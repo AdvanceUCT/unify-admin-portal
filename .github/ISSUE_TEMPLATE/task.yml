@@ -1,0 +1,40 @@
+name: Task / chore
+description: Track implementation work, cleanup, setup, or project chores.
+title: "[Task]: "
+labels: ["task"]
+body:
+  - type: textarea
+    id: task
+    attributes:
+      label: Task
+      description: What needs to be done?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Wallet
+        - Issuer
+        - Verifier
+        - Admin
+        - Shared
+        - DevOps
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Definition of done
+      description: How will we know this task is complete?
+    validations:
+      required: true
+  - type: input
+    id: milestone
+    attributes:
+      label: Target milestone
+      placeholder: MVP, Demo 1, or Final Submission
+    validations:
+      required: false
+

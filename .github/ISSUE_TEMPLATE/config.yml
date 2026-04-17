@@ -1,0 +1,6 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Sensitive security report
+    url: https://github.com/AdvanceUCT/unify-admin-portal/security/advisories/new
+    about: Use a private advisory for exploitable vulnerabilities, secrets, or credential exposure.
+

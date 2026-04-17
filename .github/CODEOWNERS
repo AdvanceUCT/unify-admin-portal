@@ -1,0 +1,29 @@
+# UNIFY Admin Portal ownership
+#
+# Kumbirai is not listed here yet because their GitHub account is not currently
+# a member of the AdvanceUCT organization. Add them once they have joined.
+
+# Default owner for admin portal changes.
+* @JoshuaWood13
+
+# Repository governance and delivery setup.
+/.github/ @CalebVoskuil @JoshuaWood13
+/CONTRIBUTING.md @CalebVoskuil @JoshuaWood13
+/SECURITY.md @CalebVoskuil @JoshuaWood13
+
+# Admin and governance portal.
+/src/admin/ @JoshuaWood13
+/src/portal/ @JoshuaWood13
+/app/admin/ @JoshuaWood13
+/apps/admin/ @JoshuaWood13
+
+# Issuer and verifiable credential lifecycle.
+/src/issuer/ @JoshuaWood13 @CalebVoskuil
+/src/vc-lifecycle/ @JoshuaWood13 @CalebVoskuil
+/src/credentials/ @JoshuaWood13 @CalebVoskuil
+/apps/issuer/ @JoshuaWood13 @CalebVoskuil
+
+# Shared code needs a second pair of eyes.
+/src/shared/ @CalebVoskuil @JoshuaWood13 @Lusa458
+/packages/ @CalebVoskuil @JoshuaWood13 @Lusa458
+

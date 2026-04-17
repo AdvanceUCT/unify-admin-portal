@@ -1,0 +1,47 @@
+name: Security concern
+description: Raise a non-sensitive security concern or hardening task.
+title: "[Security]: "
+labels: ["security"]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include secrets, tokens, passwords, private keys, or exploit details. Use a private security advisory for sensitive vulnerabilities.
+  - type: textarea
+    id: concern
+    attributes:
+      label: Concern
+      description: What is the security concern?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Wallet
+        - Issuer
+        - Verifier
+        - Admin
+        - Shared
+        - DevOps
+    validations:
+      required: true
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Potential impact
+      options:
+        - High
+        - Medium
+        - Low
+        - Unknown
+    validations:
+      required: true
+  - type: textarea
+    id: mitigation
+    attributes:
+      label: Suggested mitigation
+      description: Optional notes on how to reduce the risk.
+    validations:
+      required: false
+
