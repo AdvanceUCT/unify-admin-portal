@@ -10,6 +10,7 @@ Primary source alignment: `BA Innovation.docx` defines the prototype as a simula
 
 - Use JSON over HTTPS.
 - Use ISO 8601 timestamps for machine-readable dates.
+- Use the shared `Money` decimal-string format for all monetary values.
 - Use stable string IDs for students, credentials, vendors, service points, and transactions.
 - Do not send secrets in QR payloads.
 - Do not trust client-provided credential status without backend verification.
@@ -56,12 +57,22 @@ type StudentCredential = {
 };
 ```
 
+`validFrom` and `expiresAt` must be full ISO 8601 UTC timestamps (for example, `2026-01-01T00:00:00Z`), not date-only strings.
+
+### Money
+
+```ts
+type Money = string;
+```
+
+`Money` values are decimal strings in major units with two fractional digits (for example, `"42.50"`). Do not include currency symbols in the value.
+
 ### PaymentRecord
 
 ```ts
 type PaymentRecord = {
   id: string;
-  amount: string;
+  amount: Money;
   status: "Approved" | "Pending" | "Declined";
   vendor: string;
 };
@@ -88,7 +99,7 @@ type QrPayload = {
   type: "payment" | "verification";
   vendorId: string;
   servicePointId: string;
-  amount?: number;
+  amount?: Money;
   nonce: string;
 };
 ```
@@ -98,7 +109,7 @@ Rules:
 - `type` distinguishes simulated wallet payment from service-point credential verification.
 - `vendorId` must identify the vendor.
 - `servicePointId` must identify the physical or logical service point.
-- `amount` is required for `payment` and must be zero or greater.
+- `amount` is required for `payment` and must be a zero-or-greater `Money` value.
 - `amount` is omitted for `verification`.
 - `nonce` must be single-use and verified by the backend.
 - The backend should reject expired, reused, malformed, or unknown nonces.
@@ -181,7 +192,7 @@ Response:
     "institution": "University of Cape Town"
   },
   "wallet": {
-    "availableBalance": "R 320.00",
+    "availableBalance": "320.00",
     "lastVerification": "Library Cafe"
   }
 }
@@ -205,8 +216,8 @@ Response:
       "enrolmentStatus": "Registered",
       "lifecycleState": "Active",
       "studentNumber": "VSKCAL001",
-      "validFrom": "2026-01-01",
-      "expiresAt": "2026-12-31"
+      "validFrom": "2026-01-01T00:00:00Z",
+      "expiresAt": "2026-12-31T23:59:59Z"
     }
   ]
 }
@@ -221,7 +232,7 @@ Request:
 ```json
 {
   "studentId": "student-demo-001",
-  "amount": 100
+  "amount": "100.00"
 }
 ```
 
@@ -302,7 +313,7 @@ Response payload shape:
   "type": "payment",
   "vendorId": "vendor-001",
   "servicePointId": "library-cafe",
-  "amount": 42.5,
+  "amount": "42.50",
   "nonce": "single-use-nonce"
 }
 ```
