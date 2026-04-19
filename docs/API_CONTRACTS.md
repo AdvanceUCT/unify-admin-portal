@@ -122,15 +122,30 @@ POST /wallet/payments/authorize
 
 Purpose: activate a student wallet from an activation code or issuer-provided enrollment flow.
 
-Request:
+Request (one of):
 
-```json
-{
-  "activationCode": "string",
-  "invitationId": "string",
-  "deviceId": "string"
-}
-```
+- Activation-code flow:
+
+  ```json
+  {
+    "activationCode": "string",
+    "deviceId": "string"
+  }
+  ```
+
+- Invitation-based flow:
+
+  ```json
+  {
+    "invitationId": "string",
+    "deviceId": "string"
+  }
+  ```
+
+Validation rules:
+
+- `deviceId` is always required.
+- Exactly one of `activationCode` or `invitationId` must be provided.
 
 Response:
 
