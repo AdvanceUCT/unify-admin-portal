@@ -4,6 +4,8 @@ Status: living workflow guide. Last updated: 2026-04-19.
 
 This file explains how work should enter the repos and which GitHub features are active or planned.
 
+Primary source alignment: delivery milestones should stay consistent with `BA Innovation.docx`.
+
 ## Source of Truth
 
 Use GitHub Issues and one GitHub Project for delivery tracking.
@@ -22,6 +24,68 @@ Recommended milestones:
 - MVP.
 - Demo 1.
 - Final Submission.
+
+The BA document also defines academic iteration targets:
+
+- Iteration One / MVP: due 18 May 2026.
+- Iteration Two: due 7 August 2026.
+- Iteration Three: due 17 September 2026.
+- Iteration Four / Final: due 23 October 2026.
+
+Keep GitHub milestones simple, but map issues to these iteration dates where possible.
+
+## Delivery Scope by Iteration
+
+### Iteration One / MVP
+
+Target flows:
+
+- Define architecture and technology stack.
+- Design W3C-compatible student VC schema with selective disclosure fields.
+- Generate simulated student registration data.
+- Implement VC issuer service and batch issuance pipeline for at least 100 simulated VCs.
+- Implement VC delivery and activation mechanism.
+- Implement VC revocation service with status reflected across services within the target 60-second window where feasible for the prototype.
+- Scaffold student wallet navigation and auth flow.
+- Build wallet VC activation, VC display, balance/top-up, QR payment scan, and transaction history screens.
+- Demonstrate issue VC -> activate in wallet -> verify.
+
+### Iteration Two
+
+Target flows:
+
+- Scaffold admin portal with role-based access control.
+- Implement student VC lifecycle screens for issue, renew, revoke, suspend, and bulk operations.
+- Implement validity and eligibility rule configuration.
+- Implement vendor approval and provisioning of vendor credentials/API keys/vendor DID.
+- Implement admin transaction monitoring and audit log views.
+- Scaffold vendor portal with admin-provisioned login.
+- Implement vendor service/pricing rules, QR display, verification/payment processing, and transaction screen.
+- Demonstrate admin issues VC -> vendor verifies -> payment processed.
+
+### Iteration Three
+
+Target flows:
+
+- Implement standalone transaction log database schema.
+- Write wallet, vendor, and verifier events into transaction/audit logs.
+- Expose filtered/exportable log data in admin portal.
+- Implement external top-up link/QR flow.
+- Implement VC sharing for external verification.
+- Implement credential backup/recovery and wallet security settings.
+- Demonstrate external top-up -> spend at vendor -> audit log entry.
+
+### Iteration Four / Final
+
+Target flows:
+
+- Design and implement standard verifier API.
+- Build simulated external integration demo.
+- Write external developer API documentation.
+- Run system hardening and security review.
+- Run performance/load testing with a target VC verification time under 3 seconds.
+- Polish wallet and portal UI, error states, empty states, and accessibility.
+- Prepare final demo scripts, user guides, report, and walkthrough video.
 
 ## Branching
 
@@ -76,6 +140,9 @@ Security-sensitive areas include:
 - Issuer and credential lifecycle logic.
 - Verifier and service-point verification logic.
 - Admin authorization or governance logic.
+- Payment, wallet balance, top-up, or transaction logging logic.
+- POPIA-sensitive student data handling.
+- Credo, DIDComm, AnonCreds, Indy VDR, BCovrin, Hyperledger Indy, or Aries Askar integration.
 - GitHub Actions workflows.
 - Dependency, secret, environment, or release changes.
 
@@ -143,6 +210,14 @@ npm test
 npm run build
 ```
 
+Wallet implementation should also add targeted tests for:
+
+- PIN/biometric gate behavior.
+- QR payload validation.
+- Credential lifecycle state handling.
+- Payment confirmation and rollback behavior for simulated payments.
+- Secure-storage wrapper behavior.
+
 Admin and vendor portals before scaffolding:
 
 - There may be no package scripts yet.
@@ -157,6 +232,15 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+Admin/vendor implementation should add tests for:
+
+- Role-based access.
+- Credential lifecycle actions.
+- Vendor onboarding and approval.
+- QR generation.
+- Verification result handling.
+- Audit/transaction filtering.
 
 ## Deployments
 

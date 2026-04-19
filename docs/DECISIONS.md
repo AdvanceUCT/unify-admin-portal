@@ -4,6 +4,8 @@ Status: living decision log. Last updated: 2026-04-19.
 
 Use this file to understand why the repo is shaped the way it is. Add new decisions when a future change would otherwise need chat history to explain it.
 
+Primary source alignment: decisions in this file should stay consistent with `BA Innovation.docx`.
+
 ## 1. Use Three Repos
 
 Decision: keep the student wallet, admin portal, and vendor portal in separate repos.
@@ -14,6 +16,7 @@ Reasoning:
 - The student wallet is React Native.
 - The admin and vendor portals are planned as Next.js web apps.
 - Separate repos reduce accidental coupling while the project is still small.
+- The BA document mentions npm workspaces and a single-codebase style setup; the current implementation intentionally uses three repos because the team requested separate repos for the three user-facing systems.
 
 Repos:
 
@@ -30,6 +33,13 @@ Reasoning:
 - Expo provides a practical mobile development path for iOS, Android, and web smoke testing.
 - Expo Router gives file-based navigation that is easy for future contributors and Codex instances to inspect.
 - TypeScript keeps API and credential contracts explicit.
+
+Alignment note:
+
+- The BA document names React Native, React Navigation, Metro, Hermes, react-native-vision-camera, react-native-fs, react-native-get-random-values, Credo, and Aries Askar as target mobile technologies.
+- Expo Router is built on React Navigation and keeps the scaffold compatible with the React Native direction.
+- Current Expo SecureStore usage is a scaffold placeholder. Final VC/key storage should align with Credo and Aries Askar.
+- If Credo mobile integration requires native modules that Expo Go cannot support, move to an Expo development build or prebuild rather than abandoning the React Native direction.
 
 ## 3. Use Next.js for Admin and Vendor
 
@@ -116,7 +126,68 @@ Reasoning:
 - The three frontends need a shared understanding of credential, wallet, and verifier data.
 - Written contracts reduce repeated chat context and prevent each repo from inventing incompatible shapes.
 
-## 10. Use Environment Secrets for Deployments
+## 10. Build a Proof of Concept, Not Production Infrastructure
+
+Decision: keep the current build aligned with the proof-of-concept scope in the BA document.
+
+In scope:
+
+- Simulated student records.
+- Simulated service providers and vendors.
+- Simulated wallet balances, top-ups, payments, and transaction history.
+- Simulated external verification scenarios.
+- Controlled end-to-end demo flows.
+
+Out of scope:
+
+- Live university system integration.
+- Real institutional data.
+- Real payment gateways or vendor settlement.
+- Building Hyperledger Indy, BCovrin, or SSI infrastructure ourselves.
+- Full production deployment or national rollout.
+
+## 11. Use Credo, AnonCreds, DIDComm, and Indy as the Target Identity Stack
+
+Decision: the final identity implementation should follow the BA document's target SSI stack.
+
+Target components:
+
+- W3C Verifiable Credentials.
+- AnonCreds for selective disclosure.
+- Credo issuer, holder/wallet, and verifier agents.
+- DIDComm for credential exchange and proof presentation messaging.
+- Hyperledger Indy and BCovrin for the development trust ledger.
+- Indy VDR for ledger access.
+- Aries Askar and SQLite for secure wallet storage.
+
+Current state:
+
+- Frontend scaffolds and contracts exist.
+- Identity services are not implemented yet.
+- Mock data should remain clearly marked until the backend/identity service exists.
+
+## 12. Model Credential Lifecycle Explicitly
+
+Decision: credential lifecycle should use the BA document's lifecycle states rather than only a loose display status.
+
+Lifecycle states:
+
+- Pending.
+- Issuing.
+- Offered.
+- Active.
+- Suspended.
+- Revoked.
+- Expired.
+- Renewed.
+
+Reasoning:
+
+- Admin lifecycle operations, wallet display, verifier decisions, and audit logs all depend on credential state.
+- Suspension is reversible; revocation is terminal for access decisions.
+- Renewal should expire or replace the old credential and issue an updated one.
+
+## 13. Use Environment Secrets for Deployments
 
 Decision: use GitHub environments when deployment starts.
 
