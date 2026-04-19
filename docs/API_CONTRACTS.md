@@ -329,7 +329,7 @@ Response:
 {
   "status": "Approved",
   "reason": "Credential active",
-  "transactionId": "payment-001"
+  "eventId": "verification-001"
 }
 ```
 
