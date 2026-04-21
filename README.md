@@ -11,9 +11,9 @@ Future Codex instances should read this file first, then:
 
 ## Current Status
 
-- Stack: planned Next.js, TypeScript.
-- Current implementation: repository governance files only.
-- App scaffold: not created yet.
+- Stack: Next.js, TypeScript, Tailwind CSS.
+- Current implementation: lean runnable app scaffold with typed mock data.
+- App scaffold: created with App Router routes for admin operations.
 - Current data: no real student data or production secrets.
 - GitHub Actions: present and expected to handle the repo before an app package exists.
 - System scope: proof of concept using simulated student records, simulated service providers, and simulated wallet/payment flows.
@@ -40,12 +40,9 @@ This repo owns:
 
 ## Getting Started
 
-The Next.js app has not been scaffolded yet. Once implementation starts, scaffold the app in this repo and update this section with the exact commands.
-
-Expected baseline commands once a package is present:
-
 ```bash
 npm install
+npm run dev
 npm run lint
 npm run typecheck
 npm test
@@ -54,7 +51,7 @@ npm run build
 
 ## Planned App Structure
 
-Expected structure after scaffolding:
+Current structure after scaffolding:
 
 - `app/` or `src/app/` for Next.js routes.
 - `src/components/` for shared admin UI primitives.
