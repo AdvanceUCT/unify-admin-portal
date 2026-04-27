@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { corsPreflight, jsonWithCors } from "@/app/api/mock/cors";
 import { resolveMockWalletActivation } from "@/lib/api/mockActivationStore";
 import type { WalletActivationResolveRequest } from "@/lib/api/types";
 
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   });
 
   if (!result.ok) {
-    return NextResponse.json(
+    return jsonWithCors(
       {
         error: {
           code: result.code,
@@ -31,5 +31,9 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json(result.data);
+  return jsonWithCors(result.data);
+}
+
+export function OPTIONS() {
+  return corsPreflight();
 }

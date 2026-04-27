@@ -1,6 +1,10 @@
-import { NextResponse } from "next/server";
+import { corsPreflight, jsonWithCors } from "@/app/api/mock/cors";
 import { queueMockBatchIssuance } from "@/lib/api/mockActivationStore";
 
 export function POST() {
-  return NextResponse.json(queueMockBatchIssuance());
+  return jsonWithCors(queueMockBatchIssuance());
+}
+
+export function OPTIONS() {
+  return corsPreflight();
 }

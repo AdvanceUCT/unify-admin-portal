@@ -1,8 +1,12 @@
-import { NextResponse } from "next/server";
+import { corsPreflight, jsonWithCors } from "@/app/api/mock/cors";
 import { getMockAdminState } from "@/lib/api/mockActivationStore";
 
 export const dynamic = "force-dynamic";
 
 export function GET() {
-  return NextResponse.json(getMockAdminState());
+  return jsonWithCors(getMockAdminState());
+}
+
+export function OPTIONS() {
+  return corsPreflight();
 }
