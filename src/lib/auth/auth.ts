@@ -1,37 +1,79 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { admin } from "better-auth/plugins";
-import { adminAc, userAc } from "better-auth/plugins/admin/access";
 
+import { AuditAction } from "@/generated/prisma/enums";
+import { writeAuditLog } from "@/lib/auth/audit";
+import { betterAuthAdminRoles } from "@/lib/auth/permissions";
 import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
 
-export const ADMIN_ROLES = [
-  "SUPER_ADMIN",
-  "ADMIN",
-  "ISSUER",
-  "VIEWER",
-] as const;
-
 export const auth = betterAuth({
+  appName: "UNIFY Admin Portal",
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,
+  trustedOrigins: [env.APP_URL],
   emailAndPassword: {
     enabled: true,
+    disableSignUp: true,
+    minPasswordLength: 12,
+    maxPasswordLength: 128,
+    revokeSessionsOnPasswordReset: true,
+    async onPasswordReset({ user }, request) {
+      await writeAuditLog({
+        action: AuditAction.PASSWORD_RESET_COMPLETED,
+        actorId: user.id,
+        targetType: "user",
+        targetId: user.id,
+        request,
+      });
+    },
+  },
+  session: {
+    expiresIn: 8 * 60 * 60,
+    updateAge: 60 * 60,
+    cookieCache: {
+      enabled: false,
+    },
+  },
+  advanced: {
+    useSecureCookies: process.env.NODE_ENV === "production",
+    cookiePrefix: "unify-admin",
+  },
+  databaseHooks: {
+    session: {
+      create: {
+        async after(session, context) {
+          await writeAuditLog({
+            action: AuditAction.LOGIN_SUCCESS,
+            actorId: session.userId,
+            targetType: "session",
+            targetId: session.id,
+            request: context?.request,
+          });
+        },
+      },
+      delete: {
+        async after(session, context) {
+          await writeAuditLog({
+            action: AuditAction.LOGOUT,
+            actorId: session.userId,
+            targetType: "session",
+            targetId: session.id,
+            request: context?.request,
+          });
+        },
+      },
+    },
   },
   plugins: [
     admin({
       defaultRole: "VIEWER",
       adminRoles: ["SUPER_ADMIN"],
-      roles: {
-        SUPER_ADMIN: adminAc,
-        ADMIN: userAc,
-        ISSUER: userAc,
-        VIEWER: userAc,
-      },
+      roles: betterAuthAdminRoles,
     }),
   ],
 });
