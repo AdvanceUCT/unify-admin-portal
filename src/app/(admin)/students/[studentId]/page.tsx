@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { getStudentById } from "@/lib/api/client";
+import { requireRole } from "@/lib/auth/session";
 import { formatCredentialStatus, formatDateTime } from "@/lib/formatters";
 
 export default async function StudentDetailPage({
@@ -9,6 +10,8 @@ export default async function StudentDetailPage({
 }: {
   params: Promise<{ studentId: string }>;
 }) {
+  await requireRole(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
+
   const { studentId } = await params;
   const student = await getStudentById(studentId);
 

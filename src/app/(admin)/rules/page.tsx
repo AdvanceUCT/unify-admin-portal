@@ -1,7 +1,10 @@
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { getEligibilityRules } from "@/lib/api/client";
+import { requireRole } from "@/lib/auth/session";
 
 export default async function RulesPage() {
+  await requireRole(["SUPER_ADMIN", "ADMIN"]);
+
   const rules = await getEligibilityRules();
 
   return (

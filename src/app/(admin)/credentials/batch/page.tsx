@@ -1,7 +1,10 @@
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { getBatchIssuancePreview } from "@/lib/api/client";
+import { requireRole } from "@/lib/auth/session";
 
 export default async function BatchIssuePage() {
+  await requireRole(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
+
   const preview = await getBatchIssuancePreview();
 
   return (

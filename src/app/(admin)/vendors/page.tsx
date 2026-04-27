@@ -1,8 +1,11 @@
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { getVendors } from "@/lib/api/client";
+import { requireRole } from "@/lib/auth/session";
 
 export default async function VendorsPage() {
+  await requireRole(["SUPER_ADMIN", "ADMIN"]);
+
   const vendors = await getVendors();
 
   return (
