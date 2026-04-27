@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { queueBatchIssuance } from "@/lib/api/client";
+import { useAdminState } from "@/lib/api/useAdminState";
 import type { ActivationDeliveryStatus, BatchIssuancePreview, BatchIssuanceResult } from "@/lib/api/types";
 import { formatActivationDeliveryStatus, formatDateTime } from "@/lib/formatters";
 
@@ -18,16 +19,30 @@ function deliveryTone(status: ActivationDeliveryStatus) {
 }
 
 export function BatchIssuancePanel({ preview }: { preview: BatchIssuancePreview }) {
+  const { refresh, state } = useAdminState();
   const [batchResult, setBatchResult] = useState<BatchIssuanceResult | null>(null);
   const [copiedDeliveryId, setCopiedDeliveryId] = useState<string | null>(null);
   const [copyDeniedDeliveryId, setCopyDeniedDeliveryId] = useState<string | null>(null);
+  const [queueError, setQueueError] = useState<string | null>(null);
   const [isQueueing, setIsQueueing] = useState(false);
+  const activationDeliveries = batchResult
+    ? (state?.activationDeliveries.filter((delivery) => delivery.batchId === batchResult.batchId) ??
+      batchResult.activationDeliveries)
+    : [];
 
   async function handleQueueBatch() {
     setIsQueueing(true);
-    const result = await queueBatchIssuance();
-    setBatchResult(result);
-    setIsQueueing(false);
+    setQueueError(null);
+
+    try {
+      const result = await queueBatchIssuance();
+      setBatchResult(result);
+      await refresh();
+    } catch (error) {
+      setQueueError(error instanceof Error ? error.message : "Batch queue request failed.");
+    } finally {
+      setIsQueueing(false);
+    }
   }
 
   async function handleCopy(deliveryId: string, activationUrl: string) {
@@ -72,6 +87,7 @@ export function BatchIssuancePanel({ preview }: { preview: BatchIssuancePreview 
         >
           {isQueueing ? "Queueing" : "Queue batch"}
         </button>
+        {queueError ? <p className="mt-3 text-sm text-amber-700">{queueError}</p> : null}
       </section>
 
       {batchResult ? (
@@ -94,7 +110,7 @@ export function BatchIssuancePanel({ preview }: { preview: BatchIssuancePreview 
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {batchResult.activationDeliveries.map((delivery) => (
+                {activationDeliveries.map((delivery) => (
                   <tr key={delivery.id}>
                     <td className="px-5 py-4 font-medium text-zinc-950">{delivery.credentialId}</td>
                     <td className="px-5 py-4 text-zinc-600">{delivery.studentId}</td>
@@ -102,6 +118,9 @@ export function BatchIssuancePanel({ preview }: { preview: BatchIssuancePreview 
                       <Badge tone={deliveryTone(delivery.status)}>
                         {formatActivationDeliveryStatus(delivery.status)}
                       </Badge>
+                      {delivery.activatedAt ? (
+                        <p className="mt-2 text-xs text-zinc-500">Activated {formatDateTime(delivery.activatedAt)}</p>
+                      ) : null}
                     </td>
                     <td className="px-5 py-4 text-zinc-600">{formatDateTime(delivery.expiresAt)}</td>
                     <td className="min-w-80 px-5 py-4">

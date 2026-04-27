@@ -181,16 +181,15 @@ Response:
 ```json
 {
   "activationId": "activation-001",
+  "activationSource": "token",
   "studentId": "student-demo-001",
   "walletId": "wallet-001",
   "invitationId": "invitation-001",
   "invitationUrl": "https://issuer.example/oob?oob=...",
-  "expiresAt": "2026-09-01T12:00:00Z",
-  "student": {
-    "id": "student-demo-001",
-    "name": "Demo Student",
-    "institution": "University of Cape Town"
-  }
+  "issuerLabel": "UNIFY Issuer Service",
+  "ledgerName": "BCovrin Test",
+  "createdAt": "2026-09-01T12:00:00Z",
+  "expiresAt": "2026-09-02T12:00:00Z"
 }
 ```
 
@@ -212,12 +211,12 @@ Response:
 
 ```json
 {
-  "status": "Activated",
+  "activatedAt": "2026-09-01T12:05:00Z",
   "activationId": "activation-001",
-  "walletId": "wallet-001",
+  "credentialId": "credential-demo-002",
+  "studentId": "student-demo-002",
   "credentialRecordId": "credential-001",
-  "holderConnectionId": "connection-001",
-  "completedAt": "2026-09-01T12:05:00Z"
+  "holderConnectionId": "connection-001"
 }
 ```
 
@@ -401,8 +400,28 @@ Rules:
 
 - The admin portal should model newly issued credentials as `Offered` until wallet activation completes.
 - Activation delivery metadata may include safe student, credential, batch, and delivery IDs for audit.
+- Wallet completion changes the related credential from `Offered` to `Active` and creates a `CredentialActivated` audit event.
 - Production delivery should not expose raw activation tokens in ordinary audit views.
 - This proof-of-concept may display copyable activation links for demo operation only.
+
+### Proof-of-concept mock routes
+
+The current admin portal includes in-memory mock API routes so the wallet web demo can complete an activation and update already-open admin pages. These routes reset when the admin dev server restarts and are not production service contracts.
+
+```http
+GET /api/mock/admin-state
+POST /api/mock/credentials/batch-issue
+POST /api/mock/wallet/activation/resolve
+POST /api/mock/wallet/activation/complete
+```
+
+Rules:
+
+- `POST /api/mock/credentials/batch-issue` mirrors `/admin/credentials/batch-issue` and records delivered token-only links.
+- `POST /api/mock/wallet/activation/resolve` accepts only token activation requests and returns holder-consumable invitation metadata.
+- `POST /api/mock/wallet/activation/complete` marks the matching delivery activated, updates the credential to `Active`, and appends `CredentialActivated`.
+- `GET /api/mock/admin-state` returns students, credentials, activation deliveries, audit events, and dashboard counts for polling admin views.
+- The mock admin API must not generate admin-side `oob` activation links.
 
 ## Vendor API
 
@@ -510,6 +529,7 @@ type AuditEvent = {
   id: string;
   eventType:
     | "ActivationLinkDelivered"
+    | "CredentialActivated"
     | "CredentialIssued"
     | "CredentialRenewed"
     | "CredentialSuspended"

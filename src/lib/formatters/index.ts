@@ -36,6 +36,7 @@ const activationDeliveryStatusLabels: Record<ActivationDeliveryStatus, string> =
 
 const eventTypeLabels: Record<AuditEvent["eventType"], string> = {
   ActivationLinkDelivered: "Activation link delivered",
+  CredentialActivated: "Credential activated",
   CredentialIssued: "Credential issued",
   CredentialRenewed: "Credential renewed",
   CredentialSuspended: "Credential suspended",

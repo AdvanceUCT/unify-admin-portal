@@ -25,5 +25,6 @@ describe("formatters", () => {
   it("formats activation delivery status and audit events", () => {
     expect(formatActivationDeliveryStatus("Delivered")).toBe("Delivered");
     expect(formatEventType("ActivationLinkDelivered")).toBe("Activation link delivered");
+    expect(formatEventType("CredentialActivated")).toBe("Credential activated");
   });
 });
