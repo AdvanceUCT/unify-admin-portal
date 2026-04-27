@@ -54,6 +54,7 @@ export type QrPayload =
 export type AuditEvent = {
   id: string;
   eventType:
+    | "ActivationLinkDelivered"
     | "CredentialIssued"
     | "CredentialRenewed"
     | "CredentialSuspended"
@@ -105,9 +106,34 @@ export type DashboardSummary = {
   auditEventsToday: number;
 };
 
+export type ActivationDeliveryStatus = "Pending" | "Delivered" | "Failed";
+
+export type ActivationDelivery = {
+  id: string;
+  batchId: string;
+  channel: "activation-link";
+  credentialId: string;
+  studentId: string;
+  activationUrl: string;
+  status: ActivationDeliveryStatus;
+  deliveredAt?: string;
+  expiresAt: string;
+  failureReason?: string;
+};
+
 export type BatchIssuancePreview = {
   batchId: string;
   cohortId: string;
   requestedCount: number;
   status: "Queued" | "Draft";
+};
+
+export type BatchIssuanceResult = {
+  batchId: string;
+  cohortId: string;
+  requestedCount: number;
+  status: "Queued";
+  issuedCredentialIds: string[];
+  activationDeliveries: ActivationDelivery[];
+  queuedAt: string;
 };

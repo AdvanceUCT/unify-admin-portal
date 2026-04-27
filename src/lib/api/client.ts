@@ -1,6 +1,8 @@
 import {
+  mockActivationDeliveries,
   mockAuditEvents,
   mockBatchIssuancePreview,
+  mockBatchIssuanceResult,
   mockDashboardSummary,
   mockEligibilityRules,
   mockStudents,
@@ -29,6 +31,16 @@ export async function getCredentials() {
   return mockStudents.map((student) => student.credential);
 }
 
+export async function getActivationDeliveries() {
+  await wait();
+  return mockActivationDeliveries;
+}
+
+export async function getActivationDeliveryByCredentialId(credentialId: string) {
+  await wait();
+  return mockActivationDeliveries.find((delivery) => delivery.credentialId === credentialId);
+}
+
 export async function getVendors() {
   await wait();
   return mockVendors;
@@ -52,4 +64,9 @@ export async function getRecentAuditEvents() {
 export async function getBatchIssuancePreview() {
   await wait();
   return mockBatchIssuancePreview;
+}
+
+export async function queueBatchIssuance() {
+  await wait();
+  return mockBatchIssuanceResult;
 }
