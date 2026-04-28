@@ -9,6 +9,8 @@ type WriteAuditLogInput = {
   targetType?: string | null;
   targetId?: string | null;
   meta?: AuditMetadata;
+  ipAddress?: string | null;
+  userAgent?: string | null;
   request?: Request | null;
 };
 
@@ -26,6 +28,8 @@ export async function writeAuditLog({
   targetType = null,
   targetId = null,
   meta,
+  ipAddress,
+  userAgent,
   request,
 }: WriteAuditLogInput) {
   await prisma.auditLog.create({
@@ -35,8 +39,8 @@ export async function writeAuditLog({
       targetType,
       targetId,
       meta,
-      ipAddress: getRequestIpAddress(request),
-      userAgent: request?.headers.get("user-agent") ?? null,
+      ipAddress: ipAddress ?? getRequestIpAddress(request),
+      userAgent: userAgent ?? request?.headers.get("user-agent") ?? null,
     },
   });
 }

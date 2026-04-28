@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 
 import { AuditAction } from "@/generated/prisma/enums";
 import { auth } from "@/lib/auth/auth";
-import { writeAuditLog } from "@/lib/auth/audit";
+import { writeAuditLog } from "@/lib/audit/audit";
 import { createAdminInvite } from "@/lib/auth/invites";
 import { isAdminRole, type AdminRole } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
@@ -101,7 +101,7 @@ export async function reactivateUserAction(formData: FormData) {
     targetId: userId,
   });
 
-  revalidatePath("/users/invites");
+  revalidatePath("/users");
 }
 
 export async function changeUserRoleAction(formData: FormData) {
@@ -190,5 +190,5 @@ export async function revokeInviteAction(formData: FormData) {
     },
   });
 
-  revalidatePath("/users");
+  revalidatePath("/users/invites");
 }

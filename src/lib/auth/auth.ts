@@ -3,7 +3,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { admin } from "better-auth/plugins";
 
 import { AuditAction } from "@/generated/prisma/enums";
-import { writeAuditLog } from "@/lib/auth/audit";
+import { writeAuditLog } from "@/lib/audit/audit";
 import { betterAuthAdminRoles } from "@/lib/auth/permissions";
 import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";

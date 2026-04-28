@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { AuditAction } from "@/generated/prisma/enums";
 import { auth } from "@/lib/auth/auth";
-import { writeAuditLog } from "@/lib/auth/audit";
+import { writeAuditLog } from "@/lib/audit/audit";
 import {
   INVITABLE_ADMIN_ROLES,
   ROLE_LABELS,
@@ -62,6 +62,39 @@ function buildInviteUrl(token: string) {
   inviteUrl.searchParams.set("token", token);
 
   return inviteUrl.toString();
+}
+
+async function auditExpiredInviteOnce(invite: {
+  id: string;
+  email: string;
+  role: string;
+  expiresAt: Date;
+}) {
+  const existingAuditLog = await prisma.auditLog.findFirst({
+    where: {
+      action: AuditAction.INVITE_EXPIRED,
+      targetType: "admin_invite",
+      targetId: invite.id,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (existingAuditLog) {
+    return;
+  }
+
+  await writeAuditLog({
+    action: AuditAction.INVITE_EXPIRED,
+    targetType: "admin_invite",
+    targetId: invite.id,
+    meta: {
+      email: invite.email,
+      role: invite.role,
+      expiresAt: invite.expiresAt.toISOString(),
+    },
+  });
 }
 
 export async function createAdminInvite({
@@ -159,6 +192,10 @@ export async function getPendingInviteByToken(token: string) {
 
   const now = new Date();
 
+  if (invite.expiresAt <= now && !invite.acceptedAt && !invite.revokedAt) {
+    await auditExpiredInviteOnce(invite);
+  }
+
   if (invite.acceptedAt || invite.revokedAt || invite.expiresAt <= now) {
     return null;
   }
@@ -180,6 +217,10 @@ export async function acceptAdminInvite(input: AcceptAdminInviteInput) {
   }
 
   const now = new Date();
+
+  if (invite.expiresAt <= now && !invite.acceptedAt && !invite.revokedAt) {
+    await auditExpiredInviteOnce(invite);
+  }
 
   if (invite.acceptedAt || invite.revokedAt || invite.expiresAt <= now) {
     throw new Error("This invite link is invalid or has expired.");

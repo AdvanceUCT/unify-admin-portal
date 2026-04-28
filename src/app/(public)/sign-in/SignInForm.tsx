@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 
 import { authClient } from "@/lib/auth/auth-client";
 import { sanitizeCallbackUrl } from "@/lib/auth/redirects";
+import { auditLoginFailureAction } from "./actions";
 
 function getSignInErrorMessage(error: unknown) {
   if (
@@ -52,6 +53,10 @@ export function SignInForm({
     setIsPending(false);
 
     if (result.error) {
+      await auditLoginFailureAction({
+        email,
+        code: "code" in result.error ? String(result.error.code) : undefined,
+      });
       setErrorMessage(getSignInErrorMessage(result.error));
       return;
     }

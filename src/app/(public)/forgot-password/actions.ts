@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 
 import { AuditAction } from "@/generated/prisma/enums";
 import { auth } from "@/lib/auth/auth";
-import { writeAuditLog } from "@/lib/auth/audit";
+import { writeAuditLog } from "@/lib/audit/audit";
 import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
 
