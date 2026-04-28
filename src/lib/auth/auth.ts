@@ -7,6 +7,9 @@ import { writeAuditLog } from "@/lib/auth/audit";
 import { betterAuthAdminRoles } from "@/lib/auth/permissions";
 import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
+import { sendPasswordResetEmail } from "@/lib/email/password-reset";
+
+const passwordResetTokenExpiresIn = 60 * 60;
 
 export const auth = betterAuth({
   appName: "UNIFY Admin Portal",
@@ -21,7 +24,19 @@ export const auth = betterAuth({
     disableSignUp: true,
     minPasswordLength: 12,
     maxPasswordLength: 128,
+    resetPasswordTokenExpiresIn: passwordResetTokenExpiresIn,
     revokeSessionsOnPasswordReset: true,
+    async sendResetPassword({ user, token }) {
+      const resetUrl = new URL("/reset-password", env.APP_URL);
+      resetUrl.searchParams.set("token", token);
+
+      await sendPasswordResetEmail({
+        to: user.email,
+        name: user.name,
+        resetUrl: resetUrl.toString(),
+        expiresInMinutes: passwordResetTokenExpiresIn / 60,
+      });
+    },
     async onPasswordReset({ user }, request) {
       await writeAuditLog({
         action: AuditAction.PASSWORD_RESET_COMPLETED,

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -131,6 +132,13 @@ export function SignInForm({
             {isPending ? "Signing in..." : "Sign in"}
           </button>
         </form>
+
+        <Link
+          className="mt-6 block text-center text-sm font-medium text-zinc-600 hover:text-zinc-950"
+          href="/forgot-password"
+        >
+          Forgot password?
+        </Link>
       </section>
     </main>
   );
