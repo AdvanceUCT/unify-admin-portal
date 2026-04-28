@@ -79,6 +79,7 @@ model Verification {
 model AdminInvite {
   id               String    @id @default(cuid())
   email            String
+  name             String
   role             String
   tokenHash        String    @unique
   expiresAt        DateTime

@@ -6,6 +6,7 @@ import {
   ScrollText,
   ShieldCheck,
   SlidersHorizontal,
+  UserCog,
   Users,
 } from "lucide-react";
 import { PortalShell } from "@/components/layout/PortalShell";
@@ -20,6 +21,7 @@ const navItems = [
   { href: "/vendors", label: "Vendors", icon: Landmark },
   { href: "/rules", label: "Rules", icon: SlidersHorizontal },
   { href: "/audit", label: "Audit", icon: ScrollText },
+  { href: "/users", label: "Users", icon: UserCog },
 ];
 
 export default async function AdminLayout({

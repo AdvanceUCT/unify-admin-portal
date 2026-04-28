@@ -1,20 +1,13 @@
 import { defaultAc, userAc } from "better-auth/plugins/admin/access";
 
-export const ADMIN_ROLES = [
-  "SUPER_ADMIN",
-  "ADMIN",
-  "ISSUER",
-  "VIEWER",
-] as const;
+import { ADMIN_ROLES, type AdminRole } from "@/lib/auth/roles";
 
-export type AdminRole = (typeof ADMIN_ROLES)[number];
-
-export const ROLE_LABELS: Record<AdminRole, string> = {
-  SUPER_ADMIN: "Super admin",
-  ADMIN: "Admin",
-  ISSUER: "Issuer",
-  VIEWER: "Viewer",
-};
+export {
+  ADMIN_ROLES,
+  INVITABLE_ADMIN_ROLES,
+  ROLE_LABELS,
+  type AdminRole,
+} from "@/lib/auth/roles";
 
 type RoleRoute = {
   prefix: string;

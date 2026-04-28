@@ -20,7 +20,13 @@ function getSignInErrorMessage(error: unknown) {
   return "Invalid email or password";
 }
 
-export function SignInForm({ callbackURL }: { callbackURL: string }) {
+export function SignInForm({
+  callbackURL,
+  notice,
+}: {
+  callbackURL: string;
+  notice?: string;
+}) {
   const router = useRouter();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
@@ -65,6 +71,12 @@ export function SignInForm({ callbackURL }: { callbackURL: string }) {
             <h1 className="text-xl font-semibold text-zinc-950">Admin portal</h1>
           </div>
         </div>
+
+        {notice ? (
+          <p className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+            {notice}
+          </p>
+        ) : null}
 
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div>
