@@ -43,3 +43,6 @@ dev-server*.log
 next-env.d.ts
 
 /src/generated/prisma
+
+# Local dev
+/docs-local
