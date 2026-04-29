@@ -7,7 +7,19 @@ import {
   mockVendors,
 } from "@/lib/api/mockData";
 
+import type { StudentRecord } from "@/lib/api/types";
+
 const wait = (durationMs = 50) => new Promise((resolve) => setTimeout(resolve, durationMs));
+
+async function apiFetch<T>(path: string): Promise<T> {
+  const base =
+    typeof window === "undefined"
+      ? process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000"
+      : "";
+  const res = await fetch(`${base}${path}`);
+  if (!res.ok) throw new Error(`API error ${res.status}: ${path}`);
+  return res.json() as Promise<T>;
+}
 
 export async function getDashboardSummary() {
   await wait();
@@ -15,13 +27,15 @@ export async function getDashboardSummary() {
 }
 
 export async function getStudents() {
-  await wait();
-  return mockStudents;
+  return apiFetch<StudentRecord[]>("/api/admin/students");
 }
 
 export async function getStudentById(studentId: string) {
-  await wait();
-  return mockStudents.find((student) => student.profile.id === studentId);
+  try {
+    return await apiFetch<StudentRecord>(`/api/admin/students/${studentId}`);
+  } catch {
+    return undefined;
+  }
 }
 
 export async function getCredentials() {
