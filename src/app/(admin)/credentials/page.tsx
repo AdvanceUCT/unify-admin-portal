@@ -1,9 +1,12 @@
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { getCredentials } from "@/lib/api/client";
+import { requireRole } from "@/lib/auth/session";
 import { formatCredentialStatus, formatDateTime } from "@/lib/formatters";
 
 export default async function CredentialsPage() {
+  await requireRole(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
+
   const credentials = await getCredentials();
 
   return (

@@ -2,9 +2,12 @@ import Link from "next/link";
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { getStudents } from "@/lib/api/client";
+import { requireRole } from "@/lib/auth/session";
 import { formatCredentialStatus } from "@/lib/formatters";
 
 export default async function StudentsPage() {
+  await requireRole(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
+
   const students = await getStudents();
 
   return (

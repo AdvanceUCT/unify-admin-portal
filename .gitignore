@@ -33,6 +33,7 @@ dev-server*.log
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -40,3 +41,5 @@ dev-server*.log
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/src/generated/prisma

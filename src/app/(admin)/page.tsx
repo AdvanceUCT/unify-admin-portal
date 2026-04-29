@@ -2,9 +2,13 @@ import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { Metric } from "@/components/ui/Metric";
 import { getDashboardSummary, getRecentAuditEvents } from "@/lib/api/client";
+import { ADMIN_ROLES } from "@/lib/auth/permissions";
+import { requireRole } from "@/lib/auth/session";
 import { formatDateTime, formatEventType } from "@/lib/formatters";
 
 export default async function AdminOverviewPage() {
+  await requireRole(ADMIN_ROLES);
+
   const [summary, auditEvents] = await Promise.all([getDashboardSummary(), getRecentAuditEvents()]);
 
   return (
