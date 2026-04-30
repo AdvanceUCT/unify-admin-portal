@@ -1,21 +1,11 @@
-import Database from "better-sqlite3";
-import path from "path";
+import { createClient } from "@libsql/client";
 
-const dbPath = path.join(process.cwd(), "students.db");
-const db = new Database(dbPath);
+console.log("TURSO_DATABASE_URL:", process.env.TURSO_DATABASE_URL);
+console.log("TURSO_AUTH_TOKEN:", process.env.TURSO_AUTH_TOKEN ? "exists" : "missing");
 
-// Create table if it doesn't exist
-db.exec(`
-  CREATE TABLE IF NOT EXISTS students (
-    id TEXT PRIMARY KEY,
-    firstName TEXT NOT NULL,
-    lastName TEXT NOT NULL,
-    student_number TEXT UNIQUE NOT NULL,
-    faculty TEXT NOT NULL,
-    programme TEXT NOT NULL,
-    lifecycle_state TEXT NOT NULL,
-    expires_at TEXT NOT NULL
-  );
-`);
+const db = createClient({
+  url: process.env.TURSO_DATABASE_URL!,
+  authToken: process.env.TURSO_AUTH_TOKEN!,
+});
 
 export default db;

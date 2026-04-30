@@ -1,8 +1,7 @@
+import type { Client } from "@libsql/client";
+import type { StudentRecord } from "@/lib/api/types";
 import db from "./database";
 import { seedDatabase } from "./seed";
-import type { StudentRecord } from "@/lib/api/types";
-// Ensure DB is seeded once
-seedDatabase(db);
 
 function rowToStudentRecord(row: Record<string, unknown>): StudentRecord {
   return {
@@ -22,41 +21,59 @@ function rowToStudentRecord(row: Record<string, unknown>): StudentRecord {
       lifecycleState: row.lifecycle_state as StudentRecord["credential"]["lifecycleState"],
       studentNumber: row.student_number as string,
       validFrom: "2026-01-01T00:00:00Z",
-      expiresAt: `${row.expires_at}T00:00:00Z`,
+      expiresAt: `${row.expires_at as string}T00:00:00Z`,
     },
   };
 }
 
-// Get all students
-export function getAllStudents(): StudentRecord[] {
-  const rows = db.prepare("SELECT * FROM students").all() as Record<string, unknown>[];
-  return rows.map(rowToStudentRecord);
+async function init() {
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS students (
+      id TEXT PRIMARY KEY,
+      firstName TEXT NOT NULL,
+      lastName TEXT NOT NULL,
+      student_number TEXT UNIQUE NOT NULL,
+      faculty TEXT NOT NULL,
+      programme TEXT NOT NULL,
+      lifecycle_state TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    )
+  `);
+  await seedDatabase(db);
 }
 
+const initPromise = init();
 
-// Get one student
-export function getStudentById(id: string): StudentRecord | undefined {
-  const row = db.prepare("SELECT * FROM students WHERE id = ?").get(id) as Record<string, unknown> | undefined;
-  return row ? rowToStudentRecord(row) : undefined;
+export async function getAllStudents(): Promise<StudentRecord[]> {
+  await initPromise;
+  const result = await db.execute("SELECT * FROM students");
+  return result.rows.map((row) => rowToStudentRecord(row as Record<string, unknown>));
 }
 
-// Search students (Updated for Renaming)
-export function searchStudents(query: string): StudentRecord[] {
-  const rows = db.prepare(`
-    SELECT * FROM students
-    WHERE firstName LIKE ? 
-    OR lastName LIKE ? 
-    OR student_number LIKE ?
-  `).all(`%${query}%`, `%${query}%`, `%${query}%`) as Record<string, unknown>[];
-  
-  return rows.map(rowToStudentRecord);
+export async function getStudentById(id: string): Promise<StudentRecord | undefined> {
+  await initPromise;
+  const result = await db.execute({
+    sql: "SELECT * FROM students WHERE id = ?",
+    args: [id]
+  });
+  const row = result.rows[0];
+  return row ? rowToStudentRecord(row as Record<string, unknown>) : undefined;
 }
 
+export async function searchStudents(query: string): Promise<StudentRecord[]> {
+  await initPromise;
+  const pattern = `%${query}%`;
+  const result = await db.execute({
+    sql: "SELECT * FROM students WHERE firstName LIKE ? OR lastName LIKE ? OR student_number LIKE ?",
+    args: [pattern, pattern, pattern]
+  });
+  return result.rows.map((row) => rowToStudentRecord(row as Record<string, unknown>));
+}
 
-// Update status (optional but useful)
-export function updateStudentStatus(id: string, status: string) {
-  return db.prepare(`
-    UPDATE students SET lifecycle_state = ?
-    WHERE id = ?
-  `).run(status, id);
+export async function updateStudentStatus(id: string, status: string) {
+  await initPromise;
+  await db.execute({
+    sql: "UPDATE students SET lifecycle_state = ? WHERE id = ?",
+    args: [status, id]
+  });
 }

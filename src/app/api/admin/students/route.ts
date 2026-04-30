@@ -6,8 +6,8 @@ export async function GET(req: Request) {
   const query = searchParams.get("query");
 
   if (query) {
-    return NextResponse.json(searchStudents(query));
+    return NextResponse.json(await searchStudents(query));
   }
 
-  return NextResponse.json(getAllStudents());
+  return NextResponse.json(await getAllStudents());
 }

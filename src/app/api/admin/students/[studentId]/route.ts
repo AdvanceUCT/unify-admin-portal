@@ -6,7 +6,7 @@ export async function GET(
   { params }: { params: Promise<{ studentId: string }> }
 ) {
   const { studentId } = await params;
-  const student = getStudentById(studentId);
+  const student = await getStudentById(studentId);
 
   if (!student) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
