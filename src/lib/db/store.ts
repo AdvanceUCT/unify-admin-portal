@@ -1,4 +1,3 @@
-import type { Client } from "@libsql/client";
 import type { StudentRecord } from "@/lib/api/types";
 import db from "./database";
 import { seedDatabase } from "./seed";
