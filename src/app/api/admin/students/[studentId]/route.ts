@@ -3,9 +3,10 @@ import { getStudentById } from "@/lib/db/store";
 
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ studentId: string }> }
 ) {
-  const student = getStudentById(params.id);
+  const { studentId } = await params;
+  const student = getStudentById(studentId);
 
   if (!student) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

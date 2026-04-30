@@ -18,7 +18,7 @@ export default async function StudentDetailPage({
 
   return (
     <div className="space-y-6">
-      <SectionHeader title={student.profile.name} description={student.profile.institution} />
+      <SectionHeader title={`${student.profile.firstName} ${student.profile.lastName}`} description={student.profile.institution} />
       <section className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-lg border border-zinc-200 bg-white p-5">
           <h2 className="mb-4 text-base font-semibold text-zinc-950">Credential</h2>
