@@ -30,8 +30,16 @@ export default async function StudentDetailPage({
               </dd>
             </div>
             <div className="flex justify-between gap-4">
+              <dt className="text-zinc-500">Faculty</dt>
+              <dd className="text-right text-zinc-900">{student.credential.faculty}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
               <dt className="text-zinc-500">Programme</dt>
               <dd className="text-right text-zinc-900">{student.credential.programme}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-zinc-500">Enrolment status</dt>
+              <dd className="text-zinc-900">{student.credential.enrolmentStatus}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-zinc-500">Student number</dt>

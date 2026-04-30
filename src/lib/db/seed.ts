@@ -5,7 +5,51 @@ export async function seedDatabase(db: Client) {
   const count = result.rows[0].count as number;
   if (count > 0) return;
 
-  const faculties = ["Commerce", "Science", "Engineering", "Health Sciences", "Law", "Humanities"];
+  const facultyProgrammes: Record<string, string[]> = {
+    Commerce: [
+      "Bachelor of Commerce",
+      "Bachelor of Business Science",
+      "Bachelor of Accounting",
+      "Postgraduate Diploma in Accounting",
+      "Master of Commerce in Finance",
+    ],
+    Science: [
+      "Bachelor of Science",
+      "BSc Honours in Computer Science",
+      "Bachelor of Science in Data Science",
+      "Master of Science in Bioinformatics",
+      "Doctor of Philosophy in Physics",
+    ],
+    Engineering: [
+      "BSc Engineering (Electrical)",
+      "BSc Engineering (Mechanical)",
+      "BSc Engineering (Civil)",
+      "BSc Engineering (Chemical)",
+      "Master of Science in Engineering",
+    ],
+    "Health Sciences": [
+      "MBChB",
+      "Bachelor of Pharmacy",
+      "Bachelor of Physiotherapy",
+      "Bachelor of Nursing",
+      "Master of Science in Medicine",
+    ],
+    Law: [
+      "Bachelor of Laws (LLB)",
+      "Bachelor of Arts and Law",
+      "Master of Laws (LLM)",
+      "Doctor of Laws (LLD)",
+    ],
+    Humanities: [
+      "Bachelor of Arts",
+      "Bachelor of Social Science",
+      "BA in Film & Media Production",
+      "Master of Arts in African Studies",
+      "Bachelor of Education",
+    ],
+  };
+
+  const faculties = Object.keys(facultyProgrammes);
   const firstNames = ["Sipho", "Kayla", "Tariq", "Chloe", "Zanele", "Sarah", "Bongani", "Anathi", "Thabo", "Priya", "Lethabo", "Minenhle", "Aarav", "Fatima", "Duan", "Naledi", "Liam", "Musa", "Zoey", "Kabelo"];
   const lastNames = ["Dlamini", "Scott", "Smith", "Gumede", "Patel", "Mokoena", "Botha", "Du Toit", "Van Wyk", "Ngcobo", "Mazibuko", "Naidoo", "Muller", "Ndlovu", "Hendricks", "Jacobs", "Pretorius", "Smit", "Mkhize", "Zwane"];
 
@@ -40,6 +84,8 @@ export async function seedDatabase(db: Client) {
     lastSurname = lName;
 
     const faculty = faculties[i % faculties.length];
+    const programmes = facultyProgrammes[faculty];
+    const programme = programmes[i % programmes.length];
 
     const consonants = (lName.match(/[^aeiou\s]/gi) || []).join("");
     const surPart = consonants.substring(0, 3).toUpperCase().padEnd(3, "X");
@@ -60,7 +106,7 @@ export async function seedDatabase(db: Client) {
         lName,
         studentNumber,
         faculty,
-        `${faculty} Programme`,
+        programme,
         state,
         "2026-12-31"
       ]

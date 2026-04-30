@@ -64,8 +64,12 @@ export async function searchStudents(query: string): Promise<StudentRecord[]> {
   await initPromise;
   const pattern = `%${query}%`;
   const result = await db.execute({
-    sql: "SELECT * FROM students WHERE firstName LIKE ? OR lastName LIKE ? OR student_number LIKE ?",
-    args: [pattern, pattern, pattern]
+    sql: `SELECT * FROM students 
+          WHERE firstName LIKE ? 
+          OR lastName LIKE ? 
+          OR student_number LIKE ?
+          OR (firstName || ' ' || lastName) LIKE ?`,
+    args: [pattern, pattern, pattern, pattern]
   });
   return result.rows.map((row) => rowToStudentRecord(row as Record<string, unknown>));
 }

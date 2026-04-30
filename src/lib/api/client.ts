@@ -26,8 +26,9 @@ export async function getDashboardSummary() {
   return mockDashboardSummary;
 }
 
-export async function getStudents() {
-  return apiFetch<StudentRecord[]>("/api/admin/students");
+export async function getStudents(params?: { q?: string }) {
+  const qs = params?.q ? `?query=${params.q}` : "";
+  return apiFetch<StudentRecord[]>(`/api/admin/students${qs}`);
 }
 
 export async function getStudentById(studentId: string) {
