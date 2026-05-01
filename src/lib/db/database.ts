@@ -1,11 +1,14 @@
 import { createClient } from "@libsql/client";
 
-console.log("TURSO_DATABASE_URL:", process.env.TURSO_DATABASE_URL);
-console.log("TURSO_AUTH_TOKEN:", process.env.TURSO_AUTH_TOKEN ? "exists" : "missing");
+const tursoDatabaseUrl = process.env.TURSO_DATABASE_URL;
+const tursoAuthToken = process.env.TURSO_AUTH_TOKEN;
 
-const db = createClient({
-  url: process.env.TURSO_DATABASE_URL!,
-  authToken: process.env.TURSO_AUTH_TOKEN!,
-});
+const db =
+  tursoDatabaseUrl && tursoAuthToken
+    ? createClient({
+        authToken: tursoAuthToken,
+        url: tursoDatabaseUrl,
+      })
+    : null;
 
 export default db;

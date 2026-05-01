@@ -1,4 +1,5 @@
 import type { StudentRecord } from "@/lib/api/types";
+import { mockStudents } from "@/lib/api/mockData";
 import db from "./database";
 import { seedDatabase } from "./seed";
 
@@ -26,6 +27,10 @@ function rowToStudentRecord(row: Record<string, unknown>): StudentRecord {
 }
 
 async function init() {
+  if (!db) {
+    return;
+  }
+
   await db.execute(`
     CREATE TABLE IF NOT EXISTS students (
       id TEXT PRIMARY KEY,
@@ -41,15 +46,45 @@ async function init() {
   await seedDatabase(db);
 }
 
-const initPromise = init();
+const initPromise = db ? init() : Promise.resolve();
+
+function searchMockStudents(query: string) {
+  const normalizedQuery = query.trim().toLowerCase();
+
+  if (!normalizedQuery) {
+    return mockStudents;
+  }
+
+  return mockStudents.filter((student) => {
+    const fullName = `${student.profile.firstName} ${student.profile.lastName}`.toLowerCase();
+    const searchableValues = [
+      student.profile.firstName,
+      student.profile.lastName,
+      fullName,
+      student.credential.faculty,
+      student.credential.programme,
+      student.credential.studentNumber,
+    ];
+
+    return searchableValues.some((value) => value?.toLowerCase().includes(normalizedQuery));
+  });
+}
 
 export async function getAllStudents(): Promise<StudentRecord[]> {
+  if (!db) {
+    return mockStudents;
+  }
+
   await initPromise;
   const result = await db.execute("SELECT * FROM students");
   return result.rows.map((row) => rowToStudentRecord(row as Record<string, unknown>));
 }
 
 export async function getStudentById(id: string): Promise<StudentRecord | undefined> {
+  if (!db) {
+    return mockStudents.find((student) => student.profile.id === id);
+  }
+
   await initPromise;
   const result = await db.execute({
     sql: "SELECT * FROM students WHERE id = ?",
@@ -60,6 +95,10 @@ export async function getStudentById(id: string): Promise<StudentRecord | undefi
 }
 
 export async function searchStudents(query: string): Promise<StudentRecord[]> {
+  if (!db) {
+    return searchMockStudents(query);
+  }
+
   await initPromise;
   const pattern = `%${query}%`;
   const result = await db.execute({
@@ -74,6 +113,10 @@ export async function searchStudents(query: string): Promise<StudentRecord[]> {
 }
 
 export async function updateStudentStatus(id: string, status: string) {
+  if (!db) {
+    return;
+  }
+
   await initPromise;
   await db.execute({
     sql: "UPDATE students SET lifecycle_state = ? WHERE id = ?",
