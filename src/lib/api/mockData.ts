@@ -11,7 +11,8 @@ export const mockStudents: StudentRecord[] = [
   {
     profile: {
       id: "student-demo-001",
-      name: "Demo Student",
+      firstName: "Demo",
+      lastName: "Student",
       institution: "University of Cape Town",
     },
     credential: {
@@ -30,7 +31,8 @@ export const mockStudents: StudentRecord[] = [
   {
     profile: {
       id: "student-demo-002",
-      name: "Simulated Student Two",
+      firstName: "Simulated Student",
+      lastName: "Two",
       institution: "University of Cape Town",
     },
     credential: {
