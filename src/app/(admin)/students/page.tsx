@@ -3,6 +3,7 @@ import Link from "next/link";
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { getStudents } from "@/lib/api/client";
+import { requireRole } from "@/lib/auth/session";
 import { formatCredentialStatus } from "@/lib/formatters";
 import { StudentSearch } from "@/features/students/StudentSearch";
 
@@ -11,6 +12,8 @@ export default async function StudentsPage({
 }: {
   searchParams: Promise<{ query?: string }>;
 }) {
+  await requireRole(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
+
   const { query } = await searchParams;
   const students = await getStudents(query ? { q: query } : undefined);
 

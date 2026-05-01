@@ -1,9 +1,12 @@
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { getAuditEvents } from "@/lib/api/client";
+import { requireRole } from "@/lib/auth/session";
 import { formatDateTime, formatEventType } from "@/lib/formatters";
 
 export default async function AuditPage() {
+  await requireRole(["SUPER_ADMIN", "ADMIN", "VIEWER"]);
+
   const events = await getAuditEvents();
 
   return (
