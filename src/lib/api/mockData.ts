@@ -3,55 +3,18 @@ import type {
   AdminVendor,
   AuditEvent,
   BatchIssuancePreview,
-  BatchIssuanceResult,
   DashboardSummary,
   EligibilityRule,
   StudentRecord,
 } from "@/lib/api/types";
-import { buildWalletActivationLink } from "@/lib/api/activationLinks";
+import {
+  getSimulatedUniversityStudentRecords,
+  isStudentRecordEligibleForCredentialIssuance,
+  SIMULATED_STUDENT_COHORT_ID,
+  SIMULATED_STUDENT_RECORD_COUNT,
+} from "@/lib/student-records/simulatedUniversityRecords";
 
-export const mockStudents: StudentRecord[] = [
-  {
-    profile: {
-      id: "student-demo-001",
-      firstName: "Demo",
-      lastName: "Student",
-      institution: "University of Cape Town",
-    },
-    credential: {
-      id: "credential-demo-001",
-      holderName: "Demo Student",
-      issuer: "University of Cape Town",
-      faculty: "Commerce",
-      programme: "Bachelor of Business Science",
-      enrolmentStatus: "Registered",
-      lifecycleState: "Active",
-      studentNumber: "VSKCAL001",
-      validFrom: "2026-01-01T00:00:00Z",
-      expiresAt: "2026-12-31T23:59:59Z",
-    },
-  },
-  {
-    profile: {
-      id: "student-demo-002",
-      firstName: "Simulated Student",
-      lastName: "Two",
-      institution: "University of Cape Town",
-    },
-    credential: {
-      id: "credential-demo-002",
-      holderName: "Simulated Student Two",
-      issuer: "University of Cape Town",
-      faculty: "Science",
-      programme: "Bachelor of Science",
-      enrolmentStatus: "Registered",
-      lifecycleState: "Offered",
-      studentNumber: "VSKSIM002",
-      validFrom: "2026-01-01T00:00:00Z",
-      expiresAt: "2026-12-31T23:59:59Z",
-    },
-  },
-];
+export const mockStudents: StudentRecord[] = getSimulatedUniversityStudentRecords();
 
 export const mockVendors: AdminVendor[] = [
   {
@@ -103,51 +66,20 @@ export const mockAuditEvents: AuditEvent[] = [
     result: "Success",
     occurredAt: "2026-04-21T08:15:00Z",
   },
-  {
-    id: "audit-003",
-    eventType: "ActivationLinkDelivered",
-    actorId: "admin-demo-001",
-    targetId: "credential-demo-002",
-    result: "Success",
-    occurredAt: "2026-04-21T08:30:00Z",
-    reason: "Activation link delivered for simulated student credential",
-  },
 ];
 
 export const mockDashboardSummary: DashboardSummary = {
-  activeCredentials: 96,
-  pendingIssuance: 4,
+  activeCredentials: mockStudents.filter((student) => student.credential.lifecycleState === "Active").length,
+  pendingIssuance: mockStudents.filter(isStudentRecordEligibleForCredentialIssuance).length,
   vendorsPendingApproval: 1,
   auditEventsToday: mockAuditEvents.length,
 };
 
 export const mockBatchIssuancePreview: BatchIssuancePreview = {
   batchId: "batch-001",
-  cohortId: "simulated-2026-cohort",
-  requestedCount: 100,
+  cohortId: SIMULATED_STUDENT_COHORT_ID,
+  requestedCount: SIMULATED_STUDENT_RECORD_COUNT,
   status: "Draft",
 };
 
-export const mockActivationDeliveries: ActivationDelivery[] = [
-  {
-    id: "activation-delivery-001",
-    batchId: "batch-001",
-    channel: "activation-link",
-    credentialId: "credential-demo-002",
-    studentId: "student-demo-002",
-    activationUrl: buildWalletActivationLink("mock-act-7MFK2Q9V"),
-    status: "Delivered",
-    deliveredAt: "2026-04-21T08:30:00Z",
-    expiresAt: "2026-04-22T08:30:00Z",
-  },
-];
-
-export const mockBatchIssuanceResult: BatchIssuanceResult = {
-  batchId: mockBatchIssuancePreview.batchId,
-  cohortId: mockBatchIssuancePreview.cohortId,
-  requestedCount: mockBatchIssuancePreview.requestedCount,
-  status: "Queued",
-  issuedCredentialIds: mockActivationDeliveries.map((delivery) => delivery.credentialId),
-  activationDeliveries: mockActivationDeliveries,
-  queuedAt: "2026-04-21T08:30:00Z",
-};
+export const mockActivationDeliveries: ActivationDelivery[] = [];

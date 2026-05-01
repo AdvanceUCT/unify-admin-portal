@@ -9,6 +9,7 @@ import {
 } from "@/lib/api/client";
 import { mockStudents } from "@/lib/api/mockData";
 import { resetMockActivationStore } from "@/lib/api/mockActivationStore";
+import { selectStudentRecordsForCredentialIssuance } from "@/lib/student-records/simulatedUniversityRecords";
 
 describe("admin mock client", () => {
   afterEach(() => {
@@ -50,17 +51,17 @@ describe("admin mock client", () => {
   });
 
   it("returns delivered activation links for queued batch issuance", async () => {
+    const issuableStudents = selectStudentRecordsForCredentialIssuance(mockStudents);
     const result = await queueBatchIssuance();
 
     expect(result.status).toBe("Queued");
-    expect(result.issuedCredentialIds).toEqual(["credential-demo-002"]);
-    expect(result.activationDeliveries).toHaveLength(1);
+    expect(result.issuedCredentialIds).toEqual(issuableStudents.map((student) => student.credential.id));
+    expect(result.activationDeliveries).toHaveLength(issuableStudents.length);
     expect(result.activationDeliveries[0]).toMatchObject({
-      activationId: "activation-7MFK2Q9V",
       batchId: "batch-001",
       channel: "activation-link",
-      credentialId: "credential-demo-002",
-      studentId: "student-demo-002",
+      credentialId: issuableStudents[0].credential.id,
+      studentId: issuableStudents[0].profile.id,
       status: "Delivered",
     });
     expect(result.activationDeliveries[0].activationUrl).toMatch(/^unifywallet:\/\/activate\?token=/);
@@ -70,10 +71,11 @@ describe("admin mock client", () => {
     await queueBatchIssuance();
     const events = await getAuditEvents();
 
-    expect(events.some((event) => event.eventType === "ActivationLinkDelivered")).toBe(true);
+    expect(events.filter((event) => event.eventType === "ActivationLinkDelivered")).toHaveLength(4);
   });
 
   it("does not derive activation links from student names or numbers", async () => {
+    await queueBatchIssuance();
     const deliveries = await getActivationDeliveries();
     const activationUrls = deliveries.map((delivery) => delivery.activationUrl).join("\n");
 

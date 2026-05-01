@@ -6,6 +6,7 @@ import {
   mockDashboardSummary,
   mockStudents,
 } from "@/lib/api/mockData";
+import { selectStudentRecordsForCredentialIssuance } from "@/lib/student-records/simulatedUniversityRecords";
 import type {
   ActivationDelivery,
   AdminState,
@@ -29,10 +30,7 @@ type MockResult<T> =
   | { data: T; ok: true }
   | { code: string; error: string; ok: false; status: number };
 
-const DEMO_BATCH_TOKEN = "mock-act-7MFK2Q9V";
-const DEMO_CREDENTIAL_ID = "credential-demo-002";
-const DEMO_STUDENT_ID = "student-demo-002";
-const DEMO_WALLET_ID = "wallet-demo-001";
+const DEMO_WALLET_ID_PREFIX = "wallet-demo";
 const ISSUER_LABEL = "UNIFY Issuer Service";
 const LEDGER_NAME = "BCovrin Test" as const;
 
@@ -116,18 +114,16 @@ function activationDeliveryForActivationId(state: MockActivationState, activatio
   });
 }
 
-function findDemoStudent(state: MockActivationState) {
-  return state.students.find((student) => student.profile.id === DEMO_STUDENT_ID);
-}
-
 function dashboardSummary(state: MockActivationState): DashboardSummary {
-  const demoCredentialIsActive =
-    findDemoStudent(state)?.credential.lifecycleState === "Active";
+  const activeCredentials = state.students.filter((student) => student.credential.lifecycleState === "Active").length;
+  const pendingIssuance = state.students.filter((student) =>
+    ["Issuing", "Offered", "Pending"].includes(student.credential.lifecycleState),
+  ).length;
 
   return {
-    activeCredentials: mockDashboardSummary.activeCredentials + (demoCredentialIsActive ? 1 : 0),
+    activeCredentials,
     auditEventsToday: state.auditEvents.length,
-    pendingIssuance: Math.max(0, mockDashboardSummary.pendingIssuance - (demoCredentialIsActive ? 1 : 0)),
+    pendingIssuance,
     vendorsPendingApproval: mockDashboardSummary.vendorsPendingApproval,
   };
 }
@@ -177,48 +173,58 @@ export function resetMockActivationStore() {
 export function queueMockBatchIssuance(now = new Date()): BatchIssuanceResult {
   const state = mutableState();
   const queuedAt = now.toISOString();
-  const activationId = activationIdForToken(DEMO_BATCH_TOKEN);
-  const existingIndex = state.activationDeliveries.findIndex(
-    (delivery) => delivery.credentialId === DEMO_CREDENTIAL_ID,
-  );
-  const delivery: ActivationDelivery = {
-    activationId,
-    activationUrl: buildWalletActivationLink(DEMO_BATCH_TOKEN),
-    batchId: mockBatchIssuancePreview.batchId,
-    channel: "activation-link",
-    credentialId: DEMO_CREDENTIAL_ID,
-    deliveredAt: queuedAt,
-    expiresAt: deliveryExpiryFrom(now),
-    id: "activation-delivery-001",
-    status: "Delivered",
-    studentId: DEMO_STUDENT_ID,
-  };
+  const studentsForIssuance = selectStudentRecordsForCredentialIssuance(state.students, {
+    cohortId: mockBatchIssuancePreview.cohortId,
+    limit: mockBatchIssuancePreview.requestedCount,
+  });
+  const activationDeliveries = studentsForIssuance.map((student, index): ActivationDelivery => {
+    const token = `mock-act-${mockBatchIssuancePreview.batchId}-${String(index + 1).padStart(3, "0")}`;
 
-  if (existingIndex >= 0) {
-    state.activationDeliveries[existingIndex] = delivery;
-  } else {
-    state.activationDeliveries.push(delivery);
-  }
-
-  const student = findDemoStudent(state);
-  if (student) {
-    student.credential.lifecycleState = "Offered";
-  }
-
-  appendAuditEvent(state, {
-    actorId: "admin-demo-001",
-    eventType: "ActivationLinkDelivered",
-    occurredAt: queuedAt,
-    reason: "Activation link delivered for simulated student credential",
-    result: "Success",
-    targetId: DEMO_CREDENTIAL_ID,
+    return {
+      activationId: activationIdForToken(token),
+      activationUrl: buildWalletActivationLink(token),
+      batchId: mockBatchIssuancePreview.batchId,
+      channel: "activation-link",
+      credentialId: student.credential.id,
+      deliveredAt: queuedAt,
+      expiresAt: deliveryExpiryFrom(now),
+      id: `activation-delivery-${String(index + 1).padStart(3, "0")}`,
+      status: "Delivered",
+      studentId: student.profile.id,
+    };
   });
 
+  for (const delivery of activationDeliveries) {
+    const existingIndex = state.activationDeliveries.findIndex(
+      (candidate) => candidate.credentialId === delivery.credentialId,
+    );
+
+    if (existingIndex >= 0) {
+      state.activationDeliveries[existingIndex] = delivery;
+    } else {
+      state.activationDeliveries.push(delivery);
+    }
+
+    const student = state.students.find((candidate) => candidate.profile.id === delivery.studentId);
+    if (student) {
+      student.credential.lifecycleState = "Offered";
+    }
+
+    appendAuditEvent(state, {
+      actorId: "admin-demo-001",
+      eventType: "ActivationLinkDelivered",
+      occurredAt: queuedAt,
+      reason: "Activation link delivered for simulated student credential",
+      result: "Success",
+      targetId: delivery.credentialId,
+    });
+  }
+
   return {
-    activationDeliveries: clone([delivery]),
+    activationDeliveries: clone(activationDeliveries),
     batchId: mockBatchIssuancePreview.batchId,
     cohortId: mockBatchIssuancePreview.cohortId,
-    issuedCredentialIds: [DEMO_CREDENTIAL_ID],
+    issuedCredentialIds: activationDeliveries.map((delivery) => delivery.credentialId),
     queuedAt,
     requestedCount: mockBatchIssuancePreview.requestedCount,
     status: "Queued",
@@ -285,7 +291,7 @@ export function resolveMockWalletActivation(
       issuerLabel: ISSUER_LABEL,
       ledgerName: LEDGER_NAME,
       studentId: delivery.studentId,
-      walletId: DEMO_WALLET_ID,
+      walletId: `${DEMO_WALLET_ID_PREFIX}-${suffixFor(delivery.studentId)}`,
     },
     ok: true,
   };
