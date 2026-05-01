@@ -1,15 +1,33 @@
 import {
-  mockAuditEvents,
   mockBatchIssuancePreview,
-  mockDashboardSummary,
   mockEligibilityRules,
-  mockStudents,
   mockVendors,
 } from "@/lib/api/mockData";
-
-import type { StudentRecord } from "@/lib/api/types";
+import { getMockAdminState, queueMockBatchIssuance } from "@/lib/api/mockActivationStore";
+import type { AdminState, BatchIssuanceResult, StudentRecord } from "@/lib/api/types";
 
 const wait = (durationMs = 50) => new Promise((resolve) => setTimeout(resolve, durationMs));
+
+function shouldUseMockApi() {
+  return typeof window !== "undefined" && process.env.NODE_ENV !== "test";
+}
+
+async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, {
+    cache: "no-store",
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...init?.headers,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Mock API request failed with status ${response.status}.`);
+  }
+
+  return response.json() as Promise<T>;
+}
 
 async function apiFetch<T>(path: string): Promise<T> {
   const base =
@@ -21,13 +39,23 @@ async function apiFetch<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function getDashboardSummary() {
+export async function getAdminState() {
   await wait();
-  return mockDashboardSummary;
+
+  if (shouldUseMockApi()) {
+    return fetchJson<AdminState>("/api/mock/admin-state");
+  }
+
+  return getMockAdminState();
+}
+
+export async function getDashboardSummary() {
+  const state = await getAdminState();
+  return state.dashboardSummary;
 }
 
 export async function getStudents(params?: { q?: string }) {
-  const qs = params?.q ? `?query=${params.q}` : "";
+  const qs = params?.q ? `?${new URLSearchParams({ query: params.q }).toString()}` : "";
   return apiFetch<StudentRecord[]>(`/api/admin/students${qs}`);
 }
 
@@ -40,8 +68,18 @@ export async function getStudentById(studentId: string) {
 }
 
 export async function getCredentials() {
-  await wait();
-  return mockStudents.map((student) => student.credential);
+  const state = await getAdminState();
+  return state.credentials;
+}
+
+export async function getActivationDeliveries() {
+  const state = await getAdminState();
+  return state.activationDeliveries;
+}
+
+export async function getActivationDeliveryByCredentialId(credentialId: string) {
+  const deliveries = await getActivationDeliveries();
+  return deliveries.find((delivery) => delivery.credentialId === credentialId);
 }
 
 export async function getVendors() {
@@ -55,16 +93,28 @@ export async function getEligibilityRules() {
 }
 
 export async function getAuditEvents() {
-  await wait();
-  return mockAuditEvents;
+  const state = await getAdminState();
+  return state.auditEvents;
 }
 
 export async function getRecentAuditEvents() {
-  await wait();
-  return mockAuditEvents.slice(0, 5);
+  const events = await getAuditEvents();
+  return events.slice(0, 5);
 }
 
 export async function getBatchIssuancePreview() {
   await wait();
   return mockBatchIssuancePreview;
+}
+
+export async function queueBatchIssuance() {
+  await wait();
+
+  if (shouldUseMockApi()) {
+    return fetchJson<BatchIssuanceResult>("/api/mock/credentials/batch-issue", {
+      method: "POST",
+    });
+  }
+
+  return queueMockBatchIssuance();
 }

@@ -1,11 +1,14 @@
 import type {
+  ActivationDelivery,
   AdminVendor,
   AuditEvent,
   BatchIssuancePreview,
+  BatchIssuanceResult,
   DashboardSummary,
   EligibilityRule,
   StudentRecord,
 } from "@/lib/api/types";
+import { buildWalletActivationLink } from "@/lib/api/activationLinks";
 
 export const mockStudents: StudentRecord[] = [
   {
@@ -100,6 +103,15 @@ export const mockAuditEvents: AuditEvent[] = [
     result: "Success",
     occurredAt: "2026-04-21T08:15:00Z",
   },
+  {
+    id: "audit-003",
+    eventType: "ActivationLinkDelivered",
+    actorId: "admin-demo-001",
+    targetId: "credential-demo-002",
+    result: "Success",
+    occurredAt: "2026-04-21T08:30:00Z",
+    reason: "Activation link delivered for simulated student credential",
+  },
 ];
 
 export const mockDashboardSummary: DashboardSummary = {
@@ -114,4 +126,28 @@ export const mockBatchIssuancePreview: BatchIssuancePreview = {
   cohortId: "simulated-2026-cohort",
   requestedCount: 100,
   status: "Draft",
+};
+
+export const mockActivationDeliveries: ActivationDelivery[] = [
+  {
+    id: "activation-delivery-001",
+    batchId: "batch-001",
+    channel: "activation-link",
+    credentialId: "credential-demo-002",
+    studentId: "student-demo-002",
+    activationUrl: buildWalletActivationLink("mock-act-7MFK2Q9V"),
+    status: "Delivered",
+    deliveredAt: "2026-04-21T08:30:00Z",
+    expiresAt: "2026-04-22T08:30:00Z",
+  },
+];
+
+export const mockBatchIssuanceResult: BatchIssuanceResult = {
+  batchId: mockBatchIssuancePreview.batchId,
+  cohortId: mockBatchIssuancePreview.cohortId,
+  requestedCount: mockBatchIssuancePreview.requestedCount,
+  status: "Queued",
+  issuedCredentialIds: mockActivationDeliveries.map((delivery) => delivery.credentialId),
+  activationDeliveries: mockActivationDeliveries,
+  queuedAt: "2026-04-21T08:30:00Z",
 };

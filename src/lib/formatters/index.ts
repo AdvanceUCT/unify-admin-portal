@@ -1,4 +1,10 @@
-import type { AuditEvent, CredentialLifecycleState, Money, PaymentRecord } from "@/lib/api/types";
+import type {
+  ActivationDeliveryStatus,
+  AuditEvent,
+  CredentialLifecycleState,
+  Money,
+  PaymentRecord,
+} from "@/lib/api/types";
 
 const currencyFormatter = new Intl.NumberFormat("en-ZA", {
   currency: "ZAR",
@@ -22,7 +28,15 @@ const credentialStatusLabels: Record<CredentialLifecycleState, string> = {
   Suspended: "Suspended",
 };
 
+const activationDeliveryStatusLabels: Record<ActivationDeliveryStatus, string> = {
+  Delivered: "Delivered",
+  Failed: "Failed",
+  Pending: "Pending",
+};
+
 const eventTypeLabels: Record<AuditEvent["eventType"], string> = {
+  ActivationLinkDelivered: "Activation link delivered",
+  CredentialActivated: "Credential activated",
   CredentialIssued: "Credential issued",
   CredentialRenewed: "Credential renewed",
   CredentialSuspended: "Credential suspended",
@@ -49,6 +63,10 @@ export function formatDateTime(value: string) {
 
 export function formatCredentialStatus(value: CredentialLifecycleState) {
   return credentialStatusLabels[value];
+}
+
+export function formatActivationDeliveryStatus(value: ActivationDeliveryStatus) {
+  return activationDeliveryStatusLabels[value];
 }
 
 export function formatEventType(value: AuditEvent["eventType"]) {

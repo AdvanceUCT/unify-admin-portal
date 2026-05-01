@@ -55,6 +55,8 @@ export type QrPayload =
 export type AuditEvent = {
   id: string;
   eventType:
+    | "ActivationLinkDelivered"
+    | "CredentialActivated"
     | "CredentialIssued"
     | "CredentialRenewed"
     | "CredentialSuspended"
@@ -106,9 +108,80 @@ export type DashboardSummary = {
   auditEventsToday: number;
 };
 
+export type ActivationDeliveryStatus = "Pending" | "Delivered" | "Failed";
+
+export type ActivationDelivery = {
+  id: string;
+  activationId?: string;
+  batchId: string;
+  channel: "activation-link";
+  credentialId: string;
+  studentId: string;
+  activationUrl: string;
+  status: ActivationDeliveryStatus;
+  activatedAt?: string;
+  deliveredAt?: string;
+  expiresAt: string;
+  failureReason?: string;
+  credentialRecordId?: string;
+  holderConnectionId?: string;
+};
+
 export type BatchIssuancePreview = {
   batchId: string;
   cohortId: string;
   requestedCount: number;
   status: "Queued" | "Draft";
+};
+
+export type BatchIssuanceResult = {
+  batchId: string;
+  cohortId: string;
+  requestedCount: number;
+  status: "Queued";
+  issuedCredentialIds: string[];
+  activationDeliveries: ActivationDelivery[];
+  queuedAt: string;
+};
+
+export type AdminState = {
+  activationDeliveries: ActivationDelivery[];
+  auditEvents: AuditEvent[];
+  credentials: StudentCredential[];
+  dashboardSummary: DashboardSummary;
+  students: StudentRecord[];
+};
+
+export type WalletActivationResolveRequest = {
+  kind?: "token";
+  sourceUrl?: string;
+  token: string;
+};
+
+export type WalletActivationResolveResponse = {
+  activationId: string;
+  activationSource: "token";
+  createdAt: string;
+  expiresAt: string;
+  invitationId: string;
+  invitationUrl: string;
+  issuerLabel: string;
+  ledgerName: "BCovrin Test";
+  studentId: string;
+  walletId: string;
+};
+
+export type WalletActivationCompleteRequest = {
+  activationId: string;
+  credentialRecordId: string;
+  holderConnectionId: string;
+};
+
+export type WalletActivationCompleteResponse = {
+  activatedAt: string;
+  activationId: string;
+  credentialId: string;
+  credentialRecordId: string;
+  holderConnectionId: string;
+  studentId: string;
 };
