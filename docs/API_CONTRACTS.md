@@ -25,7 +25,8 @@ Primary source alignment: `BA Innovation.docx` defines the prototype as a simula
 ```ts
 type StudentProfile = {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   institution: string;
 };
 ```
@@ -338,6 +339,16 @@ Response:
 ```
 
 ## Admin API
+
+### Simulated university student records source
+
+For this proof-of-concept, the admin portal treats the university student records system as a deterministic simulated connector. It returns 100 mock UCT student records for `simulated-2026-cohort` and supplies the student details needed for VC issuance: stable student ID, first and last name, student number, institution, faculty, programme, enrolment status, validity period, and current credential lifecycle state.
+
+Rules:
+
+- Do not connect to live university systems or commit real student data in this phase.
+- Student lookup, student detail views, and batch issuance should read through the same records boundary.
+- Batch issuance selects issuance-eligible simulated records from that boundary and generates token-only activation links; names and student numbers must not be embedded in activation URLs.
 
 Planned endpoints:
 

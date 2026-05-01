@@ -1,5 +1,9 @@
 import type { StudentRecord } from "@/lib/api/types";
-import { mockStudents } from "@/lib/api/mockData";
+import {
+  getSimulatedUniversityStudentRecordById,
+  getSimulatedUniversityStudentRecords,
+  searchSimulatedUniversityStudentRecords,
+} from "@/lib/student-records/simulatedUniversityRecords";
 import db from "./database";
 import { seedDatabase } from "./seed";
 
@@ -48,31 +52,9 @@ async function init() {
 
 const initPromise = db ? init() : Promise.resolve();
 
-function searchMockStudents(query: string) {
-  const normalizedQuery = query.trim().toLowerCase();
-
-  if (!normalizedQuery) {
-    return mockStudents;
-  }
-
-  return mockStudents.filter((student) => {
-    const fullName = `${student.profile.firstName} ${student.profile.lastName}`.toLowerCase();
-    const searchableValues = [
-      student.profile.firstName,
-      student.profile.lastName,
-      fullName,
-      student.credential.faculty,
-      student.credential.programme,
-      student.credential.studentNumber,
-    ];
-
-    return searchableValues.some((value) => value?.toLowerCase().includes(normalizedQuery));
-  });
-}
-
 export async function getAllStudents(): Promise<StudentRecord[]> {
   if (!db) {
-    return mockStudents;
+    return getSimulatedUniversityStudentRecords();
   }
 
   await initPromise;
@@ -82,7 +64,7 @@ export async function getAllStudents(): Promise<StudentRecord[]> {
 
 export async function getStudentById(id: string): Promise<StudentRecord | undefined> {
   if (!db) {
-    return mockStudents.find((student) => student.profile.id === id);
+    return getSimulatedUniversityStudentRecordById(id);
   }
 
   await initPromise;
@@ -96,7 +78,7 @@ export async function getStudentById(id: string): Promise<StudentRecord | undefi
 
 export async function searchStudents(query: string): Promise<StudentRecord[]> {
   if (!db) {
-    return searchMockStudents(query);
+    return searchSimulatedUniversityStudentRecords(query);
   }
 
   await initPromise;

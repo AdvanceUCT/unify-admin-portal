@@ -36,9 +36,9 @@ describe("BatchIssuancePanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Queue batch" }));
 
-    expect(await screen.findByText("Delivered")).toBeInTheDocument();
-    expect(screen.getByDisplayValue(/^unifywallet:\/\/activate\?token=/)).toBeInTheDocument();
-    expect(screen.getByText("credential-demo-002")).toBeInTheDocument();
+    expect((await screen.findAllByText("Delivered")).length).toBeGreaterThan(0);
+    expect(screen.getAllByDisplayValue(/^unifywallet:\/\/activate\?token=/).length).toBeGreaterThan(0);
+    expect(screen.getByText("credential-demo-097")).toBeInTheDocument();
   });
 
   it("handles denied clipboard permission without throwing", async () => {
@@ -53,8 +53,8 @@ describe("BatchIssuancePanel", () => {
     render(<BatchIssuancePanel preview={preview} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Queue batch" }));
-    await screen.findByDisplayValue(/^unifywallet:\/\/activate\?token=/);
-    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    await screen.findAllByDisplayValue(/^unifywallet:\/\/activate\?token=/);
+    fireEvent.click(screen.getAllByRole("button", { name: "Copy" })[0]);
 
     expect(await screen.findByRole("button", { name: "Select link" })).toBeInTheDocument();
   });

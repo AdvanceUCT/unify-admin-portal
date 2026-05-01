@@ -14,7 +14,7 @@ The student pages live in `src/app/(admin)/students/` and are server components 
 - `[studentId]/page.tsx` — displays full credential details for a single student including faculty, programme, enrolment status, student number, valid from, expiry date and available actions.
 
 ## Data flow
-page.tsx → client.ts → GET /api/admin/students → store.ts → Turso cloud database
+page.tsx → client.ts → GET /api/admin/students → store.ts → simulated university records connector → optional Turso/libSQL mirror
 
 ## API routes
 - `GET /api/admin/students` — returns all students or filtered results when `?query=` is provided

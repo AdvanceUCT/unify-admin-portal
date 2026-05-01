@@ -25,8 +25,9 @@ function mockAdminStateFetch(state: AdminState) {
 
 function activatedState() {
   const queuedAt = new Date("2026-04-27T10:00:00Z");
-  queueMockBatchIssuance(queuedAt);
-  const resolved = resolveMockWalletActivation({ token: "mock-act-7MFK2Q9V" }, queuedAt);
+  const queued = queueMockBatchIssuance(queuedAt);
+  const token = new URL(queued.activationDeliveries[0].activationUrl).searchParams.get("token") ?? "";
+  const resolved = resolveMockWalletActivation({ token }, queuedAt);
 
   if (!resolved.ok) {
     throw new Error(resolved.error);
@@ -54,20 +55,24 @@ describe("admin live tables", () => {
   it("renders activated student state from admin state", () => {
     const state = activatedState();
     mockAdminStateFetch(state);
+    const activatedDelivery = state.activationDeliveries.find((delivery) => delivery.activatedAt);
+    const activatedStudent = state.students.find((student) => student.profile.id === activatedDelivery?.studentId);
 
     render(<StudentsTable initialState={state} />);
 
-    expect(screen.getByText("Simulated Student Two")).toBeInTheDocument();
+    expect(screen.getByText(activatedStudent?.credential.studentNumber ?? "")).toBeInTheDocument();
     expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
   });
 
   it("renders activated credential and delivery metadata", () => {
     const state = activatedState();
     mockAdminStateFetch(state);
+    const activatedDelivery = state.activationDeliveries.find((delivery) => delivery.activatedAt);
+    const activatedStudent = state.students.find((student) => student.profile.id === activatedDelivery?.studentId);
 
     render(<CredentialsTable initialState={state} />);
 
-    expect(screen.getByText("Simulated Student Two")).toBeInTheDocument();
+    expect(screen.getByText(activatedStudent?.credential.studentNumber ?? "")).toBeInTheDocument();
     expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
     expect(screen.getByText(/Activated .*2026/)).toBeInTheDocument();
   });
@@ -79,6 +84,6 @@ describe("admin live tables", () => {
     render(<AuditTable initialState={state} />);
 
     expect(screen.getByText("Credential activated")).toBeInTheDocument();
-    expect(screen.getAllByText("credential-demo-002").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("credential-demo-097").length).toBeGreaterThan(0);
   });
 });

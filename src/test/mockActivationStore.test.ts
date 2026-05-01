@@ -6,6 +6,8 @@ import {
   resetMockActivationStore,
   resolveMockWalletActivation,
 } from "@/lib/api/mockActivationStore";
+import { mockStudents } from "@/lib/api/mockData";
+import { selectStudentRecordsForCredentialIssuance } from "@/lib/student-records/simulatedUniversityRecords";
 
 const queuedAt = new Date("2026-04-27T10:00:00Z");
 
@@ -15,38 +17,43 @@ describe("mock activation store", () => {
   });
 
   it("queues delivered activation link state and keeps the credential offered", () => {
+    const issuableStudents = selectStudentRecordsForCredentialIssuance(mockStudents);
     const result = queueMockBatchIssuance(queuedAt);
     const state = getMockAdminState();
-    const credential = state.credentials.find((candidate) => candidate.id === "credential-demo-002");
+    const credential = state.credentials.find((candidate) => candidate.id === issuableStudents[0].credential.id);
 
     expect(result).toMatchObject({
       batchId: "batch-001",
-      issuedCredentialIds: ["credential-demo-002"],
+      issuedCredentialIds: issuableStudents.map((student) => student.credential.id),
       queuedAt: queuedAt.toISOString(),
       status: "Queued",
     });
+    expect(result.activationDeliveries).toHaveLength(issuableStudents.length);
     expect(result.activationDeliveries[0]).toMatchObject({
       batchId: "batch-001",
-      credentialId: "credential-demo-002",
+      credentialId: issuableStudents[0].credential.id,
       status: "Delivered",
-      studentId: "student-demo-002",
+      studentId: issuableStudents[0].profile.id,
     });
-    expect(result.activationDeliveries[0].activationUrl).toBe("unifywallet://activate?token=mock-act-7MFK2Q9V");
+    expect(result.activationDeliveries[0].activationUrl).toMatch(/^unifywallet:\/\/activate\?token=/);
     expect(credential?.lifecycleState).toBe("Offered");
-    expect(state.auditEvents.some((event) => event.eventType === "ActivationLinkDelivered")).toBe(true);
+    expect(state.auditEvents.filter((event) => event.eventType === "ActivationLinkDelivered")).toHaveLength(4);
   });
 
   it("rejects unknown and expired activation tokens", () => {
+    const queued = queueMockBatchIssuance(queuedAt);
+    const token = new URL(queued.activationDeliveries[0].activationUrl).searchParams.get("token") ?? "";
     const unknown = resolveMockWalletActivation({ token: "missing-token" }, queuedAt);
-    const expired = resolveMockWalletActivation({ token: "mock-act-7MFK2Q9V" }, queuedAt);
+    const expired = resolveMockWalletActivation({ token }, new Date("2026-04-28T10:01:00Z"));
 
     expect(unknown).toMatchObject({ code: "ActivationTokenNotFound", ok: false, status: 404 });
     expect(expired).toMatchObject({ code: "ActivationTokenExpired", ok: false, status: 410 });
   });
 
   it("resolves a queued token into holder activation data", () => {
-    queueMockBatchIssuance(queuedAt);
-    const result = resolveMockWalletActivation({ token: "mock-act-7MFK2Q9V" }, queuedAt);
+    const queued = queueMockBatchIssuance(queuedAt);
+    const token = new URL(queued.activationDeliveries[0].activationUrl).searchParams.get("token") ?? "";
+    const result = resolveMockWalletActivation({ token }, queuedAt);
 
     expect(result.ok).toBe(true);
     if (!result.ok) {
@@ -54,19 +61,21 @@ describe("mock activation store", () => {
     }
 
     expect(result.data).toMatchObject({
-      activationId: "activation-7MFK2Q9V",
       activationSource: "token",
       issuerLabel: "UNIFY Issuer Service",
       ledgerName: "BCovrin Test",
-      studentId: "student-demo-002",
-      walletId: "wallet-demo-001",
+      studentId: queued.activationDeliveries[0].studentId,
     });
+    expect(result.data.activationId).toMatch(/^activation-/);
+    expect(result.data.walletId).toMatch(/^wallet-demo-/);
     expect(result.data.invitationUrl).toContain("https://issuer.advanceuct.test/oob?oob=");
   });
 
   it("completes activation and marks the offered credential active", () => {
-    queueMockBatchIssuance(queuedAt);
-    const resolved = resolveMockWalletActivation({ token: "mock-act-7MFK2Q9V" }, queuedAt);
+    const queued = queueMockBatchIssuance(queuedAt);
+    const firstDelivery = queued.activationDeliveries[0];
+    const token = new URL(firstDelivery.activationUrl).searchParams.get("token") ?? "";
+    const resolved = resolveMockWalletActivation({ token }, queuedAt);
 
     expect(resolved.ok).toBe(true);
     if (!resolved.ok) {
@@ -82,8 +91,8 @@ describe("mock activation store", () => {
       new Date("2026-04-27T10:05:00Z"),
     );
     const state = getMockAdminState();
-    const credential = state.credentials.find((candidate) => candidate.id === "credential-demo-002");
-    const delivery = state.activationDeliveries.find((candidate) => candidate.credentialId === "credential-demo-002");
+    const credential = state.credentials.find((candidate) => candidate.id === firstDelivery.credentialId);
+    const delivery = state.activationDeliveries.find((candidate) => candidate.credentialId === firstDelivery.credentialId);
 
     expect(result.ok).toBe(true);
     expect(credential?.lifecycleState).toBe("Active");
@@ -95,7 +104,7 @@ describe("mock activation store", () => {
     expect(state.auditEvents[0]).toMatchObject({
       eventType: "CredentialActivated",
       result: "Success",
-      targetId: "credential-demo-002",
+      targetId: firstDelivery.credentialId,
     });
   });
 });

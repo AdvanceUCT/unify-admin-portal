@@ -13,7 +13,7 @@ Future Codex instances should read this file first, then:
 
 - Stack: Next.js 16, TypeScript, Tailwind CSS, Better Auth, Prisma, PostgreSQL/Supabase.
 - Current implementation: runnable admin portal with invite-only authentication, RBAC, user management, password reset, and audit logging.
-- Current app data: portal auth data is stored in PostgreSQL; domain records are still mock/simulated.
+- Current app data: portal auth data is stored in PostgreSQL; domain student records come from a deterministic simulated university records connector, with optional Turso/libSQL persistence as a mock records mirror.
 - Current email delivery: admin invites and password resets use development console logging. A real email provider is still required for production.
 - GitHub Actions: present and expected to handle the repo before an app package exists.
 - System scope: proof of concept using simulated student records, simulated service providers, and simulated wallet/payment flows.
@@ -130,7 +130,7 @@ Current structure:
 This repo should stay aligned with the BA system document:
 
 - Build for a controlled proof-of-concept, not production rollout.
-- Use simulated student records until a later integration decision exists.
+- Use the simulated university student records connector until a later integration decision exists.
 - Manage issuance, renewal, suspension, reinstatement, revocation, vendor onboarding, rules, monitoring, and audit workflows.
 - Do not connect to live university systems or real payment infrastructure in this project scope.
 - Keep PII off-chain; ledger integrations should store only public trust artefacts.
