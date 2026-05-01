@@ -28,7 +28,7 @@ export function StudentsTable({ initialState }: { initialState: AdminState }) {
               <tr key={student.profile.id}>
                 <td className="px-5 py-4">
                   <Link className="font-medium text-zinc-950 hover:underline" href={`/students/${student.profile.id}`}>
-                    {student.profile.name}
+                    {student.profile.firstName} {student.profile.lastName}
                   </Link>
                   <p className="text-xs text-zinc-500">{student.credential.studentNumber}</p>
                 </td>

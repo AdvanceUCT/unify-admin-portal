@@ -1,8 +1,11 @@
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { CredentialsTable } from "@/features/credentials/CredentialsTable";
 import { getAdminState } from "@/lib/api/client";
+import { requireRole } from "@/lib/auth/session";
 
 export default async function CredentialsPage() {
+  await requireRole(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
+
   const initialState = await getAdminState();
 
   return (

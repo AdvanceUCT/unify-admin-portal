@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getActivationDeliveries,
   getAuditEvents,
@@ -7,16 +7,32 @@ import {
   getVendors,
   queueBatchIssuance,
 } from "@/lib/api/client";
+import { mockStudents } from "@/lib/api/mockData";
 import { resetMockActivationStore } from "@/lib/api/mockActivationStore";
 
 describe("admin mock client", () => {
   afterEach(() => {
     resetMockActivationStore();
+    vi.unstubAllGlobals();
   });
 
+  function mockJsonFetch(data: unknown) {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(data), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      }),
+    );
+
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
   it("returns contract-shaped student credential data", async () => {
+    const fetchMock = mockJsonFetch(mockStudents);
     const students = await getStudents();
 
+    expect(fetchMock).toHaveBeenCalledWith("/api/admin/students");
     expect(students[0].credential.validFrom).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(students[0].credential.lifecycleState).toBe("Active");
   });
@@ -58,12 +74,15 @@ describe("admin mock client", () => {
   });
 
   it("does not derive activation links from student names or numbers", async () => {
-    const [students, deliveries] = await Promise.all([getStudents(), getActivationDeliveries()]);
+    const deliveries = await getActivationDeliveries();
     const activationUrls = deliveries.map((delivery) => delivery.activationUrl).join("\n");
 
-    for (const student of students) {
-      expect(activationUrls).not.toContain(student.profile.name);
-      expect(activationUrls).not.toContain(encodeURIComponent(student.profile.name));
+    for (const student of mockStudents) {
+      const fullName = `${student.profile.firstName} ${student.profile.lastName}`;
+      expect(activationUrls).not.toContain(fullName);
+      expect(activationUrls).not.toContain(encodeURIComponent(fullName));
+      expect(activationUrls).not.toContain(student.profile.firstName);
+      expect(activationUrls).not.toContain(student.profile.lastName);
       expect(activationUrls).not.toContain(student.credential.studentNumber);
     }
   });

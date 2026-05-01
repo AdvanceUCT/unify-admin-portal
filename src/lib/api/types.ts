@@ -2,7 +2,8 @@ export type Money = string;
 
 export type StudentProfile = {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   institution: string;
 };
 

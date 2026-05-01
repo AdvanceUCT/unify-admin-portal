@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
+import { SignOutButton } from "@/components/layout/SignOutButton";
 
 export type PortalNavItem = {
   href: string;
@@ -59,7 +60,10 @@ export function PortalShell({
               <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">{context}</p>
               <p className="font-semibold text-zinc-950">{productName}</p>
             </div>
-            <span className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600">{sessionLabel}</span>
+            <div className="flex items-center gap-3">
+              <span className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600">{sessionLabel}</span>
+              <SignOutButton />
+            </div>
           </div>
         </header>
         <main className="mx-auto max-w-6xl px-5 py-8">{children}</main>
