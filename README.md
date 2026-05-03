@@ -108,6 +108,13 @@ The portal uses Better Auth with Prisma-backed persistence. Public sign-up is di
 - `/users/invites`: create and revoke admin invites.
 - `/forgot-password`: request a password reset.
 
+### Super Admin Account
+
+```
+Email: superadmin@example.com
+Password: SuperAdmin123!
+```
+
 ## App Structure
 
 Current structure:
