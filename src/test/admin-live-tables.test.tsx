@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuditTable } from "@/features/audit/AuditTable";
 import { CredentialsTable } from "@/features/credentials/CredentialsTable";
@@ -49,6 +49,7 @@ describe("admin live tables", () => {
   afterEach(() => {
     cleanup();
     resetMockActivationStore();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -85,5 +86,19 @@ describe("admin live tables", () => {
 
     expect(screen.getByText("Credential activated")).toBeInTheDocument();
     expect(screen.getAllByText("credential-demo-097").length).toBeGreaterThan(0);
+  });
+
+  it("does not poll admin state by default when server state is provided", async () => {
+    vi.useFakeTimers();
+    const state = activatedState();
+    mockAdminStateFetch(state);
+
+    render(<CredentialsTable initialState={state} />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

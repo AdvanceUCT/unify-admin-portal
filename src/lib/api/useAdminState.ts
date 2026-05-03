@@ -5,7 +5,7 @@ import type { AdminState } from "@/lib/api/types";
 
 type UseAdminStateOptions = {
   initialState?: AdminState;
-  pollMs?: number;
+  pollMs?: number | null;
 };
 
 async function fetchAdminState() {
@@ -18,10 +18,15 @@ async function fetchAdminState() {
   return response.json() as Promise<AdminState>;
 }
 
-export function useAdminState({ initialState, pollMs = 2000 }: UseAdminStateOptions = {}) {
+function shouldPoll(pollMs: number | null): pollMs is number {
+  return pollMs !== null && Number.isFinite(pollMs) && pollMs > 0;
+}
+
+export function useAdminState({ initialState, pollMs = null }: UseAdminStateOptions = {}) {
+  const shouldLoadOnMount = !initialState;
   const [state, setState] = useState<AdminState | null>(initialState ?? null);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(!initialState);
+  const [isLoading, setIsLoading] = useState(shouldLoadOnMount);
 
   const refresh = useCallback(async () => {
     const nextState = await fetchAdminState();
@@ -51,14 +56,19 @@ export function useAdminState({ initialState, pollMs = 2000 }: UseAdminStateOpti
       }
     }
 
-    void load();
-    const intervalId = window.setInterval(() => void load(), pollMs);
+    if (shouldLoadOnMount) {
+      void load();
+    }
+
+    const intervalId = shouldPoll(pollMs) ? window.setInterval(() => void load(), pollMs) : undefined;
 
     return () => {
       isMounted = false;
-      window.clearInterval(intervalId);
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
     };
-  }, [pollMs]);
+  }, [pollMs, shouldLoadOnMount]);
 
   return { error, isLoading, refresh, state };
 }
