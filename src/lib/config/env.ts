@@ -1,8 +1,41 @@
 import { z } from "zod";
 
+function isPlaceholderSupabaseUrl(value: string) {
+  try {
+    const url = new URL(value);
+    const partsToCheck = [
+      url.hostname,
+      url.username,
+      url.password,
+    ];
+
+    return partsToCheck.some((part) =>
+      [
+        "project-ref",
+        "aws-0-region",
+        "[project-ref]",
+        "[db-region]",
+        "[region]",
+        "[your-password]",
+      ].some((placeholder) => part.toLowerCase().includes(placeholder)),
+    );
+  } catch {
+    return false;
+  }
+}
+
+const databaseUrl = (name: string) =>
+  z
+    .string()
+    .min(1, `${name} is required`)
+    .url()
+    .refine((value) => !isPlaceholderSupabaseUrl(value), {
+      message: `${name} still contains placeholder Supabase values. Replace it with the real connection string from Supabase Dashboard > Connect.`,
+    });
+
 const envSchema = z.object({
-  DATABASE_URL: z.string().min(1, "DATABASE_URL is required").url(),
-  DIRECT_URL: z.string().url().optional(),
+  DATABASE_URL: databaseUrl("DATABASE_URL"),
+  DIRECT_URL: databaseUrl("DIRECT_URL").optional(),
   BETTER_AUTH_SECRET: z
     .string()
     .min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),
