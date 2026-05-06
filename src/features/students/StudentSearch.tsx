@@ -8,43 +8,120 @@ import type { StudentRecord } from "@/lib/api/types";
 
 export function StudentSearch({ initial }: { initial: StudentRecord[] }) {
   const [query, setQuery] = useState("");
+  const [faculty, setFaculty] = useState("");
+  const [programme, setProgramme] = useState("");
+
+  const faculties = useMemo(() =>
+    [...new Set(initial.map((s) => s.credential.faculty).filter(Boolean))].sort(),
+    [initial]
+  );
+
+  const programmes = useMemo(() =>
+    [...new Set(
+      initial
+        .filter((s) => !faculty || s.credential.faculty === faculty)
+        .map((s) => s.credential.programme)
+    )].sort(),
+    [initial, faculty]
+  );
 
   const filtered = useMemo(() => {
-    if (!query.trim()) return initial;
-    const q = query.toLowerCase();
-    return initial.filter((s) =>
-      s.profile.firstName.toLowerCase().includes(q) ||
-      s.profile.lastName.toLowerCase().includes(q) ||
-      `${s.profile.firstName} ${s.profile.lastName}`.toLowerCase().includes(q) ||
-      s.credential.studentNumber.toLowerCase().includes(q)
-    );
-  }, [query, initial]);
+    return initial.filter((s) => {
+      const q = query.toLowerCase();
+      const matchesSearch =
+        !query.trim() ||
+        s.profile.firstName.toLowerCase().includes(q) ||
+        s.profile.lastName.toLowerCase().includes(q) ||
+        `${s.profile.firstName} ${s.profile.lastName}`.toLowerCase().includes(q) ||
+        s.credential.studentNumber.toLowerCase().includes(q);
+
+      const matchesFaculty = !faculty || s.credential.faculty === faculty;
+      const matchesProgramme = !programme || s.credential.programme === programme;
+
+      return matchesSearch && matchesFaculty && matchesProgramme;
+    });
+  }, [query, faculty, programme, initial]);
+
+  function clearFilters() {
+    setQuery("");
+    setFaculty("");
+    setProgramme("");
+  }
+
+  const hasFilters = query || faculty || programme;
 
   return (
     <div className="space-y-4">
-      <div className="relative w-full max-w-sm">
-        <svg
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
-          fill="none"
-          height="15"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="2"
-          viewBox="0 0 24 24"
-          width="15"
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Search input */}
+        <div className="relative w-72">
+          <svg
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
+            fill="none"
+            height="15"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2"
+            viewBox="0 0 24 24"
+            width="15"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.35-4.35" />
+          </svg>
+          <input
+            className="h-9 w-full rounded-md border border-zinc-300 bg-white pl-9 pr-3 text-sm placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none"
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by name or student number..."
+            value={query}
+          />
+        </div>
+
+        {/* Faculty filter */}
+        <select
+          className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
+          onChange={(e) => {
+            setFaculty(e.target.value);
+            setProgramme("");
+          }}
+          value={faculty}
         >
-          <circle cx="11" cy="11" r="8" />
-          <path d="m21 21-4.35-4.35" />
-        </svg>
-        <input
-          className="h-9 w-full rounded-md border border-zinc-300 bg-white pl-9 pr-3 text-sm placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none"
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by name or student number..."
-          value={query}
-        />
+          <option value="">All faculties</option>
+          {faculties.map((f) => (
+            <option key={f} value={f}>{f}</option>
+          ))}
+        </select>
+
+        {/* Programme filter */}
+        <select
+          className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
+          onChange={(e) => setProgramme(e.target.value)}
+          value={programme}
+        >
+          <option value="">All programmes</option>
+          {programmes.map((p) => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
+
+        {/* Clear filters */}
+        {hasFilters && (
+          <button
+            className="h-9 rounded-md border border-zinc-300 px-3 text-sm text-zinc-600 transition hover:border-zinc-500 hover:text-zinc-950"
+            onClick={clearFilters}
+            type="button"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
+      {/* Results count */}
+      <p className="text-xs text-zinc-500">
+        Showing {filtered.length} of {initial.length} students
+      </p>
+
+      {/* Table */}
       <section className="rounded-lg border border-zinc-200 bg-white">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
