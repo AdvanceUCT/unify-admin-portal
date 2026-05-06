@@ -10,9 +10,7 @@ export function StudentSearch({ initial }: { initial: StudentRecord[] }) {
   const [query, setQuery] = useState("");
   const [faculty, setFaculty] = useState("");
   const [programme, setProgramme] = useState("");
-  const [enrolmentStatus, setEnrolmentStatus] = useState("");
 
-  // Derive unique filter options from the data
   const faculties = useMemo(() =>
     [...new Set(initial.map((s) => s.credential.faculty).filter(Boolean))].sort(),
     [initial]
@@ -27,11 +25,6 @@ export function StudentSearch({ initial }: { initial: StudentRecord[] }) {
     [initial, faculty]
   );
 
-  const enrolmentStatuses = useMemo(() =>
-    [...new Set(initial.map((s) => s.credential.enrolmentStatus))].sort(),
-    [initial]
-  );
-
   const filtered = useMemo(() => {
     return initial.filter((s) => {
       const q = query.toLowerCase();
@@ -44,27 +37,24 @@ export function StudentSearch({ initial }: { initial: StudentRecord[] }) {
 
       const matchesFaculty = !faculty || s.credential.faculty === faculty;
       const matchesProgramme = !programme || s.credential.programme === programme;
-      const matchesEnrolment = !enrolmentStatus || s.credential.enrolmentStatus === enrolmentStatus;
 
-      return matchesSearch && matchesFaculty && matchesProgramme && matchesEnrolment;
+      return matchesSearch && matchesFaculty && matchesProgramme;
     });
-  }, [query, faculty, programme, enrolmentStatus, initial]);
+  }, [query, faculty, programme, initial]);
 
   function clearFilters() {
     setQuery("");
     setFaculty("");
     setProgramme("");
-    setEnrolmentStatus("");
   }
 
-  const hasFilters = query || faculty || programme || enrolmentStatus;
+  const hasFilters = query || faculty || programme;
 
   return (
     <div className="space-y-4">
-      {/* Search and filter bar */}
       <div className="flex flex-wrap items-center gap-3">
         {/* Search input */}
-        <div className="relative min-w-[220px] flex-1">
+        <div className="relative w-72">
           <svg
             className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
             fill="none"
@@ -92,7 +82,7 @@ export function StudentSearch({ initial }: { initial: StudentRecord[] }) {
           className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
           onChange={(e) => {
             setFaculty(e.target.value);
-            setProgramme(""); // reset programme when faculty changes
+            setProgramme("");
           }}
           value={faculty}
         >
@@ -111,18 +101,6 @@ export function StudentSearch({ initial }: { initial: StudentRecord[] }) {
           <option value="">All programmes</option>
           {programmes.map((p) => (
             <option key={p} value={p}>{p}</option>
-          ))}
-        </select>
-
-        {/* Enrolment status filter */}
-        <select
-          className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
-          onChange={(e) => setEnrolmentStatus(e.target.value)}
-          value={enrolmentStatus}
-        >
-          <option value="">All enrolment statuses</option>
-          {enrolmentStatuses.map((s) => (
-            <option key={s} value={s}>{s}</option>
           ))}
         </select>
 
