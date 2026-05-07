@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -94,6 +93,47 @@ model AdminInvite {
   @@index([email])
   @@index([expiresAt])
   @@index([createdByUserId])
+}
+
+model UniversityProfile {
+  id                 String             @id @default(cuid())
+  name               String
+  abbreviation       String
+  logoUrl            String?
+  contactEmail       String
+  issuerDid          String?
+  setupStatus        SetupStatus        @default(PENDING)
+  setupCompletedAt   DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  credentialSchemas  CredentialSchema[]
+
+  @@map("university_profile")
+}
+
+model CredentialSchema {
+  id                             String            @id @default(cuid())
+  universityProfileId            String
+  universityProfile              UniversityProfile @relation(fields: [universityProfileId], references: [id])
+  schemaName                     String
+  schemaVersion                  String
+  schemaAttributes               String[]
+  schemaId                       String?
+  credentialDefinitionId         String?
+  revocationRegistryDefinitionId String?
+  isActive                       Boolean           @default(true)
+  createdAt                      DateTime          @default(now())
+  updatedAt                      DateTime          @updatedAt
+
+  @@index([universityProfileId])
+  @@map("credential_schema")
+}
+
+enum SetupStatus {
+  PENDING
+  DID_CREATED
+  SCHEMA_CREATED
+  COMPLETE
 }
 
 model AuditLog {

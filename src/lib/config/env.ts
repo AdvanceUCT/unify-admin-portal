@@ -3,11 +3,7 @@ import { z } from "zod";
 function isPlaceholderSupabaseUrl(value: string) {
   try {
     const url = new URL(value);
-    const partsToCheck = [
-      url.hostname,
-      url.username,
-      url.password,
-    ];
+    const partsToCheck = [url.hostname, url.username, url.password];
 
     return partsToCheck.some((part) =>
       [
@@ -45,19 +41,15 @@ const envSchema = z.object({
     .string()
     .min(1, "BOOTSTRAP_ADMIN_EMAIL is required")
     .email(),
-  BOOTSTRAP_ADMIN_NAME: z
-    .string()
-    .min(1, "BOOTSTRAP_ADMIN_NAME is required"),
+  BOOTSTRAP_ADMIN_NAME: z.string().min(1, "BOOTSTRAP_ADMIN_NAME is required"),
   BOOTSTRAP_ADMIN_PASSWORD: z
     .string()
     .min(12, "BOOTSTRAP_ADMIN_PASSWORD must be at least 12 characters"),
-  ADMIN_INVITE_TTL_HOURS: z.coerce
-    .number()
-    .int()
-    .positive()
-    .default(24),
+  ADMIN_INVITE_TTL_HOURS: z.coerce.number().int().positive().default(24),
   AUTH_EMAIL_FROM: z.string().min(1, "AUTH_EMAIL_FROM is required"),
   NEXT_PUBLIC_API_BASE_URL: z.string().default("mock://unify-admin"),
+  AGENT_SERVICE_URL: z.string().url(),
+  AGENT_API_KEY: z.string().min(1),
 });
 
 export const env = envSchema.parse(process.env);
