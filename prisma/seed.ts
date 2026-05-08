@@ -1,4 +1,9 @@
 import { config } from "dotenv";
+import { randomUUID } from "node:crypto";
+
+import { hashPassword } from "better-auth/crypto";
+
+import { ADMIN_ROLES } from "@/lib/auth/roles";
 
 config({ path: ".env.local" });
 config({ path: ".env" });
@@ -6,8 +11,6 @@ config({ path: ".env" });
 const BOOTSTRAP_ROLE = "SUPER_ADMIN";
 
 async function main() {
-  const { auth } = await import("../src/lib/auth/auth");
-  const { ADMIN_ROLES } = await import("../src/lib/auth/permissions");
   const { prisma } = await import("../src/lib/db/prisma");
   const { env } = await import("../src/lib/config/env");
 
@@ -54,17 +57,34 @@ async function main() {
       return;
     }
 
-    await auth.api.createUser({
-      body: {
-        email: bootstrapEmail,
-        name: env.BOOTSTRAP_ADMIN_NAME,
-        password: env.BOOTSTRAP_ADMIN_PASSWORD,
-        role: BOOTSTRAP_ROLE,
+    const passwordHash = await hashPassword(env.BOOTSTRAP_ADMIN_PASSWORD);
+    const now = new Date();
+    const userId = randomUUID();
+
+    await prisma.$transaction([
+      prisma.user.create({
         data: {
+          id: userId,
+          email: bootstrapEmail,
+          name: env.BOOTSTRAP_ADMIN_NAME,
           emailVerified: true,
+          role: BOOTSTRAP_ROLE,
+          createdAt: now,
+          updatedAt: now,
         },
-      },
-    });
+      }),
+      prisma.account.create({
+        data: {
+          id: randomUUID(),
+          accountId: userId,
+          providerId: "credential",
+          userId,
+          password: passwordHash,
+          createdAt: now,
+          updatedAt: now,
+        },
+      }),
+    ]);
 
     console.log(`Created bootstrap SUPER_ADMIN: ${bootstrapEmail}`);
   } finally {
