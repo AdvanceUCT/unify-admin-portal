@@ -11,8 +11,10 @@ type StatusState =
 export function AgentCheckStep({ onComplete }: { onComplete: () => void }) {
   const [status, setStatus] = useState<StatusState>({ state: "checking" });
 
-  async function runCheck() {
-    setStatus({ state: "checking" });
+  async function runCheck({ setChecking }: { setChecking: boolean }) {
+    if (setChecking) {
+      setStatus({ state: "checking" });
+    }
     const result = await checkAgentStatusAction();
     if (result.reachable) {
       setStatus({ state: "ready" });
@@ -25,7 +27,8 @@ export function AgentCheckStep({ onComplete }: { onComplete: () => void }) {
   }
 
   useEffect(() => {
-    void runCheck();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetch on mount
+    void runCheck({ setChecking: false });
   }, []);
 
   return (
@@ -55,7 +58,7 @@ export function AgentCheckStep({ onComplete }: { onComplete: () => void }) {
             <p className="text-sm text-zinc-600">{status.message}</p>
             <button
               className="h-9 rounded-md border border-zinc-300 px-3 text-sm text-zinc-700 transition hover:bg-white"
-              onClick={runCheck}
+              onClick={() => void runCheck({ setChecking: true })}
               type="button"
             >
               Retry
