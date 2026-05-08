@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import type { CredentialSchema } from "@/generated/prisma";
+import type { CredentialSchema, Prisma } from "@/generated/prisma/client";
 
 /**
  * Retrieves the active credential schema for a given university profile.
@@ -25,7 +25,10 @@ export async function getActiveCredentialSchema(
  * @returns The created credential schema.
  */
 export async function createCredentialSchema(
-  data: Omit<CredentialSchema, "id" | "isActive" | "createdAt" | "updatedAt">,
+  data: Omit<
+    Prisma.CredentialSchemaUncheckedCreateInput,
+    "id" | "createdAt" | "updatedAt"
+  >,
 ) {
   return prisma.credentialSchema.create({
     data,
@@ -41,12 +44,7 @@ export async function createCredentialSchema(
  */
 export async function updateCredentialSchema(
   id: string,
-  data: Partial<
-    Omit<
-      CredentialSchema,
-      "id" | "universityProfileId" | "createdAt" | "updatedAt"
-    >
-  >,
+  data: Prisma.CredentialSchemaUncheckedUpdateInput,
 ) {
   return prisma.credentialSchema.update({
     where: { id },

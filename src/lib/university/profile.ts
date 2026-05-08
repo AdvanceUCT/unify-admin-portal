@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import type { UniversityProfile } from "@/generated/prisma";
+import type { UniversityProfile } from "@/generated/prisma/client";
 
 /**
  * Retrieves the first university profile found in the database.
@@ -19,14 +19,9 @@ export async function getUniversityProfile(): Promise<UniversityProfile | null> 
  * @returns The created or updated university profile.
  */
 export async function upsertUniversityProfile(
-  data: Omit<
+  data: Pick<
     UniversityProfile,
-    | "id"
-    | "issuerDid"
-    | "setupStatus"
-    | "setupCompletedAt"
-    | "createdAt"
-    | "updatedAt"
+    "name" | "abbreviation" | "logoUrl" | "contactEmail"
   >,
 ) {
   const existingProfile = await getUniversityProfile();
