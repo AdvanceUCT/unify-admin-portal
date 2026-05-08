@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { getUniversityProfile } from "@/lib/university/profile";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { SetupWizard } from "@/features/setup/SetupWizard";
@@ -11,7 +10,7 @@ function getInitialStep(
     return 0; // Profile step
   }
   if (profile.setupStatus === "COMPLETE") {
-    redirect("/");
+    return 4; // Complete step
   }
   if (!profile.issuerDid) {
     return 1; // Agent Check step

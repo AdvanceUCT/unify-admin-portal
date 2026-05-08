@@ -48,6 +48,12 @@ const envSchema = z.object({
   ADMIN_INVITE_TTL_HOURS: z.coerce.number().int().positive().default(24),
   AUTH_EMAIL_FROM: z.string().min(1, "AUTH_EMAIL_FROM is required"),
   NEXT_PUBLIC_API_BASE_URL: z.string().default("mock://unify-admin"),
+  SETUP_BYPASS: z.preprocess((value) => {
+    if (typeof value === "string") {
+      return value.toLowerCase() === "true";
+    }
+    return value;
+  }, z.boolean().optional().default(false)),
   AGENT_SERVICE_URL: z.string().url(),
   AGENT_API_KEY: z.string().min(1),
 });

@@ -9,9 +9,17 @@ import {
   UserCog,
   Users,
 } from "lucide-react";
+import { redirect } from "next/navigation";
 import { PortalShell } from "@/components/layout/PortalShell";
-import { ADMIN_ROLES, canAccessRoute, ROLE_LABELS, type AdminRole } from "@/lib/auth/permissions";
+import {
+  ADMIN_ROLES,
+  canAccessRoute,
+  ROLE_LABELS,
+  type AdminRole,
+} from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
+import { env } from "@/lib/config/env";
+import { getUniversityProfile } from "@/lib/university/profile";
 
 const navItems = [
   { href: "/", label: "Overview", icon: Gauge },
@@ -30,8 +38,23 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }>) {
   const session = await requireRole(ADMIN_ROLES);
+  const profile = await getUniversityProfile();
+  const bypassSetup = env.SETUP_BYPASS;
+  const isComplete = bypassSetup || profile?.setupStatus === "COMPLETE";
+  const isSuperAdmin = session.user.role === "SUPER_ADMIN";
+
+  if (!isComplete) {
+    if (isSuperAdmin) {
+      redirect("/setup");
+    }
+
+    return <SystemNotConfiguredPage />;
+  }
+
   const role = session.user.role as AdminRole;
-  const visibleNavItems = navItems.filter((item) => canAccessRoute(role, item.href));
+  const visibleNavItems = navItems.filter((item) =>
+    canAccessRoute(role, item.href),
+  );
 
   return (
     <PortalShell
@@ -43,5 +66,21 @@ export default async function AdminLayout({
     >
       {children}
     </PortalShell>
+  );
+}
+
+function SystemNotConfiguredPage() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#f7f8fa] px-6 text-zinc-950">
+      <div className="max-w-lg rounded-lg border border-zinc-200 bg-white p-6 text-center">
+        <h1 className="text-xl font-semibold">
+          System setup is not yet complete
+        </h1>
+        <p className="mt-2 text-sm text-zinc-600">
+          Please contact your Super Administrator to finish the onboarding
+          wizard.
+        </p>
+      </div>
+    </div>
   );
 }
