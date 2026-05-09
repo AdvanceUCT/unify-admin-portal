@@ -1,13 +1,22 @@
-import { NextResponse } from "next/server";
-import { getAllStudents, searchStudents } from "@/lib/db/store";
+import { type NextRequest, NextResponse } from "next/server";
+import { getAllStudentsFromSupabase } from "@/lib/db/store";
 
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const query = searchParams.get("query");
+export async function GET(request: NextRequest) {
+  const { searchParams } = request.nextUrl;
+  const query = searchParams.get("query") ?? "";
+
+  const students = await getAllStudentsFromSupabase();
 
   if (query) {
-    return NextResponse.json(await searchStudents(query));
+    const q = query.toLowerCase();
+    const filtered = students.filter((s) =>
+      s.profile.firstName.toLowerCase().includes(q) ||
+      s.profile.lastName.toLowerCase().includes(q) ||
+      `${s.profile.firstName} ${s.profile.lastName}`.toLowerCase().includes(q) ||
+      s.credential.studentNumber.toLowerCase().includes(q)
+    );
+    return NextResponse.json(filtered);
   }
 
-  return NextResponse.json(await getAllStudents());
+  return NextResponse.json(students);
 }

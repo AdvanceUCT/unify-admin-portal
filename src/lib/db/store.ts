@@ -6,6 +6,7 @@ import {
 } from "@/lib/student-records/simulatedUniversityRecords";
 import db from "./database";
 import { seedDatabase } from "./seed";
+import { prisma } from "@/lib/db/prisma";
 
 function rowToStudentRecord(row: Record<string, unknown>): StudentRecord {
   return {
@@ -103,5 +104,67 @@ export async function updateStudentStatus(id: string, status: string) {
   await db.execute({
     sql: "UPDATE students SET lifecycle_state = ? WHERE id = ?",
     args: [status, id]
+  });
+}
+
+function prismaRowToStudentRecord(row: {
+  id: string;
+  firstName: string;
+  lastName: string;
+  studentNumber: string;
+  faculty: string;
+  programme: string;
+  enrolmentStatus: string;
+  lifecycleState: string;
+  validFrom: string;
+  expiresAt: string;
+  institution: string;
+}): StudentRecord {
+  return {
+    profile: {
+      id: row.id,
+      firstName: row.firstName,
+      lastName: row.lastName,
+      institution: row.institution,
+    },
+    credential: {
+      id: row.id,
+      holderName: `${row.firstName} ${row.lastName}`,
+      issuer: row.institution,
+      faculty: row.faculty,
+      programme: row.programme,
+      enrolmentStatus: row.enrolmentStatus as StudentRecord["credential"]["enrolmentStatus"],
+      lifecycleState: row.lifecycleState as StudentRecord["credential"]["lifecycleState"],
+      studentNumber: row.studentNumber,
+      validFrom: row.validFrom,
+      expiresAt: row.expiresAt,
+    },
+  };
+}
+
+export async function getAllStudentsFromSupabase(): Promise<StudentRecord[]> {
+  const rows = await prisma.student.findMany();
+  return rows.map(prismaRowToStudentRecord);
+}
+
+export async function getStudentByIdFromSupabase(id: string): Promise<StudentRecord | undefined> {
+  const row = await prisma.student.findUnique({ where: { id } });
+  return row ? prismaRowToStudentRecord(row) : undefined;
+}
+
+export async function getPendingStudentsFromSupabase(): Promise<StudentRecord[]> {
+  const rows = await prisma.student.findMany({
+    where: { lifecycleState: "Pending" },
+  });
+  return rows.map(prismaRowToStudentRecord);
+}
+
+export async function updateStudentLifecycleInSupabase(
+  id: string,
+  lifecycleState: string,
+): Promise<void> {
+  await prisma.student.update({
+    where: { id },
+    data: { lifecycleState },
   });
 }

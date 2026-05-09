@@ -167,3 +167,70 @@ enum AuditAction {
   PASSWORD_RESET_COMPLETED
   SESSION_REVOKED
 }
+
+model Student {
+  id               String              @id
+  firstName        String
+  lastName         String
+  studentNumber    String              @unique
+  faculty          String
+  programme        String
+  enrolmentStatus  String              @default("Registered")
+  lifecycleState   String              @default("Pending")
+  validFrom        String
+  expiresAt        String
+  institution      String              @default("University of Cape Town")
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  credentials      IssuedCredential[]
+
+  @@map("student")
+}
+
+model IssuedCredential {
+  id               String              @id
+  studentId        String
+  student          Student             @relation(fields: [studentId], references: [id])
+  holderName       String
+  issuer           String
+  faculty          String?
+  programme        String
+  enrolmentStatus  String
+  lifecycleState   String              @default("Pending")
+  studentNumber    String
+  validFrom        String
+  expiresAt        String
+  batchId          String?
+  issuedAt         DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  activationDeliveries ActivationDelivery[]
+
+  @@index([studentId])
+  @@index([batchId])
+  @@map("issued_credential")
+}
+
+model ActivationDelivery {
+  id                 String            @id
+  credentialId       String
+  credential         IssuedCredential  @relation(fields: [credentialId], references: [id])
+  studentId          String
+  batchId            String
+  activationUrl      String
+  activationId       String?
+  channel            String            @default("activation-link")
+  status             String            @default("Pending")
+  deliveredAt        String?
+  activatedAt        String?
+  expiresAt          String
+  holderConnectionId String?
+  credentialRecordId String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([studentId])
+  @@index([batchId])
+  @@index([credentialId])
+  @@map("activation_delivery")
+}

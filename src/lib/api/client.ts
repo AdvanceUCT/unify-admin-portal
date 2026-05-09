@@ -3,7 +3,7 @@ import {
   mockEligibilityRules,
   mockVendors,
 } from "@/lib/api/mockData";
-import { getMockAdminState, queueMockBatchIssuance } from "@/lib/api/mockActivationStore";
+import { getMockAdminState } from "@/lib/api/mockActivationStore";
 import type { AdminState, BatchIssuanceResult, StudentRecord } from "@/lib/api/types";
 
 const wait = (durationMs = 50) => new Promise((resolve) => setTimeout(resolve, durationMs));
@@ -108,13 +108,14 @@ export async function getBatchIssuancePreview() {
 }
 
 export async function queueBatchIssuance() {
-  await wait();
-
-  if (shouldUseMockApi()) {
-    return fetchJson<BatchIssuanceResult>("/api/mock/credentials/batch-issue", {
-      method: "POST",
-    });
-  }
-
-  return queueMockBatchIssuance();
+  const base =
+    typeof window === "undefined"
+      ? process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000"
+      : "";
+  const res = await fetch(`${base}/api/admin/credentials/batch-issue`, {
+    method: "POST",
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Batch issuance failed with status ${res.status}.`);
+  return res.json() as Promise<BatchIssuanceResult>;
 }
