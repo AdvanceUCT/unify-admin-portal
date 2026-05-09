@@ -32,10 +32,10 @@ async function main() {
     });
 
     const existingBootstrapUser = users.find(
-      (user) => user.email.toLowerCase() === bootstrapEmail,
+      (user: { email: string; }) => user.email.toLowerCase() === bootstrapEmail,
     );
     const existingDifferentAdmin = users.find(
-      (user) =>
+      (user: { email: string; role: string | null; }) =>
         user.email.toLowerCase() !== bootstrapEmail &&
         isAdminPortalRole(user.role),
     );

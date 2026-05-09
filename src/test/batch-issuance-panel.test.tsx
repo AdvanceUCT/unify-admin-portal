@@ -38,7 +38,7 @@ describe("BatchIssuancePanel", () => {
 
     expect((await screen.findAllByText("Delivered")).length).toBeGreaterThan(0);
     expect(screen.getAllByDisplayValue(/^unifywallet:\/\/activate\?token=/).length).toBeGreaterThan(0);
-    expect(screen.getByText("credential-demo-097")).toBeInTheDocument();
+    expect(screen.getByText("credential-demo-100")).toBeInTheDocument();
   });
 
   it("handles denied clipboard permission without throwing", async () => {

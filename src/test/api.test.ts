@@ -71,7 +71,7 @@ describe("admin mock client", () => {
     await queueBatchIssuance();
     const events = await getAuditEvents();
 
-    expect(events.filter((event) => event.eventType === "ActivationLinkDelivered")).toHaveLength(4);
+    expect(events.filter((event) => event.eventType === "ActivationLinkDelivered")).toHaveLength(1);
   });
 
   it("does not derive activation links from student names or numbers", async () => {

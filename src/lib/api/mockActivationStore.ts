@@ -231,6 +231,42 @@ export function queueMockBatchIssuance(now = new Date()): BatchIssuanceResult {
   };
 }
 
+export function recordBatchIssuanceResult(result: BatchIssuanceResult, now = new Date()) {
+  const state = mutableState();
+  const recordedAt = now.toISOString();
+
+  for (const delivery of result.activationDeliveries) {
+    const existingIndex = state.activationDeliveries.findIndex(
+      (candidate) => candidate.credentialId === delivery.credentialId,
+    );
+
+    if (existingIndex >= 0) {
+      state.activationDeliveries[existingIndex] = clone(delivery);
+    } else {
+      state.activationDeliveries.push(clone(delivery));
+    }
+
+    const student = state.students.find((candidate) => candidate.profile.id === delivery.studentId);
+    if (student && delivery.status === "Delivered") {
+      student.credential.lifecycleState = "Offered";
+    }
+
+    appendAuditEvent(state, {
+      actorId: "admin-demo-001",
+      eventType: "ActivationLinkDelivered",
+      occurredAt: delivery.deliveredAt ?? recordedAt,
+      reason:
+        delivery.status === "Delivered"
+          ? "Activation link delivered through the Identity Agent Service"
+          : (delivery.failureReason ?? "Activation link delivery failed"),
+      result: delivery.status === "Delivered" ? "Success" : "Failure",
+      targetId: delivery.credentialId,
+    });
+  }
+
+  return getMockAdminState();
+}
+
 export function resolveMockWalletActivation(
   request: WalletActivationResolveRequest,
   now = new Date(),

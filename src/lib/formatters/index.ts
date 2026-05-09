@@ -22,7 +22,7 @@ const credentialStatusLabels: Record<CredentialLifecycleState, string> = {
   Expired: "Expired",
   Issuing: "Issuing",
   Offered: "Offered",
-  Pending: "Pending",
+  Pending: "Ready to issue",
   Renewed: "Renewed",
   Revoked: "Revoked",
   Suspended: "Suspended",

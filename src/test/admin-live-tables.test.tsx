@@ -85,7 +85,7 @@ describe("admin live tables", () => {
     render(<AuditTable initialState={state} />);
 
     expect(screen.getByText("Credential activated")).toBeInTheDocument();
-    expect(screen.getAllByText("credential-demo-097").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("credential-demo-100").length).toBeGreaterThan(0);
   });
 
   it("does not poll admin state by default when server state is provided", async () => {

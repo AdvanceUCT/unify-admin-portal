@@ -1,6 +1,7 @@
 export type Money = string;
 
 export type StudentProfile = {
+  email: string;
   id: string;
   firstName: string;
   lastName: string;
@@ -116,6 +117,9 @@ export type ActivationDelivery = {
   batchId: string;
   channel: "activation-link";
   credentialId: string;
+  credentialExchangeId?: string;
+  email?: string;
+  emailStatus?: "Pending" | "Sent" | "Failed";
   studentId: string;
   activationUrl: string;
   status: ActivationDeliveryStatus;
@@ -137,6 +141,11 @@ export type BatchIssuancePreview = {
 export type BatchIssuanceResult = {
   batchId: string;
   cohortId: string;
+  failures?: {
+    email?: string;
+    externalId?: string;
+    message: string;
+  }[];
   requestedCount: number;
   status: "Queued";
   issuedCredentialIds: string[];

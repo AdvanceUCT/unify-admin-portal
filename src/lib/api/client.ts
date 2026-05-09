@@ -111,7 +111,7 @@ export async function queueBatchIssuance() {
   await wait();
 
   if (shouldUseMockApi()) {
-    return fetchJson<BatchIssuanceResult>("/api/mock/credentials/batch-issue", {
+    return fetchJson<BatchIssuanceResult>("/api/credentials/batch-issue", {
       method: "POST",
     });
   }
