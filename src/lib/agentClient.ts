@@ -175,3 +175,48 @@ export async function resolveActivation(payload: {
   });
   return response.json();
 }
+
+export async function createBatchActivationLinks(payload: {
+  credentialDefinitionId: string;
+  students: Array<{
+    attributes: Array<{ name: string; value: string }>;
+    email?: string;
+    externalId?: string;
+  }>;
+}): Promise<{
+  failures: Array<{ email?: string; externalId?: string; message: string }>;
+  offers: Array<{
+    activationId: string;
+    activationUrl: string;
+    credentialExchangeId: string;
+    email?: string;
+    expiresAt: string;
+    externalId?: string;
+  }>;
+}> {
+  const response = await agentFetch("/api/credentials/activation-links/batch", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return response.json();
+}
+
+export async function resolveActivation(payload: {
+  token: string;
+  sourceUrl?: string;
+}): Promise<{
+  activationId: string;
+  activationSource: string;
+  createdAt: string;
+  credentialExchangeId: string;
+  expiresAt: string;
+  invitationId: string;
+  invitationUrl: string;
+  issuerLabel: string;
+}> {
+  const response = await agentFetch("/api/wallet/activation/resolve", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return response.json();
+}
