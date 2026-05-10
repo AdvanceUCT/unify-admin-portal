@@ -1,8 +1,14 @@
 import { buildWalletActivationLink } from "@/lib/api/activationLinks";
 import { prisma } from "@/lib/db/prisma";
-import { getPendingStudentsFromSupabase, updateStudentLifecycleInSupabase } from "@/lib/db/store";
-import { selectStudentRecordsForCredentialIssuance, SIMULATED_STUDENT_COHORT_ID, SIMULATED_STUDENT_RECORD_COUNT } from "@/lib/student-records/simulatedUniversityRecords";
+import { getAllStudentsFromSupabase, updateStudentLifecycleInSupabase } from "@/lib/db/store";
+import { SIMULATED_STUDENT_COHORT_ID } from "@/lib/student-records/simulatedUniversityRecords";
 import type { BatchIssuanceResult } from "@/lib/api/types";
+
+export type BatchIssuanceFilters = {
+  faculties?: string[];
+  lifecycleStates?: string[];
+  limit?: number;
+};
 
 function activationIdForToken(token: string) {
   return `activation-${token.replace(/[^a-zA-Z0-9]/g, "").slice(-8)}`;
@@ -14,18 +20,32 @@ function deliveryExpiryFrom(now: Date) {
   return expiresAt.toISOString();
 }
 
-export async function queueBatchIssuance(now = new Date()): Promise<BatchIssuanceResult> {
+export async function queueBatchIssuance(
+  filters: BatchIssuanceFilters = {},
+  now = new Date()
+): Promise<BatchIssuanceResult> {
   const queuedAt = now.toISOString();
   const batchId = `batch-${Date.now()}`;
 
-  // Step 1 — get Pending students from Supabase
-  const pendingStudents = await getPendingStudentsFromSupabase();
+  const {
+    faculties = [],
+    lifecycleStates = ["Pending", "Issuing"],
+    limit = 100,
+  } = filters;
 
-  // Step 2 — select eligible students
-  const studentsForIssuance = selectStudentRecordsForCredentialIssuance(pendingStudents, {
-    cohortId: SIMULATED_STUDENT_COHORT_ID,
-    limit: SIMULATED_STUDENT_RECORD_COUNT,
-  });
+  // Step 1 — get all students from Supabase
+  const allStudents = await getAllStudentsFromSupabase();
+
+  // Step 2 — apply filters
+  const studentsForIssuance = allStudents
+    .filter((s) => {
+      const matchesFaculty =
+        faculties.length === 0 || faculties.includes(s.credential.faculty ?? "");
+      const matchesState = lifecycleStates.includes(s.credential.lifecycleState);
+      const isRegistered = s.credential.enrolmentStatus === "Registered";
+      return matchesFaculty && matchesState && isRegistered;
+    })
+    .slice(0, limit);
 
   if (studentsForIssuance.length === 0) {
     return {
@@ -34,24 +54,46 @@ export async function queueBatchIssuance(now = new Date()): Promise<BatchIssuanc
       cohortId: SIMULATED_STUDENT_COHORT_ID,
       issuedCredentialIds: [],
       queuedAt,
-      requestedCount: SIMULATED_STUDENT_RECORD_COUNT,
+      requestedCount: limit,
       status: "Queued",
     };
   }
 
-  // Step 3 — create activation deliveries and update lifecycle states
+  // Step 3 — create IssuedCredential + ActivationDelivery for each student
   const activationDeliveries = await Promise.all(
     studentsForIssuance.map(async (student, index) => {
-      const token = `act-${batchId}-${String(index + 1).padStart(3, "0")}`;
+      const suffix = String(index + 1).padStart(3, "0");
+      const token = `act-${batchId}-${suffix}`;
       const activationUrl = buildWalletActivationLink(token);
       const activationId = activationIdForToken(token);
       const expiresAt = deliveryExpiryFrom(now);
+      const credentialId = `credential-${batchId}-${suffix}`;
+      const deliveryId = `delivery-${batchId}-${suffix}`;
 
-      // Save activation delivery to Supabase
+      // Create IssuedCredential record first
+      await prisma.issuedCredential.create({
+        data: {
+          id: credentialId,
+          studentId: student.profile.id,
+          holderName: `${student.profile.firstName} ${student.profile.lastName}`,
+          issuer: student.profile.institution,
+          faculty: student.credential.faculty ?? "",
+          programme: student.credential.programme,
+          enrolmentStatus: student.credential.enrolmentStatus,
+          lifecycleState: "Offered",
+          studentNumber: student.credential.studentNumber,
+          validFrom: student.credential.validFrom,
+          expiresAt: student.credential.expiresAt,
+          batchId,
+          issuedAt: now,
+        },
+      });
+
+      // Create ActivationDelivery linked to IssuedCredential
       await prisma.activationDelivery.create({
         data: {
-          id: `delivery-${batchId}-${String(index + 1).padStart(3, "0")}`,
-          credentialId: student.credential.id,
+          id: deliveryId,
+          credentialId,
           studentId: student.profile.id,
           batchId,
           activationUrl,
@@ -63,7 +105,7 @@ export async function queueBatchIssuance(now = new Date()): Promise<BatchIssuanc
         },
       });
 
-      // Update student lifecycle state to Offered
+      // Update student lifecycle state in Supabase
       await updateStudentLifecycleInSupabase(student.profile.id, "Offered");
 
       return {
@@ -71,15 +113,34 @@ export async function queueBatchIssuance(now = new Date()): Promise<BatchIssuanc
         activationUrl,
         batchId,
         channel: "activation-link" as const,
-        credentialId: student.credential.id,
+        credentialId,
         deliveredAt: queuedAt,
         expiresAt,
-        id: `delivery-${batchId}-${String(index + 1).padStart(3, "0")}`,
+        id: deliveryId,
         status: "Delivered" as const,
         studentId: student.profile.id,
+        studentNumber: student.credential.studentNumber,
       };
     })
   );
+
+  console.log("Saving batch record:", batchId);
+
+  // Save batch summary record
+  await prisma.batch.create({
+    data: {
+      id: batchId,
+      cohortId: SIMULATED_STUDENT_COHORT_ID,
+      status: "Queued",
+      requestedCount: limit,
+      issuedCount: activationDeliveries.length,
+      faculties: faculties.length > 0 ? faculties.join(", ") : "All",
+      lifecycleStates: lifecycleStates.join(", "),
+      queuedAt: now,
+    },
+  });
+
+  console.log("Batch record saved successfully");
 
   return {
     activationDeliveries,
@@ -87,7 +148,7 @@ export async function queueBatchIssuance(now = new Date()): Promise<BatchIssuanc
     cohortId: SIMULATED_STUDENT_COHORT_ID,
     issuedCredentialIds: activationDeliveries.map((d) => d.credentialId),
     queuedAt,
-    requestedCount: SIMULATED_STUDENT_RECORD_COUNT,
+    requestedCount: limit,
     status: "Queued",
   };
 }

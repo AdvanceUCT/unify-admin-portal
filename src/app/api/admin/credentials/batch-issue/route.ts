@@ -15,7 +15,6 @@ export async function POST(request: NextRequest) {
     const result = await queueBatchIssuance(filters);
     return NextResponse.json(result);
   } catch (error) {
-    console.error("Batch issuance error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Batch issuance failed." },
       { status: 500 }

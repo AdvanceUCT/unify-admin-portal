@@ -1,10 +1,9 @@
 import {
-  mockBatchIssuancePreview,
   mockEligibilityRules,
   mockVendors,
 } from "@/lib/api/mockData";
 import { getMockAdminState } from "@/lib/api/mockActivationStore";
-import type { AdminState, BatchIssuanceResult, StudentRecord } from "@/lib/api/types";
+import type { AdminState, BatchIssuancePreview, BatchIssuanceResult, StudentRecord } from "@/lib/api/types";
 
 const wait = (durationMs = 50) => new Promise((resolve) => setTimeout(resolve, durationMs));
 
@@ -103,11 +102,14 @@ export async function getRecentAuditEvents() {
 }
 
 export async function getBatchIssuancePreview() {
-  await wait();
-  return mockBatchIssuancePreview;
+  return apiFetch<BatchIssuancePreview>("/api/admin/credentials/batch-preview");
 }
 
-export async function queueBatchIssuance() {
+export async function queueBatchIssuance(filters: {
+  faculties?: string[];
+  lifecycleStates?: string[];
+  limit?: number;
+} = {}) {
   const base =
     typeof window === "undefined"
       ? process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000"
@@ -115,7 +117,22 @@ export async function queueBatchIssuance() {
   const res = await fetch(`${base}/api/admin/credentials/batch-issue`, {
     method: "POST",
     cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(filters),
   });
   if (!res.ok) throw new Error(`Batch issuance failed with status ${res.status}.`);
   return res.json() as Promise<BatchIssuanceResult>;
+}
+
+export async function getBatchHistory() {
+  return apiFetch<Array<{
+    id: string;
+    cohortId: string;
+    status: string;
+    requestedCount: number;
+    issuedCount: number;
+    faculties: string;
+    lifecycleStates: string;
+    queuedAt: string;
+  }>>("/api/admin/credentials/batch-history");
 }

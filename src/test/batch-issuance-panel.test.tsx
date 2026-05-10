@@ -8,6 +8,11 @@ const preview: BatchIssuancePreview = {
   batchId: "batch-001",
   cohortId: "simulated-2026-cohort",
   requestedCount: 100,
+  eligibleCount: 100,
+  pendingCount: 100,
+  issuingCount: 0,
+  totalStudents: 100,
+  faculties: ["Commerce", "Science", "Engineering", "Health Sciences", "Law", "Humanities"],
   status: "Draft",
 };
 

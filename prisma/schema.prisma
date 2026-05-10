@@ -234,3 +234,18 @@ model ActivationDelivery {
   @@index([credentialId])
   @@map("activation_delivery")
 }
+
+model Batch {
+  id            String   @id
+  cohortId      String
+  status        String   @default("Queued")
+  requestedCount Int
+  issuedCount   Int
+  faculties     String   @default("All")
+  lifecycleStates String @default("Pending,Issuing")
+  queuedAt      DateTime @default(now())
+  queuedBy      String   @default("admin")
+
+  @@map("batch")
+}
+

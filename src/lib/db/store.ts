@@ -168,3 +168,9 @@ export async function updateStudentLifecycleInSupabase(
     data: { lifecycleState },
   });
 }
+
+export async function getBatchHistory() {
+  return prisma.batch.findMany({
+    orderBy: { queuedAt: "desc" },
+  });
+}

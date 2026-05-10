@@ -125,12 +125,18 @@ export type ActivationDelivery = {
   failureReason?: string;
   credentialRecordId?: string;
   holderConnectionId?: string;
+  studentNumber?: string;
 };
 
 export type BatchIssuancePreview = {
   batchId: string;
   cohortId: string;
   requestedCount: number;
+  eligibleCount: number;
+  pendingCount: number;
+  issuingCount: number;
+  totalStudents: number;
+  faculties: string[];
   status: "Queued" | "Draft";
 };
 
