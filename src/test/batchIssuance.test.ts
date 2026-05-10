@@ -41,24 +41,23 @@ describe("real batch issuance orchestration", () => {
           email: "caleb.voskuil@gmail.com",
           expiresAt: "2026-04-28T10:00:00.000Z",
           externalId: "student-demo-100",
-          studentId: "student-demo-100",
-          walletId: "wallet-student-demo-100",
         },
       ],
     });
 
+    const agentRequest = vi.mocked(createBatchActivationLinks);
     const result = await queueRealBatchIssuance(new Date("2026-04-27T10:00:00Z"));
 
-    expect(createBatchActivationLinks).toHaveBeenCalledWith({
+    expect(agentRequest).toHaveBeenCalledWith({
       credentialDefinitionId: "cred-def-id",
       students: [
         expect.objectContaining({
           email: "caleb.voskuil@gmail.com",
           externalId: "student-demo-100",
-          walletId: "wallet-student-demo-100",
         }),
       ],
     });
+    expect(agentRequest.mock.calls[0][0].students[0]).not.toHaveProperty("walletId");
     expect(vi.mocked(createBatchActivationLinks).mock.calls[0][0].students[0].attributes).toEqual([
       { name: "studentNumber", value: "VOSCAL100" },
       { name: "firstName", value: "Caleb" },
@@ -94,8 +93,6 @@ describe("real batch issuance orchestration", () => {
           email: "caleb.voskuil@gmail.com",
           expiresAt: "2026-04-28T10:00:00.000Z",
           externalId: "student-demo-100",
-          studentId: "student-demo-100",
-          walletId: "wallet-student-demo-100",
         },
       ],
     });
@@ -109,7 +106,6 @@ describe("real batch issuance orchestration", () => {
         expect.objectContaining({
           email: "caleb.voskuil@gmail.com",
           externalId: "student-demo-100",
-          walletId: "wallet-student-demo-100",
         }),
       ],
     });

@@ -128,7 +128,6 @@ async function issueStudentActivationLinks(
       attributes: attributesForStudent(student, activeSchema.schemaAttributes),
       email: student.profile.email,
       externalId: student.profile.id,
-      walletId: `wallet-${student.profile.id}`,
     })),
   });
   const deliveries: ActivationDelivery[] = [];
@@ -160,7 +159,7 @@ async function issueStudentActivationLinks(
       failureReason: emailDelivery.status === "Failed" ? emailDelivery.failureReason : undefined,
       id: `activation-delivery-${offer.activationId}`,
       status: emailDelivery.status,
-      studentId: offer.externalId ?? offer.studentId,
+      studentId: student?.profile.id ?? offer.externalId ?? offer.activationId,
     });
   }
 

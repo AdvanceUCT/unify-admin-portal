@@ -1,5 +1,4 @@
 import { corsPreflight, jsonWithCors } from "@/app/api/mock/cors";
-import { completeMockWalletActivation } from "@/lib/api/mockActivationStore";
 import type { WalletActivationCompleteRequest } from "@/lib/api/types";
 
 async function readJson(request: Request) {
@@ -12,26 +11,27 @@ async function readJson(request: Request) {
 
 export async function POST(request: Request) {
   const body = await readJson(request);
-  const result = completeMockWalletActivation({
-    activationId: typeof body?.activationId === "string" ? body.activationId : "",
-    credentialRecordId: typeof body?.credentialRecordId === "string" ? body.credentialRecordId : "",
-    holderConnectionId: typeof body?.holderConnectionId === "string" ? body.holderConnectionId : "",
-  });
+  const activationId = typeof body?.activationId === "string" ? body.activationId.trim() : "";
 
-  if (!result.ok) {
+  if (!activationId) {
     return jsonWithCors(
       {
         error: {
-          code: result.code,
-          message: result.error,
-          requestId: "mock-wallet-activation-complete",
+          code: "ActivationIdRequired",
+          message: "Activation id is required.",
+          requestId: "wallet-activation-complete",
         },
       },
-      { status: result.status },
+      { status: 400 },
     );
   }
 
-  return jsonWithCors(result.data);
+  return jsonWithCors({
+    activationId,
+    completedAt: new Date().toISOString(),
+    credentialRecordId: typeof body?.credentialRecordId === "string" ? body.credentialRecordId : "",
+    holderConnectionId: typeof body?.holderConnectionId === "string" ? body.holderConnectionId : "",
+  });
 }
 
 export function OPTIONS() {
