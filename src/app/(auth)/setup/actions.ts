@@ -7,11 +7,7 @@ import {
   getUniversityProfile,
   upsertUniversityProfile,
 } from "@/lib/university/profile";
-import {
-  createCredentialSchema,
-  getActiveCredentialSchema,
-  updateCredentialSchema,
-} from "@/lib/university/credentialSchema";
+import { createCredentialSchema } from "@/lib/university/credentialSchema";
 import * as agentClient from "@/lib/agentClient";
 import { AgentServiceError } from "@/lib/agentClient";
 
@@ -127,11 +123,7 @@ const ISSUANCE_PAYLOAD = {
   schema: STUDENT_SCHEMA,
   credentialDefinition: {
     tag: "default",
-    supportRevocation: true,
-  },
-  revocation: {
-    tag: "default",
-    maximumCredentialNumber: 1000,
+    supportRevocation: false,
   },
 };
 
@@ -169,65 +161,18 @@ export async function runIssuanceSetupAction() {
       },
     });
   } catch (error) {
-    if (error instanceof AgentServiceError && error.status === 422) {
-      const details = error.details as {
-        schemaId?: string;
-        credentialDefinitionId?: string;
-      };
-      if (details.schemaId && details.credentialDefinitionId) {
-        await createCredentialSchema({
-          universityProfileId: profile.id,
-          schemaName: STUDENT_SCHEMA.name,
-          schemaVersion: STUDENT_SCHEMA.version,
-          schemaAttributes: STUDENT_SCHEMA.attributes,
-          schemaId: details.schemaId,
-          credentialDefinitionId: details.credentialDefinitionId,
-          revocationRegistryDefinitionId: null,
-        });
-        await prisma.universityProfile.update({
-          where: { id: profile.id },
-          data: { setupStatus: "SCHEMA_CREATED" },
-        });
-        revalidatePath("/setup");
-        // Don't re-throw, this is an expected partial success state
-        return;
-      }
-    }
-    throw error; // Re-throw unexpected errors
-  }
-  revalidatePath("/setup");
-}
-
-export async function retryRevocationAction() {
-  const profile = await getUniversityProfile();
-  if (!profile) {
-    throw new Error("University profile not found.");
-  }
-  const schema = await getActiveCredentialSchema(profile.id);
-  if (!schema || !schema.credentialDefinitionId) {
-    throw new Error("Active credential schema with definition ID not found.");
-  }
-
-  try {
-    const { revocationRegistryDefinitionId } =
-      await agentClient.retryRevocation(
-        schema.credentialDefinitionId,
-        ISSUANCE_PAYLOAD.revocation,
+    if (error instanceof AgentServiceError) {
+      console.error("issuanceSetup failed", {
+        status: error.status,
+        message: error.message,
+        details: error.details,
+      });
+      throw new Error(
+        `${error.message} (status ${error.status}) — details: ${JSON.stringify(error.details)}`,
       );
-
-    await updateCredentialSchema(schema.id, {
-      revocationRegistryDefinitionId,
-    });
-
-    await prisma.universityProfile.update({
-      where: { id: profile.id },
-      data: {
-        setupStatus: "COMPLETE",
-        setupCompletedAt: new Date(),
-      },
-    });
-  } catch (error) {
-    throw new Error(`Failed to retry revocation: ${error}`);
+    }
+    throw error;
   }
   revalidatePath("/setup");
 }
+

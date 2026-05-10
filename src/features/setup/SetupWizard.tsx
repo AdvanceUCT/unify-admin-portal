@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ProfileStep } from "@/features/setup/steps/ProfileStep";
 import { AgentCheckStep } from "@/features/setup/steps/AgentCheckStep";
@@ -43,13 +43,6 @@ export function SetupWizard({
 }) {
   const [currentStep, setCurrentStep] = useState(initialStep);
   const router = useRouter();
-
-  const retryRevocation = useMemo(() => {
-    return (
-      profile?.setupStatus === "SCHEMA_CREATED" &&
-      !schema?.revocationRegistryDefinitionId
-    );
-  }, [profile, schema]);
 
   function handleNext() {
     setCurrentStep((step) => Math.min(step + 1, steps.length - 1));
@@ -116,10 +109,7 @@ export function SetupWizard({
             <DidStep name={profile?.name ?? ""} onComplete={handleNext} />
           ) : null}
           {currentStep === 3 ? (
-            <IssuanceSetupStep
-              retryMode={retryRevocation}
-              onComplete={handleNext}
-            />
+            <IssuanceSetupStep onComplete={handleNext} />
           ) : null}
           {currentStep === 4 ? (
             <CompleteStep
