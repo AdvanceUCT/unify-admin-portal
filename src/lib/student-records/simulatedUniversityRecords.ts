@@ -13,7 +13,9 @@ const INSTITUTION = "University of Cape Town";
 const VALID_FROM = "2026-01-01T00:00:00Z";
 const EXPIRES_AT = "2026-12-31T23:59:59Z";
 const ISSUANCE_STATES = new Set<CredentialLifecycleState>(["Pending", "Issuing"]);
-const PENDING_ISSUANCE_START = 97;
+const PENDING_ISSUANCE_START = 100;
+const CALEB_DEMO_INDEX = 100;
+const CALEB_EMAIL = "caleb.voskuil@gmail.com";
 
 const facultyProgrammes: Record<string, string[]> = {
   Commerce: [
@@ -119,6 +121,15 @@ function studentNumberFor(firstName: string, lastName: string, index: number) {
   return `${surnamePart}${namePart}${padded(index)}`;
 }
 
+function emailForStudent(firstName: string, lastName: string, index: number) {
+  if (index === CALEB_DEMO_INDEX) {
+    return CALEB_EMAIL;
+  }
+
+  const safeName = `${firstName}.${lastName}`.replace(/[^a-z0-9.]/gi, "").toLowerCase();
+  return `${safeName}.${padded(index)}@students.uct.ac.za`;
+}
+
 function lifecycleStateFor(index: number): CredentialLifecycleState {
   return index >= PENDING_ISSUANCE_START ? "Pending" : "Active";
 }
@@ -128,12 +139,14 @@ function buildStudentRecord(index: number): StudentRecord {
   const faculty = facultyNames[(index - 1) % facultyNames.length];
   const programmes = facultyProgrammes[faculty];
   const programme = programmes[(index - 1) % programmes.length];
-  const firstName = firstNames[(index - 1) % firstNames.length];
-  const lastName = lastNames[(index * 7 - 7) % lastNames.length];
+  const firstName = index === CALEB_DEMO_INDEX ? "Caleb" : firstNames[(index - 1) % firstNames.length];
+  const lastName = index === CALEB_DEMO_INDEX ? "Voskuil" : lastNames[(index * 7 - 7) % lastNames.length];
   const idSuffix = padded(index);
+  const studentNumber = studentNumberFor(firstName, lastName, index);
 
   return {
     profile: {
+      email: emailForStudent(firstName, lastName, index),
       firstName,
       id: `student-demo-${idSuffix}`,
       institution: INSTITUTION,
@@ -148,7 +161,7 @@ function buildStudentRecord(index: number): StudentRecord {
       issuer: INSTITUTION,
       lifecycleState: lifecycleStateFor(index),
       programme,
-      studentNumber: studentNumberFor(firstName, lastName, index),
+      studentNumber,
       validFrom: VALID_FROM,
     },
   };

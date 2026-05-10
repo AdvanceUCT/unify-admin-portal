@@ -25,9 +25,13 @@ export function BatchIssuancePanel({ preview }: { preview: BatchIssuancePreview 
   const [copyDeniedDeliveryId, setCopyDeniedDeliveryId] = useState<string | null>(null);
   const [queueError, setQueueError] = useState<string | null>(null);
   const [isQueueing, setIsQueueing] = useState(false);
+  const liveActivationDeliveries = batchResult
+    ? (state?.activationDeliveries.filter((delivery) => delivery.batchId === batchResult.batchId) ?? [])
+    : [];
   const activationDeliveries = batchResult
-    ? (state?.activationDeliveries.filter((delivery) => delivery.batchId === batchResult.batchId) ??
-      batchResult.activationDeliveries)
+    ? liveActivationDeliveries.length > 0
+      ? liveActivationDeliveries
+      : batchResult.activationDeliveries
     : [];
 
   async function handleQueueBatch() {
@@ -118,6 +122,10 @@ export function BatchIssuancePanel({ preview }: { preview: BatchIssuancePreview 
                       <Badge tone={deliveryTone(delivery.status)}>
                         {formatActivationDeliveryStatus(delivery.status)}
                       </Badge>
+                      {delivery.email ? <p className="mt-2 text-xs text-zinc-500">{delivery.email}</p> : null}
+                      {delivery.failureReason ? (
+                        <p className="mt-2 text-xs text-amber-700">{delivery.failureReason}</p>
+                      ) : null}
                       {delivery.activatedAt ? (
                         <p className="mt-2 text-xs text-zinc-500">Activated {formatDateTime(delivery.activatedAt)}</p>
                       ) : null}

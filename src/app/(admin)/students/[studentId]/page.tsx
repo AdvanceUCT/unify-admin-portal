@@ -1,9 +1,18 @@
 import { notFound } from "next/navigation";
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
-import { getStudentById } from "@/lib/api/client";
+import { StudentCredentialActions } from "@/features/students/StudentCredentialActions";
+import { getActivationDeliveryByCredentialId, getStudentById } from "@/lib/api/client";
+import type { CredentialLifecycleState } from "@/lib/api/types";
 import { requireRole } from "@/lib/auth/session";
 import { formatCredentialStatus, formatDateTime } from "@/lib/formatters";
+
+function credentialTone(state: CredentialLifecycleState) {
+  if (state === "Active") return "success";
+  if (state === "Suspended" || state === "Offered" || state === "Pending" || state === "Issuing") return "warning";
+  if (state === "Revoked" || state === "Expired") return "danger";
+  return "neutral";
+}
 
 export default async function StudentDetailPage({
   params,
@@ -19,6 +28,8 @@ export default async function StudentDetailPage({
     notFound();
   }
 
+  const delivery = await getActivationDeliveryByCredentialId(student.credential.id);
+
   return (
     <div className="space-y-6">
       <SectionHeader title={`${student.profile.firstName} ${student.profile.lastName}`} description={student.profile.institution} />
@@ -29,7 +40,9 @@ export default async function StudentDetailPage({
             <div className="flex items-center justify-between gap-4">
               <dt className="text-zinc-500">Lifecycle</dt>
               <dd>
-                <Badge tone="success">{formatCredentialStatus(student.credential.lifecycleState)}</Badge>
+                <Badge tone={credentialTone(student.credential.lifecycleState)}>
+                  {formatCredentialStatus(student.credential.lifecycleState)}
+                </Badge>
               </dd>
             </div>
             <div className="flex justify-between gap-4">
@@ -59,18 +72,7 @@ export default async function StudentDetailPage({
           </dl>
         </div>
         <div className="rounded-lg border border-zinc-200 bg-white p-5">
-          <h2 className="mb-4 text-base font-semibold text-zinc-950">Available actions</h2>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {["Issue", "Suspend", "Reinstate", "Revoke", "Renew"].map((action) => (
-              <button
-                className="h-10 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-800 transition hover:border-zinc-950"
-                key={action}
-                type="button"
-              >
-                {action}
-              </button>
-            ))}
-          </div>
+          <StudentCredentialActions delivery={delivery} student={student} />
         </div>
       </section>
     </div>

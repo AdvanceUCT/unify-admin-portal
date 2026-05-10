@@ -37,7 +37,7 @@ describe("mock activation store", () => {
     });
     expect(result.activationDeliveries[0].activationUrl).toMatch(/^unifywallet:\/\/activate\?token=/);
     expect(credential?.lifecycleState).toBe("Offered");
-    expect(state.auditEvents.filter((event) => event.eventType === "ActivationLinkDelivered")).toHaveLength(4);
+    expect(state.auditEvents.filter((event) => event.eventType === "ActivationLinkDelivered")).toHaveLength(1);
   });
 
   it("rejects unknown and expired activation tokens", () => {

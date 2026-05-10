@@ -46,3 +46,6 @@ next-env.d.ts
 
 # Local dev
 /docs-local
+
+.claude
+.claude/settings.local.json

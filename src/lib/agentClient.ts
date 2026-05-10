@@ -5,14 +5,6 @@
 import "server-only";
 import { env } from "@/lib/config/env";
 
-const { AGENT_SERVICE_URL, AGENT_API_KEY } = env;
-
-if (!AGENT_SERVICE_URL || !AGENT_API_KEY) {
-  throw new Error(
-    "AGENT_SERVICE_URL and AGENT_API_KEY must be set in the environment.",
-  );
-}
-
 export class AgentServiceError extends Error {
   status: number;
   details?: unknown;
@@ -50,6 +42,14 @@ async function agentFetch(
   path: string,
   options: RequestInit = {},
 ): Promise<Response> {
+  const { AGENT_SERVICE_URL, AGENT_API_KEY } = env;
+
+  if (!AGENT_SERVICE_URL || !AGENT_API_KEY) {
+    throw new Error(
+      "AGENT_SERVICE_URL and AGENT_API_KEY must be set in the environment.",
+    );
+  }
+
   const url = new URL(path, AGENT_SERVICE_URL);
   const response = await fetch(url.toString(), {
     ...options,
@@ -145,5 +145,50 @@ export async function retryRevocation(
       body: JSON.stringify(payload),
     },
   );
+  return response.json();
+}
+
+export async function createBatchActivationLinks(payload: {
+  credentialDefinitionId: string;
+  students: Array<{
+    attributes: Array<{ name: string; value: string }>;
+    email?: string;
+    externalId?: string;
+  }>;
+}): Promise<{
+  failures: Array<{ email?: string; externalId?: string; message: string }>;
+  offers: Array<{
+    activationId: string;
+    activationUrl: string;
+    credentialExchangeId: string;
+    email?: string;
+    expiresAt: string;
+    externalId?: string;
+  }>;
+}> {
+  const response = await agentFetch("/api/credentials/activation-links/batch", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return response.json();
+}
+
+export async function resolveActivation(payload: {
+  token: string;
+  sourceUrl?: string;
+}): Promise<{
+  activationId: string;
+  activationSource: string;
+  createdAt: string;
+  credentialExchangeId: string;
+  expiresAt: string;
+  invitationId: string;
+  invitationUrl: string;
+  issuerLabel: string;
+}> {
+  const response = await agentFetch("/api/wallet/activation/resolve", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
   return response.json();
 }

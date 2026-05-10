@@ -10,12 +10,13 @@ export async function seedDatabase(db: Client) {
 
   for (const student of students) {
     await db.execute({
-      sql: `INSERT INTO students (id, firstName, lastName, student_number, faculty, programme, lifecycle_state, expires_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      sql: `INSERT INTO students (id, firstName, lastName, email, student_number, faculty, programme, lifecycle_state, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         student.profile.id,
         student.profile.firstName,
         student.profile.lastName,
+        student.profile.email,
         student.credential.studentNumber,
         student.credential.faculty ?? "",
         student.credential.programme,

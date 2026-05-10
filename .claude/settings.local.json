@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(npm test *)",
+      "Bash(npx vitest *)",
+      "Bash(npm install *)",
+      "Bash(grep -nA2 '\"vitest\"' package.json package-lock.json)",
+      "Bash(grep -nB1 -A3 '\"@rolldown/binding\"' package-lock.json)",
+      "Bash(npm --version)",
+      "Bash(cp package-lock.json /tmp/package-lock.json.backup)",
+      "Read(//tmp/**)",
+      "Bash(grep -nA 12 \"\\\\\"node_modules/@emnapi/core\\\\\"\\\\|\\\\\"node_modules/@emnapi/runtime\\\\\"\")",
+      "Bash(npm ci *)"
+    ]
+  }
+}

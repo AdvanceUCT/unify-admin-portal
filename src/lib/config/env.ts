@@ -29,6 +29,16 @@ const databaseUrl = (name: string) =>
       message: `${name} still contains placeholder Supabase values. Replace it with the real connection string from Supabase Dashboard > Connect.`,
     });
 
+const optionalNonEmptyString = z
+  .union([z.string().min(1), z.literal("")])
+  .optional()
+  .transform((value) => (value === "" ? undefined : value));
+
+const optionalUrl = z
+  .union([z.string().url(), z.literal("")])
+  .optional()
+  .transform((value) => (value === "" ? undefined : value));
+
 const envSchema = z.object({
   DATABASE_URL: databaseUrl("DATABASE_URL"),
   DIRECT_URL: databaseUrl("DIRECT_URL").optional(),
@@ -52,8 +62,11 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((value) => value?.toLowerCase() === "true"),
-  AGENT_SERVICE_URL: z.string().url().optional(),
-  AGENT_API_KEY: z.string().min(1).optional(),
+  AGENT_SERVICE_URL: optionalUrl,
+  AGENT_API_KEY: optionalNonEmptyString,
+  RESEND_API_KEY: optionalNonEmptyString,
+  CREDENTIAL_EMAIL_FROM: optionalNonEmptyString,
+  CREDENTIAL_EMAIL_DELIVERY_MODE: z.enum(["resend", "console"]).default("resend"),
 });
 
 export const env = envSchema.parse(process.env);
