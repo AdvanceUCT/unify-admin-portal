@@ -1,10 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  retryRevocationAction,
-  runIssuanceSetupAction,
-} from "@/app/(auth)/setup/actions";
+import { runIssuanceSetupAction } from "@/app/(auth)/setup/actions";
 
 const attributes = [
   "studentNumber",
@@ -15,10 +12,8 @@ const attributes = [
 ];
 
 export function IssuanceSetupStep({
-  retryMode,
   onComplete,
 }: {
-  retryMode: boolean;
   onComplete: () => void;
 }) {
   const [isWorking, setIsWorking] = useState(false);
@@ -28,11 +23,7 @@ export function IssuanceSetupStep({
     setError(null);
     setIsWorking(true);
     try {
-      if (retryMode) {
-        await retryRevocationAction();
-      } else {
-        await runIssuanceSetupAction();
-      }
+      await runIssuanceSetupAction();
       onComplete();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Issuance setup failed.");
@@ -50,13 +41,6 @@ export function IssuanceSetupStep({
           ledger.
         </p>
       </div>
-
-      {retryMode ? (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          Schema and credential definition were anchored successfully, but the
-          revocation registry needs to be completed. Retry to finish the setup.
-        </div>
-      ) : null}
 
       <div className="rounded-md border border-zinc-200 bg-zinc-50 p-4">
         <p className="text-sm font-medium text-zinc-700">Schema attributes</p>
@@ -80,7 +64,7 @@ export function IssuanceSetupStep({
         onClick={handleSetup}
         type="button"
       >
-        {isWorking ? "Working" : retryMode ? "Retry revocation" : "Run setup"}
+        {isWorking ? "Working" : "Run setup"}
       </button>
     </div>
   );

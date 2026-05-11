@@ -27,7 +27,7 @@ describe("simulated university student records", () => {
         faculty: "Commerce",
         holderName: "Sipho Dlamini",
         id: "credential-demo-001",
-        lifecycleState: "Active",
+        lifecycleState: "Pending",
         studentNumber: "DLASIP001",
       },
     });
@@ -39,7 +39,7 @@ describe("simulated university student records", () => {
     expect(student?.credential.lifecycleState).toBe("Pending");
     expect(student?.profile.email).toBe("caleb.voskuil@gmail.com");
     expect(searchSimulatedUniversityStudentRecords("Caleb Voskuil")).toHaveLength(1);
-    expect(searchSimulatedUniversityStudentRecords("Liam Muller").length).toBeGreaterThan(0);
+    expect(searchSimulatedUniversityStudentRecords("Sipho Dlamini").length).toBeGreaterThan(0);
     expect(searchSimulatedUniversityStudentRecords(student?.credential.studentNumber ?? "")).toHaveLength(1);
   });
 
@@ -49,9 +49,9 @@ describe("simulated university student records", () => {
       limit: SIMULATED_STUDENT_RECORD_COUNT,
     });
 
-    expect(selected.map((student) => student.profile.id)).toEqual([
-      "student-demo-100",
-    ]);
+    expect(selected).toHaveLength(SIMULATED_STUDENT_RECORD_COUNT);
+    expect(selected[0].profile.id).toBe("student-demo-001");
+    expect(selected[SIMULATED_STUDENT_RECORD_COUNT - 1].profile.id).toBe("student-demo-100");
     expect(selectStudentRecordsForCredentialIssuance(undefined, { cohortId: "unknown-cohort" })).toEqual([]);
   });
 });

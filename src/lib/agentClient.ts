@@ -131,23 +131,6 @@ export async function issuanceSetup(payload: {
   return response.json();
 }
 
-export async function retryRevocation(
-  credentialDefinitionId: string,
-  payload: {
-    tag: string;
-    maximumCredentialNumber: number;
-  },
-): Promise<{ revocationRegistryDefinitionId: string }> {
-  const response = await agentFetch(
-    `/api/credential-definitions/${credentialDefinitionId}/revocation-registries`,
-    {
-      method: "POST",
-      body: JSON.stringify(payload),
-    },
-  );
-  return response.json();
-}
-
 export async function createBatchActivationLinks(payload: {
   credentialDefinitionId: string;
   students: Array<{

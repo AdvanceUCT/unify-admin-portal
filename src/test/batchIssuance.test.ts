@@ -50,15 +50,19 @@ describe("real batch issuance orchestration", () => {
 
     expect(agentRequest).toHaveBeenCalledWith({
       credentialDefinitionId: "cred-def-id",
-      students: [
+      students: expect.arrayContaining([
         expect.objectContaining({
           email: "caleb.voskuil@gmail.com",
           externalId: "student-demo-100",
         }),
-      ],
+      ]),
     });
-    expect(agentRequest.mock.calls[0][0].students[0]).not.toHaveProperty("walletId");
-    expect(vi.mocked(createBatchActivationLinks).mock.calls[0][0].students[0].attributes).toEqual([
+    const calebRequest = agentRequest.mock.calls[0][0].students.find(
+      (student) => student.externalId === "student-demo-100",
+    );
+    expect(calebRequest).toBeDefined();
+    expect(calebRequest).not.toHaveProperty("walletId");
+    expect(calebRequest?.attributes).toEqual([
       { name: "studentNumber", value: "VOSCAL100" },
       { name: "firstName", value: "Caleb" },
       { name: "lastName", value: "Voskuil" },
@@ -114,7 +118,24 @@ describe("real batch issuance orchestration", () => {
     expect(caleb?.credential.lifecycleState).toBe("Offered");
   });
 
-  it("does not issue a credential for a student that is already active", async () => {
+  it("does not issue a credential for a student that is no longer in an issuable state", async () => {
+    // Transition student-demo-001 out of the Pending state by issuing once.
+    vi.mocked(createBatchActivationLinks).mockResolvedValueOnce({
+      failures: [],
+      offers: [
+        {
+          activationId: "activation-sipho",
+          activationUrl: "unifywallet://activate?token=sipho-token",
+          credentialExchangeId: "credential-exchange-sipho",
+          email: "sipho.dlamini.001@students.uct.ac.za",
+          expiresAt: "2026-04-28T10:00:00.000Z",
+          externalId: "student-demo-001",
+        },
+      ],
+    });
+    await queueRealStudentIssuance("student-demo-001");
+    vi.mocked(createBatchActivationLinks).mockClear();
+
     await expect(queueRealStudentIssuance("student-demo-001")).rejects.toMatchObject({
       message: "Student credential is not ready for issuance in its current lifecycle state.",
       status: 409,

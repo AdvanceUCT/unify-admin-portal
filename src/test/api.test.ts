@@ -35,7 +35,7 @@ describe("admin mock client", () => {
 
     expect(fetchMock).toHaveBeenCalledWith("/api/admin/students");
     expect(students[0].credential.validFrom).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-    expect(students[0].credential.lifecycleState).toBe("Active");
+    expect(students[0].credential.lifecycleState).toBe("Pending");
   });
 
   it("returns vendor approval data", async () => {
@@ -68,10 +68,13 @@ describe("admin mock client", () => {
   });
 
   it("records activation link delivery audit events when queueing a batch", async () => {
+    const issuableStudents = selectStudentRecordsForCredentialIssuance(mockStudents);
     await queueBatchIssuance();
     const events = await getAuditEvents();
 
-    expect(events.filter((event) => event.eventType === "ActivationLinkDelivered")).toHaveLength(1);
+    expect(events.filter((event) => event.eventType === "ActivationLinkDelivered")).toHaveLength(
+      issuableStudents.length,
+    );
   });
 
   it("does not derive activation links from student names or numbers", async () => {

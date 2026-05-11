@@ -4,7 +4,6 @@ import { SetupWizard } from "@/features/setup/SetupWizard";
 
 function getInitialStep(
   profile: Awaited<ReturnType<typeof getUniversityProfile>>,
-  schema: Awaited<ReturnType<typeof getActiveCredentialSchema>>,
 ): number {
   if (!profile) {
     return 0; // Profile step
@@ -18,12 +17,6 @@ function getInitialStep(
   if (profile.setupStatus === "DID_CREATED") {
     return 3; // Issuance Setup step
   }
-  if (
-    profile.setupStatus === "SCHEMA_CREATED" &&
-    !schema?.revocationRegistryDefinitionId
-  ) {
-    return 3; // Issuance Setup step (retry revocation mode)
-  }
   // Default to the start if something is inconsistent
   return 0;
 }
@@ -32,7 +25,7 @@ export default async function SetupPage() {
   const profile = await getUniversityProfile();
   const schema = profile ? await getActiveCredentialSchema(profile.id) : null;
 
-  const initialStep = getInitialStep(profile, schema);
+  const initialStep = getInitialStep(profile);
 
   // A bit of a hack to serialize the Decimal type from prisma
   const serializedProfile = profile
