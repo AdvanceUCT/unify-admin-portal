@@ -13,7 +13,7 @@ const INSTITUTION = "University of Cape Town";
 const VALID_FROM = "2026-01-01T00:00:00Z";
 const EXPIRES_AT = "2026-12-31T23:59:59Z";
 const ISSUANCE_STATES = new Set<CredentialLifecycleState>(["Pending", "Issuing"]);
-const PENDING_ISSUANCE_START = 100;
+const PENDING_ISSUANCE_START = 1;
 const CALEB_DEMO_INDEX = 100;
 const CALEB_EMAIL = "caleb.voskuil@gmail.com";
 
@@ -65,6 +65,7 @@ const firstNames = [
   "Sipho",
   "Kayla",
   "Tariq",
+  "Joshua",
   "Chloe",
   "Zanele",
   "Sarah",
@@ -88,6 +89,7 @@ const lastNames = [
   "Dlamini",
   "Scott",
   "Smith",
+  "Wood",
   "Gumede",
   "Patel",
   "Mokoena",
