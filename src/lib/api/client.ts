@@ -30,11 +30,19 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function apiFetch<T>(path: string): Promise<T> {
-  const base =
-    typeof window === "undefined"
-      ? process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000"
-      : "";
-  const res = await fetch(`${base}${path}`);
+  if (typeof window !== "undefined") {
+    const res = await fetch(path);
+    if (!res.ok) throw new Error(`API error ${res.status}: ${path}`);
+    return res.json() as Promise<T>;
+  }
+
+  const { headers } = await import("next/headers");
+  const requestHeaders = await headers();
+  const cookie = requestHeaders.get("cookie");
+  const base = process.env.APP_URL ?? process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+  const res = await fetch(`${base}${path}`, {
+    headers: cookie ? { cookie } : undefined,
+  });
   if (!res.ok) throw new Error(`API error ${res.status}: ${path}`);
   return res.json() as Promise<T>;
 }
