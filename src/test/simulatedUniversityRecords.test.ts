@@ -54,4 +54,29 @@ describe("simulated university student records", () => {
     expect(selected[SIMULATED_STUDENT_RECORD_COUNT - 1].profile.id).toBe("student-demo-100");
     expect(selectStudentRecordsForCredentialIssuance(undefined, { cohortId: "unknown-cohort" })).toEqual([]);
   });
+
+  it("selects issuance-eligible records by faculty and programme", () => {
+    const commerceStudents = selectStudentRecordsForCredentialIssuance(undefined, {
+      cohortId: SIMULATED_STUDENT_COHORT_ID,
+      faculty: "Commerce",
+    });
+    const accountingStudents = selectStudentRecordsForCredentialIssuance(undefined, {
+      cohortId: SIMULATED_STUDENT_COHORT_ID,
+      faculty: "Commerce",
+      programme: "Bachelor of Accounting",
+    });
+
+    expect(commerceStudents.length).toBeGreaterThan(accountingStudents.length);
+    expect(commerceStudents.every((student) => student.credential.faculty === "Commerce")).toBe(true);
+    expect(accountingStudents.every((student) => student.credential.programme === "Bachelor of Accounting")).toBe(true);
+  });
+
+  it("keeps batch selection limited to credential issuance states", () => {
+    const selected = selectStudentRecordsForCredentialIssuance(undefined, {
+      cohortId: SIMULATED_STUDENT_COHORT_ID,
+      credentialStatus: "Active",
+    });
+
+    expect(selected).toEqual([]);
+  });
 });

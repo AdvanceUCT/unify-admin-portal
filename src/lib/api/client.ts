@@ -3,8 +3,24 @@ import {
   mockEligibilityRules,
   mockVendors,
 } from "@/lib/api/mockData";
-import { getMockAdminState, queueMockBatchIssuance } from "@/lib/api/mockActivationStore";
-import type { AdminState, BatchIssuanceResult, StudentRecord } from "@/lib/api/types";
+import {
+  createMockBatchRun,
+  getMockAdminState,
+  getMockBatchRunDetail,
+  listMockBatchRuns,
+  previewMockBatchIssuance,
+  queueMockBatchIssuance,
+  retryMockBatchRun,
+} from "@/lib/api/mockActivationStore";
+import type {
+  AdminState,
+  BatchIssuancePreviewResult,
+  BatchIssuanceResult,
+  BatchIssuanceRunDetail,
+  BatchIssuanceRunSummary,
+  BatchIssuanceSelection,
+  StudentRecord,
+} from "@/lib/api/types";
 
 const wait = (durationMs = 50) => new Promise((resolve) => setTimeout(resolve, durationMs));
 
@@ -23,7 +39,8 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(`Mock API request failed with status ${response.status}.`);
+    const body = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+    throw new Error(body?.error?.message ?? `API request failed with status ${response.status}.`);
   }
 
   return response.json() as Promise<T>;
@@ -115,14 +132,70 @@ export async function getBatchIssuancePreview() {
   return mockBatchIssuancePreview;
 }
 
-export async function queueBatchIssuance() {
+export async function queueBatchIssuance(selection: BatchIssuanceSelection = {}) {
   await wait();
 
   if (shouldUseMockApi()) {
     return fetchJson<BatchIssuanceResult>("/api/credentials/batch-issue", {
+      body: JSON.stringify(selection),
       method: "POST",
     });
   }
 
-  return queueMockBatchIssuance();
+  return queueMockBatchIssuance(selection);
+}
+
+export async function previewBatchIssuance(selection: BatchIssuanceSelection = {}) {
+  await wait();
+
+  if (shouldUseMockApi()) {
+    return fetchJson<BatchIssuancePreviewResult>("/api/credentials/batch-preview", {
+      body: JSON.stringify(selection),
+      method: "POST",
+    });
+  }
+
+  return previewMockBatchIssuance(selection);
+}
+
+export async function createBatchRun(selection: BatchIssuanceSelection = {}) {
+  await wait();
+
+  if (shouldUseMockApi()) {
+    return fetchJson<BatchIssuanceRunDetail>("/api/credentials/batch-runs", {
+      body: JSON.stringify(selection),
+      method: "POST",
+    });
+  }
+
+  return createMockBatchRun(selection);
+}
+
+export async function getBatchRuns() {
+  await wait();
+
+  if (shouldUseMockApi()) {
+    return fetchJson<BatchIssuanceRunSummary[]>("/api/credentials/batch-runs");
+  }
+
+  return listMockBatchRuns();
+}
+
+export async function getBatchRunById(batchId: string) {
+  if (typeof window !== "undefined" && process.env.NODE_ENV !== "test") {
+    return fetchJson<BatchIssuanceRunDetail>(`/api/credentials/batch-runs/${encodeURIComponent(batchId)}`);
+  }
+
+  return getMockBatchRunDetail(batchId);
+}
+
+export async function retryFailedBatchRun(batchId: string) {
+  if (typeof window !== "undefined" && process.env.NODE_ENV !== "test") {
+    return fetchJson<BatchIssuanceRunDetail>(
+      `/api/credentials/batch-runs/${encodeURIComponent(batchId)}/retry-failed`,
+      { method: "POST" },
+    );
+  }
+
+  return retryMockBatchRun(batchId);
 }

@@ -1,13 +1,11 @@
-import type { CredentialLifecycleState, StudentRecord } from "../api/types";
+import type { BatchIssuanceSelection, CredentialLifecycleState, StudentRecord } from "../api/types";
+import { SIMULATED_FACULTY_PROGRAMMES } from "./facultyProgrammes";
 
 export const SIMULATED_STUDENT_RECORDS_SYSTEM = "UCT student records system (simulated)";
 export const SIMULATED_STUDENT_COHORT_ID = "simulated-2026-cohort";
 export const SIMULATED_STUDENT_RECORD_COUNT = 100;
 
-type IssuanceSelectionOptions = {
-  cohortId?: string;
-  limit?: number;
-};
+type IssuanceSelectionOptions = BatchIssuanceSelection;
 
 const INSTITUTION = "University of Cape Town";
 const VALID_FROM = "2026-01-01T00:00:00Z";
@@ -16,50 +14,6 @@ const ISSUANCE_STATES = new Set<CredentialLifecycleState>(["Pending", "Issuing"]
 const PENDING_ISSUANCE_START = 1;
 const CALEB_DEMO_INDEX = 100;
 const CALEB_EMAIL = "caleb.voskuil@gmail.com";
-
-const facultyProgrammes: Record<string, string[]> = {
-  Commerce: [
-    "Bachelor of Commerce",
-    "Bachelor of Business Science",
-    "Bachelor of Accounting",
-    "Postgraduate Diploma in Accounting",
-    "Master of Commerce in Finance",
-  ],
-  Science: [
-    "Bachelor of Science",
-    "BSc Honours in Computer Science",
-    "Bachelor of Science in Data Science",
-    "Master of Science in Bioinformatics",
-    "Doctor of Philosophy in Physics",
-  ],
-  Engineering: [
-    "BSc Engineering (Electrical)",
-    "BSc Engineering (Mechanical)",
-    "BSc Engineering (Civil)",
-    "BSc Engineering (Chemical)",
-    "Master of Science in Engineering",
-  ],
-  "Health Sciences": [
-    "MBChB",
-    "Bachelor of Pharmacy",
-    "Bachelor of Physiotherapy",
-    "Bachelor of Nursing",
-    "Master of Science in Medicine",
-  ],
-  Law: [
-    "Bachelor of Laws (LLB)",
-    "Bachelor of Arts and Law",
-    "Master of Laws (LLM)",
-    "Doctor of Laws (LLD)",
-  ],
-  Humanities: [
-    "Bachelor of Arts",
-    "Bachelor of Social Science",
-    "BA in Film & Media Production",
-    "Master of Arts in African Studies",
-    "Bachelor of Education",
-  ],
-};
 
 const firstNames = [
   "Sipho",
@@ -137,9 +91,9 @@ function lifecycleStateFor(index: number): CredentialLifecycleState {
 }
 
 function buildStudentRecord(index: number): StudentRecord {
-  const facultyNames = Object.keys(facultyProgrammes);
+  const facultyNames = Object.keys(SIMULATED_FACULTY_PROGRAMMES);
   const faculty = facultyNames[(index - 1) % facultyNames.length];
-  const programmes = facultyProgrammes[faculty];
+  const programmes = SIMULATED_FACULTY_PROGRAMMES[faculty];
   const programme = programmes[(index - 1) % programmes.length];
   const firstName = index === CALEB_DEMO_INDEX ? "Caleb" : firstNames[(index - 1) % firstNames.length];
   const lastName = index === CALEB_DEMO_INDEX ? "Voskuil" : lastNames[(index * 7 - 7) % lastNames.length];
@@ -216,11 +170,38 @@ export function isStudentRecordEligibleForCredentialIssuance(student: StudentRec
 
 export function selectStudentRecordsForCredentialIssuance(
   studentRecords: StudentRecord[] = simulatedStudentRecords,
-  { cohortId = SIMULATED_STUDENT_COHORT_ID, limit = SIMULATED_STUDENT_RECORD_COUNT }: IssuanceSelectionOptions = {},
+  {
+    cohortId = SIMULATED_STUDENT_COHORT_ID,
+    credentialStatus,
+    enrolmentStatus,
+    faculty,
+    limit = SIMULATED_STUDENT_RECORD_COUNT,
+    programme,
+  }: IssuanceSelectionOptions = {},
 ): StudentRecord[] {
   if (cohortId !== SIMULATED_STUDENT_COHORT_ID) {
     return [];
   }
 
-  return clone(studentRecords.filter(isStudentRecordEligibleForCredentialIssuance).slice(0, limit));
+  return clone(
+    studentRecords
+      .filter((student) => {
+        const matchesEligibility = isStudentRecordEligibleForCredentialIssuance(student);
+        const matchesFaculty = !faculty || student.credential.faculty === faculty;
+        const matchesProgramme = !programme || student.credential.programme === programme;
+        const matchesEnrolmentStatus =
+          !enrolmentStatus || student.credential.enrolmentStatus === enrolmentStatus;
+        const matchesCredentialStatus =
+          !credentialStatus || student.credential.lifecycleState === credentialStatus;
+
+        return (
+          matchesEligibility &&
+          matchesFaculty &&
+          matchesProgramme &&
+          matchesEnrolmentStatus &&
+          matchesCredentialStatus
+        );
+      })
+      .slice(0, limit),
+  );
 }

@@ -58,13 +58,24 @@ describe("admin mock client", () => {
     expect(result.issuedCredentialIds).toEqual(issuableStudents.map((student) => student.credential.id));
     expect(result.activationDeliveries).toHaveLength(issuableStudents.length);
     expect(result.activationDeliveries[0]).toMatchObject({
-      batchId: "batch-001",
+      batchId: result.batchId,
       channel: "activation-link",
       credentialId: issuableStudents[0].credential.id,
       studentId: issuableStudents[0].profile.id,
       status: "Delivered",
     });
     expect(result.activationDeliveries[0].activationUrl).toMatch(/^unifywallet:\/\/activate\?token=/);
+  });
+
+  it("queues batch issuance for a selected faculty", async () => {
+    const commerceStudents = selectStudentRecordsForCredentialIssuance(mockStudents, {
+      faculty: "Commerce",
+    });
+    const result = await queueBatchIssuance({ faculty: "Commerce" });
+
+    expect(result.requestedCount).toBe(commerceStudents.length);
+    expect(result.issuedCredentialIds).toEqual(commerceStudents.map((student) => student.credential.id));
+    expect(result.activationDeliveries.every((delivery) => delivery.studentId)).toBe(true);
   });
 
   it("records activation link delivery audit events when queueing a batch", async () => {

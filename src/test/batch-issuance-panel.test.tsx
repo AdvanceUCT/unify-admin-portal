@@ -30,15 +30,42 @@ describe("BatchIssuancePanel", () => {
     );
   }
 
-  it("shows delivered activation links after queueing a batch", async () => {
+  it("previews and processes a batch run", async () => {
     mockAdminStateFetch();
     render(<BatchIssuancePanel preview={preview} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Queue batch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview batch" }));
+    expect(await screen.findByText(/100 eligible, 0 skipped from 100 matching students/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Generate 100 offers" }));
 
     expect((await screen.findAllByText("Delivered")).length).toBeGreaterThan(0);
-    expect(screen.getAllByDisplayValue(/^unifywallet:\/\/activate\?token=/).length).toBeGreaterThan(0);
-    expect(screen.getByText("credential-demo-100")).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "View run" })).toBeInTheDocument();
+    expect(screen.getByText("credential-demo-001")).toBeInTheDocument();
+  });
+
+  it("filters batch issuance by faculty before queueing", async () => {
+    mockAdminStateFetch();
+    render(<BatchIssuancePanel preview={preview} />);
+
+    fireEvent.change(screen.getByLabelText("Faculty"), { target: { value: "Commerce" } });
+    fireEvent.click(screen.getByRole("button", { name: "Preview batch" }));
+    expect(await screen.findByText(/17 eligible, 0 skipped from 17 matching students/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Generate 17 offers" }));
+
+    expect(await screen.findByText(/17 delivered, 0 failed, 0 skipped/)).toBeInTheDocument();
+    expect(screen.queryByText("credential-demo-100")).not.toBeInTheDocument();
+  });
+
+  it("filters batch issuance by faculty and programme dropdowns", async () => {
+    mockAdminStateFetch();
+    render(<BatchIssuancePanel preview={preview} />);
+
+    fireEvent.change(screen.getByLabelText("Faculty"), { target: { value: "Commerce" } });
+    fireEvent.change(screen.getByLabelText("Programme"), { target: { value: "Bachelor of Accounting" } });
+    fireEvent.click(screen.getByRole("button", { name: "Preview batch" }));
+
+    expect(await screen.findByText(/3 eligible, 0 skipped from 3 matching students/)).toBeInTheDocument();
+    expect(screen.getAllByText("Commerce · Bachelor of Accounting")).toHaveLength(3);
   });
 
   it("handles denied clipboard permission without throwing", async () => {
@@ -52,10 +79,11 @@ describe("BatchIssuancePanel", () => {
 
     render(<BatchIssuancePanel preview={preview} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Queue batch" }));
-    await screen.findAllByDisplayValue(/^unifywallet:\/\/activate\?token=/);
-    fireEvent.click(screen.getAllByRole("button", { name: "Copy" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Preview batch" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Generate 100 offers" }));
+    await screen.findAllByText("Delivered");
+    fireEvent.click(screen.getAllByRole("button", { name: "Copy link" })[0]);
 
-    expect(await screen.findByRole("button", { name: "Select link" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Copy link" }).length).toBeGreaterThan(0);
   });
 });

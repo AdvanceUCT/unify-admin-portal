@@ -356,6 +356,11 @@ Planned endpoints:
 GET /admin/students
 GET /admin/students/{studentId}
 POST /admin/credentials
+POST /admin/credentials/batch-preview
+GET /admin/credentials/batch-runs
+GET /admin/credentials/batch-runs/{batchId}
+POST /admin/credentials/batch-runs
+POST /admin/credentials/batch-runs/{batchId}/retry-failed
 POST /admin/credentials/batch-issue
 POST /admin/credentials/{credentialId}/suspend
 POST /admin/credentials/{credentialId}/reinstate
@@ -373,11 +378,27 @@ Admin actions should create audit events with actor, action, target ID, timestam
 
 Purpose: issue a batch of simulated student VCs. The BA document sets the MVP target at a minimum of 100 student VCs in one run.
 
+Professional run workflow:
+
+```http
+POST /admin/credentials/batch-preview
+POST /admin/credentials/batch-runs
+GET /admin/credentials/batch-runs
+GET /admin/credentials/batch-runs/{batchId}
+POST /admin/credentials/batch-runs/{batchId}/retry-failed
+```
+
+`batch-preview` returns eligible and skipped student rows without creating offers. `batch-runs` persists a durable run and item rows before processing eligible students. `retry-failed` reprocesses failed or delivery-failed items only.
+
 Request:
 
 ```json
 {
   "cohortId": "simulated-2026-cohort",
+  "faculty": "Commerce",
+  "programme": "Bachelor of Accounting",
+  "enrolmentStatus": "Registered",
+  "credentialStatus": "Pending",
   "limit": 100
 }
 ```
@@ -409,6 +430,8 @@ Response:
 
 Rules:
 
+- Omit `faculty`, `programme`, `enrolmentStatus`, `credentialStatus`, or `limit` to issue every matching eligible record in the cohort.
+- Batch issuance only selects eligible student records: `Registered` enrolment and `Pending` or `Issuing` credential lifecycle state.
 - The admin portal should model newly issued credentials as `Offered` until wallet activation completes.
 - Activation delivery metadata may include safe student, credential, batch, and delivery IDs for audit.
 - Wallet completion changes the related credential from `Offered` to `Active` and creates a `CredentialActivated` audit event.

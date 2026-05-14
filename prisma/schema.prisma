@@ -129,6 +129,83 @@ model CredentialSchema {
   @@map("credential_schema")
 }
 
+model BatchIssuanceRun {
+  id             String                  @id @default(cuid())
+  batchId        String                  @unique
+  actorId        String?
+  cohortId       String
+  filters        Json
+  status         BatchIssuanceRunStatus  @default(PREVIEWED)
+  requestedCount Int                     @default(0)
+  eligibleCount  Int                     @default(0)
+  skippedCount   Int                     @default(0)
+  issuedCount    Int                     @default(0)
+  failedCount    Int                     @default(0)
+  activatedCount Int                     @default(0)
+  queuedAt       DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  items          BatchIssuanceItem[]
+
+  @@index([actorId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("batch_issuance_run")
+}
+
+model BatchIssuanceItem {
+  id                   String                    @id @default(cuid())
+  batchRunId           String
+  batchRun             BatchIssuanceRun          @relation(fields: [batchRunId], references: [id], onDelete: Cascade)
+  studentId            String
+  credentialId         String
+  holderName           String
+  email                String?
+  faculty              String?
+  programme            String?
+  status               BatchIssuanceItemStatus   @default(PENDING)
+  skipReason           String?
+  activationId         String?
+  activationUrl        String?
+  credentialExchangeId String?
+  deliveredAt          DateTime?
+  activatedAt          DateTime?
+  expiresAt            DateTime?
+  failureReason        String?
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+
+  @@unique([batchRunId, studentId])
+  @@index([studentId])
+  @@index([credentialId])
+  @@index([status])
+  @@map("batch_issuance_item")
+}
+
+enum BatchIssuanceRunStatus {
+  DRAFT
+  PREVIEWED
+  QUEUED
+  PROCESSING
+  COMPLETED
+  PARTIALLY_FAILED
+  FAILED
+  CANCELLED
+}
+
+enum BatchIssuanceItemStatus {
+  ELIGIBLE
+  SKIPPED
+  PENDING
+  OFFER_CREATED
+  DELIVERED
+  DELIVERY_FAILED
+  ACTIVATED
+  FAILED
+}
+
 enum SetupStatus {
   PENDING
   DID_CREATED
@@ -166,4 +243,7 @@ enum AuditAction {
   PASSWORD_RESET_REQUESTED
   PASSWORD_RESET_COMPLETED
   SESSION_REVOKED
+  BATCH_ISSUANCE_CREATED
+  BATCH_ISSUANCE_COMPLETED
+  BATCH_ISSUANCE_RETRIED
 }

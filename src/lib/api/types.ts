@@ -31,6 +31,95 @@ export type StudentCredential = {
   expiresAt: string;
 };
 
+export type BatchIssuanceSelection = {
+  cohortId?: string;
+  credentialStatus?: CredentialLifecycleState;
+  enrolmentStatus?: StudentCredential["enrolmentStatus"];
+  faculty?: string;
+  limit?: number;
+  programme?: string;
+};
+
+export type BatchIssuanceRunStatus =
+  | "Draft"
+  | "Previewed"
+  | "Queued"
+  | "Processing"
+  | "Completed"
+  | "PartiallyFailed"
+  | "Failed"
+  | "Cancelled";
+
+export type BatchIssuanceItemStatus =
+  | "Eligible"
+  | "Skipped"
+  | "Pending"
+  | "OfferCreated"
+  | "Delivered"
+  | "DeliveryFailed"
+  | "Activated"
+  | "Failed";
+
+export type BatchIssuancePreviewItem = {
+  credentialId: string;
+  email?: string;
+  faculty?: string;
+  holderName: string;
+  programme?: string;
+  reason?: string;
+  status: "Eligible" | "Skipped";
+  studentId: string;
+};
+
+export type BatchIssuancePreviewResult = {
+  cohortId: string;
+  eligibleCount: number;
+  filters: BatchIssuanceSelection;
+  items: BatchIssuancePreviewItem[];
+  requestedCount: number;
+  skippedCount: number;
+};
+
+export type BatchIssuanceRunItem = {
+  activationId?: string;
+  activationUrl?: string;
+  activatedAt?: string;
+  credentialExchangeId?: string;
+  credentialId: string;
+  deliveredAt?: string;
+  email?: string;
+  expiresAt?: string;
+  faculty?: string;
+  failureReason?: string;
+  holderName: string;
+  programme?: string;
+  skipReason?: string;
+  status: BatchIssuanceItemStatus;
+  studentId: string;
+};
+
+export type BatchIssuanceRunSummary = {
+  activatedCount: number;
+  actorId?: string | null;
+  batchId: string;
+  cohortId: string;
+  completedAt?: string;
+  createdAt: string;
+  eligibleCount: number;
+  failedCount: number;
+  filters: BatchIssuanceSelection;
+  issuedCount: number;
+  queuedAt?: string;
+  requestedCount: number;
+  skippedCount: number;
+  startedAt?: string;
+  status: BatchIssuanceRunStatus;
+};
+
+export type BatchIssuanceRunDetail = BatchIssuanceRunSummary & {
+  items: BatchIssuanceRunItem[];
+};
+
 export type PaymentRecord = {
   id: string;
   amount: Money;

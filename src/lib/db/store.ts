@@ -1,6 +1,5 @@
 import type { StudentRecord } from "@/lib/api/types";
 import { getMockAdminState } from "@/lib/api/mockActivationStore";
-import { getSimulatedUniversityStudentRecords } from "@/lib/student-records/simulatedUniversityRecords";
 import db from "./database";
 import { seedDatabase } from "./seed";
 
