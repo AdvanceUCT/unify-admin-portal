@@ -64,7 +64,7 @@ describe("admin mock client", () => {
       studentId: issuableStudents[0].profile.id,
       status: "Delivered",
     });
-    expect(result.activationDeliveries[0].activationUrl).toMatch(/^unifywallet:\/\/activate\?token=/);
+    expect(result.activationDeliveries[0].activationUrl).toMatch(/^http:\/\/localhost:3000\/activate\?token=/);
   });
 
   it("queues batch issuance for a selected faculty", async () => {

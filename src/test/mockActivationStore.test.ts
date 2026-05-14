@@ -39,7 +39,7 @@ describe("mock activation store", () => {
       status: "Delivered",
       studentId: issuableStudents[0].profile.id,
     });
-    expect(result.activationDeliveries[0].activationUrl).toMatch(/^unifywallet:\/\/activate\?token=/);
+    expect(result.activationDeliveries[0].activationUrl).toMatch(/^http:\/\/localhost:3000\/activate\?token=/);
     expect(credential?.lifecycleState).toBe("Offered");
     expect(state.auditEvents.filter((event) => event.eventType === "ActivationLinkDelivered")).toHaveLength(
       issuableStudents.length,

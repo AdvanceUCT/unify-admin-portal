@@ -2,6 +2,7 @@ import "server-only";
 
 import { mockBatchIssuancePreview } from "@/lib/api/mockData";
 import { recordBatchIssuanceResult } from "@/lib/api/mockActivationStore";
+import { toPublicWalletActivationLink } from "@/lib/api/activationLinks";
 import type {
   ActivationDelivery,
   BatchIssuanceResult,
@@ -210,7 +211,9 @@ async function issueStudentActivationLinks(
 
   for (const offer of agentResult.offers) {
     const student = studentsForIssuance.find((candidate) => candidate.profile.id === offer.externalId);
-    const emailDelivery = await emailDeliveryForOffer(student, offer);
+    const publicActivationUrl = toPublicWalletActivationLink(offer.activationUrl);
+    const publicOffer = { ...offer, activationUrl: publicActivationUrl };
+    const emailDelivery = await emailDeliveryForOffer(student, publicOffer);
 
     if (emailDelivery.status === "Failed") {
       failures.push({
@@ -222,7 +225,7 @@ async function issueStudentActivationLinks(
 
     deliveries.push({
       activationId: offer.activationId,
-      activationUrl: offer.activationUrl,
+      activationUrl: publicActivationUrl,
       batchId,
       channel: "activation-link",
       credentialExchangeId: offer.credentialExchangeId,

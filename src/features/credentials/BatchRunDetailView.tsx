@@ -91,6 +91,16 @@ export function BatchRunDetailView({ initialRun }: { initialRun: BatchIssuanceRu
                   </td>
                   <td className="px-5 py-4 text-zinc-600">
                     {item.failureReason ?? item.skipReason ?? (item.deliveredAt ? `Delivered ${formatDateTime(item.deliveredAt)}` : "Pending")}
+                    {item.activationUrl ? (
+                      <a
+                        className="mt-1 block max-w-xs truncate text-xs font-medium text-zinc-950 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-950"
+                        href={item.activationUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        Open activation link
+                      </a>
+                    ) : null}
                   </td>
                 </tr>
               ))}

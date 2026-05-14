@@ -11,6 +11,7 @@ import type {
   BatchIssuanceSelection,
   StudentRecord,
 } from "@/lib/api/types";
+import { toPublicWalletActivationLink } from "@/lib/api/activationLinks";
 import { createBatchActivationLinks } from "@/lib/agentClient";
 import { writeAuditLog } from "@/lib/audit/audit";
 import { prisma } from "@/lib/db/prisma";
@@ -318,9 +319,11 @@ export async function processBatchRun(batchId: string): Promise<BatchIssuanceRun
       continue;
     }
 
+    const publicActivationUrl = toPublicWalletActivationLink(offer.activationUrl);
+    const publicOffer = { ...offer, activationUrl: publicActivationUrl };
     let delivery: Partial<ActivationDelivery> = {};
     try {
-      await sendActivationEmail(student, offer);
+      await sendActivationEmail(student, publicOffer);
       delivery = { deliveredAt: new Date().toISOString(), emailStatus: "Sent", status: "Delivered" };
       await updateStudentStatus(student.profile.id, "Offered");
     } catch (error) {
@@ -334,7 +337,7 @@ export async function processBatchRun(batchId: string): Promise<BatchIssuanceRun
     await prisma.batchIssuanceItem.update({
       data: {
         activationId: offer.activationId,
-        activationUrl: offer.activationUrl,
+        activationUrl: publicActivationUrl,
         credentialExchangeId: offer.credentialExchangeId,
         deliveredAt: delivery.deliveredAt ? new Date(delivery.deliveredAt) : null,
         expiresAt: new Date(offer.expiresAt),
