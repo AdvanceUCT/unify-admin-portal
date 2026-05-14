@@ -252,6 +252,23 @@ When deployment starts, create GitHub environments:
 
 Store deployment secrets in environment secrets. Use production approval rules if the GitHub plan supports them.
 
+### Vercel Production
+
+The admin portal deploys to Vercel as a Next.js app.
+
+- Canonical production URL: `https://voskuils.com`
+- Redirected domain: `https://www.voskuils.com`
+- Install command: `npm ci`
+- Build command: `npm run build`
+- Runtime database: Supabase pooled PostgreSQL `DATABASE_URL`
+- Migration/Prisma CLI database: Supabase direct PostgreSQL `DIRECT_URL`
+- Production email provider: Resend with `admin@voskuils.com`
+
+Vercel production environment variables must include `APP_URL`,
+`BETTER_AUTH_URL`, and `ACTIVATION_PUBLIC_BASE_URL` set to
+`https://voskuils.com`. Verify the `voskuils.com` sending domain in Resend
+before testing admin invites, password resets, or credential activation emails.
+
 ## Labels
 
 Recommended labels:
