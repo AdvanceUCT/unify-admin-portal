@@ -22,11 +22,11 @@ describe("proxy", () => {
   it("redirects unauthenticated admin routes to sign in with callback", () => {
     getSessionCookieMock.mockReturnValue(null);
 
-    const response = proxy(request("/credentials/batch"));
+    const response = proxy(request("/credentials/issuance/batch"));
 
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe(
-      "http://localhost:3000/sign-in?callbackURL=%2Fcredentials%2Fbatch",
+      "http://localhost:3000/sign-in?callbackURL=%2Fcredentials%2Fissuance%2Fbatch",
     );
   });
 

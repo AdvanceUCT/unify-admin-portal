@@ -37,8 +37,8 @@ describe("simulated university student records", () => {
     const student = getSimulatedUniversityStudentRecordById("student-demo-100");
 
     expect(student?.credential.lifecycleState).toBe("Pending");
-    expect(student?.profile.email).toBe("caleb.voskuil@gmail.com");
-    expect(searchSimulatedUniversityStudentRecords("Caleb Voskuil")).toHaveLength(1);
+    expect(student?.profile.email).toBe("joshuawood.dc@gmail.com");
+    expect(searchSimulatedUniversityStudentRecords("Joshua Wood")).toHaveLength(1);
     expect(searchSimulatedUniversityStudentRecords("Sipho Dlamini").length).toBeGreaterThan(0);
     expect(searchSimulatedUniversityStudentRecords(student?.credential.studentNumber ?? "")).toHaveLength(1);
   });

@@ -129,7 +129,7 @@ export function BatchIssuancePanel({ preview }: { preview: BatchIssuancePreview 
           </div>
           <Link
             className="inline-flex h-9 items-center gap-2 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
-            href="/credentials/batch/runs"
+            href="/credentials/issuance/batch/runs"
           >
             <Eye aria-hidden className="size-4" />
             Batch history
@@ -277,7 +277,7 @@ export function BatchIssuancePanel({ preview }: { preview: BatchIssuancePreview 
             </div>
             <Link
               className="inline-flex h-9 items-center gap-2 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
-              href={`/credentials/batch/runs/${encodeURIComponent(batchRun.batchId)}`}
+              href={`/credentials/issuance/batch/runs/${encodeURIComponent(batchRun.batchId)}`}
             >
               <CheckCircle2 aria-hidden className="size-4" />
               View run

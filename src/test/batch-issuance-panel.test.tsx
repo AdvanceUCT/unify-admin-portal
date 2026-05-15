@@ -34,12 +34,19 @@ describe("BatchIssuancePanel", () => {
     mockAdminStateFetch();
     render(<BatchIssuancePanel preview={preview} />);
 
+    expect(screen.getByRole("link", { name: "Batch history" })).toHaveAttribute(
+      "href",
+      "/credentials/issuance/batch/runs",
+    );
+
     fireEvent.click(screen.getByRole("button", { name: "Preview batch" }));
     expect(await screen.findByText(/100 eligible, 0 skipped from 100 matching students/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Generate 100 offers" }));
 
     expect((await screen.findAllByText("Delivered")).length).toBeGreaterThan(0);
-    expect(await screen.findByRole("link", { name: "View run" })).toBeInTheDocument();
+    expect((await screen.findByRole("link", { name: "View run" })).getAttribute("href")).toMatch(
+      /^\/credentials\/issuance\/batch\/runs\/batch-\d+$/,
+    );
     expect(screen.getByText("credential-demo-001")).toBeInTheDocument();
   });
 

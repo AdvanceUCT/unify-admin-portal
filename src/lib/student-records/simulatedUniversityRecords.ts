@@ -13,7 +13,7 @@ const EXPIRES_AT = "2026-12-31T23:59:59Z";
 const ISSUANCE_STATES = new Set<CredentialLifecycleState>(["Pending", "Issuing"]);
 const PENDING_ISSUANCE_START = 1;
 const CALEB_DEMO_INDEX = 100;
-const CALEB_EMAIL = "caleb.voskuil@gmail.com";
+const CALEB_EMAIL = "joshuawood.dc@gmail.com";
 
 const firstNames = [
   "Sipho",
@@ -95,8 +95,8 @@ function buildStudentRecord(index: number): StudentRecord {
   const faculty = facultyNames[(index - 1) % facultyNames.length];
   const programmes = SIMULATED_FACULTY_PROGRAMMES[faculty];
   const programme = programmes[(index - 1) % programmes.length];
-  const firstName = index === CALEB_DEMO_INDEX ? "Caleb" : firstNames[(index - 1) % firstNames.length];
-  const lastName = index === CALEB_DEMO_INDEX ? "Voskuil" : lastNames[(index * 7 - 7) % lastNames.length];
+  const firstName = index === CALEB_DEMO_INDEX ? "Joshua" : firstNames[(index - 1) % firstNames.length];
+  const lastName = index === CALEB_DEMO_INDEX ? "Wood" : lastNames[(index * 7 - 7) % lastNames.length];
   const idSuffix = padded(index);
   const studentNumber = studentNumberFor(firstName, lastName, index);
 

@@ -1,5 +1,4 @@
 import {
-  BadgeCheck,
   ClipboardList,
   Gauge,
   Landmark,
@@ -24,8 +23,7 @@ import { getUniversityProfile } from "@/lib/university/profile";
 const navItems = [
   { href: "/", label: "Overview", icon: Gauge },
   { href: "/students", label: "Students", icon: Users },
-  { href: "/credentials", label: "Credentials", icon: BadgeCheck },
-  { href: "/credentials/batch", label: "Batch issue", icon: ClipboardList },
+  { href: "/credentials/issuance", label: "Issue credentials", icon: ClipboardList },
   { href: "/vendors", label: "Vendors", icon: Landmark },
   { href: "/rules", label: "Rules", icon: SlidersHorizontal },
   { href: "/audit", label: "Audit", icon: ScrollText },

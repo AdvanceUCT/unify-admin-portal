@@ -22,7 +22,7 @@ export default async function BatchRunDetailPage({ params }: { params: Promise<{
         <SectionHeader title="Batch run detail" description="Per-student status, failures, and retry controls." />
         <Link
           className="rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
-          href="/credentials/batch/runs"
+          href="/credentials/issuance/batch/runs"
         >
           Back to runs
         </Link>

@@ -35,7 +35,10 @@ export function BatchRunsTable({ runs }: { runs: BatchIssuanceRunSummary[] }) {
               runs.map((run) => (
                 <tr key={run.batchId}>
                   <td className="px-5 py-4">
-                    <Link className="font-medium text-zinc-950 hover:underline" href={`/credentials/batch/runs/${run.batchId}`}>
+                    <Link
+                      className="font-medium text-zinc-950 hover:underline"
+                      href={`/credentials/issuance/batch/runs/${run.batchId}`}
+                    >
                       {run.batchId}
                     </Link>
                     <p className="text-xs text-zinc-500">{run.cohortId}</p>
