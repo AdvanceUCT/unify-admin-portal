@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, LoaderCircle, Send } from "lucide-react";
+import { Copy, ExternalLink, LoaderCircle, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
@@ -126,12 +126,21 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
               </div>
             ) : null}
           </dl>
-          <div className="mt-4 flex gap-2">
+          <div className="mt-4 flex flex-wrap gap-2">
             <input
               className="min-w-0 flex-1 rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs text-zinc-700"
               readOnly
               value={currentDelivery.activationUrl}
             />
+            <a
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-800 transition hover:border-zinc-950"
+              href={currentDelivery.activationUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <ExternalLink aria-hidden className="size-4" />
+              Open
+            </a>
             <button
               className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-800 transition hover:border-zinc-950"
               onClick={copyActivationLink}

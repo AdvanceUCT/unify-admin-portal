@@ -11,7 +11,13 @@ import type {
   ActivationDelivery,
   AdminState,
   AuditEvent,
+  BatchIssuancePreviewItem,
+  BatchIssuancePreviewResult,
   BatchIssuanceResult,
+  BatchIssuanceRunDetail,
+  BatchIssuanceRunItem,
+  BatchIssuanceRunSummary,
+  BatchIssuanceSelection,
   DashboardSummary,
   StudentRecord,
   WalletActivationCompleteRequest,
@@ -23,6 +29,7 @@ import type {
 type MockActivationState = {
   activationDeliveries: ActivationDelivery[];
   auditEvents: AuditEvent[];
+  batchRuns: BatchIssuanceRunDetail[];
   students: StudentRecord[];
 };
 
@@ -46,6 +53,7 @@ function createInitialState(): MockActivationState {
   return {
     activationDeliveries: clone(mockActivationDeliveries),
     auditEvents: clone(mockAuditEvents),
+    batchRuns: [],
     students: clone(mockStudents),
   };
 }
@@ -152,6 +160,75 @@ function deliveryExpiryFrom(now: Date) {
   return expiresAt.toISOString();
 }
 
+function batchIdFrom(now: Date) {
+  const timestamp = now.toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+  return `batch-${timestamp}`;
+}
+
+function normalizeMockSelection(selection: BatchIssuanceSelection = {}): BatchIssuanceSelection {
+  return {
+    cohortId: selection.cohortId || mockBatchIssuancePreview.cohortId,
+    credentialStatus: selection.credentialStatus || undefined,
+    enrolmentStatus: selection.enrolmentStatus || undefined,
+    faculty: selection.faculty || undefined,
+    limit:
+      typeof selection.limit === "number" && Number.isInteger(selection.limit) && selection.limit > 0
+        ? selection.limit
+        : undefined,
+    programme: selection.programme || undefined,
+  };
+}
+
+function fullName(student: StudentRecord) {
+  return `${student.profile.firstName} ${student.profile.lastName}`;
+}
+
+function matchesSelection(student: StudentRecord, selection: BatchIssuanceSelection) {
+  return (
+    (!selection.faculty || student.credential.faculty === selection.faculty) &&
+    (!selection.programme || student.credential.programme === selection.programme) &&
+    (!selection.enrolmentStatus || student.credential.enrolmentStatus === selection.enrolmentStatus) &&
+    (!selection.credentialStatus || student.credential.lifecycleState === selection.credentialStatus)
+  );
+}
+
+function isEligible(student: StudentRecord) {
+  return ["Pending", "Issuing"].includes(student.credential.lifecycleState) && student.credential.enrolmentStatus === "Registered";
+}
+
+function mockPreviewItem(student: StudentRecord, status: "Eligible" | "Skipped"): BatchIssuancePreviewItem {
+  const reason = status === "Skipped" ? `Credential status is ${student.credential.lifecycleState}.` : undefined;
+  return {
+    credentialId: student.credential.id,
+    email: student.profile.email,
+    faculty: student.credential.faculty,
+    holderName: fullName(student),
+    programme: student.credential.programme,
+    reason,
+    status,
+    studentId: student.profile.id,
+  };
+}
+
+function deliveryToRunItem(delivery: ActivationDelivery, student: StudentRecord): BatchIssuanceRunItem {
+  return {
+    activationId: delivery.activationId,
+    activationUrl: delivery.activationUrl,
+    activatedAt: delivery.activatedAt,
+    credentialExchangeId: delivery.credentialExchangeId,
+    credentialId: delivery.credentialId,
+    deliveredAt: delivery.deliveredAt,
+    email: delivery.email ?? student.profile.email,
+    expiresAt: delivery.expiresAt,
+    faculty: student.credential.faculty,
+    failureReason: delivery.failureReason,
+    holderName: fullName(student),
+    programme: student.credential.programme,
+    status: delivery.status === "Delivered" ? "Delivered" : "DeliveryFailed",
+    studentId: delivery.studentId,
+  };
+}
+
 export function getMockAdminState(): AdminState {
   const state = mutableState();
   const students = clone(state.students);
@@ -170,20 +247,27 @@ export function resetMockActivationStore() {
   return getMockAdminState();
 }
 
-export function queueMockBatchIssuance(now = new Date()): BatchIssuanceResult {
+export function queueMockBatchIssuance(
+  selectionInputOrNow: BatchIssuanceSelection | Date = {},
+  requestedNow = new Date(),
+): BatchIssuanceResult {
   const state = mutableState();
+  const now = selectionInputOrNow instanceof Date ? selectionInputOrNow : requestedNow;
   const queuedAt = now.toISOString();
+  const selectionInput = selectionInputOrNow instanceof Date ? {} : selectionInputOrNow;
+  const selection = normalizeMockSelection(selectionInput);
+  const batchId = batchIdFrom(now);
   const studentsForIssuance = selectStudentRecordsForCredentialIssuance(state.students, {
-    cohortId: mockBatchIssuancePreview.cohortId,
-    limit: mockBatchIssuancePreview.requestedCount,
+    ...selection,
+    limit: selection.limit ?? mockBatchIssuancePreview.requestedCount,
   });
   const activationDeliveries = studentsForIssuance.map((student, index): ActivationDelivery => {
-    const token = `mock-act-${mockBatchIssuancePreview.batchId}-${String(index + 1).padStart(3, "0")}`;
+    const token = `mock-act-${batchId}-${String(index + 1).padStart(3, "0")}`;
 
     return {
       activationId: activationIdForToken(token),
       activationUrl: buildWalletActivationLink(token),
-      batchId: mockBatchIssuancePreview.batchId,
+      batchId,
       channel: "activation-link",
       credentialId: student.credential.id,
       deliveredAt: queuedAt,
@@ -222,13 +306,112 @@ export function queueMockBatchIssuance(now = new Date()): BatchIssuanceResult {
 
   return {
     activationDeliveries: clone(activationDeliveries),
-    batchId: mockBatchIssuancePreview.batchId,
-    cohortId: mockBatchIssuancePreview.cohortId,
+    batchId,
+    cohortId: selection.cohortId ?? mockBatchIssuancePreview.cohortId,
     issuedCredentialIds: activationDeliveries.map((delivery) => delivery.credentialId),
     queuedAt,
-    requestedCount: mockBatchIssuancePreview.requestedCount,
+    requestedCount: studentsForIssuance.length,
     status: "Queued",
   };
+}
+
+export function previewMockBatchIssuance(selectionInput: BatchIssuanceSelection = {}): BatchIssuancePreviewResult {
+  const state = mutableState();
+  const selection = normalizeMockSelection(selectionInput);
+  const matchingStudents = state.students.filter((student) => matchesSelection(student, selection));
+  const limitedStudents = selection.limit ? matchingStudents.slice(0, selection.limit) : matchingStudents;
+  const items = limitedStudents.map((student) => mockPreviewItem(student, isEligible(student) ? "Eligible" : "Skipped"));
+
+  return {
+    cohortId: selection.cohortId ?? mockBatchIssuancePreview.cohortId,
+    eligibleCount: items.filter((item) => item.status === "Eligible").length,
+    filters: selection,
+    items,
+    requestedCount: items.length,
+    skippedCount: items.filter((item) => item.status === "Skipped").length,
+  };
+}
+
+export function createMockBatchRun(selectionInput: BatchIssuanceSelection = {}, now = new Date()): BatchIssuanceRunDetail {
+  const state = mutableState();
+  const selection = normalizeMockSelection(selectionInput);
+  const preview = previewMockBatchIssuance(selection);
+  const result = queueMockBatchIssuance(selection, now);
+  const deliveredItems = result.activationDeliveries.map((delivery) => {
+    const student = state.students.find((candidate) => candidate.profile.id === delivery.studentId);
+    return student ? deliveryToRunItem(delivery, student) : undefined;
+  }).filter((item): item is BatchIssuanceRunItem => Boolean(item));
+  const deliveredStudentIds = new Set(deliveredItems.map((item) => item.studentId));
+  const skippedItems: BatchIssuanceRunItem[] = preview.items
+    .filter((item) => item.status === "Skipped" || !deliveredStudentIds.has(item.studentId))
+    .map((item) => ({
+      credentialId: item.credentialId,
+      email: item.email,
+      faculty: item.faculty,
+      holderName: item.holderName,
+      programme: item.programme,
+      skipReason: item.reason,
+      status: item.status === "Skipped" ? "Skipped" : "Failed",
+      studentId: item.studentId,
+    }));
+  const failedCount = skippedItems.filter((item) => item.status !== "Skipped").length;
+  const run: BatchIssuanceRunDetail = {
+    activatedCount: 0,
+    actorId: "admin-demo-001",
+    batchId: result.batchId,
+    cohortId: result.cohortId,
+    completedAt: now.toISOString(),
+    createdAt: now.toISOString(),
+    eligibleCount: preview.eligibleCount,
+    failedCount,
+    filters: selection,
+    issuedCount: deliveredItems.length,
+    items: [...deliveredItems, ...skippedItems],
+    queuedAt: result.queuedAt,
+    requestedCount: preview.requestedCount,
+    skippedCount: preview.skippedCount,
+    startedAt: result.queuedAt,
+    status: failedCount > 0 ? "PartiallyFailed" : "Completed",
+  };
+
+  state.batchRuns.unshift(run);
+  return clone(run);
+}
+
+export function listMockBatchRuns(): BatchIssuanceRunSummary[] {
+  return clone(
+    mutableState().batchRuns.map((run) => ({
+      activatedCount: run.activatedCount,
+      actorId: run.actorId,
+      batchId: run.batchId,
+      cohortId: run.cohortId,
+      completedAt: run.completedAt,
+      createdAt: run.createdAt,
+      eligibleCount: run.eligibleCount,
+      failedCount: run.failedCount,
+      filters: run.filters,
+      issuedCount: run.issuedCount,
+      queuedAt: run.queuedAt,
+      requestedCount: run.requestedCount,
+      skippedCount: run.skippedCount,
+      startedAt: run.startedAt,
+      status: run.status,
+    })),
+  );
+}
+
+export function getMockBatchRunDetail(batchId: string): BatchIssuanceRunDetail | undefined {
+  const run = mutableState().batchRuns.find((candidate) => candidate.batchId === batchId);
+  return run ? clone(run) : undefined;
+}
+
+export function retryMockBatchRun(batchId: string): BatchIssuanceRunDetail {
+  const existing = getMockBatchRunDetail(batchId);
+  if (!existing) {
+    throw new Error("Batch issuance run was not found.");
+  }
+
+  return createMockBatchRun(existing.filters);
 }
 
 export function recordBatchIssuanceResult(result: BatchIssuanceResult, now = new Date()) {

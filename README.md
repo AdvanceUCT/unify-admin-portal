@@ -64,6 +64,9 @@ Important values:
 - `APP_URL` and `BETTER_AUTH_URL`: use `http://localhost:3000` locally.
 - `BOOTSTRAP_ADMIN_*`: only needed when bootstrapping the first shared development admin.
 
+For the Vercel production deployment, set `APP_URL`, `BETTER_AUTH_URL`, and
+`ACTIVATION_PUBLIC_BASE_URL` to `https://voskuils.com`.
+
 ### 3. Prepare The Database
 
 If migrations have not already been applied to the shared development database, run:
@@ -89,6 +92,61 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000).
 
 In development, invite and password reset links are logged to the dev server console.
+
+## Vercel Deployment
+
+Vercel should auto-detect this project as a Next.js app.
+
+Use these project settings:
+
+- Install command: `npm ci`
+- Build command: `npm run build`
+- Production domain: `voskuils.com`
+- Additional domain: `www.voskuils.com`
+
+The app redirects `www.voskuils.com` to the canonical apex domain,
+`https://voskuils.com`, through `next.config.ts`.
+
+Set these Vercel production environment variables before deploying:
+
+```env
+DATABASE_URL="postgresql://...pooler.supabase.com:6543/postgres?pgbouncer=true"
+DIRECT_URL="postgresql://...db....supabase.co:5432/postgres"
+BETTER_AUTH_SECRET="generated-strong-secret-at-least-32-chars"
+BETTER_AUTH_URL="https://voskuils.com"
+APP_URL="https://voskuils.com"
+ACTIVATION_PUBLIC_BASE_URL="https://voskuils.com"
+ANDROID_APP_LINK_SHA256_CERT_FINGERPRINTS="production-fingerprint(s)"
+BOOTSTRAP_ADMIN_EMAIL="admin@voskuils.com"
+BOOTSTRAP_ADMIN_NAME="Initial Super Admin"
+BOOTSTRAP_ADMIN_PASSWORD="strong-temporary-bootstrap-password"
+ADMIN_INVITE_TTL_HOURS="24"
+AUTH_EMAIL_FROM="UNIFY Admin <admin@voskuils.com>"
+CREDENTIAL_EMAIL_FROM="UNIFY Credentials <admin@voskuils.com>"
+CREDENTIAL_EMAIL_DELIVERY_MODE="resend"
+RESEND_API_KEY="re_..."
+NEXT_PUBLIC_API_BASE_URL="mock://unify-admin"
+SETUP_BYPASS="false"
+```
+
+Optional service integration variables:
+
+```env
+AGENT_SERVICE_URL="https://..."
+AGENT_API_KEY="..."
+```
+
+Before testing production email, verify `voskuils.com` in Resend and make sure
+`admin@voskuils.com` is allowed as a sender. In production, admin invites,
+password resets, and credential activation emails use Resend.
+
+After deployment, smoke test:
+
+- `https://voskuils.com/sign-in` loads.
+- `https://www.voskuils.com` redirects to `https://voskuils.com`.
+- Admin invite and password reset emails arrive through Resend.
+- Reset links point to `https://voskuils.com/reset-password`.
+- Credential activation links point to `https://voskuils.com/activate`.
 
 ### Useful Commands
 

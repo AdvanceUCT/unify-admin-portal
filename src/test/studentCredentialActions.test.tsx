@@ -36,7 +36,7 @@ describe("StudentCredentialActions", () => {
             activationDeliveries: [
               {
                 activationId: "activation-caleb",
-                activationUrl: "unifywallet://activate?token=caleb-token",
+                activationUrl: "http://localhost:3000/activate?token=caleb-token",
                 batchId: "batch-001",
                 channel: "activation-link",
                 credentialId: "credential-demo-100",
@@ -69,7 +69,11 @@ describe("StudentCredentialActions", () => {
       cache: "no-store",
       method: "POST",
     });
-    expect(screen.getByDisplayValue("unifywallet://activate?token=caleb-token")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("http://localhost:3000/activate?token=caleb-token")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open" })).toHaveAttribute(
+      "href",
+      "http://localhost:3000/activate?token=caleb-token",
+    );
   });
 
   it("shows the real delivery failure reason when email delivery fails", async () => {
@@ -83,7 +87,7 @@ describe("StudentCredentialActions", () => {
             activationDeliveries: [
               {
                 activationId: "activation-caleb",
-                activationUrl: "unifywallet://activate?token=caleb-token",
+                activationUrl: "http://localhost:3000/activate?token=caleb-token",
                 batchId: "batch-001",
                 channel: "activation-link",
                 credentialId: "credential-demo-100",
@@ -121,7 +125,7 @@ describe("StudentCredentialActions", () => {
     await screen.findByText(
       "Activation link was created, but email delivery failed: RESEND_API_KEY is required to send credential activation emails.",
     );
-    expect(screen.getByDisplayValue("unifywallet://activate?token=caleb-token")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("http://localhost:3000/activate?token=caleb-token")).toBeInTheDocument();
   });
 
   it("copies an existing activation link", async () => {
@@ -134,7 +138,7 @@ describe("StudentCredentialActions", () => {
     });
     const delivery: ActivationDelivery = {
       activationId: "activation-caleb",
-      activationUrl: "unifywallet://activate?token=caleb-token",
+      activationUrl: "http://localhost:3000/activate?token=caleb-token",
       batchId: "batch-001",
       channel: "activation-link",
       credentialId: "credential-demo-100",
@@ -150,7 +154,7 @@ describe("StudentCredentialActions", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
 
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith("unifywallet://activate?token=caleb-token"));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("http://localhost:3000/activate?token=caleb-token"));
     expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
   });
 });

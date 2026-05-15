@@ -1,6 +1,11 @@
 import "server-only";
 
 import { env } from "@/lib/config/env";
+import {
+  type EmailDeliveryResult,
+  escapeHtml,
+  sendResendEmail,
+} from "@/lib/email/resend";
 
 type SendCredentialActivationEmailInput = {
   activationUrl: string;
@@ -9,24 +14,13 @@ type SendCredentialActivationEmailInput = {
   to: string;
 };
 
-export type CredentialActivationEmailResult = {
-  messageId?: string;
-  provider: "console" | "resend";
-};
+export type CredentialActivationEmailResult = EmailDeliveryResult;
 
 function shouldUseConsoleDelivery() {
   return (
     env.CREDENTIAL_EMAIL_DELIVERY_MODE === "console" ||
     (!env.RESEND_API_KEY && process.env.NODE_ENV !== "production")
   );
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 function emailHtml(input: SendCredentialActivationEmailInput) {
@@ -74,25 +68,12 @@ export async function sendCredentialActivationEmail(
     throw new Error("RESEND_API_KEY is required to send credential activation emails.");
   }
 
-  const response = await fetch("https://api.resend.com/emails", {
-    body: JSON.stringify({
-      from,
-      html: emailHtml(input),
-      subject: "Activate your UNIFY student credential",
-      text: emailText(input),
-      to: input.to,
-    }),
-    headers: {
-      Authorization: `Bearer ${env.RESEND_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    method: "POST",
+  return sendResendEmail({
+    apiKey: env.RESEND_API_KEY,
+    from,
+    html: emailHtml(input),
+    subject: "Activate your UNIFY student credential",
+    text: emailText(input),
+    to: input.to,
   });
-  const body = (await response.json().catch(() => null)) as { id?: string; message?: string } | null;
-
-  if (!response.ok) {
-    throw new Error(body?.message ?? `Resend request failed with status ${response.status}.`);
-  }
-
-  return { messageId: body?.id, provider: "resend" };
 }

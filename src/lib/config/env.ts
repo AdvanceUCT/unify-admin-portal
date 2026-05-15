@@ -56,6 +56,7 @@ const envSchema = z.object({
     .string()
     .min(12, "BOOTSTRAP_ADMIN_PASSWORD must be at least 12 characters"),
   ADMIN_INVITE_TTL_HOURS: z.coerce.number().int().positive().default(24),
+  ACTIVATION_PUBLIC_BASE_URL: optionalUrl,
   AUTH_EMAIL_FROM: z.string().min(1, "AUTH_EMAIL_FROM is required"),
   NEXT_PUBLIC_API_BASE_URL: z.string().default("mock://unify-admin"),
   SETUP_BYPASS: z
@@ -75,5 +76,6 @@ export const appConfig = {
   appName: "UNIFY Admin Portal",
   apiBaseUrl: env.NEXT_PUBLIC_API_BASE_URL,
   appUrl: env.APP_URL,
+  activationPublicBaseUrl: env.ACTIVATION_PUBLIC_BASE_URL ?? env.APP_URL,
   authUrl: env.BETTER_AUTH_URL,
 };

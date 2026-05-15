@@ -16,14 +16,14 @@
     "pretest": "npm run prisma:generate"
   },
   "dependencies": {
-    "@better-auth/prisma-adapter": "^1.6.9",
+    "@better-auth/prisma-adapter": "^1.6.11",
     "@libsql/client": "^0.17.3",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
-    "better-auth": "^1.6.9",
+    "better-auth": "^1.6.11",
     "better-sqlite3": "^12.9.0",
     "lucide-react": "^0.562.0",
-    "next": "16.2.4",
+    "next": "16.2.6",
     "pg": "^8.20.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -39,12 +39,18 @@
     "@types/react-dom": "^19",
     "dotenv": "^17.4.2",
     "eslint": "^9",
-    "eslint-config-next": "16.2.4",
+    "eslint-config-next": "16.2.6",
     "jsdom": "^27.3.0",
     "prisma": "^7.8.0",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5",
     "vitest": "^4.0.16"
+  },
+  "overrides": {
+    "@hono/node-server": "1.19.14",
+    "fast-uri": "3.1.2",
+    "hono": "4.12.18",
+    "postcss": "8.5.13"
   }
 }

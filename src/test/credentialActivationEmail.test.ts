@@ -34,7 +34,7 @@ describe("credential activation email delivery", () => {
 
     const { sendCredentialActivationEmail } = await import("@/lib/email/credential-activation");
     const result = await sendCredentialActivationEmail({
-      activationUrl: "unifywallet://activate?token=caleb-token",
+      activationUrl: "http://localhost:3000/activate?token=caleb-token",
       expiresAt: "2026-04-28T10:00:00.000Z",
       studentName: "Caleb Voskuil",
       to: "caleb.voskuil@gmail.com",
@@ -42,6 +42,6 @@ describe("credential activation email delivery", () => {
 
     expect(result).toEqual({ provider: "console" });
     expect(fetch).not.toHaveBeenCalled();
-    expect(info).toHaveBeenCalledWith(expect.stringContaining("Activation URL: unifywallet://activate?token=caleb-token"));
+    expect(info).toHaveBeenCalledWith(expect.stringContaining("Activation URL: http://localhost:3000/activate?token=caleb-token"));
   });
 });

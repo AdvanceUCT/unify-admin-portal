@@ -71,13 +71,13 @@ describe("real batch issuance orchestration", () => {
     ]);
     expect(sendCredentialActivationEmail).toHaveBeenCalledWith(
       expect.objectContaining({
-        activationUrl: "unifywallet://activate?token=real-token",
+        activationUrl: "http://localhost:3000/activate?token=real-token",
         studentName: "Caleb Voskuil",
         to: "caleb.voskuil@gmail.com",
       }),
     );
     expect(result.activationDeliveries[0]).toMatchObject({
-      activationUrl: "unifywallet://activate?token=real-token",
+      activationUrl: "http://localhost:3000/activate?token=real-token",
       credentialExchangeId: "credential-exchange-001",
       credentialId: "credential-demo-100",
       email: "caleb.voskuil@gmail.com",

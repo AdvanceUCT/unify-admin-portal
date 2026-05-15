@@ -13,7 +13,20 @@ function createPrismaClient() {
   return new PrismaClient({ adapter });
 }
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
+function hasCurrentModelDelegates(client: PrismaClient | undefined): client is PrismaClient {
+  const candidate = client as PrismaClient & {
+    batchIssuanceItem?: unknown;
+    batchIssuanceRun?: unknown;
+  };
+
+  return Boolean(candidate?.batchIssuanceItem && candidate.batchIssuanceRun);
+}
+
+const prismaClient: PrismaClient = hasCurrentModelDelegates(globalForPrisma.prisma)
+  ? globalForPrisma.prisma
+  : createPrismaClient();
+
+export const prisma = prismaClient;
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
