@@ -3,7 +3,7 @@ import { createHmac } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { POST } from "@/app/api/webhooks/agent/route";
-import { recordConnectionStateChangedEvent, recordCredentialStateChangedEvent } from "@/lib/credentials/status";
+import { recordCredentialStateChangedEvent } from "@/lib/credentials/status";
 
 vi.mock("@/lib/config/env", () => ({
   env: {
@@ -12,7 +12,6 @@ vi.mock("@/lib/config/env", () => ({
 }));
 
 vi.mock("@/lib/credentials/status", () => ({
-  recordConnectionStateChangedEvent: vi.fn(async () => ({ duplicate: false })),
   recordCredentialStateChangedEvent: vi.fn(async () => ({ duplicate: false })),
 }));
 
@@ -66,23 +65,7 @@ describe("agent webhook route", () => {
     expect(response.status).toBe(401);
   });
 
-  it("accepts connection completion events", async () => {
-    const payload = {
-      connectionId: "connection-001",
-      outOfBandId: "oob-001",
-      previousState: "response-sent",
-      state: "completed",
-      timestamp: "2026-05-16T09:00:00.000Z",
-      type: "connection.stateChanged",
-    };
-
-    const response = await POST(signedRequest(payload));
-
-    expect(response.status).toBe(202);
-    expect(recordConnectionStateChangedEvent).toHaveBeenCalledWith(payload);
-  });
-
-  it("accepts irrelevant connection webhooks without treating them as credential events", async () => {
+  it("ignores connection webhooks after signature verification", async () => {
     const response = await POST(
       signedRequest({
         connectionId: "connection-001",

@@ -24,6 +24,7 @@ import {
 import { prisma } from "@/lib/db/prisma";
 import { getAllStudents } from "@/lib/db/store";
 import { sendCredentialActivationEmail } from "@/lib/email/credential-activation";
+import { formatCredentialStatus } from "@/lib/formatters";
 import { parseBatchIssuanceSelection, attributesForStudent, getActiveCredentialDefinition } from "@/lib/issuance/batchIssuance";
 import {
   selectStudentRecordsForCredentialIssuance,
@@ -109,7 +110,7 @@ function skipReasonFor(student: StudentRecord) {
     return `Enrolment status is ${student.credential.enrolmentStatus}.`;
   }
 
-  return `Credential status is ${student.credential.lifecycleState}.`;
+  return `Credential status is ${formatCredentialStatus(student.credential.lifecycleState)}.`;
 }
 
 function previewItem(student: StudentRecord, status: "Eligible" | "Skipped", reason?: string): BatchIssuancePreviewItem {
@@ -368,11 +369,10 @@ export async function processBatchRun(batchId: string): Promise<BatchIssuanceRun
       email: offer.email,
       expiresAt: offer.expiresAt,
       failureReason: delivery.failureReason,
-      outOfBandId: offer.outOfBandId,
       studentId: item.studentId,
       wasDelivered: delivery.status === "Delivered",
     });
-    await reconcileCredentialEventLogs(offer.credentialExchangeId, offer.outOfBandId);
+    await reconcileCredentialEventLogs(offer.credentialExchangeId);
 
     await prisma.batchIssuanceItem.update({
       data: {

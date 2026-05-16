@@ -2,10 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { CredentialIssuanceStatus } from "@/generated/prisma/enums";
 import {
-  derivedConnectionEventId,
   derivedCredentialEventId,
   isRelevantCredentialStateChangedPayload,
-  mapConnectionStateToCredentialStatus,
   mapCredoStateToCredentialStatus,
 } from "@/lib/credentials/statusMapping";
 
@@ -39,19 +37,6 @@ describe("credential status mapping", () => {
     ).toBe(false);
   });
 
-  it("maps the connection completion transition to offer received", () => {
-    expect(
-      mapConnectionStateToCredentialStatus({
-        connectionId: "connection-001",
-        outOfBandId: "oob-001",
-        previousState: "response-sent",
-        state: "completed",
-        timestamp: "2026-05-16T09:00:00.000Z",
-        type: "connection.stateChanged",
-      }),
-    ).toBe(CredentialIssuanceStatus.OFFER_RECEIVED);
-  });
-
   it("derives stable webhook event ids from the existing agent payload shape", () => {
     const payload = {
       credentialExchangeId: "credential-exchange-001",
@@ -62,18 +47,5 @@ describe("credential status mapping", () => {
     };
 
     expect(derivedCredentialEventId(payload)).toBe(derivedCredentialEventId(payload));
-  });
-
-  it("derives stable connection webhook event ids", () => {
-    const payload = {
-      connectionId: "connection-001",
-      outOfBandId: "oob-001",
-      previousState: "response-sent",
-      state: "completed",
-      timestamp: "2026-05-16T09:00:00.000Z",
-      type: "connection.stateChanged" as const,
-    };
-
-    expect(derivedConnectionEventId(payload)).toBe(derivedConnectionEventId(payload));
   });
 });

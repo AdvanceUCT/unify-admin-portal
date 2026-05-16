@@ -147,7 +147,6 @@ export async function createBatchActivationLinks(payload: {
     email?: string;
     expiresAt: string;
     externalId?: string;
-    outOfBandId?: string;
   }>;
 }> {
   const response = await agentFetch("/api/credentials/activation-links/batch", {

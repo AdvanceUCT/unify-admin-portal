@@ -4,7 +4,7 @@ import { Metric } from "@/components/ui/Metric";
 import { getDashboardSummary, getRecentCredentialEvents } from "@/lib/api/server";
 import { ADMIN_ROLES } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
-import { formatCredentialStatus, formatDateTime } from "@/lib/formatters";
+import { credentialStatusTone, formatCredentialStatus, formatDateTime } from "@/lib/formatters";
 
 export default async function AdminOverviewPage() {
   await requireRole(ADMIN_ROLES);
@@ -20,7 +20,7 @@ export default async function AdminOverviewPage() {
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Metric label="Issued credentials" value={summary.issuedCredentials} detail="stored by students" />
-        <Metric label="Pending issuance" value={summary.pendingIssuance} detail="sent, received, or accepted" />
+        <Metric label="Pending issuance" value={summary.pendingIssuance} detail="sent or accepted" />
         <Metric label="Failed credentials" value={summary.failedCredentials} detail="ready to retry" />
         <Metric label="Active batches" value={summary.activeBatchJobs} detail="queued or processing" />
       </section>
@@ -34,7 +34,7 @@ export default async function AdminOverviewPage() {
             <thead className="border-b border-zinc-200 text-xs uppercase tracking-wide text-zinc-500">
               <tr>
                 <th className="px-5 py-3 font-medium">Exchange</th>
-                <th className="px-5 py-3 font-medium">State</th>
+                <th className="px-5 py-3 font-medium">Student ID</th>
                 <th className="px-5 py-3 font-medium">Status</th>
                 <th className="px-5 py-3 font-medium">Time</th>
               </tr>
@@ -43,11 +43,13 @@ export default async function AdminOverviewPage() {
               {credentialEvents.map((event) => (
                 <tr key={event.id}>
                   <td className="px-5 py-4 font-medium text-zinc-900">
-                    {event.credentialExchangeId ?? event.outOfBandId ?? event.connectionId ?? "Unknown"}
+                    {event.credentialExchangeId}
                   </td>
-                  <td className="px-5 py-4 text-zinc-600">{event.previousState ? `${event.previousState} -> ${event.state}` : event.state}</td>
+                  <td className="px-5 py-4 text-zinc-600">{event.studentId ?? "Unknown"}</td>
                   <td className="px-5 py-4">
-                    {event.status ? <Badge tone={event.status === "ISSUED" ? "success" : "warning"}>{formatCredentialStatus(event.status)}</Badge> : null}
+                    {event.status ? (
+                      <Badge tone={credentialStatusTone(event.status)}>{formatCredentialStatus(event.status)}</Badge>
+                    ) : null}
                   </td>
                   <td className="px-5 py-4 text-zinc-600">{formatDateTime(event.occurredAt)}</td>
                 </tr>

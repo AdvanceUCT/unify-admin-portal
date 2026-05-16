@@ -1,14 +1,7 @@
 import { Badge } from "@/components/ui/Badge";
-import type { ActivationDelivery, CredentialLifecycleState, StudentRecord } from "@/lib/api/types";
-import { formatCredentialStatus, formatDateTime } from "@/lib/formatters";
+import type { ActivationDelivery, StudentRecord } from "@/lib/api/types";
+import { credentialStatusTone, formatCredentialStatus, formatDateTime } from "@/lib/formatters";
 import { StudentCredentialActions } from "@/features/students/StudentCredentialActions";
-
-function credentialTone(state: CredentialLifecycleState) {
-  if (state === "ISSUED") return "success";
-  if (state === "OFFER_SENT" || state === "OFFER_RECEIVED" || state === "ACCEPTED") return "warning";
-  if (state === "FAILED" || state === "REVOKED") return "danger";
-  return "neutral";
-}
 
 export function StudentCredentialIssueView({
   delivery,
@@ -25,7 +18,7 @@ export function StudentCredentialIssueView({
           <div className="flex items-center justify-between gap-4">
             <dt className="text-zinc-500">Lifecycle</dt>
             <dd>
-              <Badge tone={credentialTone(student.credential.lifecycleState)}>
+              <Badge tone={credentialStatusTone(student.credential.lifecycleState)}>
                 {formatCredentialStatus(student.credential.lifecycleState)}
               </Badge>
             </dd>

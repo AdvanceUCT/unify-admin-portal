@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
-import { formatCredentialStatus } from "@/lib/formatters";
+import { credentialStatusTone, formatCredentialStatus } from "@/lib/formatters";
 import type { StudentRecord } from "@/lib/api/types";
 
 const PAGE_SIZE = 10;
@@ -172,7 +172,7 @@ export function StudentSearch({ initial }: { initial: StudentRecord[] }) {
                     <td className="px-5 py-4 text-zinc-600">{student.credential.programme}</td>
                     <td className="px-5 py-4 text-zinc-600">{student.credential.enrolmentStatus}</td>
                     <td className="px-5 py-4">
-                      <Badge tone={student.credential.lifecycleState === "ISSUED" ? "success" : "neutral"}>
+                      <Badge tone={credentialStatusTone(student.credential.lifecycleState)}>
                         {formatCredentialStatus(student.credential.lifecycleState)}
                       </Badge>
                     </td>

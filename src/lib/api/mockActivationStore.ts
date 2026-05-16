@@ -25,6 +25,7 @@ import type {
   WalletActivationResolveRequest,
   WalletActivationResolveResponse,
 } from "@/lib/api/types";
+import { formatCredentialStatus } from "@/lib/formatters";
 
 type MockActivationState = {
   activationDeliveries: ActivationDelivery[];
@@ -126,7 +127,7 @@ function dashboardSummary(state: MockActivationState): DashboardSummary {
   const issuedCredentials = state.students.filter((student) => student.credential.lifecycleState === "ISSUED").length;
   const failedCredentials = state.students.filter((student) => student.credential.lifecycleState === "FAILED").length;
   const pendingIssuance = state.students.filter((student) =>
-    ["OFFER_SENT", "OFFER_RECEIVED", "ACCEPTED"].includes(student.credential.lifecycleState),
+    ["OFFER_SENT", "ACCEPTED"].includes(student.credential.lifecycleState),
   ).length;
 
   return {
@@ -203,7 +204,7 @@ function isEligible(student: StudentRecord) {
 }
 
 function mockPreviewItem(student: StudentRecord, status: "Eligible" | "Skipped"): BatchIssuancePreviewItem {
-  const reason = status === "Skipped" ? `Credential status is ${student.credential.lifecycleState}.` : undefined;
+  const reason = status === "Skipped" ? `Credential status is ${formatCredentialStatus(student.credential.lifecycleState)}.` : undefined;
   return {
     credentialId: student.credential.id,
     email: student.profile.email,

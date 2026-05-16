@@ -13,17 +13,6 @@ export type CredentialStateChangedWebhookPayload = {
   type: "credential.stateChanged";
 };
 
-export type ConnectionStateChangedWebhookPayload = {
-  connectionId: string;
-  eventId?: string;
-  outOfBandId?: string;
-  previousState?: string | null;
-  state: string;
-  theirLabel?: string;
-  timestamp: string;
-  type: "connection.stateChanged";
-};
-
 const failedCredoStates = new Set([
   "abandoned",
   "declined",
@@ -49,33 +38,10 @@ export function isRelevantCredentialStateChangedPayload(payload: CredentialState
   return payload.state === "offer-sent" || (payload.previousState === "credential-issued" && payload.state === "done");
 }
 
-export function mapConnectionStateToCredentialStatus(
-  payload: ConnectionStateChangedWebhookPayload,
-): CredentialIssuanceStatus | undefined {
-  if (payload.previousState === "response-sent" && payload.state === "completed") {
-    return CredentialIssuanceStatus.OFFER_RECEIVED;
-  }
-
-  return undefined;
-}
-
 export function derivedCredentialEventId(payload: CredentialStateChangedWebhookPayload) {
   const fingerprint = [
     payload.type,
     payload.credentialExchangeId,
-    payload.previousState ?? "",
-    payload.state,
-    payload.timestamp,
-  ].join("|");
-
-  return createHash("sha256").update(fingerprint).digest("hex");
-}
-
-export function derivedConnectionEventId(payload: ConnectionStateChangedWebhookPayload) {
-  const fingerprint = [
-    payload.type,
-    payload.outOfBandId ?? "",
-    payload.connectionId,
     payload.previousState ?? "",
     payload.state,
     payload.timestamp,

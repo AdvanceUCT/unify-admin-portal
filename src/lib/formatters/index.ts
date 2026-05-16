@@ -22,7 +22,6 @@ const credentialStatusLabels: Record<CredentialLifecycleState, string> = {
   FAILED: "Failed",
   ISSUED: "Issued",
   NOT_ISSUED: "Not issued",
-  OFFER_RECEIVED: "Offer received",
   OFFER_SENT: "Offer sent",
   REVOKED: "Revoked",
 };
@@ -62,6 +61,13 @@ export function formatDateTime(value: string) {
 
 export function formatCredentialStatus(value: CredentialLifecycleState) {
   return credentialStatusLabels[value];
+}
+
+export function credentialStatusTone(value: CredentialLifecycleState) {
+  if (value === "ISSUED") return "success";
+  if (value === "FAILED" || value === "REVOKED") return "danger";
+  if (value === "OFFER_SENT" || value === "ACCEPTED") return "warning";
+  return "neutral";
 }
 
 export function formatActivationDeliveryStatus(value: ActivationDeliveryStatus) {

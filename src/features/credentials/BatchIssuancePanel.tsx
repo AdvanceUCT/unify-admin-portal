@@ -15,13 +15,17 @@ import type {
   CredentialLifecycleState,
   StudentCredential,
 } from "@/lib/api/types";
+import { formatCredentialStatus } from "@/lib/formatters";
 import { SIMULATED_FACULTY_PROGRAMMES } from "@/lib/student-records/facultyProgrammes";
 
 const credentialStatusOptions: Array<{ label: string; value: "" | CredentialLifecycleState }> = [
   { label: "Eligible statuses", value: "" },
-  { label: "Not issued only", value: "NOT_ISSUED" },
-  { label: "Failed only", value: "FAILED" },
-  { label: "Revoked only", value: "REVOKED" },
+  { label: formatCredentialStatus("NOT_ISSUED"), value: "NOT_ISSUED" },
+  { label: formatCredentialStatus("OFFER_SENT"), value: "OFFER_SENT" },
+  { label: formatCredentialStatus("ACCEPTED"), value: "ACCEPTED" },
+  { label: formatCredentialStatus("ISSUED"), value: "ISSUED" },
+  { label: formatCredentialStatus("FAILED"), value: "FAILED" },
+  { label: formatCredentialStatus("REVOKED"), value: "REVOKED" },
 ];
 
 const enrolmentStatusOptions: Array<StudentCredential["enrolmentStatus"]> = [

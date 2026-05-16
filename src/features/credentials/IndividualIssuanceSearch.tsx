@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import type { StudentRecord } from "@/lib/api/types";
-import { formatCredentialStatus } from "@/lib/formatters";
+import { credentialStatusTone, formatCredentialStatus } from "@/lib/formatters";
 
 const PAGE_SIZE = 10;
 
@@ -168,7 +168,7 @@ export function IndividualIssuanceSearch({ students }: { students: StudentRecord
                     <td className="px-5 py-4 text-zinc-600">{student.credential.programme}</td>
                     <td className="px-5 py-4 text-zinc-600">{student.credential.enrolmentStatus}</td>
                     <td className="px-5 py-4">
-                      <Badge tone={student.credential.lifecycleState === "ISSUED" ? "success" : "neutral"}>
+                      <Badge tone={credentialStatusTone(student.credential.lifecycleState)}>
                         {formatCredentialStatus(student.credential.lifecycleState)}
                       </Badge>
                     </td>
