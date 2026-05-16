@@ -9,6 +9,14 @@ describe("IndividualIssuanceSearch", () => {
     cleanup();
   });
 
+  it("limits visible student rows to the first 10 results", () => {
+    render(<IndividualIssuanceSearch students={mockStudents} />);
+
+    expect(screen.getByText("Showing 1-10 of 100 students")).toBeInTheDocument();
+    expect(screen.getByText("Page 1 of 10")).toBeInTheDocument();
+    expect(screen.getAllByRole("row")).toHaveLength(11);
+  });
+
   it("filters by full name and links to individual issuance detail", () => {
     render(<IndividualIssuanceSearch students={mockStudents} />);
 
@@ -16,7 +24,7 @@ describe("IndividualIssuanceSearch", () => {
       target: { value: "Joshua Wood" },
     });
 
-    expect(screen.getByText("Showing 1 of 100 students")).toBeInTheDocument();
+    expect(screen.getByText("Showing 1-1 of 1 students")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Joshua Wood" })).toHaveAttribute(
       "href",
       "/credentials/issuance/individual/student-demo-100",
@@ -30,7 +38,7 @@ describe("IndividualIssuanceSearch", () => {
       target: { value: "WOOJOS100" },
     });
 
-    expect(screen.getByText("Showing 1 of 100 students")).toBeInTheDocument();
+    expect(screen.getByText("Showing 1-1 of 1 students")).toBeInTheDocument();
     expect(screen.getByText("WOOJOS100")).toBeInTheDocument();
   });
 });

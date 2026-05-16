@@ -2,14 +2,18 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { formatCredentialStatus } from "@/lib/formatters";
 import type { StudentRecord } from "@/lib/api/types";
+
+const PAGE_SIZE = 10;
 
 export function StudentSearch({ initial }: { initial: StudentRecord[] }) {
   const [query, setQuery] = useState("");
   const [faculty, setFaculty] = useState("");
   const [programme, setProgramme] = useState("");
+  const [page, setPage] = useState(1);
 
   const faculties = useMemo(() =>
     [...new Set(initial.map((s) => s.credential.faculty).filter(Boolean))].sort(),
@@ -46,9 +50,16 @@ export function StudentSearch({ initial }: { initial: StudentRecord[] }) {
     setQuery("");
     setFaculty("");
     setProgramme("");
+    setPage(1);
   }
 
   const hasFilters = query || faculty || programme;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * PAGE_SIZE;
+  const pageStudents = filtered.slice(pageStart, pageStart + PAGE_SIZE);
+  const visibleStart = filtered.length === 0 ? 0 : pageStart + 1;
+  const visibleEnd = pageStart + pageStudents.length;
 
   return (
     <div className="space-y-4">
@@ -71,7 +82,10 @@ export function StudentSearch({ initial }: { initial: StudentRecord[] }) {
           </svg>
           <input
             className="h-9 w-full rounded-md border border-zinc-300 bg-white pl-9 pr-3 text-sm placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none"
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPage(1);
+            }}
             placeholder="Search by name or student number..."
             value={query}
           />
@@ -83,6 +97,7 @@ export function StudentSearch({ initial }: { initial: StudentRecord[] }) {
           onChange={(e) => {
             setFaculty(e.target.value);
             setProgramme("");
+            setPage(1);
           }}
           value={faculty}
         >
@@ -95,7 +110,10 @@ export function StudentSearch({ initial }: { initial: StudentRecord[] }) {
         {/* Programme filter */}
         <select
           className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
-          onChange={(e) => setProgramme(e.target.value)}
+          onChange={(e) => {
+            setProgramme(e.target.value);
+            setPage(1);
+          }}
           value={programme}
         >
           <option value="">All programmes</option>
@@ -118,7 +136,7 @@ export function StudentSearch({ initial }: { initial: StudentRecord[] }) {
 
       {/* Results count */}
       <p className="text-xs text-zinc-500">
-        Showing {filtered.length} of {initial.length} students
+        Showing {visibleStart}-{visibleEnd} of {filtered.length} students
       </p>
 
       {/* Table */}
@@ -142,7 +160,7 @@ export function StudentSearch({ initial }: { initial: StudentRecord[] }) {
                   </td>
                 </tr>
               ) : (
-                filtered.map((student) => (
+                pageStudents.map((student) => (
                   <tr key={student.profile.id}>
                     <td className="px-5 py-4">
                       <Link className="font-medium text-zinc-950 hover:underline" href={`/students/${student.profile.id}`}>
@@ -165,6 +183,34 @@ export function StudentSearch({ initial }: { initial: StudentRecord[] }) {
           </table>
         </div>
       </section>
+
+      {filtered.length > PAGE_SIZE ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-zinc-500">
+            Page {currentPage} of {totalPages}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={currentPage === 1}
+              onClick={() => setPage((value) => Math.max(1, value - 1))}
+              type="button"
+            >
+              <ChevronLeft aria-hidden className="size-4" />
+              Previous
+            </button>
+            <button
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={currentPage === totalPages}
+              onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+              type="button"
+            >
+              Next
+              <ChevronRight aria-hidden className="size-4" />
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

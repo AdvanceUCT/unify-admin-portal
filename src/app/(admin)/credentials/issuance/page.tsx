@@ -24,7 +24,7 @@ export default async function IssuancePage() {
 
   return (
     <div className="space-y-6">
-      <SectionHeader title="Issue credentials" description="Choose a batch or individual issuance workflow." />
+      <SectionHeader title="Issue Credentials" description="Choose a batch or individual issuance workflow." />
       <section className="grid gap-4 md:grid-cols-2">
         {issuanceOptions.map((option) => {
           const Icon = option.icon;
