@@ -4,6 +4,14 @@ import { BatchIssuancePanel } from "@/features/credentials/BatchIssuancePanel";
 import { getMockAdminState, resetMockActivationStore } from "@/lib/api/mockActivationStore";
 import type { BatchIssuancePreview } from "@/lib/api/types";
 
+const routerPush = vi.fn();
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: routerPush,
+  }),
+}));
+
 const preview: BatchIssuancePreview = {
   batchId: "batch-001",
   cohortId: "simulated-2026-cohort",
@@ -15,6 +23,7 @@ describe("BatchIssuancePanel", () => {
   afterEach(() => {
     cleanup();
     resetMockActivationStore();
+    routerPush.mockClear();
     vi.unstubAllGlobals();
   });
 
@@ -43,11 +52,10 @@ describe("BatchIssuancePanel", () => {
     expect(await screen.findByText(/100 eligible, 0 skipped from 100 matching students/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Generate 100 offers" }));
 
-    expect((await screen.findAllByText("Delivered")).length).toBeGreaterThan(0);
-    expect((await screen.findByRole("link", { name: "View run" })).getAttribute("href")).toMatch(
-      /^\/credentials\/issuance\/batch\/runs\/batch-\d+$/,
-    );
-    expect(screen.getByText("credential-demo-001")).toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(routerPush).toHaveBeenCalledWith(expect.stringMatching(/^\/credentials\/issuance\/batch\/runs\/batch-\d+$/));
+    });
+    expect(screen.queryByRole("link", { name: "View run" })).not.toBeInTheDocument();
   });
 
   it("filters batch issuance by faculty before queueing", async () => {
@@ -59,8 +67,10 @@ describe("BatchIssuancePanel", () => {
     expect(await screen.findByText(/17 eligible, 0 skipped from 17 matching students/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Generate 17 offers" }));
 
-    expect(await screen.findByText(/17 delivered, 0 failed, 0 skipped/)).toBeInTheDocument();
-    expect(screen.queryByText("credential-demo-100")).not.toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(routerPush).toHaveBeenCalledWith(expect.stringMatching(/^\/credentials\/issuance\/batch\/runs\/batch-\d+$/));
+    });
+    expect(screen.queryByText(/17 delivered, 0 failed, 0 skipped/)).not.toBeInTheDocument();
   });
 
   it("filters batch issuance by faculty and programme dropdowns", async () => {
@@ -75,22 +85,17 @@ describe("BatchIssuancePanel", () => {
     expect(screen.getAllByText("Commerce · Bachelor of Accounting")).toHaveLength(3);
   });
 
-  it("handles denied clipboard permission without throwing", async () => {
+  it("keeps the preview table on screen until navigation occurs", async () => {
     mockAdminStateFetch();
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: {
-        writeText: vi.fn().mockRejectedValue(new Error("Write permission denied.")),
-      },
-    });
 
     render(<BatchIssuancePanel preview={preview} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Preview batch" }));
     fireEvent.click(await screen.findByRole("button", { name: "Generate 100 offers" }));
-    await screen.findAllByText("Delivered");
-    fireEvent.click(screen.getAllByRole("button", { name: "Copy link" })[0]);
 
-    expect(screen.getAllByRole("button", { name: "Copy link" }).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/100 eligible, 0 skipped from 100 matching students/)).toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(routerPush).toHaveBeenCalled();
+    });
   });
 });

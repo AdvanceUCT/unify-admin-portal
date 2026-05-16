@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle2, Copy, Eye, LoaderCircle, Send } from "lucide-react";
+import { Eye, LoaderCircle, Send } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
@@ -10,13 +11,10 @@ import type {
   BatchIssuanceItemStatus,
   BatchIssuancePreview,
   BatchIssuancePreviewResult,
-  BatchIssuanceRunDetail,
-  BatchIssuanceRunStatus,
   BatchIssuanceSelection,
   CredentialLifecycleState,
   StudentCredential,
 } from "@/lib/api/types";
-import { formatDateTime } from "@/lib/formatters";
 import { SIMULATED_FACULTY_PROGRAMMES } from "@/lib/student-records/facultyProgrammes";
 
 const credentialStatusOptions: Array<{ label: string; value: "" | CredentialLifecycleState }> = [
@@ -35,13 +33,6 @@ const enrolmentStatusOptions: Array<StudentCredential["enrolmentStatus"]> = [
 const facultyOptions = Object.keys(SIMULATED_FACULTY_PROGRAMMES);
 const allProgrammeOptions = Object.values(SIMULATED_FACULTY_PROGRAMMES).flat();
 
-function runTone(status: BatchIssuanceRunStatus) {
-  if (status === "Completed") return "success";
-  if (status === "PartiallyFailed" || status === "Failed") return "danger";
-  if (status === "Processing" || status === "Queued") return "warning";
-  return "neutral";
-}
-
 function itemTone(status: BatchIssuanceItemStatus | "Eligible" | "Skipped") {
   if (status === "Delivered" || status === "Activated" || status === "Eligible") return "success";
   if (status === "Failed" || status === "DeliveryFailed") return "danger";
@@ -50,13 +41,12 @@ function itemTone(status: BatchIssuanceItemStatus | "Eligible" | "Skipped") {
 }
 
 export function BatchIssuancePanel({ preview }: { preview: BatchIssuancePreview }) {
-  const [copiedStudentId, setCopiedStudentId] = useState<string | null>(null);
+  const router = useRouter();
   const [credentialStatus, setCredentialStatus] = useState<"" | CredentialLifecycleState>("");
   const [enrolmentStatus, setEnrolmentStatus] = useState<StudentCredential["enrolmentStatus"]>("Registered");
   const [faculty, setFaculty] = useState("");
   const [programme, setProgramme] = useState("");
   const [batchPreview, setBatchPreview] = useState<BatchIssuancePreviewResult | null>(null);
-  const [batchRun, setBatchRun] = useState<BatchIssuanceRunDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -82,7 +72,6 @@ export function BatchIssuancePanel({ preview }: { preview: BatchIssuancePreview 
 
   async function handlePreview() {
     setError(null);
-    setBatchRun(null);
     setIsPreviewing(true);
 
     try {
@@ -99,24 +88,12 @@ export function BatchIssuancePanel({ preview }: { preview: BatchIssuancePreview 
     setIsProcessing(true);
 
     try {
-      setBatchRun(await createBatchRun(selection));
+      const run = await createBatchRun(selection);
+      router.push(`/credentials/issuance/batch/runs/${encodeURIComponent(run.batchId)}`);
     } catch (processError) {
       setError(processError instanceof Error ? processError.message : "Batch run failed.");
     } finally {
       setIsProcessing(false);
-    }
-  }
-
-  async function handleCopy(studentId: string, activationUrl?: string) {
-    if (!activationUrl || !navigator.clipboard) {
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(activationUrl);
-      setCopiedStudentId(studentId);
-    } catch {
-      setCopiedStudentId(null);
     }
   }
 
@@ -256,65 +233,6 @@ export function BatchIssuancePanel({ preview }: { preview: BatchIssuancePreview 
                       <Badge tone={itemTone(item.status)}>{item.status}</Badge>
                     </td>
                     <td className="px-5 py-4 text-zinc-600">{item.reason ?? "Ready for offer generation"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ) : null}
-
-      {batchRun ? (
-        <section className="rounded-lg border border-zinc-200 bg-white">
-          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4">
-            <div>
-              <div className="flex flex-wrap items-center gap-3">
-                <h2 className="text-base font-semibold text-zinc-950">{batchRun.batchId}</h2>
-                <Badge tone={runTone(batchRun.status)}>{batchRun.status}</Badge>
-              </div>
-              <p className="mt-1 text-sm text-zinc-500">
-                {batchRun.issuedCount} delivered, {batchRun.failedCount} failed, {batchRun.skippedCount} skipped.
-              </p>
-            </div>
-            <Link
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
-              href={`/credentials/issuance/batch/runs/${encodeURIComponent(batchRun.batchId)}`}
-            >
-              <CheckCircle2 aria-hidden className="size-4" />
-              View run
-            </Link>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-zinc-200 text-xs uppercase tracking-wide text-zinc-500">
-                <tr>
-                  <th className="px-5 py-3 font-medium">Credential</th>
-                  <th className="px-5 py-3 font-medium">Student</th>
-                  <th className="px-5 py-3 font-medium">Delivery</th>
-                  <th className="px-5 py-3 font-medium">Activation link</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100">
-                {batchRun.items.filter((item) => item.status !== "Skipped").slice(0, 25).map((item) => (
-                  <tr key={item.studentId}>
-                    <td className="px-5 py-4 font-medium text-zinc-950">{item.credentialId}</td>
-                    <td className="px-5 py-4 text-zinc-600">{item.studentId}</td>
-                    <td className="px-5 py-4">
-                      <Badge tone={itemTone(item.status)}>{item.status}</Badge>
-                      {item.deliveredAt ? <p className="mt-2 text-xs text-zinc-500">{formatDateTime(item.deliveredAt)}</p> : null}
-                      {item.failureReason ? <p className="mt-2 text-xs text-amber-700">{item.failureReason}</p> : null}
-                    </td>
-                    <td className="min-w-72 px-5 py-4">
-                      <button
-                        className="inline-flex h-9 items-center gap-2 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={!item.activationUrl}
-                        onClick={() => void handleCopy(item.studentId, item.activationUrl)}
-                        type="button"
-                      >
-                        <Copy aria-hidden className="size-4" />
-                        {copiedStudentId === item.studentId ? "Copied" : "Copy link"}
-                      </button>
-                    </td>
                   </tr>
                 ))}
               </tbody>
