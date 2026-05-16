@@ -36,6 +36,7 @@ const credentialStatuses = new Set<CredentialLifecycleState>([
   "FAILED",
   "ISSUED",
   "NOT_ISSUED",
+  "OFFER_RECEIVED",
   "OFFER_SENT",
   "REVOKED",
 ]);
@@ -243,10 +244,11 @@ async function issueStudentActivationLinks(
       email: offer.email,
       expiresAt: offer.expiresAt,
       failureReason: emailDelivery.status === "Failed" ? emailDelivery.failureReason : undefined,
+      outOfBandId: offer.outOfBandId,
       studentId: student?.profile.id ?? offer.externalId ?? offer.activationId,
       wasDelivered: emailDelivery.status === "Delivered",
     });
-    await reconcileCredentialEventLogs(offer.credentialExchangeId);
+    await reconcileCredentialEventLogs(offer.credentialExchangeId, offer.outOfBandId);
 
     if (emailDelivery.status === "Failed") {
       failures.push({

@@ -20,7 +20,7 @@ export default async function AdminOverviewPage() {
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Metric label="Issued credentials" value={summary.issuedCredentials} detail="stored by students" />
-        <Metric label="Pending issuance" value={summary.pendingIssuance} detail="offers or accepted" />
+        <Metric label="Pending issuance" value={summary.pendingIssuance} detail="sent, received, or accepted" />
         <Metric label="Failed credentials" value={summary.failedCredentials} detail="ready to retry" />
         <Metric label="Active batches" value={summary.activeBatchJobs} detail="queued or processing" />
       </section>
@@ -42,7 +42,9 @@ export default async function AdminOverviewPage() {
             <tbody className="divide-y divide-zinc-100">
               {credentialEvents.map((event) => (
                 <tr key={event.id}>
-                  <td className="px-5 py-4 font-medium text-zinc-900">{event.credentialExchangeId}</td>
+                  <td className="px-5 py-4 font-medium text-zinc-900">
+                    {event.credentialExchangeId ?? event.outOfBandId ?? event.connectionId ?? "Unknown"}
+                  </td>
                   <td className="px-5 py-4 text-zinc-600">{event.previousState ? `${event.previousState} -> ${event.state}` : event.state}</td>
                   <td className="px-5 py-4">
                     {event.status ? <Badge tone={event.status === "ISSUED" ? "success" : "warning"}>{formatCredentialStatus(event.status)}</Badge> : null}

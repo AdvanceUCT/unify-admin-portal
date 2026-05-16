@@ -22,6 +22,7 @@ const credentialStatusLabels: Record<CredentialLifecycleState, string> = {
   FAILED: "Failed",
   ISSUED: "Issued",
   NOT_ISSUED: "Not issued",
+  OFFER_RECEIVED: "Offer received",
   OFFER_SENT: "Offer sent",
   REVOKED: "Revoked",
 };

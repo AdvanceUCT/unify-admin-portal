@@ -13,6 +13,17 @@ export type CredentialStateChangedWebhookPayload = {
   type: "credential.stateChanged";
 };
 
+export type ConnectionStateChangedWebhookPayload = {
+  connectionId: string;
+  eventId?: string;
+  outOfBandId?: string;
+  previousState?: string | null;
+  state: string;
+  theirLabel?: string;
+  timestamp: string;
+  type: "connection.stateChanged";
+};
+
 const failedCredoStates = new Set([
   "abandoned",
   "declined",
@@ -27,12 +38,6 @@ export function mapCredoStateToCredentialStatus(
   currentStatus?: CredentialIssuanceStatus | null,
 ): CredentialIssuanceStatus | undefined {
   if (state === "offer-sent") return CredentialIssuanceStatus.OFFER_SENT;
-  if (state === "request-received") return CredentialIssuanceStatus.ACCEPTED;
-  if (state === "credential-issued") {
-    return currentStatus === CredentialIssuanceStatus.ISSUED
-      ? CredentialIssuanceStatus.ISSUED
-      : CredentialIssuanceStatus.ACCEPTED;
-  }
   if (state === "done") return CredentialIssuanceStatus.ISSUED;
   if (failedCredoStates.has(state) || state.includes("fail") || state.includes("problem")) {
     return CredentialIssuanceStatus.FAILED;
@@ -40,10 +45,37 @@ export function mapCredoStateToCredentialStatus(
   return undefined;
 }
 
+export function isRelevantCredentialStateChangedPayload(payload: CredentialStateChangedWebhookPayload) {
+  return payload.state === "offer-sent" || (payload.previousState === "credential-issued" && payload.state === "done");
+}
+
+export function mapConnectionStateToCredentialStatus(
+  payload: ConnectionStateChangedWebhookPayload,
+): CredentialIssuanceStatus | undefined {
+  if (payload.previousState === "response-sent" && payload.state === "completed") {
+    return CredentialIssuanceStatus.OFFER_RECEIVED;
+  }
+
+  return undefined;
+}
+
 export function derivedCredentialEventId(payload: CredentialStateChangedWebhookPayload) {
   const fingerprint = [
     payload.type,
     payload.credentialExchangeId,
+    payload.previousState ?? "",
+    payload.state,
+    payload.timestamp,
+  ].join("|");
+
+  return createHash("sha256").update(fingerprint).digest("hex");
+}
+
+export function derivedConnectionEventId(payload: ConnectionStateChangedWebhookPayload) {
+  const fingerprint = [
+    payload.type,
+    payload.outOfBandId ?? "",
+    payload.connectionId,
     payload.previousState ?? "",
     payload.state,
     payload.timestamp,

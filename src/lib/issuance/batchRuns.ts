@@ -368,10 +368,11 @@ export async function processBatchRun(batchId: string): Promise<BatchIssuanceRun
       email: offer.email,
       expiresAt: offer.expiresAt,
       failureReason: delivery.failureReason,
+      outOfBandId: offer.outOfBandId,
       studentId: item.studentId,
       wasDelivered: delivery.status === "Delivered",
     });
-    await reconcileCredentialEventLogs(offer.credentialExchangeId);
+    await reconcileCredentialEventLogs(offer.credentialExchangeId, offer.outOfBandId);
 
     await prisma.batchIssuanceItem.update({
       data: {

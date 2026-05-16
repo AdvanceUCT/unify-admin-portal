@@ -5,7 +5,7 @@ import { StudentCredentialActions } from "@/features/students/StudentCredentialA
 
 function credentialTone(state: CredentialLifecycleState) {
   if (state === "ISSUED") return "success";
-  if (state === "OFFER_SENT" || state === "ACCEPTED") return "warning";
+  if (state === "OFFER_SENT" || state === "OFFER_RECEIVED" || state === "ACCEPTED") return "warning";
   if (state === "FAILED" || state === "REVOKED") return "danger";
   return "neutral";
 }

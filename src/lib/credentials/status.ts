@@ -15,15 +15,20 @@ import type {
 } from "@/lib/api/types";
 import { prisma } from "@/lib/db/prisma";
 import {
+  derivedConnectionEventId,
   derivedCredentialEventId,
+  isRelevantCredentialStateChangedPayload,
+  mapConnectionStateToCredentialStatus,
   mapCredoStateToCredentialStatus,
+  type ConnectionStateChangedWebhookPayload,
   type CredentialStateChangedWebhookPayload,
 } from "@/lib/credentials/statusMapping";
 
-export { derivedCredentialEventId, mapCredoStateToCredentialStatus };
+export { derivedConnectionEventId, derivedCredentialEventId, mapCredoStateToCredentialStatus };
 
 export const ACTIVE_CREDENTIAL_STATUSES = [
   CredentialIssuanceStatus.OFFER_SENT,
+  CredentialIssuanceStatus.OFFER_RECEIVED,
   CredentialIssuanceStatus.ACCEPTED,
   CredentialIssuanceStatus.ISSUED,
 ] as const;
@@ -122,6 +127,7 @@ export async function createCredentialIssuanceFromOffer(params: {
   email?: string;
   expiresAt?: string;
   failureReason?: string;
+  outOfBandId?: string;
   studentId: string;
   wasDelivered: boolean;
 }) {
@@ -135,13 +141,29 @@ export async function createCredentialIssuanceFromOffer(params: {
       deliveryStatus: params.wasDelivered ? CredentialDeliveryStatus.DELIVERED : CredentialDeliveryStatus.FAILED,
       email: params.email,
       failureReason: params.failureReason,
+      outOfBandId: params.outOfBandId,
       status: params.wasDelivered ? CredentialIssuanceStatus.OFFER_SENT : CredentialIssuanceStatus.FAILED,
       studentId: params.studentId,
     },
   });
 }
 
-export async function reconcileCredentialEventLogs(credentialExchangeId: string) {
+function shouldApplyStatus(
+  mappedStatus: CredentialIssuanceStatus,
+  currentStatus?: CredentialIssuanceStatus | null,
+) {
+  if (mappedStatus === CredentialIssuanceStatus.OFFER_SENT) {
+    return !currentStatus || currentStatus === CredentialIssuanceStatus.OFFER_SENT;
+  }
+
+  if (mappedStatus === CredentialIssuanceStatus.OFFER_RECEIVED) {
+    return currentStatus === CredentialIssuanceStatus.OFFER_SENT;
+  }
+
+  return true;
+}
+
+export async function reconcileCredentialEventLogs(credentialExchangeId: string, outOfBandId?: string) {
   const issuance = await prisma.credentialIssuance.findUnique({ where: { credentialExchangeId } });
   if (!issuance) {
     return;
@@ -149,29 +171,54 @@ export async function reconcileCredentialEventLogs(credentialExchangeId: string)
 
   const events = await prisma.credentialEventLog.findMany({
     orderBy: { occurredAt: "asc" },
-    where: { credentialExchangeId },
+    where: {
+      OR: [
+        { credentialExchangeId },
+        ...(outOfBandId ? [{ outOfBandId }] : []),
+      ],
+    },
   });
   let status = issuance.status;
   let issuedAt = issuance.issuedAt;
+  let connectionId = issuance.connectionId;
 
   for (const event of events) {
-    const mapped = mapCredoStateToCredentialStatus(event.state, status);
-    if (!mapped) continue;
+    const mapped =
+      event.type === CredentialEventType.CONNECTION_STATE_CHANGED
+        ? mapConnectionStateToCredentialStatus({
+            connectionId: event.connectionId ?? "",
+            outOfBandId: event.outOfBandId ?? undefined,
+            previousState: event.previousState,
+            state: event.state,
+            timestamp: event.occurredAt.toISOString(),
+            type: "connection.stateChanged",
+          })
+        : mapCredoStateToCredentialStatus(event.state, status);
+    if (!mapped || !shouldApplyStatus(mapped, status)) continue;
     status = mapped;
+    connectionId = event.connectionId ?? connectionId;
     if (mapped === CredentialIssuanceStatus.ISSUED) {
       issuedAt = event.occurredAt;
     }
   }
 
-  if (status !== issuance.status || issuedAt?.getTime() !== issuance.issuedAt?.getTime()) {
+  if (
+    status !== issuance.status ||
+    issuedAt?.getTime() !== issuance.issuedAt?.getTime() ||
+    connectionId !== issuance.connectionId
+  ) {
     await prisma.credentialIssuance.update({
-      data: { issuedAt, status },
+      data: { connectionId, issuedAt, status },
       where: { id: issuance.id },
     });
   }
 }
 
 export async function recordCredentialStateChangedEvent(payload: CredentialStateChangedWebhookPayload) {
+  if (!isRelevantCredentialStateChangedPayload(payload)) {
+    return { duplicate: false, ignored: true };
+  }
+
   const eventId = payload.eventId ?? derivedCredentialEventId(payload);
   const occurredAt = new Date(payload.timestamp);
   const existingIssuance = await prisma.credentialIssuance.findUnique({
@@ -199,9 +246,58 @@ export async function recordCredentialStateChangedEvent(payload: CredentialState
   }
 
   if (existingIssuance && mappedStatus) {
+    if (shouldApplyStatus(mappedStatus, existingIssuance.status)) {
+      await prisma.credentialIssuance.update({
+        data: {
+          connectionId: payload.connectionId ?? existingIssuance.connectionId,
+          issuedAt: mappedStatus === CredentialIssuanceStatus.ISSUED ? occurredAt : existingIssuance.issuedAt,
+          status: mappedStatus,
+        },
+        where: { id: existingIssuance.id },
+      });
+    }
+  }
+
+  return { duplicate: false, status: mappedStatus };
+}
+
+export async function recordConnectionStateChangedEvent(payload: ConnectionStateChangedWebhookPayload) {
+  const mappedStatus = mapConnectionStateToCredentialStatus(payload);
+  if (!mappedStatus) {
+    return { duplicate: false, ignored: true };
+  }
+
+  const eventId = payload.eventId ?? derivedConnectionEventId(payload);
+  const occurredAt = new Date(payload.timestamp);
+  const existingIssuance = payload.outOfBandId
+    ? await prisma.credentialIssuance.findUnique({ where: { outOfBandId: payload.outOfBandId } })
+    : null;
+
+  const createResult = await prisma.credentialEventLog.createMany({
+    data: {
+      connectionId: payload.connectionId,
+      credentialDefinitionId: existingIssuance?.credentialDefinitionId,
+      credentialExchangeId: existingIssuance?.credentialExchangeId,
+      eventId,
+      occurredAt,
+      outOfBandId: payload.outOfBandId,
+      payload,
+      previousState: payload.previousState ?? null,
+      state: payload.state,
+      status: mappedStatus,
+      type: CredentialEventType.CONNECTION_STATE_CHANGED,
+    },
+    skipDuplicates: true,
+  });
+
+  if (createResult.count === 0) {
+    return { duplicate: true, status: existingIssuance?.status };
+  }
+
+  if (existingIssuance && shouldApplyStatus(mappedStatus, existingIssuance.status)) {
     await prisma.credentialIssuance.update({
       data: {
-        issuedAt: mappedStatus === CredentialIssuanceStatus.ISSUED ? occurredAt : existingIssuance.issuedAt,
+        connectionId: payload.connectionId,
         status: mappedStatus,
       },
       where: { id: existingIssuance.id },
@@ -244,7 +340,15 @@ export async function getCredentialDeliveryByIssuanceId(issuanceId: string) {
 export async function getDashboardCredentialSummary(): Promise<DashboardSummary> {
   const [pendingIssuance, issuedCredentials, failedCredentials, activeBatchJobs] = await Promise.all([
     prisma.credentialIssuance.count({
-      where: { status: { in: [CredentialIssuanceStatus.OFFER_SENT, CredentialIssuanceStatus.ACCEPTED] } },
+      where: {
+        status: {
+          in: [
+            CredentialIssuanceStatus.OFFER_SENT,
+            CredentialIssuanceStatus.OFFER_RECEIVED,
+            CredentialIssuanceStatus.ACCEPTED,
+          ],
+        },
+      },
     }),
     prisma.credentialIssuance.count({ where: { status: CredentialIssuanceStatus.ISSUED } }),
     prisma.credentialIssuance.count({ where: { status: CredentialIssuanceStatus.FAILED } }),
@@ -270,9 +374,11 @@ export async function getRecentCredentialActivityEvents(limit = 10): Promise<Cre
   });
 
   return events.map((event: CredentialEventLog) => ({
-    credentialExchangeId: event.credentialExchangeId,
+    connectionId: event.connectionId ?? undefined,
+    credentialExchangeId: event.credentialExchangeId ?? undefined,
     id: event.id,
     occurredAt: event.occurredAt.toISOString(),
+    outOfBandId: event.outOfBandId ?? undefined,
     previousState: event.previousState ?? undefined,
     state: event.state,
     status: event.status ?? undefined,

@@ -11,6 +11,7 @@ export type StudentProfile = {
 export type CredentialLifecycleState =
   | "NOT_ISSUED"
   | "OFFER_SENT"
+  | "OFFER_RECEIVED"
   | "ACCEPTED"
   | "ISSUED"
   | "FAILED"
@@ -202,7 +203,9 @@ export type DashboardSummary = {
 
 export type CredentialActivityEvent = {
   id: string;
-  credentialExchangeId: string;
+  connectionId?: string;
+  credentialExchangeId?: string;
+  outOfBandId?: string;
   previousState?: string;
   state: string;
   status?: StoredCredentialLifecycleState;

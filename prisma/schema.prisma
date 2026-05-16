@@ -134,6 +134,8 @@ model CredentialIssuance {
   studentId              String
   credentialDefinitionId String
   credentialExchangeId   String?                    @unique
+  outOfBandId            String?                    @unique
+  connectionId           String?
   activationId           String?
   activationUrl          String?
   activationExpiresAt    DateTime?
@@ -158,7 +160,9 @@ model CredentialEventLog {
   id                     String                    @id @default(cuid())
   eventId                String                    @unique
   type                   CredentialEventType
-  credentialExchangeId   String
+  credentialExchangeId   String?
+  outOfBandId            String?
+  connectionId           String?
   credentialDefinitionId String?
   previousState          String?
   state                  String
@@ -168,6 +172,8 @@ model CredentialEventLog {
   receivedAt             DateTime                  @default(now())
 
   @@index([credentialExchangeId])
+  @@index([outOfBandId])
+  @@index([connectionId])
   @@index([credentialDefinitionId])
   @@index([status])
   @@index([occurredAt])
@@ -243,6 +249,7 @@ enum BatchIssuanceItemStatus {
 
 enum CredentialIssuanceStatus {
   OFFER_SENT
+  OFFER_RECEIVED
   ACCEPTED
   ISSUED
   FAILED
@@ -257,6 +264,7 @@ enum CredentialDeliveryStatus {
 
 enum CredentialEventType {
   CREDENTIAL_STATE_CHANGED
+  CONNECTION_STATE_CHANGED
 }
 
 enum SetupStatus {

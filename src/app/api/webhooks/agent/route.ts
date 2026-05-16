@@ -3,8 +3,11 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { env } from "@/lib/config/env";
-import { recordCredentialStateChangedEvent } from "@/lib/credentials/status";
-import type { CredentialStateChangedWebhookPayload } from "@/lib/credentials/statusMapping";
+import { recordConnectionStateChangedEvent, recordCredentialStateChangedEvent } from "@/lib/credentials/status";
+import type {
+  ConnectionStateChangedWebhookPayload,
+  CredentialStateChangedWebhookPayload,
+} from "@/lib/credentials/statusMapping";
 
 function signatureFor(body: string, secret: string) {
   return `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`;
@@ -31,6 +34,18 @@ function isCredentialStateChangedPayload(value: unknown): value is CredentialSta
   );
 }
 
+function isConnectionStateChangedPayload(value: unknown): value is ConnectionStateChangedWebhookPayload {
+  if (!value || typeof value !== "object") return false;
+
+  const record = value as Record<string, unknown>;
+  return (
+    record.type === "connection.stateChanged" &&
+    typeof record.connectionId === "string" &&
+    typeof record.state === "string" &&
+    typeof record.timestamp === "string"
+  );
+}
+
 export async function POST(request: Request) {
   const body = await request.text();
 
@@ -52,10 +67,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: { message: "Webhook payload must be valid JSON." } }, { status: 400 });
   }
 
-  if (!isCredentialStateChangedPayload(payload)) {
-    return NextResponse.json({ ignored: true, received: true }, { status: 202 });
+  if (isCredentialStateChangedPayload(payload)) {
+    const result = await recordCredentialStateChangedEvent(payload);
+    return NextResponse.json(
+      { duplicate: result.duplicate, ignored: result.ignored ?? false, received: true },
+      { status: 202 },
+    );
   }
 
-  const result = await recordCredentialStateChangedEvent(payload);
-  return NextResponse.json({ duplicate: result.duplicate, received: true }, { status: 202 });
+  if (isConnectionStateChangedPayload(payload)) {
+    const result = await recordConnectionStateChangedEvent(payload);
+    return NextResponse.json(
+      { duplicate: result.duplicate, ignored: result.ignored ?? false, received: true },
+      { status: 202 },
+    );
+  }
+
+  return NextResponse.json({ ignored: true, received: true }, { status: 202 });
 }

@@ -126,7 +126,7 @@ function dashboardSummary(state: MockActivationState): DashboardSummary {
   const issuedCredentials = state.students.filter((student) => student.credential.lifecycleState === "ISSUED").length;
   const failedCredentials = state.students.filter((student) => student.credential.lifecycleState === "FAILED").length;
   const pendingIssuance = state.students.filter((student) =>
-    ["OFFER_SENT", "ACCEPTED"].includes(student.credential.lifecycleState),
+    ["OFFER_SENT", "OFFER_RECEIVED", "ACCEPTED"].includes(student.credential.lifecycleState),
   ).length;
 
   return {
