@@ -40,8 +40,8 @@ function latestIssuanceByStudent(issuances: CredentialIssuance[]) {
   const byStudent = new Map<string, CredentialIssuance>();
 
   for (const issuance of issuances) {
-    if (!byStudent.has(issuance.studentExternalId)) {
-      byStudent.set(issuance.studentExternalId, issuance);
+    if (!byStudent.has(issuance.studentId)) {
+      byStudent.set(issuance.studentId, issuance);
     }
   }
 
@@ -70,7 +70,7 @@ export async function overlayCredentialStatuses(students: StudentRecord[]): Prom
   const issuances = await prisma.credentialIssuance.findMany({
     orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     where: {
-      studentExternalId: { in: students.map((student) => student.profile.id) },
+      studentId: { in: students.map((student) => student.profile.id) },
     },
   });
   const issuancesByStudent = latestIssuanceByStudent(issuances);
@@ -81,7 +81,7 @@ export async function overlayCredentialStatuses(students: StudentRecord[]): Prom
 export async function overlayCredentialStatusForStudent(student: StudentRecord): Promise<StudentRecord> {
   const issuance = await prisma.credentialIssuance.findFirst({
     orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    where: { studentExternalId: student.profile.id },
+    where: { studentId: student.profile.id },
   });
 
   return overlayCredentialStatus(student, issuance ?? undefined);
@@ -89,21 +89,21 @@ export async function overlayCredentialStatusForStudent(student: StudentRecord):
 
 export async function findActiveCredentialIssuance(params: {
   credentialDefinitionId: string;
-  studentExternalId: string;
+  studentId: string;
 }) {
   return prisma.credentialIssuance.findFirst({
     orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     where: {
       credentialDefinitionId: params.credentialDefinitionId,
       status: { in: [...ACTIVE_CREDENTIAL_STATUSES] },
-      studentExternalId: params.studentExternalId,
+      studentId: params.studentId,
     },
   });
 }
 
 export async function assertCredentialIssuanceAllowed(params: {
   credentialDefinitionId: string;
-  studentExternalId: string;
+  studentId: string;
 }) {
   const activeIssuance = await findActiveCredentialIssuance(params);
 
@@ -117,13 +117,12 @@ export async function assertCredentialIssuanceAllowed(params: {
 export async function createCredentialIssuanceFromOffer(params: {
   activationId?: string;
   activationUrl?: string;
-  batchItemId?: string;
   credentialDefinitionId: string;
   credentialExchangeId: string;
   email?: string;
   expiresAt?: string;
   failureReason?: string;
-  studentExternalId: string;
+  studentId: string;
   wasDelivered: boolean;
 }) {
   return prisma.credentialIssuance.create({
@@ -131,14 +130,13 @@ export async function createCredentialIssuanceFromOffer(params: {
       activationId: params.activationId,
       activationExpiresAt: params.expiresAt ? new Date(params.expiresAt) : undefined,
       activationUrl: params.activationUrl,
-      batchItemId: params.batchItemId,
       credentialDefinitionId: params.credentialDefinitionId,
       credentialExchangeId: params.credentialExchangeId,
       deliveryStatus: params.wasDelivered ? CredentialDeliveryStatus.DELIVERED : CredentialDeliveryStatus.FAILED,
       email: params.email,
       failureReason: params.failureReason,
       status: params.wasDelivered ? CredentialIssuanceStatus.OFFER_SENT : CredentialIssuanceStatus.FAILED,
-      studentExternalId: params.studentExternalId,
+      studentId: params.studentId,
     },
   });
 }
@@ -213,10 +211,10 @@ export async function recordCredentialStateChangedEvent(payload: CredentialState
   return { duplicate: false, status: mappedStatus };
 }
 
-export async function getLatestCredentialIssuanceForStudent(studentExternalId: string) {
+export async function getLatestCredentialIssuanceForStudent(studentId: string) {
   return prisma.credentialIssuance.findFirst({
     orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    where: { studentExternalId },
+    where: { studentId },
   });
 }
 
@@ -229,7 +227,7 @@ export async function getCredentialDeliveryByIssuanceId(issuanceId: string) {
   return {
     activationId: issuance.activationId ?? undefined,
     activationUrl: issuance.activationUrl,
-    batchId: issuance.batchItemId ?? "individual",
+    batchId: "individual",
     channel: "activation-link" as const,
     credentialExchangeId: issuance.credentialExchangeId ?? undefined,
     credentialId: issuance.id,
@@ -239,7 +237,7 @@ export async function getCredentialDeliveryByIssuanceId(issuanceId: string) {
     failureReason: issuance.failureReason ?? undefined,
     id: `activation-delivery-${issuance.activationId ?? issuance.id}`,
     status: issuance.deliveryStatus === CredentialDeliveryStatus.FAILED ? "Failed" as const : "Delivered" as const,
-    studentId: issuance.studentExternalId,
+    studentId: issuance.studentId,
   };
 }
 

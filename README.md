@@ -140,9 +140,13 @@ WEBHOOK_SIGNING_SECRET="same-secret-configured-in-the-agent-service"
 For local webhook testing, configure the Identity Agent Service with:
 
 ```env
-WEBHOOK_URL="http://localhost:3000/api/webhooks/agent"
+# If the agent is running in Docker and the portal is running on the host:
+WEBHOOK_URL="http://host.docker.internal:3000/api/webhooks/agent"
 WEBHOOK_SIGNING_SECRET="same-secret-configured-in-the-admin-portal"
 ```
+
+If the agent is not running in Docker and is started directly on the host,
+`http://localhost:3000/api/webhooks/agent` is also valid.
 
 The agent already emits `credential.stateChanged` events when Credo credential
 exchange records move through `offer-sent`, `request-received`,

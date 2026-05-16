@@ -206,10 +206,10 @@ async function issueStudentActivationLinks(
   try {
     await Promise.all(
       studentsForIssuance.map((student) =>
-        assertCredentialIssuanceAllowed({
-          credentialDefinitionId: activeSchema.credentialDefinitionId,
-          studentExternalId: student.profile.id,
-        }),
+      assertCredentialIssuanceAllowed({
+        credentialDefinitionId: activeSchema.credentialDefinitionId,
+        studentId: student.profile.id,
+      }),
       ),
     );
   } catch (error) {
@@ -243,7 +243,7 @@ async function issueStudentActivationLinks(
       email: offer.email,
       expiresAt: offer.expiresAt,
       failureReason: emailDelivery.status === "Failed" ? emailDelivery.failureReason : undefined,
-      studentExternalId: student?.profile.id ?? offer.externalId ?? offer.activationId,
+      studentId: student?.profile.id ?? offer.externalId ?? offer.activationId,
       wasDelivered: emailDelivery.status === "Delivered",
     });
     await reconcileCredentialEventLogs(offer.credentialExchangeId);

@@ -15,8 +15,8 @@ vi.mock("@/lib/email/credential-activation", () => ({
 
 vi.mock("@/lib/credentials/status", () => ({
   assertCredentialIssuanceAllowed: vi.fn(async () => undefined),
-  createCredentialIssuanceFromOffer: vi.fn(async (params: { studentExternalId: string }) => ({
-    id: params.studentExternalId === "student-demo-100" ? "credential-demo-100" : "credential-demo-001",
+  createCredentialIssuanceFromOffer: vi.fn(async (params: { studentId: string }) => ({
+    id: params.studentId === "student-demo-100" ? "credential-demo-100" : "credential-demo-001",
   })),
   overlayCredentialStatuses: vi.fn(async (students) => students),
   overlayCredentialStatusForStudent: vi.fn(async (student) => student),

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { BatchIssuanceItemStatus, BatchIssuanceRunStatus } from "@/generated/prisma/enums";
+import type { CredentialIssuance } from "@/generated/prisma/client";
 import type {
   ActivationDelivery,
   BatchIssuancePreviewItem,
@@ -30,18 +31,9 @@ import {
 } from "@/lib/student-records/simulatedUniversityRecords";
 
 type PersistedBatchItem = {
-  activationId: string | null;
-  activationUrl: string | null;
-  activatedAt: Date | null;
-  credentialExchangeId: string | null;
-  credentialId: string;
-  deliveredAt: Date | null;
-  email: string | null;
-  expiresAt: Date | null;
-  faculty: string | null;
   failureReason: string | null;
-  holderName: string;
-  programme: string | null;
+  credentialIssuance: CredentialIssuance | null;
+  credentialIssuanceId: string | null;
   skipReason: string | null;
   status: BatchIssuanceItemStatus;
   studentId: string;
@@ -58,7 +50,7 @@ type PersistedBatchRun = {
   failedCount: number;
   filters: unknown;
   issuedCount: number;
-  items: PersistedBatchItem[];
+  items?: PersistedBatchItem[];
   queuedAt: Date | null;
   requestedCount: number;
   skippedCount: number;
@@ -153,30 +145,34 @@ function toSummary(run: PersistedBatchRun): BatchIssuanceRunSummary {
   };
 }
 
-function toItem(item: PersistedBatchItem): BatchIssuanceRunItem {
+function toItem(item: PersistedBatchItem, student?: StudentRecord): BatchIssuanceRunItem {
+  const issuance = item.credentialIssuance;
+
   return {
-    activationId: item.activationId ?? undefined,
-    activationUrl: item.activationUrl ?? undefined,
-    activatedAt: iso(item.activatedAt),
-    credentialExchangeId: item.credentialExchangeId ?? undefined,
-    credentialId: item.credentialId,
-    deliveredAt: iso(item.deliveredAt),
-    email: item.email ?? undefined,
-    expiresAt: iso(item.expiresAt),
-    faculty: item.faculty ?? undefined,
+    activationId: issuance?.activationId ?? undefined,
+    activationUrl: issuance?.activationUrl ?? undefined,
+    credentialExchangeId: issuance?.credentialExchangeId ?? undefined,
+    credentialId: issuance?.id ?? item.credentialIssuanceId ?? item.studentId,
+    deliveredAt: issuance?.deliveryStatus === "DELIVERED" ? issuance.createdAt.toISOString() : undefined,
+    email: issuance?.email ?? student?.profile.email,
+    expiresAt: iso(issuance?.activationExpiresAt),
+    faculty: student?.credential.faculty,
     failureReason: item.failureReason ?? undefined,
-    holderName: item.holderName,
-    programme: item.programme ?? undefined,
+    holderName: student ? fullName(student) : item.studentId,
+    programme: student?.credential.programme,
     skipReason: item.skipReason ?? undefined,
     status: publicItemStatus(item.status),
     studentId: item.studentId,
   };
 }
 
-function toDetail(run: PersistedBatchRun): BatchIssuanceRunDetail {
+async function toDetail(run: PersistedBatchRun & { items: PersistedBatchItem[] }): Promise<BatchIssuanceRunDetail> {
+  const students = await getAllStudents();
+  const studentsById = new Map(students.map((student) => [student.profile.id, student]));
+
   return {
     ...toSummary(run),
-    items: run.items.map(toItem),
+    items: run.items.map((item) => toItem(item, studentsById.get(item.studentId))),
   };
 }
 
@@ -235,18 +231,13 @@ export async function createAndProcessBatchRun({
       queuedAt: now,
       items: {
         create: preview.items.map((item) => ({
-          credentialId: item.credentialId,
-          email: item.email,
-          faculty: item.faculty,
-          holderName: item.holderName,
-          programme: item.programme,
           skipReason: item.reason,
           status: item.status === "Eligible" ? BatchIssuanceItemStatus.PENDING : BatchIssuanceItemStatus.SKIPPED,
           studentId: item.studentId,
         })),
       },
     },
-    include: { items: true },
+    include: { items: { include: { credentialIssuance: true } } },
   });
 
   await writeAuditLog({
@@ -265,7 +256,10 @@ export async function createAndProcessBatchRun({
 }
 
 export async function processBatchRun(batchId: string): Promise<BatchIssuanceRunDetail> {
-  const run = await prisma.batchIssuanceRun.findUnique({ include: { items: true }, where: { batchId } });
+  const run = await prisma.batchIssuanceRun.findUnique({
+    include: { items: { include: { credentialIssuance: true } } },
+    where: { batchId },
+  });
   if (!run) {
     throw new Error("Batch issuance run was not found.");
   }
@@ -290,13 +284,14 @@ export async function processBatchRun(batchId: string): Promise<BatchIssuanceRun
     pendingItems.map(async (item) => {
       const activeIssuance = await findActiveCredentialIssuance({
         credentialDefinitionId: activeSchema.credentialDefinitionId,
-        studentExternalId: item.studentId,
+        studentId: item.studentId,
       });
 
       if (activeIssuance) {
         blockedItems.add(item.id);
         await prisma.batchIssuanceItem.update({
           data: {
+            credentialIssuanceId: activeIssuance.id,
             skipReason: `Student already has an active credential issuance in status ${activeIssuance.status}.`,
             status: BatchIssuanceItemStatus.SKIPPED,
           },
@@ -368,25 +363,19 @@ export async function processBatchRun(batchId: string): Promise<BatchIssuanceRun
     const issuance = await createCredentialIssuanceFromOffer({
       activationId: offer.activationId,
       activationUrl: publicActivationUrl,
-      batchItemId: item.id,
       credentialDefinitionId: activeSchema.credentialDefinitionId,
       credentialExchangeId: offer.credentialExchangeId,
       email: offer.email,
       expiresAt: offer.expiresAt,
       failureReason: delivery.failureReason,
-      studentExternalId: item.studentId,
+      studentId: item.studentId,
       wasDelivered: delivery.status === "Delivered",
     });
     await reconcileCredentialEventLogs(offer.credentialExchangeId);
 
     await prisma.batchIssuanceItem.update({
       data: {
-        activationId: offer.activationId,
-        activationUrl: publicActivationUrl,
-        credentialExchangeId: offer.credentialExchangeId,
-        credentialId: issuance.id,
-        deliveredAt: delivery.deliveredAt ? new Date(delivery.deliveredAt) : null,
-        expiresAt: new Date(offer.expiresAt),
+        credentialIssuanceId: issuance.id,
         failureReason: delivery.failureReason,
         status: delivery.status === "Delivered" ? BatchIssuanceItemStatus.DELIVERED : BatchIssuanceItemStatus.DELIVERY_FAILED,
       },
@@ -394,7 +383,10 @@ export async function processBatchRun(batchId: string): Promise<BatchIssuanceRun
     });
   }
 
-  const updatedRun = await prisma.batchIssuanceRun.findUniqueOrThrow({ include: { items: true }, where: { batchId } });
+  const updatedRun = await prisma.batchIssuanceRun.findUniqueOrThrow({
+    include: { items: { include: { credentialIssuance: true } } },
+    where: { batchId },
+  });
   const delivered = updatedRun.items.filter((item) => item.status === BatchIssuanceItemStatus.DELIVERED).length;
   const failed = updatedRun.items.filter((item) => failedItemStatuses.has(item.status)).length;
   const skipped = updatedRun.items.filter((item) => item.status === BatchIssuanceItemStatus.SKIPPED).length;
@@ -413,7 +405,7 @@ export async function processBatchRun(batchId: string): Promise<BatchIssuanceRun
       skippedCount: skipped,
       status,
     },
-    include: { items: true },
+    include: { items: { include: { credentialIssuance: true } } },
     where: { batchId },
   });
 
@@ -435,7 +427,6 @@ export async function processBatchRun(batchId: string): Promise<BatchIssuanceRun
 
 export async function listBatchRuns(): Promise<BatchIssuanceRunSummary[]> {
   const runs = await prisma.batchIssuanceRun.findMany({
-    include: { items: true },
     orderBy: { createdAt: "desc" },
     take: 50,
   });
@@ -443,7 +434,10 @@ export async function listBatchRuns(): Promise<BatchIssuanceRunSummary[]> {
 }
 
 export async function getBatchRunDetail(batchId: string): Promise<BatchIssuanceRunDetail> {
-  const run = await prisma.batchIssuanceRun.findUnique({ include: { items: true }, where: { batchId } });
+  const run = await prisma.batchIssuanceRun.findUnique({
+    include: { items: { include: { credentialIssuance: true } } },
+    where: { batchId },
+  });
   if (!run) {
     throw new Error("Batch issuance run was not found.");
   }

@@ -131,7 +131,7 @@ model CredentialSchema {
 
 model CredentialIssuance {
   id                     String                     @id @default(cuid())
-  studentExternalId      String
+  studentId              String
   credentialDefinitionId String
   credentialExchangeId   String?                    @unique
   activationId           String?
@@ -141,16 +141,15 @@ model CredentialIssuance {
   deliveryStatus         CredentialDeliveryStatus   @default(PENDING)
   status                 CredentialIssuanceStatus
   failureReason          String?
-  batchItemId            String?
   issuedAt               DateTime?
   revokedAt              DateTime?
   createdAt              DateTime                   @default(now())
   updatedAt              DateTime                   @updatedAt
+  batchItem              BatchIssuanceItem?
 
-  @@index([studentExternalId])
+  @@index([studentId])
   @@index([credentialDefinitionId])
   @@index([status])
-  @@index([batchItemId])
   @@index([createdAt])
   @@map("credential_issuance")
 }
@@ -202,30 +201,20 @@ model BatchIssuanceRun {
 }
 
 model BatchIssuanceItem {
-  id                   String                    @id @default(cuid())
+  id                   String                     @id @default(cuid())
   batchRunId           String
-  batchRun             BatchIssuanceRun          @relation(fields: [batchRunId], references: [id], onDelete: Cascade)
+  batchRun             BatchIssuanceRun           @relation(fields: [batchRunId], references: [id], onDelete: Cascade)
   studentId            String
-  credentialId         String
-  holderName           String
-  email                String?
-  faculty              String?
-  programme            String?
-  status               BatchIssuanceItemStatus   @default(PENDING)
+  status               BatchIssuanceItemStatus    @default(PENDING)
   skipReason           String?
-  activationId         String?
-  activationUrl        String?
-  credentialExchangeId String?
-  deliveredAt          DateTime?
-  activatedAt          DateTime?
-  expiresAt            DateTime?
   failureReason        String?
-  createdAt            DateTime                  @default(now())
-  updatedAt            DateTime                  @updatedAt
+  credentialIssuanceId String?                    @unique
+  credentialIssuance   CredentialIssuance?        @relation(fields: [credentialIssuanceId], references: [id], onDelete: SetNull)
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
 
   @@unique([batchRunId, studentId])
   @@index([studentId])
-  @@index([credentialId])
   @@index([status])
   @@map("batch_issuance_item")
 }
