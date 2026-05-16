@@ -1,6 +1,6 @@
 import "server-only";
 
-import { BatchIssuanceItemStatus, BatchIssuanceRunStatus } from "@/generated/prisma/enums";
+import { BatchIssuanceItemStatus, BatchIssuanceRunStatus, CredentialDeliveryStatus } from "@/generated/prisma/enums";
 import type { CredentialIssuance } from "@/generated/prisma/client";
 import type {
   ActivationDelivery,
@@ -15,6 +15,7 @@ import type {
 import { toPublicWalletActivationLink } from "@/lib/api/activationLinks";
 import { createBatchActivationLinks } from "@/lib/agentClient";
 import { writeAuditLog } from "@/lib/audit/audit";
+import { recordCredentialOfferSentAudit } from "@/lib/credentials/audit";
 import {
   createCredentialIssuanceFromOffer,
   findActiveCredentialIssuance,
@@ -256,7 +257,7 @@ export async function createAndProcessBatchRun({
   return processBatchRun(run.batchId);
 }
 
-export async function processBatchRun(batchId: string): Promise<BatchIssuanceRunDetail> {
+export async function processBatchRun(batchId: string, actorIdOverride?: string | null): Promise<BatchIssuanceRunDetail> {
   const run = await prisma.batchIssuanceRun.findUnique({
     include: { items: { include: { credentialIssuance: true } } },
     where: { batchId },
@@ -264,6 +265,7 @@ export async function processBatchRun(batchId: string): Promise<BatchIssuanceRun
   if (!run) {
     throw new Error("Batch issuance run was not found.");
   }
+  const auditActorId = actorIdOverride ?? run.actorId;
 
   const pendingItems = run.items.filter((item) => retryableItemStatuses.has(item.status));
 
@@ -374,11 +376,25 @@ export async function processBatchRun(batchId: string): Promise<BatchIssuanceRun
     });
     await reconcileCredentialEventLogs(offer.credentialExchangeId);
 
+    await recordCredentialOfferSentAudit({
+      actorId: auditActorId,
+      batchId,
+      batchItemId: item.id,
+      credentialDefinitionId: activeSchema.credentialDefinitionId,
+      credentialExchangeId: offer.credentialExchangeId,
+      credentialIssuanceId: issuance.id,
+      deliveryStatus:
+        delivery.status === "Delivered" ? CredentialDeliveryStatus.DELIVERED : CredentialDeliveryStatus.FAILED,
+      failureReason: delivery.failureReason,
+      studentId: item.studentId,
+    });
+
     await prisma.batchIssuanceItem.update({
       data: {
         credentialIssuanceId: issuance.id,
         failureReason: delivery.failureReason,
-        status: delivery.status === "Delivered" ? BatchIssuanceItemStatus.DELIVERED : BatchIssuanceItemStatus.DELIVERY_FAILED,
+        status:
+          delivery.status === "Delivered" ? BatchIssuanceItemStatus.DELIVERED : BatchIssuanceItemStatus.DELIVERY_FAILED,
       },
       where: { id: item.id },
     });
@@ -452,5 +468,5 @@ export async function retryFailedBatchRun(batchId: string, actorId?: string | nu
     targetType: "BatchIssuanceRun",
     targetId: batchId,
   });
-  return processBatchRun(batchId);
+  return processBatchRun(batchId, actorId);
 }

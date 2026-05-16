@@ -33,7 +33,6 @@ export default async function AdminOverviewPage() {
           <table className="w-full text-left text-sm">
             <thead className="border-b border-zinc-200 text-xs uppercase tracking-wide text-zinc-500">
               <tr>
-                <th className="px-5 py-3 font-medium">Exchange</th>
                 <th className="px-5 py-3 font-medium">Student ID</th>
                 <th className="px-5 py-3 font-medium">Status</th>
                 <th className="px-5 py-3 font-medium">Time</th>
@@ -42,10 +41,7 @@ export default async function AdminOverviewPage() {
             <tbody className="divide-y divide-zinc-100">
               {credentialEvents.map((event) => (
                 <tr key={event.id}>
-                  <td className="px-5 py-4 font-medium text-zinc-900">
-                    {event.credentialExchangeId}
-                  </td>
-                  <td className="px-5 py-4 text-zinc-600">{event.studentId ?? "Unknown"}</td>
+                  <td className="px-5 py-4 font-medium text-zinc-900">{event.studentId ?? "Unknown"}</td>
                   <td className="px-5 py-4">
                     {event.status ? (
                       <Badge tone={credentialStatusTone(event.status)}>{formatCredentialStatus(event.status)}</Badge>

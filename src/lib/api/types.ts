@@ -210,6 +210,21 @@ export type CredentialActivityEvent = {
   occurredAt: string;
 };
 
+export type CredentialAuditLogEntry = {
+  action: "OFFER_SENT" | "OFFER_DELIVERY_FAILED" | "REISSUE_REQUESTED" | "REVOCATION_REQUESTED" | "REVOCATION_COMPLETED";
+  actorId?: string | null;
+  batchId?: string | null;
+  batchItemId?: string | null;
+  credentialDefinitionId: string;
+  credentialExchangeId?: string | null;
+  credentialIssuanceId?: string | null;
+  deliveryStatus?: ActivationDeliveryStatus | null;
+  id: string;
+  message?: string | null;
+  occurredAt: string;
+  studentId: string;
+};
+
 export type ActivationDeliveryStatus = "Pending" | "Delivered" | "Failed";
 
 export type ActivationDelivery = {

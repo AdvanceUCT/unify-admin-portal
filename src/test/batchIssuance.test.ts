@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { createBatchActivationLinks } from "@/lib/agentClient";
 import { sendCredentialActivationEmail } from "@/lib/email/credential-activation";
 import { resetMockActivationStore } from "@/lib/api/mockActivationStore";
+import { recordCredentialOfferSentAudit } from "@/lib/credentials/audit";
 import { queueRealBatchIssuance, queueRealStudentIssuance, StudentIssuanceError } from "@/lib/issuance/batchIssuance";
 import { assertCredentialIssuanceAllowed } from "@/lib/credentials/status";
 
@@ -11,6 +12,10 @@ vi.mock("@/lib/agentClient", () => ({
 
 vi.mock("@/lib/email/credential-activation", () => ({
   sendCredentialActivationEmail: vi.fn(),
+}));
+
+vi.mock("@/lib/credentials/audit", () => ({
+  recordCredentialOfferSentAudit: vi.fn(async () => undefined),
 }));
 
 vi.mock("@/lib/credentials/status", () => ({
@@ -39,6 +44,8 @@ describe("real batch issuance orchestration", () => {
     resetMockActivationStore();
     vi.mocked(createBatchActivationLinks).mockReset();
     vi.mocked(sendCredentialActivationEmail).mockReset();
+    vi.mocked(recordCredentialOfferSentAudit).mockReset();
+    vi.mocked(recordCredentialOfferSentAudit).mockResolvedValue(undefined);
     vi.mocked(assertCredentialIssuanceAllowed).mockReset();
     vi.mocked(assertCredentialIssuanceAllowed).mockResolvedValue(undefined);
   });
@@ -97,6 +104,14 @@ describe("real batch issuance orchestration", () => {
       status: "Delivered",
       studentId: "student-demo-100",
     });
+    expect(recordCredentialOfferSentAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        credentialExchangeId: "credential-exchange-001",
+        deliveryStatus: "DELIVERED",
+        studentId: "student-demo-100",
+      }),
+    );
+    expect(vi.mocked(recordCredentialOfferSentAudit).mock.calls[0][0]).not.toHaveProperty("email");
   });
 
   it("issues only Joshua when requested from the student detail action", async () => {
@@ -127,6 +142,39 @@ describe("real batch issuance orchestration", () => {
     });
     expect(result.requestedCount).toBe(1);
     expect(result.issuedCredentialIds).toEqual(["credential-demo-100"]);
+  });
+
+  it("records an offer audit log when email delivery fails", async () => {
+    vi.mocked(createBatchActivationLinks).mockResolvedValue({
+      failures: [],
+      offers: [
+        {
+          activationId: "activation-joshua",
+          activationUrl: "unifywallet://activate?token=joshua-token",
+          credentialExchangeId: "credential-exchange-joshua",
+          email: "joshuawood.dc@gmail.com",
+          expiresAt: "2026-04-28T10:00:00.000Z",
+          externalId: "student-demo-100",
+        },
+      ],
+    });
+    vi.mocked(sendCredentialActivationEmail).mockRejectedValueOnce(new Error("Email provider unavailable."));
+
+    const result = await queueRealStudentIssuance("student-demo-100", new Date("2026-04-27T10:00:00Z"));
+
+    expect(result.failures?.[0]).toMatchObject({
+      message: "Email provider unavailable.",
+    });
+    expect(recordCredentialOfferSentAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        batchId: null,
+        credentialExchangeId: "credential-exchange-joshua",
+        deliveryStatus: "FAILED",
+        failureReason: "Email provider unavailable.",
+        studentId: "student-demo-100",
+      }),
+    );
+    expect(vi.mocked(recordCredentialOfferSentAudit).mock.calls[0][0]).not.toHaveProperty("email");
   });
 
   it("does not issue a credential for a student that is no longer in an issuable state", async () => {
