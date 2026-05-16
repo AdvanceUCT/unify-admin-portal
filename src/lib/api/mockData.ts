@@ -69,7 +69,9 @@ export const mockAuditEvents: AuditEvent[] = [
 ];
 
 export const mockDashboardSummary: DashboardSummary = {
-  activeCredentials: mockStudents.filter((student) => student.credential.lifecycleState === "Active").length,
+  activeBatchJobs: 0,
+  failedCredentials: mockStudents.filter((student) => student.credential.lifecycleState === "FAILED").length,
+  issuedCredentials: mockStudents.filter((student) => student.credential.lifecycleState === "ISSUED").length,
   pendingIssuance: mockStudents.filter(isStudentRecordEligibleForCredentialIssuance).length,
   vendorsPendingApproval: 1,
   auditEventsToday: mockAuditEvents.length,

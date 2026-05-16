@@ -10,10 +10,8 @@ type IssuanceSelectionOptions = BatchIssuanceSelection;
 const INSTITUTION = "University of Cape Town";
 const VALID_FROM = "2026-01-01T00:00:00Z";
 const EXPIRES_AT = "2026-12-31T23:59:59Z";
-const ISSUANCE_STATES = new Set<CredentialLifecycleState>(["Pending", "Issuing"]);
-const PENDING_ISSUANCE_START = 1;
 const CALEB_DEMO_INDEX = 100;
-const CALEB_EMAIL = "caleb.voskuil@gmail.com";
+const CALEB_EMAIL = "joshuawood.dc@gmail.com";
 
 const firstNames = [
   "Sipho",
@@ -87,7 +85,7 @@ function emailForStudent(firstName: string, lastName: string, index: number) {
 }
 
 function lifecycleStateFor(index: number): CredentialLifecycleState {
-  return index >= PENDING_ISSUANCE_START ? "Pending" : "Active";
+  return "NOT_ISSUED";
 }
 
 function buildStudentRecord(index: number): StudentRecord {
@@ -95,8 +93,8 @@ function buildStudentRecord(index: number): StudentRecord {
   const faculty = facultyNames[(index - 1) % facultyNames.length];
   const programmes = SIMULATED_FACULTY_PROGRAMMES[faculty];
   const programme = programmes[(index - 1) % programmes.length];
-  const firstName = index === CALEB_DEMO_INDEX ? "Caleb" : firstNames[(index - 1) % firstNames.length];
-  const lastName = index === CALEB_DEMO_INDEX ? "Voskuil" : lastNames[(index * 7 - 7) % lastNames.length];
+  const firstName = index === CALEB_DEMO_INDEX ? "Joshua" : firstNames[(index - 1) % firstNames.length];
+  const lastName = index === CALEB_DEMO_INDEX ? "Wood" : lastNames[(index * 7 - 7) % lastNames.length];
   const idSuffix = padded(index);
   const studentNumber = studentNumberFor(firstName, lastName, index);
 
@@ -165,7 +163,10 @@ export function searchSimulatedUniversityStudentRecords(query: string): StudentR
 }
 
 export function isStudentRecordEligibleForCredentialIssuance(student: StudentRecord) {
-  return student.credential.enrolmentStatus === "Registered" && ISSUANCE_STATES.has(student.credential.lifecycleState);
+  return (
+    student.credential.enrolmentStatus === "Registered" &&
+    ["NOT_ISSUED", "FAILED", "REVOKED"].includes(student.credential.lifecycleState)
+  );
 }
 
 export function selectStudentRecordsForCredentialIssuance(

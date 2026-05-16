@@ -18,8 +18,8 @@ describe("formatters", () => {
   });
 
   it("formats credential and payment statuses", () => {
-    expect(formatCredentialStatus("Active")).toBe("Active");
-    expect(formatCredentialStatus("Pending")).toBe("Ready to issue");
+    expect(formatCredentialStatus("ISSUED")).toBe("Issued");
+    expect(formatCredentialStatus("NOT_ISSUED")).toBe("Not issued");
     expect(formatPaymentStatus("Approved")).toBe("Approved");
   });
 

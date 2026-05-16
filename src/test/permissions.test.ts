@@ -79,8 +79,8 @@ describe("permissions", () => {
   );
 
   it("uses prefix matching for nested routes without making dashboard a wildcard", () => {
-    expect(canAccessRoute("ISSUER", "/credentials/batch")).toBe(true);
-    expect(canAccessRoute("VIEWER", "/credentials/batch")).toBe(false);
+    expect(canAccessRoute("ISSUER", "/credentials/issuance/batch")).toBe(true);
+    expect(canAccessRoute("VIEWER", "/credentials/issuance/batch")).toBe(false);
     expect(canAccessRoute("VIEWER", "/anything-else")).toBe(false);
   });
 

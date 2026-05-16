@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { useAdminState } from "@/lib/api/useAdminState";
 import type { AdminState } from "@/lib/api/types";
-import { formatCredentialStatus } from "@/lib/formatters";
+import { credentialStatusTone, formatCredentialStatus } from "@/lib/formatters";
 
 export function StudentsTable({ initialState }: { initialState: AdminState }) {
   const { error, state } = useAdminState({ initialState });
@@ -35,7 +35,7 @@ export function StudentsTable({ initialState }: { initialState: AdminState }) {
                 <td className="px-5 py-4 text-zinc-600">{student.credential.programme}</td>
                 <td className="px-5 py-4 text-zinc-600">{student.credential.enrolmentStatus}</td>
                 <td className="px-5 py-4">
-                  <Badge tone={student.credential.lifecycleState === "Active" ? "success" : "neutral"}>
+                  <Badge tone={credentialStatusTone(student.credential.lifecycleState)}>
                     {formatCredentialStatus(student.credential.lifecycleState)}
                   </Badge>
                 </td>

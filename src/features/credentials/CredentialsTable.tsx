@@ -3,7 +3,12 @@
 import { Badge } from "@/components/ui/Badge";
 import { useAdminState } from "@/lib/api/useAdminState";
 import type { ActivationDeliveryStatus, AdminState } from "@/lib/api/types";
-import { formatActivationDeliveryStatus, formatCredentialStatus, formatDateTime } from "@/lib/formatters";
+import {
+  credentialStatusTone,
+  formatActivationDeliveryStatus,
+  formatCredentialStatus,
+  formatDateTime,
+} from "@/lib/formatters";
 
 function deliveryTone(status: ActivationDeliveryStatus) {
   switch (status) {
@@ -48,7 +53,7 @@ export function CredentialsTable({ initialState }: { initialState: AdminState })
                     <p className="text-xs text-zinc-500">{credential.studentNumber}</p>
                   </td>
                   <td className="px-5 py-4">
-                    <Badge tone={credential.lifecycleState === "Active" ? "success" : "neutral"}>
+                    <Badge tone={credentialStatusTone(credential.lifecycleState)}>
                       {formatCredentialStatus(credential.lifecycleState)}
                     </Badge>
                   </td>

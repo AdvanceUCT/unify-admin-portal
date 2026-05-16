@@ -9,14 +9,14 @@ export type StudentProfile = {
 };
 
 export type CredentialLifecycleState =
-  | "Pending"
-  | "Issuing"
-  | "Offered"
-  | "Active"
-  | "Suspended"
-  | "Revoked"
-  | "Expired"
-  | "Renewed";
+  | "NOT_ISSUED"
+  | "OFFER_SENT"
+  | "ACCEPTED"
+  | "ISSUED"
+  | "FAILED"
+  | "REVOKED";
+
+export type StoredCredentialLifecycleState = Exclude<CredentialLifecycleState, "NOT_ISSUED">;
 
 export type StudentCredential = {
   id: string;
@@ -192,10 +192,37 @@ export type EligibilityRule = {
 };
 
 export type DashboardSummary = {
-  activeCredentials: number;
+  activeBatchJobs: number;
+  failedCredentials: number;
+  issuedCredentials: number;
   pendingIssuance: number;
   vendorsPendingApproval: number;
   auditEventsToday: number;
+};
+
+export type CredentialActivityEvent = {
+  id: string;
+  credentialExchangeId: string;
+  previousState?: string;
+  state: string;
+  status?: StoredCredentialLifecycleState;
+  studentId?: string;
+  occurredAt: string;
+};
+
+export type CredentialAuditLogEntry = {
+  action: "OFFER_SENT" | "OFFER_DELIVERY_FAILED" | "REISSUE_REQUESTED" | "REVOCATION_REQUESTED" | "REVOCATION_COMPLETED";
+  actorId?: string | null;
+  batchId?: string | null;
+  batchItemId?: string | null;
+  credentialDefinitionId: string;
+  credentialExchangeId?: string | null;
+  credentialIssuanceId?: string | null;
+  deliveryStatus?: ActivationDeliveryStatus | null;
+  id: string;
+  message?: string | null;
+  occurredAt: string;
+  studentId: string;
 };
 
 export type ActivationDeliveryStatus = "Pending" | "Delivered" | "Failed";
@@ -245,6 +272,7 @@ export type BatchIssuanceResult = {
 export type AdminState = {
   activationDeliveries: ActivationDelivery[];
   auditEvents: AuditEvent[];
+  credentialEvents?: CredentialActivityEvent[];
   credentials: StudentCredential[];
   dashboardSummary: DashboardSummary;
   students: StudentRecord[];

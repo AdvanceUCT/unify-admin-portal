@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { assertCan, PermissionError, type SessionWithRole } from "@/lib/auth/permissions";
-import { getCurrentAdminSession } from "@/lib/auth/session";
+import { getCurrentAdminSession, getSessionForAudit } from "@/lib/auth/session";
 import { queueRealStudentIssuance, StudentIssuanceError } from "@/lib/issuance/batchIssuance";
 
 export async function POST(
@@ -20,7 +20,10 @@ export async function POST(
   const { studentId } = await params;
 
   try {
-    return NextResponse.json(await queueRealStudentIssuance(studentId), { status: 201 });
+    const auditSession = await getSessionForAudit();
+    return NextResponse.json(await queueRealStudentIssuance(studentId, new Date(), auditSession.actorId), {
+      status: 201,
+    });
   } catch (error) {
     const status = error instanceof StudentIssuanceError ? error.status : 502;
     return NextResponse.json(

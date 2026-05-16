@@ -18,14 +18,12 @@ const dateTimeFormatter = new Intl.DateTimeFormat("en-ZA", {
 });
 
 const credentialStatusLabels: Record<CredentialLifecycleState, string> = {
-  Active: "Active",
-  Expired: "Expired",
-  Issuing: "Issuing",
-  Offered: "Offered",
-  Pending: "Ready to issue",
-  Renewed: "Renewed",
-  Revoked: "Revoked",
-  Suspended: "Suspended",
+  ACCEPTED: "Accepted",
+  FAILED: "Failed",
+  ISSUED: "Issued",
+  NOT_ISSUED: "Not issued",
+  OFFER_SENT: "Offer sent",
+  REVOKED: "Revoked",
 };
 
 const activationDeliveryStatusLabels: Record<ActivationDeliveryStatus, string> = {
@@ -63,6 +61,13 @@ export function formatDateTime(value: string) {
 
 export function formatCredentialStatus(value: CredentialLifecycleState) {
   return credentialStatusLabels[value];
+}
+
+export function credentialStatusTone(value: CredentialLifecycleState) {
+  if (value === "ISSUED") return "success";
+  if (value === "FAILED" || value === "REVOKED") return "danger";
+  if (value === "OFFER_SENT" || value === "ACCEPTED") return "warning";
+  return "neutral";
 }
 
 export function formatActivationDeliveryStatus(value: ActivationDeliveryStatus) {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { assertCan, PermissionError, type SessionWithRole } from "@/lib/auth/permissions";
-import { getCurrentAdminSession } from "@/lib/auth/session";
+import { getCurrentAdminSession, getSessionForAudit } from "@/lib/auth/session";
 import { parseBatchIssuanceSelection, queueRealBatchIssuance, StudentIssuanceError } from "@/lib/issuance/batchIssuance";
 
 export async function POST(request: Request) {
@@ -17,7 +17,10 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => undefined)) as unknown;
     const selection = parseBatchIssuanceSelection(body);
-    return NextResponse.json(await queueRealBatchIssuance(selection), { status: 201 });
+    const auditSession = await getSessionForAudit();
+    return NextResponse.json(await queueRealBatchIssuance(selection, new Date(), auditSession.actorId), {
+      status: 201,
+    });
   } catch (error) {
     const status = error instanceof StudentIssuanceError ? error.status : 502;
     return NextResponse.json(

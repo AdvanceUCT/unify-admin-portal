@@ -19,6 +19,7 @@ import type {
   BatchIssuanceRunDetail,
   BatchIssuanceRunSummary,
   BatchIssuanceSelection,
+  CredentialActivityEvent,
   StudentRecord,
 } from "@/lib/api/types";
 
@@ -127,6 +128,11 @@ export async function getRecentAuditEvents() {
   return events.slice(0, 5);
 }
 
+export async function getRecentCredentialEvents(): Promise<CredentialActivityEvent[]> {
+  const state = await getAdminState();
+  return state.credentialEvents ?? [];
+}
+
 export async function getBatchIssuancePreview() {
   await wait();
   return mockBatchIssuancePreview;
@@ -136,7 +142,7 @@ export async function queueBatchIssuance(selection: BatchIssuanceSelection = {})
   await wait();
 
   if (shouldUseMockApi()) {
-    return fetchJson<BatchIssuanceResult>("/api/credentials/batch-issue", {
+    return fetchJson<BatchIssuanceResult>("/api/credentials/issuance/batch/issue", {
       body: JSON.stringify(selection),
       method: "POST",
     });
@@ -149,7 +155,7 @@ export async function previewBatchIssuance(selection: BatchIssuanceSelection = {
   await wait();
 
   if (shouldUseMockApi()) {
-    return fetchJson<BatchIssuancePreviewResult>("/api/credentials/batch-preview", {
+    return fetchJson<BatchIssuancePreviewResult>("/api/credentials/issuance/batch/preview", {
       body: JSON.stringify(selection),
       method: "POST",
     });
@@ -162,7 +168,7 @@ export async function createBatchRun(selection: BatchIssuanceSelection = {}) {
   await wait();
 
   if (shouldUseMockApi()) {
-    return fetchJson<BatchIssuanceRunDetail>("/api/credentials/batch-runs", {
+    return fetchJson<BatchIssuanceRunDetail>("/api/credentials/issuance/batch/runs", {
       body: JSON.stringify(selection),
       method: "POST",
     });
@@ -175,7 +181,7 @@ export async function getBatchRuns() {
   await wait();
 
   if (shouldUseMockApi()) {
-    return fetchJson<BatchIssuanceRunSummary[]>("/api/credentials/batch-runs");
+    return fetchJson<BatchIssuanceRunSummary[]>("/api/credentials/issuance/batch/runs");
   }
 
   return listMockBatchRuns();
@@ -183,7 +189,7 @@ export async function getBatchRuns() {
 
 export async function getBatchRunById(batchId: string) {
   if (typeof window !== "undefined" && process.env.NODE_ENV !== "test") {
-    return fetchJson<BatchIssuanceRunDetail>(`/api/credentials/batch-runs/${encodeURIComponent(batchId)}`);
+    return fetchJson<BatchIssuanceRunDetail>(`/api/credentials/issuance/batch/runs/${encodeURIComponent(batchId)}`);
   }
 
   return getMockBatchRunDetail(batchId);
@@ -192,7 +198,7 @@ export async function getBatchRunById(batchId: string) {
 export async function retryFailedBatchRun(batchId: string) {
   if (typeof window !== "undefined" && process.env.NODE_ENV !== "test") {
     return fetchJson<BatchIssuanceRunDetail>(
-      `/api/credentials/batch-runs/${encodeURIComponent(batchId)}/retry-failed`,
+      `/api/credentials/issuance/batch/runs/${encodeURIComponent(batchId)}/retry-failed`,
       { method: "POST" },
     );
   }
