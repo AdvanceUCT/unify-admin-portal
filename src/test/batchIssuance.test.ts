@@ -1,8 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { createBatchActivationLinks } from "@/lib/agentClient";
 import { sendCredentialActivationEmail } from "@/lib/email/credential-activation";
-import { getMockAdminState, resetMockActivationStore } from "@/lib/api/mockActivationStore";
+import { resetMockActivationStore } from "@/lib/api/mockActivationStore";
 import { queueRealBatchIssuance, queueRealStudentIssuance, StudentIssuanceError } from "@/lib/issuance/batchIssuance";
+import { assertCredentialIssuanceAllowed } from "@/lib/credentials/status";
 
 vi.mock("@/lib/agentClient", () => ({
   createBatchActivationLinks: vi.fn(),
@@ -10,6 +11,16 @@ vi.mock("@/lib/agentClient", () => ({
 
 vi.mock("@/lib/email/credential-activation", () => ({
   sendCredentialActivationEmail: vi.fn(),
+}));
+
+vi.mock("@/lib/credentials/status", () => ({
+  assertCredentialIssuanceAllowed: vi.fn(async () => undefined),
+  createCredentialIssuanceFromOffer: vi.fn(async (params: { studentExternalId: string }) => ({
+    id: params.studentExternalId === "student-demo-100" ? "credential-demo-100" : "credential-demo-001",
+  })),
+  overlayCredentialStatuses: vi.fn(async (students) => students),
+  overlayCredentialStatusForStudent: vi.fn(async (student) => student),
+  reconcileCredentialEventLogs: vi.fn(async () => undefined),
 }));
 
 vi.mock("@/lib/university/profile", () => ({
@@ -28,6 +39,8 @@ describe("real batch issuance orchestration", () => {
     resetMockActivationStore();
     vi.mocked(createBatchActivationLinks).mockReset();
     vi.mocked(sendCredentialActivationEmail).mockReset();
+    vi.mocked(assertCredentialIssuanceAllowed).mockReset();
+    vi.mocked(assertCredentialIssuanceAllowed).mockResolvedValue(undefined);
   });
 
   it("issues Joshua's simulated student credential through the agent service and sends email", async () => {
@@ -102,7 +115,6 @@ describe("real batch issuance orchestration", () => {
     });
 
     const result = await queueRealStudentIssuance("student-demo-100", new Date("2026-04-27T10:00:00Z"));
-    const joshua = getMockAdminState().students.find((student) => student.profile.id === "student-demo-100");
 
     expect(createBatchActivationLinks).toHaveBeenCalledWith({
       credentialDefinitionId: "cred-def-id",
@@ -115,29 +127,15 @@ describe("real batch issuance orchestration", () => {
     });
     expect(result.requestedCount).toBe(1);
     expect(result.issuedCredentialIds).toEqual(["credential-demo-100"]);
-    expect(joshua?.credential.lifecycleState).toBe("Offered");
   });
 
   it("does not issue a credential for a student that is no longer in an issuable state", async () => {
-    // Transition student-demo-001 out of the Pending state by issuing once.
-    vi.mocked(createBatchActivationLinks).mockResolvedValueOnce({
-      failures: [],
-      offers: [
-        {
-          activationId: "activation-sipho",
-          activationUrl: "unifywallet://activate?token=sipho-token",
-          credentialExchangeId: "credential-exchange-sipho",
-          email: "sipho.dlamini.001@students.uct.ac.za",
-          expiresAt: "2026-04-28T10:00:00.000Z",
-          externalId: "student-demo-001",
-        },
-      ],
-    });
-    await queueRealStudentIssuance("student-demo-001");
-    vi.mocked(createBatchActivationLinks).mockClear();
+    vi.mocked(assertCredentialIssuanceAllowed).mockRejectedValueOnce(
+      new Error("Student already has an active credential issuance in status OFFER_SENT."),
+    );
 
     await expect(queueRealStudentIssuance("student-demo-001")).rejects.toMatchObject({
-      message: "Student credential is not ready for issuance in its current lifecycle state.",
+      message: "Student already has an active credential issuance in status OFFER_SENT.",
       status: 409,
     } satisfies Partial<StudentIssuanceError>);
     expect(createBatchActivationLinks).not.toHaveBeenCalled();

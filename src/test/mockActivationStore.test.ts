@@ -40,7 +40,7 @@ describe("mock activation store", () => {
       studentId: issuableStudents[0].profile.id,
     });
     expect(result.activationDeliveries[0].activationUrl).toMatch(/^http:\/\/localhost:3000\/activate\?token=/);
-    expect(credential?.lifecycleState).toBe("Offered");
+    expect(credential?.lifecycleState).toBe("OFFER_SENT");
     expect(state.auditEvents.filter((event) => event.eventType === "ActivationLinkDelivered")).toHaveLength(
       issuableStudents.length,
     );
@@ -118,7 +118,7 @@ describe("mock activation store", () => {
     const delivery = state.activationDeliveries.find((candidate) => candidate.credentialId === firstDelivery.credentialId);
 
     expect(result.ok).toBe(true);
-    expect(credential?.lifecycleState).toBe("Active");
+    expect(credential?.lifecycleState).toBe("ISSUED");
     expect(delivery).toMatchObject({
       activatedAt: "2026-04-27T10:05:00.000Z",
       credentialRecordId: "credential-record-demo",

@@ -35,7 +35,7 @@ export function StudentsTable({ initialState }: { initialState: AdminState }) {
                 <td className="px-5 py-4 text-zinc-600">{student.credential.programme}</td>
                 <td className="px-5 py-4 text-zinc-600">{student.credential.enrolmentStatus}</td>
                 <td className="px-5 py-4">
-                  <Badge tone={student.credential.lifecycleState === "Active" ? "success" : "neutral"}>
+                  <Badge tone={student.credential.lifecycleState === "ISSUED" ? "success" : "neutral"}>
                     {formatCredentialStatus(student.credential.lifecycleState)}
                   </Badge>
                 </td>

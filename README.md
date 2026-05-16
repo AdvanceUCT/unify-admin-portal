@@ -134,7 +134,20 @@ Optional service integration variables:
 ```env
 AGENT_SERVICE_URL="https://..."
 AGENT_API_KEY="..."
+WEBHOOK_SIGNING_SECRET="same-secret-configured-in-the-agent-service"
 ```
+
+For local webhook testing, configure the Identity Agent Service with:
+
+```env
+WEBHOOK_URL="http://localhost:3000/api/webhooks/agent"
+WEBHOOK_SIGNING_SECRET="same-secret-configured-in-the-admin-portal"
+```
+
+The agent already emits `credential.stateChanged` events when Credo credential
+exchange records move through `offer-sent`, `request-received`,
+`credential-issued`, and `done`. The admin portal webhook endpoint accepts that
+existing event type and maps `done` to `ISSUED`.
 
 Before testing production email, verify `voskuils.com` in Resend and make sure
 `admin@voskuils.com` is allowed as a sender. In production, admin invites,

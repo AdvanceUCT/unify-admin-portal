@@ -27,7 +27,7 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
   const [message, setMessage] = useState<string | null>(null);
 
   const canIssue = useMemo(() => {
-    const stateAllowsIssue = ["Pending", "Issuing"].includes(student.credential.lifecycleState);
+    const stateAllowsIssue = ["NOT_ISSUED", "FAILED", "REVOKED"].includes(student.credential.lifecycleState);
     return stateAllowsIssue && currentDelivery?.status !== "Delivered";
   }, [currentDelivery?.status, student.credential.lifecycleState]);
 

@@ -20,9 +20,10 @@ import { formatDateTime } from "@/lib/formatters";
 import { SIMULATED_FACULTY_PROGRAMMES } from "@/lib/student-records/facultyProgrammes";
 
 const credentialStatusOptions: Array<{ label: string; value: "" | CredentialLifecycleState }> = [
-  { label: "Pending or issuing", value: "" },
-  { label: "Pending only", value: "Pending" },
-  { label: "Issuing only", value: "Issuing" },
+  { label: "Eligible statuses", value: "" },
+  { label: "Not issued only", value: "NOT_ISSUED" },
+  { label: "Failed only", value: "FAILED" },
+  { label: "Revoked only", value: "REVOKED" },
 ];
 
 const enrolmentStatusOptions: Array<StudentCredential["enrolmentStatus"]> = [

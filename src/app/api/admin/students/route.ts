@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { overlayCredentialStatuses } from "@/lib/credentials/status";
 import { getAllStudents, searchStudents } from "@/lib/db/store";
 
 export async function GET(req: Request) {
@@ -6,8 +7,8 @@ export async function GET(req: Request) {
   const query = searchParams.get("query");
 
   if (query) {
-    return NextResponse.json(await searchStudents(query));
+    return NextResponse.json(await overlayCredentialStatuses(await searchStudents(query)));
   }
 
-  return NextResponse.json(await getAllStudents());
+  return NextResponse.json(await overlayCredentialStatuses(await getAllStudents()));
 }

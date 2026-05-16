@@ -62,7 +62,7 @@ describe("admin live tables", () => {
     render(<StudentsTable initialState={state} />);
 
     expect(screen.getByText(activatedStudent?.credential.studentNumber ?? "")).toBeInTheDocument();
-    expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Issued").length).toBeGreaterThan(0);
   });
 
   it("renders activated credential and delivery metadata", () => {
@@ -74,7 +74,7 @@ describe("admin live tables", () => {
     render(<CredentialsTable initialState={state} />);
 
     expect(screen.getByText(activatedStudent?.credential.studentNumber ?? "")).toBeInTheDocument();
-    expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Issued").length).toBeGreaterThan(0);
     expect(screen.getByText(/Activated .*2026/)).toBeInTheDocument();
   });
 

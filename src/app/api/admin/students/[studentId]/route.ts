@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { overlayCredentialStatusForStudent } from "@/lib/credentials/status";
 import { getStudentById } from "@/lib/db/store";
 
 export async function GET(
@@ -12,5 +13,5 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  return NextResponse.json(student);
+  return NextResponse.json(await overlayCredentialStatusForStudent(student));
 }

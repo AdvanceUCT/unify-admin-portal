@@ -19,6 +19,7 @@ import type {
   BatchIssuanceRunDetail,
   BatchIssuanceRunSummary,
   BatchIssuanceSelection,
+  CredentialActivityEvent,
   StudentRecord,
 } from "@/lib/api/types";
 
@@ -125,6 +126,11 @@ export async function getAuditEvents() {
 export async function getRecentAuditEvents() {
   const events = await getAuditEvents();
   return events.slice(0, 5);
+}
+
+export async function getRecentCredentialEvents(): Promise<CredentialActivityEvent[]> {
+  const state = await getAdminState();
+  return state.credentialEvents ?? [];
 }
 
 export async function getBatchIssuancePreview() {

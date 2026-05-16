@@ -30,7 +30,7 @@ function rowToStudentRecord(row: Record<string, unknown>): StudentRecord {
       faculty: row.faculty as string,
       programme: row.programme as string,
       enrolmentStatus: "Registered",
-      lifecycleState: row.lifecycle_state as StudentRecord["credential"]["lifecycleState"],
+      lifecycleState: "NOT_ISSUED",
       studentNumber: row.student_number as string,
       validFrom: "2026-01-01T00:00:00Z",
       expiresAt: `${row.expires_at as string}T00:00:00Z`,

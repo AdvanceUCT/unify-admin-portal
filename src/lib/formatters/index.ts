@@ -18,14 +18,12 @@ const dateTimeFormatter = new Intl.DateTimeFormat("en-ZA", {
 });
 
 const credentialStatusLabels: Record<CredentialLifecycleState, string> = {
-  Active: "Active",
-  Expired: "Expired",
-  Issuing: "Issuing",
-  Offered: "Offered",
-  Pending: "Ready to issue",
-  Renewed: "Renewed",
-  Revoked: "Revoked",
-  Suspended: "Suspended",
+  ACCEPTED: "Accepted",
+  FAILED: "Failed",
+  ISSUED: "Issued",
+  NOT_ISSUED: "Not issued",
+  OFFER_SENT: "Offer sent",
+  REVOKED: "Revoked",
 };
 
 const activationDeliveryStatusLabels: Record<ActivationDeliveryStatus, string> = {

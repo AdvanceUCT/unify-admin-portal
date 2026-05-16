@@ -10,8 +10,6 @@ type IssuanceSelectionOptions = BatchIssuanceSelection;
 const INSTITUTION = "University of Cape Town";
 const VALID_FROM = "2026-01-01T00:00:00Z";
 const EXPIRES_AT = "2026-12-31T23:59:59Z";
-const ISSUANCE_STATES = new Set<CredentialLifecycleState>(["Pending", "Issuing"]);
-const PENDING_ISSUANCE_START = 1;
 const CALEB_DEMO_INDEX = 100;
 const CALEB_EMAIL = "joshuawood.dc@gmail.com";
 
@@ -87,7 +85,7 @@ function emailForStudent(firstName: string, lastName: string, index: number) {
 }
 
 function lifecycleStateFor(index: number): CredentialLifecycleState {
-  return index >= PENDING_ISSUANCE_START ? "Pending" : "Active";
+  return "NOT_ISSUED";
 }
 
 function buildStudentRecord(index: number): StudentRecord {
@@ -165,7 +163,10 @@ export function searchSimulatedUniversityStudentRecords(query: string): StudentR
 }
 
 export function isStudentRecordEligibleForCredentialIssuance(student: StudentRecord) {
-  return student.credential.enrolmentStatus === "Registered" && ISSUANCE_STATES.has(student.credential.lifecycleState);
+  return (
+    student.credential.enrolmentStatus === "Registered" &&
+    ["NOT_ISSUED", "FAILED", "REVOKED"].includes(student.credential.lifecycleState)
+  );
 }
 
 export function selectStudentRecordsForCredentialIssuance(

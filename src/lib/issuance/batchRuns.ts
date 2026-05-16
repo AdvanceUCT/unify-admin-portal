@@ -14,8 +14,14 @@ import type {
 import { toPublicWalletActivationLink } from "@/lib/api/activationLinks";
 import { createBatchActivationLinks } from "@/lib/agentClient";
 import { writeAuditLog } from "@/lib/audit/audit";
+import {
+  createCredentialIssuanceFromOffer,
+  findActiveCredentialIssuance,
+  overlayCredentialStatuses,
+  reconcileCredentialEventLogs,
+} from "@/lib/credentials/status";
 import { prisma } from "@/lib/db/prisma";
-import { getAllStudents, updateStudentStatus } from "@/lib/db/store";
+import { getAllStudents } from "@/lib/db/store";
 import { sendCredentialActivationEmail } from "@/lib/email/credential-activation";
 import { parseBatchIssuanceSelection, attributesForStudent, getActiveCredentialDefinition } from "@/lib/issuance/batchIssuance";
 import {
@@ -185,7 +191,7 @@ async function sendActivationEmail(student: StudentRecord, delivery: { activatio
 
 export async function previewBatchIssuance(selectionInput?: BatchIssuanceSelection): Promise<BatchIssuancePreviewResult> {
   const selection = parseBatchIssuanceSelection(selectionInput);
-  const students = await getAllStudents();
+  const students = await overlayCredentialStatuses(await getAllStudents());
   const matchingStudents = students.filter((student) => filterMatches(student, selection));
   const eligibleStudents = selectStudentRecordsForCredentialIssuance(students, selection);
   const eligibleIds = new Set(eligibleStudents.map((student) => student.profile.id));
@@ -278,21 +284,47 @@ export async function processBatchRun(batchId: string): Promise<BatchIssuanceRun
   const students = await getAllStudents();
   const studentsById = new Map(students.map((student) => [student.profile.id, student]));
   const activeSchema = await getActiveCredentialDefinition();
-  const agentResult = await createBatchActivationLinks({
-    credentialDefinitionId: activeSchema.credentialDefinitionId,
-    students: pendingItems
-      .map((item) => studentsById.get(item.studentId))
-      .filter((student): student is StudentRecord => Boolean(student))
-      .map((student) => ({
-        attributes: attributesForStudent(student, activeSchema.schemaAttributes),
-        email: student.profile.email,
-        externalId: student.profile.id,
-      })),
-  });
+  const blockedItems = new Set<string>();
+
+  await Promise.all(
+    pendingItems.map(async (item) => {
+      const activeIssuance = await findActiveCredentialIssuance({
+        credentialDefinitionId: activeSchema.credentialDefinitionId,
+        studentExternalId: item.studentId,
+      });
+
+      if (activeIssuance) {
+        blockedItems.add(item.id);
+        await prisma.batchIssuanceItem.update({
+          data: {
+            skipReason: `Student already has an active credential issuance in status ${activeIssuance.status}.`,
+            status: BatchIssuanceItemStatus.SKIPPED,
+          },
+          where: { id: item.id },
+        });
+      }
+    }),
+  );
+  const allowedPendingItems = pendingItems.filter((item) => !blockedItems.has(item.id));
+
+  const agentResult =
+    allowedPendingItems.length === 0
+      ? { failures: [], offers: [] }
+      : await createBatchActivationLinks({
+          credentialDefinitionId: activeSchema.credentialDefinitionId,
+          students: allowedPendingItems
+            .map((item) => studentsById.get(item.studentId))
+            .filter((student): student is StudentRecord => Boolean(student))
+            .map((student) => ({
+              attributes: attributesForStudent(student, activeSchema.schemaAttributes),
+              email: student.profile.email,
+              externalId: student.profile.id,
+            })),
+        });
   const offerByStudentId = new Map(agentResult.offers.map((offer) => [offer.externalId, offer]));
   const failureByStudentId = new Map(agentResult.failures.map((failure) => [failure.externalId, failure]));
 
-  for (const item of pendingItems) {
+  for (const item of allowedPendingItems) {
     const student = studentsById.get(item.studentId);
     const offer = offerByStudentId.get(item.studentId);
     const failure = failureByStudentId.get(item.studentId);
@@ -325,7 +357,6 @@ export async function processBatchRun(batchId: string): Promise<BatchIssuanceRun
     try {
       await sendActivationEmail(student, publicOffer);
       delivery = { deliveredAt: new Date().toISOString(), emailStatus: "Sent", status: "Delivered" };
-      await updateStudentStatus(student.profile.id, "Offered");
     } catch (error) {
       delivery = {
         emailStatus: "Failed",
@@ -334,11 +365,26 @@ export async function processBatchRun(batchId: string): Promise<BatchIssuanceRun
       };
     }
 
+    const issuance = await createCredentialIssuanceFromOffer({
+      activationId: offer.activationId,
+      activationUrl: publicActivationUrl,
+      batchItemId: item.id,
+      credentialDefinitionId: activeSchema.credentialDefinitionId,
+      credentialExchangeId: offer.credentialExchangeId,
+      email: offer.email,
+      expiresAt: offer.expiresAt,
+      failureReason: delivery.failureReason,
+      studentExternalId: item.studentId,
+      wasDelivered: delivery.status === "Delivered",
+    });
+    await reconcileCredentialEventLogs(offer.credentialExchangeId);
+
     await prisma.batchIssuanceItem.update({
       data: {
         activationId: offer.activationId,
         activationUrl: publicActivationUrl,
         credentialExchangeId: offer.credentialExchangeId,
+        credentialId: issuance.id,
         deliveredAt: delivery.deliveredAt ? new Date(delivery.deliveredAt) : null,
         expiresAt: new Date(offer.expiresAt),
         failureReason: delivery.failureReason,
@@ -351,6 +397,7 @@ export async function processBatchRun(batchId: string): Promise<BatchIssuanceRun
   const updatedRun = await prisma.batchIssuanceRun.findUniqueOrThrow({ include: { items: true }, where: { batchId } });
   const delivered = updatedRun.items.filter((item) => item.status === BatchIssuanceItemStatus.DELIVERED).length;
   const failed = updatedRun.items.filter((item) => failedItemStatuses.has(item.status)).length;
+  const skipped = updatedRun.items.filter((item) => item.status === BatchIssuanceItemStatus.SKIPPED).length;
   const status =
     failed > 0 && delivered > 0
       ? BatchIssuanceRunStatus.PARTIALLY_FAILED
@@ -363,6 +410,7 @@ export async function processBatchRun(batchId: string): Promise<BatchIssuanceRun
       completedAt: new Date(),
       failedCount: failed,
       issuedCount: delivered,
+      skippedCount: skipped,
       status,
     },
     include: { items: true },
@@ -377,6 +425,7 @@ export async function processBatchRun(batchId: string): Promise<BatchIssuanceRun
     meta: {
       failedCount: failed,
       issuedCount: delivered,
+      skippedCount: skipped,
       status: publicRunStatus(status),
     },
   });

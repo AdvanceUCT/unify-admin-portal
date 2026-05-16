@@ -123,14 +123,17 @@ function activationDeliveryForActivationId(state: MockActivationState, activatio
 }
 
 function dashboardSummary(state: MockActivationState): DashboardSummary {
-  const activeCredentials = state.students.filter((student) => student.credential.lifecycleState === "Active").length;
+  const issuedCredentials = state.students.filter((student) => student.credential.lifecycleState === "ISSUED").length;
+  const failedCredentials = state.students.filter((student) => student.credential.lifecycleState === "FAILED").length;
   const pendingIssuance = state.students.filter((student) =>
-    ["Issuing", "Offered", "Pending"].includes(student.credential.lifecycleState),
+    ["OFFER_SENT", "ACCEPTED"].includes(student.credential.lifecycleState),
   ).length;
 
   return {
-    activeCredentials,
+    activeBatchJobs: state.batchRuns.filter((run) => run.status === "Queued" || run.status === "Processing").length,
     auditEventsToday: state.auditEvents.length,
+    failedCredentials,
+    issuedCredentials,
     pendingIssuance,
     vendorsPendingApproval: mockDashboardSummary.vendorsPendingApproval,
   };
@@ -193,7 +196,10 @@ function matchesSelection(student: StudentRecord, selection: BatchIssuanceSelect
 }
 
 function isEligible(student: StudentRecord) {
-  return ["Pending", "Issuing"].includes(student.credential.lifecycleState) && student.credential.enrolmentStatus === "Registered";
+  return (
+    ["NOT_ISSUED", "FAILED", "REVOKED"].includes(student.credential.lifecycleState) &&
+    student.credential.enrolmentStatus === "Registered"
+  );
 }
 
 function mockPreviewItem(student: StudentRecord, status: "Eligible" | "Skipped"): BatchIssuancePreviewItem {
@@ -291,7 +297,7 @@ export function queueMockBatchIssuance(
 
     const student = state.students.find((candidate) => candidate.profile.id === delivery.studentId);
     if (student) {
-      student.credential.lifecycleState = "Offered";
+      student.credential.lifecycleState = "OFFER_SENT";
     }
 
     appendAuditEvent(state, {
@@ -431,7 +437,7 @@ export function recordBatchIssuanceResult(result: BatchIssuanceResult, now = new
 
     const student = state.students.find((candidate) => candidate.profile.id === delivery.studentId);
     if (student && delivery.status === "Delivered") {
-      student.credential.lifecycleState = "Offered";
+      student.credential.lifecycleState = "OFFER_SENT";
     }
 
     appendAuditEvent(state, {
@@ -549,7 +555,7 @@ export function completeMockWalletActivation(
   const student = state.students.find((candidate) => candidate.profile.id === delivery.studentId);
 
   if (student) {
-    student.credential.lifecycleState = "Active";
+    student.credential.lifecycleState = "ISSUED";
   }
 
   delivery.activatedAt = activatedAt;

@@ -4,9 +4,9 @@ import { formatCredentialStatus, formatDateTime } from "@/lib/formatters";
 import { StudentCredentialActions } from "@/features/students/StudentCredentialActions";
 
 function credentialTone(state: CredentialLifecycleState) {
-  if (state === "Active") return "success";
-  if (state === "Suspended" || state === "Offered" || state === "Pending" || state === "Issuing") return "warning";
-  if (state === "Revoked" || state === "Expired") return "danger";
+  if (state === "ISSUED") return "success";
+  if (state === "OFFER_SENT" || state === "ACCEPTED") return "warning";
+  if (state === "FAILED" || state === "REVOKED") return "danger";
   return "neutral";
 }
 

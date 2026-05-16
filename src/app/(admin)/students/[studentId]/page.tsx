@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { StudentCredentialIssueView } from "@/features/students/StudentCredentialIssueView";
-import { getActivationDeliveryByCredentialId, getStudentById } from "@/lib/api/client";
+import { getStudentById } from "@/lib/api/client";
+import { getActivationDeliveryByCredentialId } from "@/lib/api/server";
 import { requireRole } from "@/lib/auth/session";
 
 export default async function StudentDetailPage({

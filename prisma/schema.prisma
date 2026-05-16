@@ -129,6 +129,52 @@ model CredentialSchema {
   @@map("credential_schema")
 }
 
+model CredentialIssuance {
+  id                     String                     @id @default(cuid())
+  studentExternalId      String
+  credentialDefinitionId String
+  credentialExchangeId   String?                    @unique
+  activationId           String?
+  activationUrl          String?
+  activationExpiresAt    DateTime?
+  email                  String?
+  deliveryStatus         CredentialDeliveryStatus   @default(PENDING)
+  status                 CredentialIssuanceStatus
+  failureReason          String?
+  batchItemId            String?
+  issuedAt               DateTime?
+  revokedAt              DateTime?
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
+
+  @@index([studentExternalId])
+  @@index([credentialDefinitionId])
+  @@index([status])
+  @@index([batchItemId])
+  @@index([createdAt])
+  @@map("credential_issuance")
+}
+
+model CredentialEventLog {
+  id                     String                    @id @default(cuid())
+  eventId                String                    @unique
+  type                   CredentialEventType
+  credentialExchangeId   String
+  credentialDefinitionId String?
+  previousState          String?
+  state                  String
+  status                 CredentialIssuanceStatus?
+  payload                Json
+  occurredAt             DateTime
+  receivedAt             DateTime                  @default(now())
+
+  @@index([credentialExchangeId])
+  @@index([credentialDefinitionId])
+  @@index([status])
+  @@index([occurredAt])
+  @@map("credential_event_log")
+}
+
 model BatchIssuanceRun {
   id             String                  @id @default(cuid())
   batchId        String                  @unique
@@ -204,6 +250,24 @@ enum BatchIssuanceItemStatus {
   DELIVERY_FAILED
   ACTIVATED
   FAILED
+}
+
+enum CredentialIssuanceStatus {
+  OFFER_SENT
+  ACCEPTED
+  ISSUED
+  FAILED
+  REVOKED
+}
+
+enum CredentialDeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
+}
+
+enum CredentialEventType {
+  CREDENTIAL_STATE_CHANGED
 }
 
 enum SetupStatus {

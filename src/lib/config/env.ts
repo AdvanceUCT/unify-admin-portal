@@ -68,6 +68,7 @@ const envSchema = z.object({
   RESEND_API_KEY: optionalNonEmptyString,
   CREDENTIAL_EMAIL_FROM: optionalNonEmptyString,
   CREDENTIAL_EMAIL_DELIVERY_MODE: z.enum(["resend", "console"]).default("resend"),
+  WEBHOOK_SIGNING_SECRET: optionalNonEmptyString,
 });
 
 export const env = envSchema.parse(process.env);

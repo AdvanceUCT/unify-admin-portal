@@ -12,7 +12,14 @@ import type {
   StudentRecord,
 } from "@/lib/api/types";
 import { createBatchActivationLinks } from "@/lib/agentClient";
-import { getAllStudents, getStudentById, updateStudentStatus } from "@/lib/db/store";
+import {
+  assertCredentialIssuanceAllowed,
+  createCredentialIssuanceFromOffer,
+  overlayCredentialStatuses,
+  overlayCredentialStatusForStudent,
+  reconcileCredentialEventLogs,
+} from "@/lib/credentials/status";
+import { getAllStudents, getStudentById } from "@/lib/db/store";
 import { sendCredentialActivationEmail } from "@/lib/email/credential-activation";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfile } from "@/lib/university/profile";
@@ -25,14 +32,12 @@ import {
 
 const DEFAULT_YEAR = "2026";
 const credentialStatuses = new Set<CredentialLifecycleState>([
-  "Active",
-  "Expired",
-  "Issuing",
-  "Offered",
-  "Pending",
-  "Renewed",
-  "Revoked",
-  "Suspended",
+  "ACCEPTED",
+  "FAILED",
+  "ISSUED",
+  "NOT_ISSUED",
+  "OFFER_SENT",
+  "REVOKED",
 ]);
 const enrolmentStatuses = new Set<StudentCredential["enrolmentStatus"]>([
   "Graduated",
@@ -198,6 +203,22 @@ async function issueStudentActivationLinks(
   const activeSchema = await getActiveCredentialDefinition();
   const batchId = batchIdFrom(now);
 
+  try {
+    await Promise.all(
+      studentsForIssuance.map((student) =>
+        assertCredentialIssuanceAllowed({
+          credentialDefinitionId: activeSchema.credentialDefinitionId,
+          studentExternalId: student.profile.id,
+        }),
+      ),
+    );
+  } catch (error) {
+    throw new StudentIssuanceError(
+      error instanceof Error ? error.message : "Student already has an active credential issuance.",
+      409,
+    );
+  }
+
   const agentResult = await createBatchActivationLinks({
     credentialDefinitionId: activeSchema.credentialDefinitionId,
     students: studentsForIssuance.map((student) => ({
@@ -214,6 +235,18 @@ async function issueStudentActivationLinks(
     const publicActivationUrl = toPublicWalletActivationLink(offer.activationUrl);
     const publicOffer = { ...offer, activationUrl: publicActivationUrl };
     const emailDelivery = await emailDeliveryForOffer(student, publicOffer);
+    const issuance = await createCredentialIssuanceFromOffer({
+      activationId: offer.activationId,
+      activationUrl: publicActivationUrl,
+      credentialDefinitionId: activeSchema.credentialDefinitionId,
+      credentialExchangeId: offer.credentialExchangeId,
+      email: offer.email,
+      expiresAt: offer.expiresAt,
+      failureReason: emailDelivery.status === "Failed" ? emailDelivery.failureReason : undefined,
+      studentExternalId: student?.profile.id ?? offer.externalId ?? offer.activationId,
+      wasDelivered: emailDelivery.status === "Delivered",
+    });
+    await reconcileCredentialEventLogs(offer.credentialExchangeId);
 
     if (emailDelivery.status === "Failed") {
       failures.push({
@@ -229,7 +262,7 @@ async function issueStudentActivationLinks(
       batchId,
       channel: "activation-link",
       credentialExchangeId: offer.credentialExchangeId,
-      credentialId: student?.credential.id ?? offer.externalId ?? offer.activationId,
+      credentialId: issuance.id,
       deliveredAt: emailDelivery.status === "Delivered" ? now.toISOString() : undefined,
       email: offer.email,
       emailStatus: emailDelivery.status === "Delivered" ? "Sent" : "Failed",
@@ -255,11 +288,6 @@ async function issueStudentActivationLinks(
   };
 
   recordBatchIssuanceResult(result, now);
-  await Promise.all(
-    deliveries
-      .filter((delivery) => delivery.status === "Delivered")
-      .map((delivery) => updateStudentStatus(delivery.studentId, "Offered")),
-  );
 
   return result;
 }
@@ -271,7 +299,10 @@ export async function queueRealBatchIssuance(
   const now = selectionInputOrNow instanceof Date ? selectionInputOrNow : requestedNow;
   const selectionInput = selectionInputOrNow instanceof Date ? undefined : selectionInputOrNow;
   const selection = parseBatchIssuanceSelection(selectionInput);
-  const studentsForIssuance = selectStudentRecordsForCredentialIssuance(await getAllStudents(), selection);
+  const studentsForIssuance = selectStudentRecordsForCredentialIssuance(
+    await overlayCredentialStatuses(await getAllStudents()),
+    selection,
+  );
 
   if (studentsForIssuance.length === 0) {
     throw new StudentIssuanceError("No eligible simulated students match the selected batch filters.", 409);
@@ -290,12 +321,14 @@ export async function queueRealStudentIssuance(
     throw new StudentIssuanceError("Student record was not found.", 404);
   }
 
-  if (!isStudentRecordEligibleForCredentialIssuance(student)) {
+  const studentWithCredentialStatus = await overlayCredentialStatusForStudent(student);
+
+  if (!isStudentRecordEligibleForCredentialIssuance(studentWithCredentialStatus)) {
     throw new StudentIssuanceError(
       "Student credential is not ready for issuance in its current lifecycle state.",
       409,
     );
   }
 
-  return issueStudentActivationLinks([student], now, 1);
+  return issueStudentActivationLinks([studentWithCredentialStatus], now, 1);
 }
