@@ -70,6 +70,10 @@ const failedItemStatuses = new Set<BatchIssuanceItemStatus>([
   BatchIssuanceItemStatus.DELIVERY_FAILED,
 ]);
 
+/**
+ * Converts a DB enum run status from SNAKE_CASE to PascalCase for API responses,
+ * e.g. `PARTIALLY_FAILED` → `PartiallyFailed`.
+ */
 function publicRunStatus(status: BatchIssuanceRunStatus): BatchIssuanceRunSummary["status"] {
   return status
     .toLowerCase()
@@ -77,6 +81,10 @@ function publicRunStatus(status: BatchIssuanceRunStatus): BatchIssuanceRunSummar
     .replace(/^([a-z])/, (_match, char: string) => char.toUpperCase()) as BatchIssuanceRunSummary["status"];
 }
 
+/**
+ * Same as `publicRunStatus` but for item-level statuses,
+ * e.g. `DELIVERY_FAILED` → `DeliveryFailed`.
+ */
 function publicItemStatus(status: BatchIssuanceItemStatus): BatchIssuanceRunItem["status"] {
   return status
     .toLowerCase()
@@ -168,6 +176,11 @@ function toItem(item: PersistedBatchItem, student?: StudentRecord): BatchIssuanc
   };
 }
 
+/**
+ * Builds the full run detail by attaching each item's matching student record.
+ * The lookup map uses both `studentNumber` and `profile.id` as keys since batch
+ * items can be stored under either identifier depending on how the run was created.
+ */
 async function toDetail(run: PersistedBatchRun & { items: PersistedBatchItem[] }): Promise<BatchIssuanceRunDetail> {
   const students = await getAllStudents();
   const studentsById = new Map(
@@ -192,6 +205,13 @@ async function sendActivationEmail(student: StudentRecord, delivery: { activatio
   });
 }
 
+/**
+ * Shows a preview of which students would be included in a batch issuance for the
+ * given filters, split into eligible and skipped with reasons. No credentials are issued.
+ *
+ * @param selectionInput - Optional filters (faculty, programme, enrolment/credential status, limit).
+ * @returns Preview result with eligible/skipped counts and a per-student item list.
+ */
 export async function previewBatchIssuance(selectionInput?: BatchIssuanceSelection): Promise<BatchIssuancePreviewResult> {
   const selection = parseBatchIssuanceSelection(selectionInput);
   const students = await overlayCredentialStatuses(await getAllStudents());
@@ -215,6 +235,14 @@ export async function previewBatchIssuance(selectionInput?: BatchIssuanceSelecti
   };
 }
 
+/**
+ * Creates a new batch run in the DB from a preview result and immediately processes it.
+ * Writes a creation audit log before handing off to `processBatchRun`.
+ *
+ * @param actorId - Who triggered the batch, if anyone.
+ * @param selection - Optional filters to scope which students are included.
+ * @returns The completed `BatchIssuanceRunDetail` after processing.
+ */
 export async function createAndProcessBatchRun({
   actorId,
   selection,
@@ -262,6 +290,22 @@ export async function createAndProcessBatchRun({
   return processBatchRun(run.batchId);
 }
 
+/**
+ * Processes all pending items in a batch run. For each item it:
+ * 1. Skips students that already have an active issuance.
+ * 2. Calls the agent in bulk to create activation links for the rest.
+ * 3. Sends activation emails and records each delivery outcome.
+ * 4. Saves a `CredentialIssuance` record, syncs event logs, and writes an audit entry.
+ * 5. Updates item status to `DELIVERED` or `DELIVERY_FAILED`.
+ *
+ * Once all items are done, saves final counts and marks the run as `COMPLETED`,
+ * `PARTIALLY_FAILED`, or `FAILED`. Also used by `retryFailedBatchRun`.
+ *
+ * @param batchId - The batch run to process.
+ * @param actorIdOverride - Overrides the stored actor ID in audit logs if provided.
+ * @returns The final `BatchIssuanceRunDetail`.
+ * @throws If the batch run is not found.
+ */
 export async function processBatchRun(batchId: string, actorIdOverride?: string | null): Promise<BatchIssuanceRunDetail> {
   const run = await prisma.batchIssuanceRun.findUnique({
     include: { items: { include: { credentialIssuance: true } } },

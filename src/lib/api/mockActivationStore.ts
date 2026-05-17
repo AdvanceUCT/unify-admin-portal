@@ -59,6 +59,11 @@ function createInitialState(): MockActivationState {
   };
 }
 
+/**
+ * Returns the shared mock state, initialising it on first access.
+ * Stored on `globalThis` so it survives Next.js hot reloads and module
+ * re-imports without resetting between requests.
+ */
 function mutableState() {
   globalThis.__unifyAdminMockActivationState ??= createInitialState();
   return globalThis.__unifyAdminMockActivationState;
@@ -76,6 +81,11 @@ function invitationIdForToken(token: string) {
   return `unify-oob-${suffixFor(token)}`;
 }
 
+/**
+ * Encodes a string as URL-safe base64 (no padding).
+ * Replaces `+` with `-`, `/` with `_`, and strips trailing `=` characters
+ * so the result is safe to use directly in a URL query parameter.
+ */
 function base64UrlEncode(value: string) {
   const utf8Value = encodeURIComponent(value).replace(/%([0-9A-F]{2})/g, (_match, hex) =>
     String.fromCharCode(Number.parseInt(hex, 16)),
@@ -140,6 +150,10 @@ function dashboardSummary(state: MockActivationState): DashboardSummary {
   };
 }
 
+/**
+ * Adds an audit event to the mock state, skipping it if an identical entry
+ * (same type, target, and timestamp) already exists.
+ */
 function appendAuditEvent(state: MockActivationState, event: Omit<AuditEvent, "id">) {
   const duplicate = state.auditEvents.some(
     (candidate) =>
@@ -254,6 +268,16 @@ export function resetMockActivationStore() {
   return getMockAdminState();
 }
 
+/**
+ * Simulates a batch credential issuance against the mock state.
+ * For each eligible student, creates an activation delivery and upserts it
+ * (replaces any existing delivery for the same credential). Also updates the
+ * student's lifecycle state to `OFFER_SENT` and appends an audit event.
+ *
+ * @param selectionInputOrNow - Filter criteria or a `Date` to override the current time.
+ * @param requestedNow - Current time, used when the first arg is a selection object.
+ * @returns A `BatchIssuanceResult` with the created deliveries.
+ */
 export function queueMockBatchIssuance(
   selectionInputOrNow: BatchIssuanceSelection | Date = {},
   requestedNow = new Date(),
@@ -339,6 +363,15 @@ export function previewMockBatchIssuance(selectionInput: BatchIssuanceSelection 
   };
 }
 
+/**
+ * Creates a completed mock batch run by combining a preview with a queued issuance.
+ * Students not included in the delivery (skipped or failed) are added as skipped items.
+ * The run is prepended to the mock state's batch run list.
+ *
+ * @param selectionInput - Optional filters to scope which students are included.
+ * @param now - Current time used for timestamps, defaults to `new Date()`.
+ * @returns The completed `BatchIssuanceRunDetail`.
+ */
 export function createMockBatchRun(selectionInput: BatchIssuanceSelection = {}, now = new Date()): BatchIssuanceRunDetail {
   const state = mutableState();
   const selection = normalizeMockSelection(selectionInput);
@@ -421,6 +454,12 @@ export function retryMockBatchRun(batchId: string): BatchIssuanceRunDetail {
   return createMockBatchRun(existing.filters);
 }
 
+/**
+ * Writes a real batch issuance result into the mock state.
+ * Upserts each delivery and updates the student's lifecycle state to `OFFER_SENT`
+ * for successful deliveries. Used to keep the mock store in sync when real
+ * issuance runs are triggered in dev/demo mode.
+ */
 export function recordBatchIssuanceResult(result: BatchIssuanceResult, now = new Date()) {
   const state = mutableState();
   const recordedAt = now.toISOString();
@@ -457,6 +496,15 @@ export function recordBatchIssuanceResult(result: BatchIssuanceResult, now = new
   return getMockAdminState();
 }
 
+/**
+ * Simulates the wallet activation resolve step for a given token.
+ * Validates the token exists, isn't expired, and the delivery is ready,
+ * then returns the mock OOB invitation URL for the holder wallet to open.
+ *
+ * @param request - The resolve request containing the activation token.
+ * @param now - Current time for expiry checks, defaults to `new Date()`.
+ * @returns A `MockResult` with the activation details on success, or an error code on failure.
+ */
 export function resolveMockWalletActivation(
   request: WalletActivationResolveRequest,
   now = new Date(),
@@ -523,6 +571,15 @@ export function resolveMockWalletActivation(
   };
 }
 
+/**
+ * Simulates the holder completing wallet activation for a credential.
+ * Finds the delivery by activation ID, marks it as activated, updates the
+ * student's lifecycle state to `ISSUED`, and appends an audit event.
+ *
+ * @param request - Contains the activation ID, holder connection ID, and credential record ID.
+ * @param now - Current time used for the `activatedAt` timestamp.
+ * @returns A `MockResult` with activation confirmation on success, or an error code on failure.
+ */
 export function completeMockWalletActivation(
   request: WalletActivationCompleteRequest,
   now = new Date(),

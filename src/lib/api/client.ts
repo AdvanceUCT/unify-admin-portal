@@ -19,10 +19,20 @@ import type {
 
 const wait = (durationMs = 50) => new Promise((resolve) => setTimeout(resolve, durationMs));
 
+/**
+ * Returns true when running in the browser outside of tests.
+ * In that case API calls go to real Next.js route handlers rather than
+ * calling mock store functions directly.
+ */
 function shouldUseMockApi() {
   return typeof window !== "undefined" && process.env.NODE_ENV !== "test";
 }
 
+/**
+ * Fetch wrapper that parses the response as JSON and throws on non-2xx responses.
+ * Tries to pull the error message from `body.error.message` before falling back
+ * to a generic status message.
+ */
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     cache: "no-store",
@@ -41,6 +51,11 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+/**
+ * Fetches an internal API route from both client and server contexts.
+ * On the server it constructs an absolute URL and forwards the session cookie
+ * so authenticated routes work correctly during SSR.
+ */
 async function apiFetch<T>(path: string): Promise<T> {
   if (typeof window !== "undefined") {
     const res = await fetch(path);

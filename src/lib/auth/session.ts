@@ -23,6 +23,10 @@ export async function getCurrentAdminSession() {
   return session;
 }
 
+/**
+ * Gets the current session or redirects to `/sign-in` if there isn't one.
+ * Use this in server components or route handlers that require authentication.
+ */
 export async function requireAdminSession() {
   const session = await getCurrentAdminSession();
 
@@ -33,6 +37,14 @@ export async function requireAdminSession() {
   return session;
 }
 
+/**
+ * Requires an authenticated session with one of the given roles.
+ * Calls Next.js `forbidden()` (returning a 403) if the role doesn't match,
+ * so the caller never needs to handle the unauthorised case explicitly.
+ *
+ * @param allowedRoles - The roles permitted to proceed.
+ * @returns The current session if the role check passes.
+ */
 export async function requireRole(allowedRoles: readonly AdminRole[]) {
   const session = await requireAdminSession();
 
@@ -45,6 +57,11 @@ export async function requireRole(allowedRoles: readonly AdminRole[]) {
   return session;
 }
 
+/**
+ * Returns the current user and request context needed to write an audit log entry.
+ * Takes the first IP from `x-forwarded-for` (in case of multiple proxies) and
+ * falls back to `x-real-ip` if that header isn't present.
+ */
 export async function getSessionForAudit() {
   const [session, requestHeaders] = await Promise.all([
     getCurrentAdminSession(),

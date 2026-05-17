@@ -1,3 +1,8 @@
+/*
+ * This file checks the app's environment variables.
+ * It makes sure required settings like database, auth, and email values
+ * are valid before the rest of the app uses them.
+ */
 import { z } from "zod";
 
 function isPlaceholderSupabaseUrl(value: string) {

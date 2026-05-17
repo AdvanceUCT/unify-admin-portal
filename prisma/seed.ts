@@ -1,3 +1,8 @@
+/*
+ * This seed file sets up the first admin user for the app.
+ * It checks the env details, makes sure we are not in production,
+ * and creates the bootstrap SUPER_ADMIN login if it does not exist yet.
+ */
 import { config } from "dotenv";
 import { randomUUID } from "node:crypto";
 

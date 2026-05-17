@@ -40,6 +40,11 @@ function publicCredentialAuditLog(log: CredentialAuditLogModel) {
   };
 }
 
+/**
+ * Writes an `OFFER_SENT` audit log entry for a credential activation offer.
+ * The message reflects whether the email was delivered or failed.
+ * Uses `skipDuplicates` so re-runs don't create duplicate entries.
+ */
 export async function recordCredentialOfferSentAudit({
   actorId,
   batchId,
@@ -75,6 +80,15 @@ export async function recordCredentialOfferSentAudit({
   });
 }
 
+/**
+ * Returns a paginated list of `OFFER_SENT` audit log entries.
+ * The page number is clamped between 1 and the last available page so
+ * out-of-range requests always return a valid result.
+ *
+ * @param page - The requested page number (1-indexed).
+ * @param pageSize - How many entries to return per page.
+ * @returns Logs for the clamped page along with total count and page metadata.
+ */
 export async function getPaginatedCredentialOfferSentAuditLogs({
   page,
   pageSize,

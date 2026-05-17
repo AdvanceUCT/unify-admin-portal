@@ -18,6 +18,11 @@ export async function GET() {
   return NextResponse.json(await listBatchRuns());
 }
 
+/**
+ * Creates and immediately processes a new batch issuance run.
+ * Returns 201 on success. `StudentIssuanceError` maps to its own status code
+ * (e.g. 409 for conflicts), everything else falls back to 502.
+ */
 export async function POST(request: Request) {
   const session = await getCurrentAdminSession();
 

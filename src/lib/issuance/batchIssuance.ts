@@ -47,6 +47,10 @@ const enrolmentStatuses = new Set<StudentCredential["enrolmentStatus"]>([
   "Withdrawn",
 ]);
 
+/**
+ * Custom error for failed student issuance requests.
+ * Includes an HTTP status code alongside the message.
+ */
 export class StudentIssuanceError extends Error {
   status: number;
 
@@ -57,6 +61,16 @@ export class StudentIssuanceError extends Error {
   }
 }
 
+/**
+ * Looks up the value for a credential attribute by name from the student's data.
+ * Throws if the attribute name doesn't match any known field, so schema mismatches
+ * are caught early instead of silently producing empty credentials.
+ *
+ * @param student - The student to read data from.
+ * @param attributeName - The schema attribute name to look up.
+ * @returns The string value for that attribute.
+ * @throws If no value exists for the given attribute name.
+ */
 function attributeValue(student: StudentRecord, attributeName: string): string {
   const values: Record<string, string | undefined> = {
     email: student.profile.email,
@@ -98,6 +112,10 @@ function fullName(student: StudentRecord) {
   return `${student.profile.firstName} ${student.profile.lastName}`;
 }
 
+/**
+ * Creates a batch ID from the current time by stripping separators from the ISO
+ * string and keeping only the first 14 digits, e.g. `batch-20260118120000`.
+ */
 function batchIdFrom(now: Date) {
   const timestamp = now.toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
   return `batch-${timestamp}`;
@@ -107,6 +125,14 @@ function optionalTrimmedString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+/**
+ * Parses and validates the batch filter input. Missing fields fall back to
+ * simulated cohort defaults. Throws if a filter value or limit is invalid.
+ *
+ * @param value - Raw filter input from a form or API body.
+ * @returns A validated `BatchIssuanceSelection` object.
+ * @throws {StudentIssuanceError} If a filter value or the limit is out of range.
+ */
 export function parseBatchIssuanceSelection(value: unknown): BatchIssuanceSelection {
   if (!value || typeof value !== "object") {
     return { cohortId: SIMULATED_STUDENT_COHORT_ID };
@@ -145,6 +171,14 @@ export function parseBatchIssuanceSelection(value: unknown): BatchIssuanceSelect
   };
 }
 
+/**
+ * Tries to send the activation email for an offer. Returns a success or failure
+ * result instead of throwing, so one bad email doesn't stop the rest of the batch.
+ *
+ * @param student - Used to get the student's name for the email.
+ * @param offer - The offer containing the activation URL, email address, and expiry.
+ * @returns `{ status: "Delivered" }` on success, or `{ status: "Failed", failureReason }` on error.
+ */
 async function emailDeliveryForOffer(
   student: StudentRecord | undefined,
   offer: {
@@ -176,6 +210,13 @@ async function emailDeliveryForOffer(
   }
 }
 
+/**
+ * Gets the active credential definition ID and schema attributes for the university.
+ * Throws if the university profile or an active credential schema hasn't been set up yet.
+ *
+ * @returns The active `credentialDefinitionId` and `schemaAttributes`.
+ * @throws If no university profile or active credential schema is found.
+ */
 export async function getActiveCredentialDefinition() {
   const profile = await getUniversityProfile();
 
@@ -195,6 +236,25 @@ export async function getActiveCredentialDefinition() {
   };
 }
 
+/**
+ * The core issuance pipeline. For each student it:
+ * 1. Checks no active issuance already exists (throws 409 if one does).
+ * 2. Calls the agent to create activation links in bulk.
+ * 3. Sends the activation email and records the delivery outcome.
+ * 4. Saves a `CredentialIssuance` record and syncs event logs.
+ * 5. Writes an audit log entry.
+ *
+ * Per-student agent failures are collected and returned rather than stopping the batch.
+ *
+ * @param studentsForIssuance - Pre-filtered list of eligible students.
+ * @param now - Used for the batch ID and queued-at timestamp.
+ * @param requestedCount - How many students were originally requested.
+ * @param selection - The filters used to select students.
+ * @param actorId - Who triggered the issuance, if anyone.
+ * @param includeBatchIdInAudit - Whether to include the batch ID in each audit entry.
+ * @returns A `BatchIssuanceResult` with deliveries, failures, and counts.
+ * @throws {StudentIssuanceError} If a student already has an active issuance (409).
+ */
 async function issueStudentActivationLinks(
   studentsForIssuance: StudentRecord[],
   now: Date,
@@ -308,6 +368,16 @@ async function issueStudentActivationLinks(
   return result;
 }
 
+/**
+ * Issues credentials to a filtered batch of students.
+ * The first argument can be a `Date` to override the current time, or a
+ * `BatchIssuanceSelection` filter object to scope which students are included.
+ *
+ * @param selectionInputOrNow - Filter criteria or a `Date` to override the current time.
+ * @param requestedNow - Current time, used when the first arg is a selection object.
+ * @param actorId - Who triggered the batch, if anyone.
+ * @returns A `BatchIssuanceResult` for the queued batch.
+ */
 export async function queueRealBatchIssuance(
   selectionInputOrNow: BatchIssuanceSelection | Date = {},
   requestedNow = new Date(),
@@ -323,6 +393,17 @@ export async function queueRealBatchIssuance(
   return issueStudentActivationLinks(studentsForIssuance, now, studentsForIssuance.length, selection, actorId, true);
 }
 
+/**
+ * Issues a credential to a single student. Checks the student exists and is
+ * eligible before running the issuance pipeline. Used for one-off issuance
+ * outside of a batch run.
+ *
+ * @param studentId - The student to issue to.
+ * @param now - Current time, defaults to `new Date()`.
+ * @param actorId - Who triggered the issuance, if anyone.
+ * @returns A `BatchIssuanceResult` scoped to the single student.
+ * @throws {StudentIssuanceError} If the student is not found (404) or not eligible (409).
+ */
 export async function queueRealStudentIssuance(
   studentId: string,
   now = new Date(),

@@ -12,6 +12,11 @@ async function readJson(request: Request) {
   }
 }
 
+/**
+ * Resolves an activation token by calling the real agent and returning the result
+ * to the holder wallet. Adds `ledgerName`, `studentId`, and `walletId` to the
+ * response as compatibility fields expected by older wallet app versions.
+ */
 export async function POST(request: Request) {
   const body = await readJson(request);
   const token = typeof body?.token === "string" ? body.token.trim() : "";

@@ -1,3 +1,7 @@
+/*
+ * This file handles simulatedstudent records for the app.
+ * It creates the students table and reads students from the database.
+ */
 import type { StudentRecord } from "@/lib/api/types";
 import { getMockAdminState } from "@/lib/api/mockActivationStore";
 import db from "./database";
