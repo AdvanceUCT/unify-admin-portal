@@ -20,12 +20,13 @@ import {
   overlayCredentialStatusForStudent,
   reconcileCredentialEventLogs,
 } from "@/lib/credentials/status";
-import { getStudentById } from "@/lib/db/store";
+import { getAllStudents, getStudentById } from "@/lib/db/store";
 import { sendCredentialActivationEmail } from "@/lib/email/credential-activation";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfile } from "@/lib/university/profile";
 import {
   isStudentRecordEligibleForCredentialIssuance,
+  selectStudentRecordsForCredentialIssuance,
   SIMULATED_STUDENT_COHORT_ID,
   SIMULATED_STUDENT_RECORD_COUNT,
 } from "@/lib/student-records/simulatedUniversityRecords";
@@ -68,7 +69,7 @@ function attributeValue(student: StudentRecord, attributeName: string): string {
     issuedAt: new Date().toISOString(),
     lastName: student.profile.lastName,
     programme: student.credential.programme,
-    studentId: student.profile.id,
+    studentId: student.credential.studentNumber,
     studentNumber: student.credential.studentNumber,
     validFrom: student.credential.validFrom,
     year: DEFAULT_YEAR,
@@ -210,7 +211,7 @@ async function issueStudentActivationLinks(
       studentsForIssuance.map((student) =>
       assertCredentialIssuanceAllowed({
         credentialDefinitionId: activeSchema.credentialDefinitionId,
-        studentId: student.profile.id,
+        studentId: student.credential.studentNumber,
       }),
       ),
     );
@@ -234,6 +235,7 @@ async function issueStudentActivationLinks(
 
   for (const offer of agentResult.offers) {
     const student = studentsForIssuance.find((candidate) => candidate.profile.id === offer.externalId);
+    const persistedStudentId = student?.credential.studentNumber ?? offer.externalId ?? offer.activationId;
     const publicActivationUrl = toPublicWalletActivationLink(offer.activationUrl);
     const publicOffer = { ...offer, activationUrl: publicActivationUrl };
     const emailDelivery = await emailDeliveryForOffer(student, publicOffer);
@@ -245,7 +247,7 @@ async function issueStudentActivationLinks(
       email: offer.email,
       expiresAt: offer.expiresAt,
       failureReason: emailDelivery.status === "Failed" ? emailDelivery.failureReason : undefined,
-      studentId: student?.profile.id ?? offer.externalId ?? offer.activationId,
+      studentId: persistedStudentId,
       wasDelivered: emailDelivery.status === "Delivered",
     });
     await reconcileCredentialEventLogs(offer.credentialExchangeId);
@@ -259,7 +261,7 @@ async function issueStudentActivationLinks(
       deliveryStatus:
         emailDelivery.status === "Delivered" ? CredentialDeliveryStatus.DELIVERED : CredentialDeliveryStatus.FAILED,
       failureReason: emailDelivery.status === "Failed" ? emailDelivery.failureReason : undefined,
-      studentId: student?.profile.id ?? offer.externalId ?? offer.activationId,
+      studentId: persistedStudentId,
     });
 
     if (emailDelivery.status === "Failed") {
@@ -304,6 +306,21 @@ async function issueStudentActivationLinks(
   recordBatchIssuanceResult(result, now);
 
   return result;
+}
+
+export async function queueRealBatchIssuance(
+  selectionInputOrNow: BatchIssuanceSelection | Date = {},
+  requestedNow = new Date(),
+  actorId?: string | null,
+): Promise<BatchIssuanceResult> {
+  const now = selectionInputOrNow instanceof Date ? selectionInputOrNow : requestedNow;
+  const selection = selectionInputOrNow instanceof Date ? {} : parseBatchIssuanceSelection(selectionInputOrNow);
+  const studentsForIssuance = selectStudentRecordsForCredentialIssuance(await getAllStudents(), {
+    ...selection,
+    limit: selection.limit ?? mockBatchIssuancePreview.requestedCount,
+  });
+
+  return issueStudentActivationLinks(studentsForIssuance, now, studentsForIssuance.length, selection, actorId, true);
 }
 
 export async function queueRealStudentIssuance(

@@ -67,22 +67,28 @@ export async function overlayCredentialStatuses(students: StudentRecord[]): Prom
   if (students.length === 0) {
     return students;
   }
+  const studentIds = students.flatMap((student) => [student.credential.studentNumber, student.profile.id]);
 
   const issuances = await prisma.credentialIssuance.findMany({
     orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     where: {
-      studentId: { in: students.map((student) => student.profile.id) },
+      studentId: { in: studentIds },
     },
   });
   const issuancesByStudent = latestIssuanceByStudent(issuances);
 
-  return students.map((student) => overlayCredentialStatus(student, issuancesByStudent.get(student.profile.id)));
+  return students.map((student) =>
+    overlayCredentialStatus(
+      student,
+      issuancesByStudent.get(student.credential.studentNumber) ?? issuancesByStudent.get(student.profile.id),
+    ),
+  );
 }
 
 export async function overlayCredentialStatusForStudent(student: StudentRecord): Promise<StudentRecord> {
   const issuance = await prisma.credentialIssuance.findFirst({
     orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    where: { studentId: student.profile.id },
+    where: { studentId: { in: [student.credential.studentNumber, student.profile.id] } },
   });
 
   return overlayCredentialStatus(student, issuance ?? undefined);

@@ -21,7 +21,7 @@ vi.mock("@/lib/credentials/audit", () => ({
 vi.mock("@/lib/credentials/status", () => ({
   assertCredentialIssuanceAllowed: vi.fn(async () => undefined),
   createCredentialIssuanceFromOffer: vi.fn(async (params: { studentId: string }) => ({
-    id: params.studentId === "student-demo-100" ? "credential-demo-100" : "credential-demo-001",
+    id: params.studentId === "WOOJOS100" ? "credential-demo-100" : "credential-demo-001",
   })),
   overlayCredentialStatuses: vi.fn(async (students) => students),
   overlayCredentialStatusForStudent: vi.fn(async (student) => student),
@@ -108,7 +108,7 @@ describe("real batch issuance orchestration", () => {
       expect.objectContaining({
         credentialExchangeId: "credential-exchange-001",
         deliveryStatus: "DELIVERED",
-        studentId: "student-demo-100",
+        studentId: "WOOJOS100",
       }),
     );
     expect(vi.mocked(recordCredentialOfferSentAudit).mock.calls[0][0]).not.toHaveProperty("email");
@@ -171,7 +171,7 @@ describe("real batch issuance orchestration", () => {
         credentialExchangeId: "credential-exchange-joshua",
         deliveryStatus: "FAILED",
         failureReason: "Email provider unavailable.",
-        studentId: "student-demo-100",
+        studentId: "WOOJOS100",
       }),
     );
     expect(vi.mocked(recordCredentialOfferSentAudit).mock.calls[0][0]).not.toHaveProperty("email");

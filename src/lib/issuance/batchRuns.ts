@@ -123,7 +123,7 @@ function previewItem(student: StudentRecord, status: "Eligible" | "Skipped", rea
     programme: student.credential.programme,
     reason,
     status,
-    studentId: student.profile.id,
+    studentId: student.credential.studentNumber,
   };
 }
 
@@ -170,7 +170,12 @@ function toItem(item: PersistedBatchItem, student?: StudentRecord): BatchIssuanc
 
 async function toDetail(run: PersistedBatchRun & { items: PersistedBatchItem[] }): Promise<BatchIssuanceRunDetail> {
   const students = await getAllStudents();
-  const studentsById = new Map(students.map((student) => [student.profile.id, student]));
+  const studentsById = new Map(
+    students.flatMap((student) => [
+      [student.credential.studentNumber, student] as const,
+      [student.profile.id, student] as const,
+    ]),
+  );
 
   return {
     ...toSummary(run),
@@ -279,7 +284,12 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
   }
 
   const students = await getAllStudents();
-  const studentsById = new Map(students.map((student) => [student.profile.id, student]));
+  const studentsById = new Map(
+    students.flatMap((student) => [
+      [student.credential.studentNumber, student] as const,
+      [student.profile.id, student] as const,
+    ]),
+  );
   const activeSchema = await getActiveCredentialDefinition();
   const blockedItems = new Set<string>();
 
@@ -316,7 +326,7 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
             .map((student) => ({
               attributes: attributesForStudent(student, activeSchema.schemaAttributes),
               email: student.profile.email,
-              externalId: student.profile.id,
+              externalId: student.credential.studentNumber,
             })),
         });
   const offerByStudentId = new Map(agentResult.offers.map((offer) => [offer.externalId, offer]));
