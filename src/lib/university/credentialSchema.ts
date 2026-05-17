@@ -35,19 +35,3 @@ export async function createCredentialSchema(
   });
 }
 
-/**
- * Updates an existing credential schema.
- *
- * @param id - The ID of the credential schema to update.
- * @param data - The data to update.
- * @returns The updated credential schema.
- */
-export async function updateCredentialSchema(
-  id: string,
-  data: Prisma.CredentialSchemaUncheckedUpdateInput,
-) {
-  return prisma.credentialSchema.update({
-    where: { id },
-    data,
-  });
-}

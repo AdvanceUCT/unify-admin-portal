@@ -229,13 +229,6 @@ export async function recordCredentialStateChangedEvent(payload: CredentialState
   return { duplicate: false, status: mappedStatus };
 }
 
-export async function getLatestCredentialIssuanceForStudent(studentId: string) {
-  return prisma.credentialIssuance.findFirst({
-    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    where: { studentId },
-  });
-}
-
 export async function getCredentialDeliveryByIssuanceId(issuanceId: string) {
   const issuance = await prisma.credentialIssuance.findUnique({ where: { id: issuanceId } });
   if (!issuance?.activationUrl) {

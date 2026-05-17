@@ -75,16 +75,6 @@ export async function recordCredentialOfferSentAudit({
   });
 }
 
-export async function getCredentialOfferSentAuditLogs(limit = 100): Promise<CredentialAuditLogEntry[]> {
-  const logs = await prisma.credentialAuditLog.findMany({
-    orderBy: { occurredAt: "desc" },
-    take: limit,
-    where: { action: CredentialAuditAction.OFFER_SENT },
-  });
-
-  return logs.map(publicCredentialAuditLog);
-}
-
 export async function getPaginatedCredentialOfferSentAuditLogs({
   page,
   pageSize,

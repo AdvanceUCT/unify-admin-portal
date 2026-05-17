@@ -6,20 +6,14 @@ import {
 import {
   createMockBatchRun,
   getMockAdminState,
-  getMockBatchRunDetail,
-  listMockBatchRuns,
   previewMockBatchIssuance,
-  queueMockBatchIssuance,
   retryMockBatchRun,
 } from "@/lib/api/mockActivationStore";
 import type {
   AdminState,
   BatchIssuancePreviewResult,
-  BatchIssuanceResult,
   BatchIssuanceRunDetail,
-  BatchIssuanceRunSummary,
   BatchIssuanceSelection,
-  CredentialActivityEvent,
   StudentRecord,
 } from "@/lib/api/types";
 
@@ -75,11 +69,6 @@ export async function getAdminState() {
   return getMockAdminState();
 }
 
-export async function getDashboardSummary() {
-  const state = await getAdminState();
-  return state.dashboardSummary;
-}
-
 export async function getStudents(params?: { q?: string }) {
   const qs = params?.q ? `?${new URLSearchParams({ query: params.q }).toString()}` : "";
   return apiFetch<StudentRecord[]>(`/api/admin/students${qs}`);
@@ -93,19 +82,9 @@ export async function getStudentById(studentId: string) {
   }
 }
 
-export async function getCredentials() {
-  const state = await getAdminState();
-  return state.credentials;
-}
-
 export async function getActivationDeliveries() {
   const state = await getAdminState();
   return state.activationDeliveries;
-}
-
-export async function getActivationDeliveryByCredentialId(credentialId: string) {
-  const deliveries = await getActivationDeliveries();
-  return deliveries.find((delivery) => delivery.credentialId === credentialId);
 }
 
 export async function getVendors() {
@@ -123,32 +102,9 @@ export async function getAuditEvents() {
   return state.auditEvents;
 }
 
-export async function getRecentAuditEvents() {
-  const events = await getAuditEvents();
-  return events.slice(0, 5);
-}
-
-export async function getRecentCredentialEvents(): Promise<CredentialActivityEvent[]> {
-  const state = await getAdminState();
-  return state.credentialEvents ?? [];
-}
-
 export async function getBatchIssuancePreview() {
   await wait();
   return mockBatchIssuancePreview;
-}
-
-export async function queueBatchIssuance(selection: BatchIssuanceSelection = {}) {
-  await wait();
-
-  if (shouldUseMockApi()) {
-    return fetchJson<BatchIssuanceResult>("/api/credentials/issuance/batch/issue", {
-      body: JSON.stringify(selection),
-      method: "POST",
-    });
-  }
-
-  return queueMockBatchIssuance(selection);
 }
 
 export async function previewBatchIssuance(selection: BatchIssuanceSelection = {}) {
@@ -175,24 +131,6 @@ export async function createBatchRun(selection: BatchIssuanceSelection = {}) {
   }
 
   return createMockBatchRun(selection);
-}
-
-export async function getBatchRuns() {
-  await wait();
-
-  if (shouldUseMockApi()) {
-    return fetchJson<BatchIssuanceRunSummary[]>("/api/credentials/issuance/batch/runs");
-  }
-
-  return listMockBatchRuns();
-}
-
-export async function getBatchRunById(batchId: string) {
-  if (typeof window !== "undefined" && process.env.NODE_ENV !== "test") {
-    return fetchJson<BatchIssuanceRunDetail>(`/api/credentials/issuance/batch/runs/${encodeURIComponent(batchId)}`);
-  }
-
-  return getMockBatchRunDetail(batchId);
 }
 
 export async function retryFailedBatchRun(batchId: string) {

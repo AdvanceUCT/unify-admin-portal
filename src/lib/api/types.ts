@@ -1,5 +1,3 @@
-export type Money = string;
-
 export type StudentProfile = {
   email: string;
   id: string;
@@ -120,28 +118,6 @@ export type BatchIssuanceRunDetail = BatchIssuanceRunSummary & {
   items: BatchIssuanceRunItem[];
 };
 
-export type PaymentRecord = {
-  id: string;
-  amount: Money;
-  status: "Approved" | "Pending" | "Declined";
-  vendor: string;
-};
-
-export type QrPayload =
-  | {
-      type: "payment";
-      vendorId: string;
-      servicePointId: string;
-      amount: Money;
-      nonce: string;
-    }
-  | {
-      type: "verification";
-      vendorId: string;
-      servicePointId: string;
-      nonce: string;
-    };
-
 export type AuditEvent = {
   id: string;
   eventType:
@@ -162,14 +138,6 @@ export type AuditEvent = {
   result: "Success" | "Failure" | "Pending";
   occurredAt: string;
   reason?: string;
-};
-
-export type ApiError = {
-  error: {
-    code: string;
-    message: string;
-    requestId: string;
-  };
 };
 
 export type StudentRecord = {

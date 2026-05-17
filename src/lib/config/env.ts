@@ -72,11 +72,3 @@ const envSchema = z.object({
 });
 
 export const env = envSchema.parse(process.env);
-
-export const appConfig = {
-  appName: "UNIFY Admin Portal",
-  apiBaseUrl: env.NEXT_PUBLIC_API_BASE_URL,
-  appUrl: env.APP_URL,
-  activationPublicBaseUrl: env.ACTIVATION_PUBLIC_BASE_URL ?? env.APP_URL,
-  authUrl: env.BETTER_AUTH_URL,
-};

@@ -17,17 +17,15 @@ import { recordCredentialOfferSentAudit } from "@/lib/credentials/audit";
 import {
   assertCredentialIssuanceAllowed,
   createCredentialIssuanceFromOffer,
-  overlayCredentialStatuses,
   overlayCredentialStatusForStudent,
   reconcileCredentialEventLogs,
 } from "@/lib/credentials/status";
-import { getAllStudents, getStudentById } from "@/lib/db/store";
+import { getStudentById } from "@/lib/db/store";
 import { sendCredentialActivationEmail } from "@/lib/email/credential-activation";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfile } from "@/lib/university/profile";
 import {
   isStudentRecordEligibleForCredentialIssuance,
-  selectStudentRecordsForCredentialIssuance,
   SIMULATED_STUDENT_COHORT_ID,
   SIMULATED_STUDENT_RECORD_COUNT,
 } from "@/lib/student-records/simulatedUniversityRecords";
@@ -306,26 +304,6 @@ async function issueStudentActivationLinks(
   recordBatchIssuanceResult(result, now);
 
   return result;
-}
-
-export async function queueRealBatchIssuance(
-  selectionInputOrNow?: BatchIssuanceSelection | Date,
-  requestedNow = new Date(),
-  actorId?: string | null,
-): Promise<BatchIssuanceResult> {
-  const now = selectionInputOrNow instanceof Date ? selectionInputOrNow : requestedNow;
-  const selectionInput = selectionInputOrNow instanceof Date ? undefined : selectionInputOrNow;
-  const selection = parseBatchIssuanceSelection(selectionInput);
-  const studentsForIssuance = selectStudentRecordsForCredentialIssuance(
-    await overlayCredentialStatuses(await getAllStudents()),
-    selection,
-  );
-
-  if (studentsForIssuance.length === 0) {
-    throw new StudentIssuanceError("No eligible simulated students match the selected batch filters.", 409);
-  }
-
-  return issueStudentActivationLinks(studentsForIssuance, now, studentsForIssuance.length, selection, actorId, true);
 }
 
 export async function queueRealStudentIssuance(
