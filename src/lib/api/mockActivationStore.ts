@@ -1,10 +1,8 @@
 import { buildWalletActivationLink } from "@/lib/api/activationLinks";
 import {
-  mockActivationDeliveries,
-  mockAuditEvents,
   mockBatchIssuancePreview,
-  mockDashboardSummary,
   mockStudents,
+  mockVendors,
 } from "@/lib/api/mockData";
 import { selectStudentRecordsForCredentialIssuance } from "@/lib/student-records/simulatedUniversityRecords";
 import type {
@@ -20,10 +18,6 @@ import type {
   BatchIssuanceSelection,
   DashboardSummary,
   StudentRecord,
-  WalletActivationCompleteRequest,
-  WalletActivationCompleteResponse,
-  WalletActivationResolveRequest,
-  WalletActivationResolveResponse,
 } from "@/lib/api/types";
 import { formatCredentialStatus } from "@/lib/formatters";
 
@@ -33,14 +27,6 @@ type MockActivationState = {
   batchRuns: BatchIssuanceRunDetail[];
   students: StudentRecord[];
 };
-
-type MockResult<T> =
-  | { data: T; ok: true }
-  | { code: string; error: string; ok: false; status: number };
-
-const DEMO_WALLET_ID_PREFIX = "wallet-demo";
-const ISSUER_LABEL = "UNIFY Issuer Service";
-const LEDGER_NAME = "BCovrin Test" as const;
 
 declare global {
   var __unifyAdminMockActivationState: MockActivationState | undefined;
@@ -52,13 +38,18 @@ function clone<T>(value: T): T {
 
 function createInitialState(): MockActivationState {
   return {
-    activationDeliveries: clone(mockActivationDeliveries),
-    auditEvents: clone(mockAuditEvents),
+    activationDeliveries: [],
+    auditEvents: [],
     batchRuns: [],
     students: clone(mockStudents),
   };
 }
 
+/**
+ * Returns the shared mock state, initialising it on first access.
+ * Stored on `globalThis` so it survives Next.js hot reloads and module
+ * re-imports without resetting between requests.
+ */
 function mutableState() {
   globalThis.__unifyAdminMockActivationState ??= createInitialState();
   return globalThis.__unifyAdminMockActivationState;
@@ -70,57 +61,6 @@ function suffixFor(value: string) {
 
 function activationIdForToken(token: string) {
   return `activation-${suffixFor(token)}`;
-}
-
-function invitationIdForToken(token: string) {
-  return `unify-oob-${suffixFor(token)}`;
-}
-
-function base64UrlEncode(value: string) {
-  const utf8Value = encodeURIComponent(value).replace(/%([0-9A-F]{2})/g, (_match, hex) =>
-    String.fromCharCode(Number.parseInt(hex, 16)),
-  );
-
-  return btoa(utf8Value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-function mockInvitationUrl(invitationId: string) {
-  const invitation = {
-    "@id": invitationId,
-    "@type": "https://didcomm.org/out-of-band/1.1/invitation",
-    handshake_protocols: ["https://didcomm.org/didexchange/1.0"],
-    label: ISSUER_LABEL,
-    services: [
-      {
-        id: "#inline",
-        recipientKeys: ["did:key:z6MkiTBzj1u3bdF7S7Q4TzqzH4Rb9SLGZwk9N4qe68q8nW1N"],
-        routingKeys: [],
-        serviceEndpoint: "https://issuer.advanceuct.test/didcomm",
-        type: "did-communication",
-      },
-    ],
-  };
-
-  return `https://issuer.advanceuct.test/oob?oob=${base64UrlEncode(JSON.stringify(invitation))}`;
-}
-
-function tokenForDelivery(delivery: ActivationDelivery) {
-  try {
-    return new URL(delivery.activationUrl).searchParams.get("token") ?? "";
-  } catch {
-    return "";
-  }
-}
-
-function activationDeliveryForToken(state: MockActivationState, token: string) {
-  return state.activationDeliveries.find((delivery) => tokenForDelivery(delivery) === token);
-}
-
-function activationDeliveryForActivationId(state: MockActivationState, activationId: string) {
-  return state.activationDeliveries.find((delivery) => {
-    const token = tokenForDelivery(delivery);
-    return delivery.activationId === activationId || (token ? activationIdForToken(token) === activationId : false);
-  });
 }
 
 function dashboardSummary(state: MockActivationState): DashboardSummary {
@@ -136,10 +76,14 @@ function dashboardSummary(state: MockActivationState): DashboardSummary {
     failedCredentials,
     issuedCredentials,
     pendingIssuance,
-    vendorsPendingApproval: mockDashboardSummary.vendorsPendingApproval,
+    vendorsPendingApproval: mockVendors.filter((vendor) => vendor.status === "Pending").length,
   };
 }
 
+/**
+ * Adds an audit event to the mock state, skipping it if an identical entry
+ * (same type, target, and timestamp) already exists.
+ */
 function appendAuditEvent(state: MockActivationState, event: Omit<AuditEvent, "id">) {
   const duplicate = state.auditEvents.some(
     (candidate) =>
@@ -254,6 +198,16 @@ export function resetMockActivationStore() {
   return getMockAdminState();
 }
 
+/**
+ * Simulates a batch credential issuance against the mock state.
+ * For each eligible student, creates an activation delivery and upserts it
+ * (replaces any existing delivery for the same credential). Also updates the
+ * student's lifecycle state to `OFFER_SENT` and appends an audit event.
+ *
+ * @param selectionInputOrNow - Filter criteria or a `Date` to override the current time.
+ * @param requestedNow - Current time, used when the first arg is a selection object.
+ * @returns A `BatchIssuanceResult` with the created deliveries.
+ */
 export function queueMockBatchIssuance(
   selectionInputOrNow: BatchIssuanceSelection | Date = {},
   requestedNow = new Date(),
@@ -339,6 +293,15 @@ export function previewMockBatchIssuance(selectionInput: BatchIssuanceSelection 
   };
 }
 
+/**
+ * Creates a completed mock batch run by combining a preview with a queued issuance.
+ * Students not included in the delivery (skipped or failed) are added as skipped items.
+ * The run is prepended to the mock state's batch run list.
+ *
+ * @param selectionInput - Optional filters to scope which students are included.
+ * @param now - Current time used for timestamps, defaults to `new Date()`.
+ * @returns The completed `BatchIssuanceRunDetail`.
+ */
 export function createMockBatchRun(selectionInput: BatchIssuanceSelection = {}, now = new Date()): BatchIssuanceRunDetail {
   const state = mutableState();
   const selection = normalizeMockSelection(selectionInput);
@@ -421,6 +384,12 @@ export function retryMockBatchRun(batchId: string): BatchIssuanceRunDetail {
   return createMockBatchRun(existing.filters);
 }
 
+/**
+ * Writes a real batch issuance result into the mock state.
+ * Upserts each delivery and updates the student's lifecycle state to `OFFER_SENT`
+ * for successful deliveries. Used to keep the mock store in sync when real
+ * issuance runs are triggered in dev/demo mode.
+ */
 export function recordBatchIssuanceResult(result: BatchIssuanceResult, now = new Date()) {
   const state = mutableState();
   const recordedAt = now.toISOString();
@@ -455,133 +424,4 @@ export function recordBatchIssuanceResult(result: BatchIssuanceResult, now = new
   }
 
   return getMockAdminState();
-}
-
-export function resolveMockWalletActivation(
-  request: WalletActivationResolveRequest,
-  now = new Date(),
-): MockResult<WalletActivationResolveResponse> {
-  const token = request.token?.trim();
-
-  if (!token) {
-    return {
-      code: "ActivationTokenRequired",
-      error: "Activation token is required.",
-      ok: false,
-      status: 400,
-    };
-  }
-
-  const state = mutableState();
-  const delivery = activationDeliveryForToken(state, token);
-
-  if (!delivery) {
-    return {
-      code: "ActivationTokenNotFound",
-      error: "Activation token was not found.",
-      ok: false,
-      status: 404,
-    };
-  }
-
-  if (new Date(delivery.expiresAt).getTime() <= now.getTime()) {
-    return {
-      code: "ActivationTokenExpired",
-      error: "Activation token has expired.",
-      ok: false,
-      status: 410,
-    };
-  }
-
-  if (delivery.status !== "Delivered") {
-    return {
-      code: "ActivationDeliveryNotReady",
-      error: "Activation delivery is not ready for wallet activation.",
-      ok: false,
-      status: 409,
-    };
-  }
-
-  const activationId = delivery.activationId ?? activationIdForToken(token);
-  const invitationId = invitationIdForToken(token);
-  delivery.activationId = activationId;
-
-  return {
-    data: {
-      activationId,
-      activationSource: "token",
-      createdAt: delivery.deliveredAt ?? now.toISOString(),
-      expiresAt: delivery.expiresAt,
-      invitationId,
-      invitationUrl: mockInvitationUrl(invitationId),
-      issuerLabel: ISSUER_LABEL,
-      ledgerName: LEDGER_NAME,
-      studentId: delivery.studentId,
-      walletId: `${DEMO_WALLET_ID_PREFIX}-${suffixFor(delivery.studentId)}`,
-    },
-    ok: true,
-  };
-}
-
-export function completeMockWalletActivation(
-  request: WalletActivationCompleteRequest,
-  now = new Date(),
-): MockResult<WalletActivationCompleteResponse> {
-  const activationId = request.activationId?.trim();
-  const holderConnectionId = request.holderConnectionId?.trim();
-  const credentialRecordId = request.credentialRecordId?.trim();
-
-  if (!activationId || !holderConnectionId || !credentialRecordId) {
-    return {
-      code: "ActivationCompletionRequired",
-      error: "Activation id, holder connection id, and credential record id are required.",
-      ok: false,
-      status: 400,
-    };
-  }
-
-  const state = mutableState();
-  const delivery = activationDeliveryForActivationId(state, activationId);
-
-  if (!delivery) {
-    return {
-      code: "ActivationNotFound",
-      error: "Activation was not found.",
-      ok: false,
-      status: 404,
-    };
-  }
-
-  const activatedAt = now.toISOString();
-  const student = state.students.find((candidate) => candidate.profile.id === delivery.studentId);
-
-  if (student) {
-    student.credential.lifecycleState = "ISSUED";
-  }
-
-  delivery.activatedAt = activatedAt;
-  delivery.activationId = activationId;
-  delivery.credentialRecordId = credentialRecordId;
-  delivery.holderConnectionId = holderConnectionId;
-
-  appendAuditEvent(state, {
-    actorId: "wallet-demo-001",
-    eventType: "CredentialActivated",
-    occurredAt: activatedAt,
-    reason: "Student wallet completed simulated holder activation",
-    result: "Success",
-    targetId: delivery.credentialId,
-  });
-
-  return {
-    data: {
-      activatedAt,
-      activationId,
-      credentialId: delivery.credentialId,
-      credentialRecordId,
-      holderConnectionId,
-      studentId: delivery.studentId,
-    },
-    ok: true,
-  };
 }

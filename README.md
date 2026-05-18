@@ -1,225 +1,220 @@
 # UNIFY Admin Portal
 
-Admin and governance portal for UNIFY. This repo is planned as the Next.js web application used by administrators and issuer operators to manage Verifiable Credential lifecycle workflows.
+> A governance and administration portal for managing the full lifecycle of Verifiable Credentials issued to university students.
 
-Future Codex instances should read this file first, then:
+---
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- [docs/DECISIONS.md](docs/DECISIONS.md)
-- [docs/API_CONTRACTS.md](docs/API_CONTRACTS.md)
-- [docs/WORKFLOW.md](docs/WORKFLOW.md)
+## 1. Overview
 
-## Current Status
+The UNIFY Admin Portal is the administrative web interface for the UNIFY digital identity system. Built with Next.js, it gives university administrators, issuer operators, and auditors a central place to manage the full lifecycle of Verifiable Credentials from initial issuance through to revocation and audit. The portal is scoped as a proof of concept, demonstrating end-to-end credential governance workflows against a simulated university records system.
 
-- Stack: Next.js 16, TypeScript, Tailwind CSS, Better Auth, Prisma, PostgreSQL/Supabase.
-- Current implementation: runnable admin portal with invite-only authentication, RBAC, user management, password reset, and audit logging.
-- Current app data: portal auth data is stored in PostgreSQL; domain student records come from a deterministic simulated university records connector, with optional Turso/libSQL persistence as a mock records mirror.
-- Current email delivery: admin invites and password resets use development console logging. A real email provider is still required for production.
-- GitHub Actions: present and expected to handle the repo before an app package exists.
-- System scope: proof of concept using simulated student records, simulated service providers, and simulated wallet/payment flows.
-- Target identity stack from `BA Innovation.docx`: W3C Verifiable Credentials, AnonCreds, Credo, DIDComm, Hyperledger Indy/BCovrin, Indy VDR, and Aries Askar.
+### What it does (as of Iteration 1)
 
-This repo owns:
+| Domain | Capabilities |
+|---|---|
+| **Credential Issuance** | Issue credentials to individual students or entire cohorts via batch workflows; track offer delivery and activation status |
+| **Student Management** | Look up students from a simulated university records connector; inspect per-student credential history |
+| **Audit & Governance** | Full immutable audit log of all administrative actions and credential lifecycle events |
+| **User & Access Management** | Invite-only admin accounts with role-based access control (RBAC); super-admin session management |
 
-- Credential lifecycle administration
-- Issuer operations
-- Batch issuance for simulated student cohorts
-- Student credential suspension, revocation, and renewal support
-- Validity and eligibility rule configuration
-- Vendor/service-provider onboarding and approval
-- Admin-facing reporting and governance workflows
-- Repo and DevOps conventions for the admin surface
+---
 
-## Working Agreement
+## 2. Tech Stack
 
-- Work enters through issues and pull requests.
-- `main` is protected and should only change through reviewed PRs.
-- Use draft PRs early when work is still in progress.
-- Link every PR to an issue before it is merged.
-- Security-sensitive changes need two approving reviews before merge.
+| Layer | Technology |
+|---|---|
+| **Framework** | [![Next.js](https://img.shields.io/badge/Next.js_16-black?style=flat-square&logo=next.js&logoColor=white)](https://nextjs.org/) [![React](https://img.shields.io/badge/React_19-20232A?style=flat-square&logo=react&logoColor=61DAFB)](https://react.dev/) |
+| **Language** | [![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) |
+| **Styling** | [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS_4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/) |
+| **Authentication** | [![Better Auth](https://img.shields.io/badge/Better_Auth-black?style=flat-square&logo=auth0&logoColor=white)](https://www.better-auth.com/) |
+| **ORM** | [![Prisma](https://img.shields.io/badge/Prisma_7-2D3748?style=flat-square&logo=prisma&logoColor=white)](https://www.prisma.io/) |
+| **Database** | [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/) [![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=flat-square&logo=supabase&logoColor=white)](https://supabase.com/) |
+| **Email** | [![Resend](https://img.shields.io/badge/Resend-black?style=flat-square&logo=resend&logoColor=white)](https://resend.com/) |
+| **Agent Integration** | [![Credo](https://img.shields.io/badge/Credo_TS-Hyperledger_Indy-informational?style=flat-square&logo=hyperledger&logoColor=white)](https://credo.js.org/) |
+| **Testing** | [![Vitest](https://img.shields.io/badge/Vitest-6D4AFF?style=flat-square&logo=vitest&logoColor=white)](https://vitest.dev/) [![Testing Library](https://img.shields.io/badge/Testing_Library-E33332?style=flat-square&logo=testinglibrary&logoColor=white)](https://testing-library.com/) |
+| **Deployment** | [![Vercel](https://img.shields.io/badge/Vercel-black?style=flat-square&logo=vercel&logoColor=white)](https://vercel.com/) |
 
-## Getting Started
+---
 
-### 1. Install Dependencies
+## 3. Project Structure
+
+```
+unify-admin-portal/
+├── prisma/
+│   ├── schema.prisma          # Database schema (auth, credentials, audit, batch issuance)
+│   ├── seed.ts                # Bootstrap seed — creates the first super-admin account
+│   └── migrations/            # Prisma migration history
+│
+├── src/
+│   ├── app/
+│   │   ├── (admin)/           # Protected admin routes (require authenticated session)
+│   │   │   ├── audit/         # Audit log viewer
+│   │   │   ├── credentials/   # Credential issuance workflows (batch + individual)
+│   │   │   ├── rules/         # Eligibility and validity rule configuration
+│   │   │   ├── students/      # Student lookup and credential detail views
+│   │   │   ├── users/         # Admin user management and invite management
+│   │   │   └── vendors/       # Vendor / service-provider management
+│   │   ├── (auth)/
+│   │   │   └── setup/         # First-run setup wizard (DID, schema, issuance config)
+│   │   ├── (public)/          # Unauthenticated routes
+│   │   │   ├── activate/      # Student-facing credential activation page
+│   │   │   ├── accept-invite/ # Admin invite acceptance flow
+│   │   │   ├── forgot-password/
+│   │   │   ├── reset-password/
+│   │   │   └── sign-in/
+│   │   ├── api/
+│   │   │   ├── admin/         # Server-side admin data endpoints
+│   │   │   ├── credentials/   # Issuance trigger and batch run endpoints
+│   │   │   ├── mock/          # Local mock endpoints (wallet, activation, admin state)
+│   │   │   ├── students/      # Per-student credential issue endpoint
+│   │   │   └── webhooks/agent # Signed webhook receiver for agent credential events
+│   │   └── .well-known/       # Android App Links asset manifest
+│   │
+│   ├── components/
+│   │   ├── layout/            # PortalShell, SectionHeader, SignOutButton
+│   │   └── ui/                # Shared primitives (Badge, Metric, etc.)
+│   │
+│   ├── features/
+│   │   ├── credentials/       # Credential table, batch run detail, issue view
+│   │   ├── students/          # Student search, credential actions UI
+│   │   ├── vendors/           # Vendor onboarding UI (placeholder)
+│   │   ├── rules/             # Rules configuration UI (placeholder)
+│   │   ├── audit/             # Audit table component
+│   │   └── setup/             # Setup wizard steps (Profile, DID, Issuance)
+│   │
+│   ├── lib/
+│   │   ├── api/               # Typed API client, mock data, activation link helpers
+│   │   ├── audit/             # Audit logging helpers
+│   │   ├── auth/              # Better Auth config, sessions, roles, RBAC, invites
+│   │   ├── credentials/       # Credential status mapping and audit helpers
+│   │   ├── db/                # Prisma client singleton and database utilities
+│   │   ├── email/             # Email templates (admin invite, password reset, credentials)
+│   │   ├── issuance/          # Batch run orchestration logic
+│   │   ├── student-records/   # Simulated university records connector
+│   │   └── university/        # Credential schema definitions
+│   │
+│   ├── generated/prisma/      # Auto-generated Prisma client (do not edit)
+│   └── test/                  # Vitest test suite
+│
+├── .env.example               # Environment variable reference
+├── next.config.ts             # Next.js config (redirects, headers)
+├── package.json
+└── tsconfig.json
+```
+
+### Role-Based Access Control
+
+The portal enforces four roles across all routes and API actions:
+
+| Role | Access |
+|---|---|
+| `SUPER_ADMIN` | Full access — user management, all credential and governance functions |
+| `ADMIN` | Credential issuance, students, vendors, rules, audit |
+| `ISSUER` | Credential issuance and student lookup only |
+| `VIEWER` | Read-only access to credentials, students, vendors, rules, and audit |
+
+Public sign-up is disabled. All admin accounts are created via an invite link generated by a `SUPER_ADMIN`.
+
+---
+
+## 4. Setup
+
+### Prerequisites
+
+- Node.js 20+
+- A PostgreSQL database (Supabase recommended — provides both a pooled and a direct connection URL)
+- npm
+
+### Step 1 — Install Dependencies
 
 ```bash
 npm install
 ```
 
-### 2. Configure Local Environment
+### Step 2 — Configure Environment Variables
 
-Create `.env.local` from the example and fill in the shared development database and auth values:
+Copy the example env file and fill in your values:
 
 ```bash
 cp .env.example .env.local
 ```
 
-Use `.env.local` for local development. It is ignored by git.
+`.env.local` is ignored by git and is the correct file for local development.
 
-Important values:
+Key variables to configure:
 
-- `DATABASE_URL`: pooled runtime PostgreSQL/Supabase connection string.
-- `DIRECT_URL`: direct PostgreSQL/Supabase connection string for Prisma migrations.
-- `BETTER_AUTH_SECRET`: shared development auth secret, at least 32 characters.
-- `APP_URL` and `BETTER_AUTH_URL`: use `http://localhost:3000` locally.
-- `BOOTSTRAP_ADMIN_*`: only needed when bootstrapping the first shared development admin.
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | Pooled PostgreSQL connection string (used at runtime) |
+| `DIRECT_URL` | Direct PostgreSQL connection string (used by Prisma for migrations) |
+| `BETTER_AUTH_SECRET` | Session signing secret — generate with `openssl rand -base64 32` |
+| `APP_URL` | Public base URL of the portal — `http://localhost:3000` locally |
+| `BETTER_AUTH_URL` | Same as `APP_URL` |
+| `BOOTSTRAP_ADMIN_EMAIL` | Email for the first super-admin account created by the seed |
+| `BOOTSTRAP_ADMIN_NAME` | Display name for the first super-admin |
+| `BOOTSTRAP_ADMIN_PASSWORD` | Temporary password for the first super-admin |
+| `AGENT_SERVICE_URL` | URL of the Credo Identity Agent Service (optional for basic portal use) |
+| `AGENT_API_KEY` | API key for the agent service |
+| `WEBHOOK_SIGNING_SECRET` | Shared HMAC secret between the portal and the agent (must match both sides) |
+| `RESEND_API_KEY` | Resend API key for production email delivery |
+| `CREDENTIAL_EMAIL_DELIVERY_MODE` | `"resend"` for real emails, `"log"` to print to console |
 
-For the Vercel production deployment, set `APP_URL`, `BETTER_AUTH_URL`, and
-`ACTIVATION_PUBLIC_BASE_URL` to `https://voskuils.com`.
+### Step 3 — Apply Database Migrations
 
-### 3. Prepare The Database
-
-If migrations have not already been applied to the shared development database, run:
+Run Prisma migrations to create all required tables:
 
 ```bash
 npx prisma migrate dev
 ```
 
-If the shared development database does not already have a super admin, seed one:
+### Step 4 — Seed the Database
+
+Create the initial super-admin account defined in your environment variables:
 
 ```bash
 npx prisma db seed
 ```
 
-For the current shared development DB, check with the team before running migrations or seed commands.
+This produces a `SUPER_ADMIN` account using the `BOOTSTRAP_ADMIN_*` values from `.env.local`.
 
-### 4. Start The App
+Default development credentials (after seeding with the example values):
+
+```
+Email:    superadmin@example.com
+Password: SuperAdmin123!
+```
+
+> Change the password immediately after first login in any shared or production environment.
+
+### Step 5 — Start the Development Server
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000) and sign in.
 
-In development, invite and password reset links are logged to the dev server console.
+In development, admin invite links and password reset links are printed to the server console instead of being emailed.
 
-## Vercel Deployment
+### First-Run Setup Wizard
 
-Vercel should auto-detect this project as a Next.js app.
+On first login, the portal will redirect to `/setup` — a guided wizard that walks through:
 
-Use these project settings:
+1. **University Profile** — institution name, abbreviation, and contact email.
+2. **DID Configuration** — registering an issuer DID on the Hyperledger Indy ledger via the agent service.
+3. **Issuance Setup** — creating and anchoring a credential schema and credential definition.
 
-- Install command: `npm ci`
-- Build command: `npm run build`
-- Production domain: `voskuils.com`
-- Additional domain: `www.voskuils.com`
-
-The app redirects `www.voskuils.com` to the canonical apex domain,
-`https://voskuils.com`, through `next.config.ts`.
-
-Set these Vercel production environment variables before deploying:
-
-```env
-DATABASE_URL="postgresql://...pooler.supabase.com:6543/postgres?pgbouncer=true"
-DIRECT_URL="postgresql://...db....supabase.co:5432/postgres"
-BETTER_AUTH_SECRET="generated-strong-secret-at-least-32-chars"
-BETTER_AUTH_URL="https://voskuils.com"
-APP_URL="https://voskuils.com"
-ACTIVATION_PUBLIC_BASE_URL="https://voskuils.com"
-ANDROID_APP_LINK_SHA256_CERT_FINGERPRINTS="production-fingerprint(s)"
-BOOTSTRAP_ADMIN_EMAIL="admin@voskuils.com"
-BOOTSTRAP_ADMIN_NAME="Initial Super Admin"
-BOOTSTRAP_ADMIN_PASSWORD="strong-temporary-bootstrap-password"
-ADMIN_INVITE_TTL_HOURS="24"
-AUTH_EMAIL_FROM="UNIFY Admin <admin@voskuils.com>"
-CREDENTIAL_EMAIL_FROM="UNIFY Credentials <admin@voskuils.com>"
-CREDENTIAL_EMAIL_DELIVERY_MODE="resend"
-RESEND_API_KEY="re_..."
-NEXT_PUBLIC_API_BASE_URL="mock://unify-admin"
-SETUP_BYPASS="false"
-```
-
-Optional service integration variables:
-
-```env
-AGENT_SERVICE_URL="https://..."
-AGENT_API_KEY="..."
-WEBHOOK_SIGNING_SECRET="same-secret-configured-in-the-agent-service"
-```
-
-For local webhook testing, configure the Identity Agent Service with:
-
-```env
-# If the agent is running in Docker and the portal is running on the host:
-WEBHOOK_URL="http://host.docker.internal:3000/api/webhooks/agent"
-WEBHOOK_SIGNING_SECRET="same-secret-configured-in-the-admin-portal"
-```
-
-If the agent is not running in Docker and is started directly on the host,
-`http://localhost:3000/api/webhooks/agent` is also valid.
-
-The agent already emits `credential.stateChanged` events when Credo credential
-exchange records move through `offer-sent`, `request-received`,
-`credential-issued`, and `done`. The admin portal webhook endpoint accepts that
-existing event type and maps `done` to `ISSUED`.
-
-Before testing production email, verify `voskuils.com` in Resend and make sure
-`admin@voskuils.com` is allowed as a sender. In production, admin invites,
-password resets, and credential activation emails use Resend.
-
-After deployment, smoke test:
-
-- `https://voskuils.com/sign-in` loads.
-- `https://www.voskuils.com` redirects to `https://voskuils.com`.
-- Admin invite and password reset emails arrive through Resend.
-- Reset links point to `https://voskuils.com/reset-password`.
-- Credential activation links point to `https://voskuils.com/activate`.
+The setup wizard can be bypassed in development by setting `SETUP_BYPASS="true"` in `.env.local` (only use this if the database is already configured).
 
 ### Useful Commands
 
 ```bash
-npm run lint
-npm run typecheck
-npm test
-npm run build
+npm run dev          # Start the development server
+npm run build        # Production build
+npm run lint         # Run ESLint
+npm run typecheck    # TypeScript type check (no emit)
+npm test             # Run the Vitest test suite
+npx prisma studio    # Open Prisma Studio to browse the database
 ```
 
-## Auth And Admin Access
-
-The portal uses Better Auth with Prisma-backed persistence. Public sign-up is disabled; admin users are created by invite or by the development bootstrap seed.
-
-- `/sign-in`: admin sign-in.
-- `/users`: manage admin users.
-- `/users/invites`: create and revoke admin invites.
-- `/forgot-password`: request a password reset.
-
-### Super Admin Account
-
-```
-Email: superadmin@example.com
-Password: SuperAdmin123!
-```
-
-## App Structure
-
-Current structure:
-
-- `src/app/` for Next.js App Router routes.
-- `src/components/` for shared admin UI primitives.
-- `src/features/credentials/` for credential lifecycle workflows.
-- `src/features/students/` for student lookup and detail views.
-- `src/features/vendors/` for service-provider onboarding and approval.
-- `src/features/rules/` for validity and eligibility rules.
-- `src/features/audit/` for governance and audit views.
-- `src/lib/api/` for typed API clients.
-- `src/lib/auth/` for Better Auth configuration, sessions, roles, permissions, and invite logic.
-- `src/lib/audit/` for audit logging helpers.
-- `src/lib/db/` for Prisma client setup.
-- `prisma/` for database schema, migrations, and seed script.
-
-## Scope Alignment
-
-This repo should stay aligned with the BA system document:
-
-- Build for a controlled proof-of-concept, not production rollout.
-- Use the simulated university student records connector until a later integration decision exists.
-- Manage issuance, renewal, suspension, reinstatement, revocation, vendor onboarding, rules, monitoring, and audit workflows.
-- Do not connect to live university systems or real payment infrastructure in this project scope.
-- Keep PII off-chain; ledger integrations should store only public trust artefacts.
-
-## Documentation
-
-- [Architecture](docs/ARCHITECTURE.md): systems, repo boundaries, and runtime flows.
-- [Decisions](docs/DECISIONS.md): important project decisions and why they were made.
-- [API Contracts](docs/API_CONTRACTS.md): draft contracts between wallet, admin, vendor, and future backend services.
-- [Workflow](docs/WORKFLOW.md): GitHub Issues, PRs, checks, releases, and deployment conventions.
+---

@@ -5,6 +5,10 @@
 import "server-only";
 import { env } from "@/lib/config/env";
 
+/**
+ * Custom error for failed Identity Agent Service requests.
+ * Includes the HTTP status code and any structured error details from the response body.
+ */
 export class AgentServiceError extends Error {
   status: number;
   details?: unknown;
@@ -17,6 +21,14 @@ export class AgentServiceError extends Error {
   }
 }
 
+/**
+ * Pulls the most specific error details out of a failed agent response body.
+ * Checks `body.details` then `body.error.details`, falling back to the raw body
+ * if neither exists.
+ *
+ * @param errorBody - The parsed JSON body of a failed agent response.
+ * @returns The details payload, or the raw body if no details field is found.
+ */
 function extractErrorDetails(errorBody: unknown) {
   if (!errorBody || typeof errorBody !== "object") {
     return errorBody;
@@ -38,6 +50,16 @@ function extractErrorDetails(errorBody: unknown) {
   return errorBody;
 }
 
+/**
+ * Internal fetch wrapper for the Identity Agent Service. Prepends the base URL,
+ * injects auth headers, and throws an `AgentServiceError` for any non-2xx response.
+ *
+ * @param path - The API path to request, e.g. `/api/status`.
+ * @param options - Standard `fetch` options merged with the auth headers.
+ * @returns The raw `Response` for successful requests.
+ * @throws {Error} If `AGENT_SERVICE_URL` or `AGENT_API_KEY` are not set.
+ * @throws {AgentServiceError} If the agent returns a non-2xx status.
+ */
 async function agentFetch(
   path: string,
   options: RequestInit = {},
@@ -104,6 +126,17 @@ export async function createIssuerDid(alias: string): Promise<{ did: string }> {
   return response.json();
 }
 
+/**
+ * Sets up a schema, credential definition, and optional revocation registry in one call.
+ * Usually called once during tenant onboarding before any credentials can be issued.
+ *
+ * @param payload.issuerDid - The DID to use as the credential issuer.
+ * @param payload.schema - Name, version, and attributes for the schema.
+ * @param payload.credentialDefinition - Tag and revocation support flag.
+ * @param payload.revocation - Optional tag and max credential count for the revocation registry.
+ * @returns The resolved IDs for the schema, credential definition, and revocation registry.
+ * @throws {AgentServiceError} If the agent rejects the setup request.
+ */
 export async function issuanceSetup(payload: {
   issuerDid: string;
   schema: {
@@ -131,6 +164,16 @@ export async function issuanceSetup(payload: {
   return response.json();
 }
 
+/**
+ * Creates activation links for a batch of students in one request. The agent
+ * returns both successful offers and per-student failures, so one failure doesn't
+ * block the rest.
+ *
+ * @param payload.credentialDefinitionId - The credential definition to issue against.
+ * @param payload.students - Attribute sets for each student, with optional email and external ID.
+ * @returns Successful offers and any per-student failures.
+ * @throws {AgentServiceError} If the agent rejects the entire batch request.
+ */
 export async function createBatchActivationLinks(payload: {
   credentialDefinitionId: string;
   students: Array<{
@@ -156,6 +199,15 @@ export async function createBatchActivationLinks(payload: {
   return response.json();
 }
 
+/**
+ * Exchanges an activation token for the full activation record, including the
+ * invitation URL the holder wallet needs to open to receive the credential offer.
+ *
+ * @param payload.token - The activation token to resolve.
+ * @param payload.sourceUrl - The original URL the token came from, used for audit tracking.
+ * @returns The resolved activation record with invitation URL and expiry.
+ * @throws {AgentServiceError} If the token is invalid, expired, or already used.
+ */
 export async function resolveActivation(payload: {
   token: string;
   sourceUrl?: string;

@@ -6,29 +6,33 @@ import {
 import {
   createMockBatchRun,
   getMockAdminState,
-  getMockBatchRunDetail,
-  listMockBatchRuns,
   previewMockBatchIssuance,
-  queueMockBatchIssuance,
   retryMockBatchRun,
 } from "@/lib/api/mockActivationStore";
 import type {
   AdminState,
   BatchIssuancePreviewResult,
-  BatchIssuanceResult,
   BatchIssuanceRunDetail,
-  BatchIssuanceRunSummary,
   BatchIssuanceSelection,
-  CredentialActivityEvent,
   StudentRecord,
 } from "@/lib/api/types";
 
 const wait = (durationMs = 50) => new Promise((resolve) => setTimeout(resolve, durationMs));
 
+/**
+ * Returns true when running in the browser outside of tests.
+ * In that case API calls go to real Next.js route handlers rather than
+ * calling mock store functions directly.
+ */
 function shouldUseMockApi() {
   return typeof window !== "undefined" && process.env.NODE_ENV !== "test";
 }
 
+/**
+ * Fetch wrapper that parses the response as JSON and throws on non-2xx responses.
+ * Tries to pull the error message from `body.error.message` before falling back
+ * to a generic status message.
+ */
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     cache: "no-store",
@@ -47,6 +51,11 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+/**
+ * Fetches an internal API route from both client and server contexts.
+ * On the server it constructs an absolute URL and forwards the session cookie
+ * so authenticated routes work correctly during SSR.
+ */
 async function apiFetch<T>(path: string): Promise<T> {
   if (typeof window !== "undefined") {
     const res = await fetch(path);
@@ -75,11 +84,6 @@ export async function getAdminState() {
   return getMockAdminState();
 }
 
-export async function getDashboardSummary() {
-  const state = await getAdminState();
-  return state.dashboardSummary;
-}
-
 export async function getStudents(params?: { q?: string }) {
   const qs = params?.q ? `?${new URLSearchParams({ query: params.q }).toString()}` : "";
   return apiFetch<StudentRecord[]>(`/api/admin/students${qs}`);
@@ -93,19 +97,9 @@ export async function getStudentById(studentId: string) {
   }
 }
 
-export async function getCredentials() {
-  const state = await getAdminState();
-  return state.credentials;
-}
-
 export async function getActivationDeliveries() {
   const state = await getAdminState();
   return state.activationDeliveries;
-}
-
-export async function getActivationDeliveryByCredentialId(credentialId: string) {
-  const deliveries = await getActivationDeliveries();
-  return deliveries.find((delivery) => delivery.credentialId === credentialId);
 }
 
 export async function getVendors() {
@@ -123,32 +117,9 @@ export async function getAuditEvents() {
   return state.auditEvents;
 }
 
-export async function getRecentAuditEvents() {
-  const events = await getAuditEvents();
-  return events.slice(0, 5);
-}
-
-export async function getRecentCredentialEvents(): Promise<CredentialActivityEvent[]> {
-  const state = await getAdminState();
-  return state.credentialEvents ?? [];
-}
-
 export async function getBatchIssuancePreview() {
   await wait();
   return mockBatchIssuancePreview;
-}
-
-export async function queueBatchIssuance(selection: BatchIssuanceSelection = {}) {
-  await wait();
-
-  if (shouldUseMockApi()) {
-    return fetchJson<BatchIssuanceResult>("/api/credentials/issuance/batch/issue", {
-      body: JSON.stringify(selection),
-      method: "POST",
-    });
-  }
-
-  return queueMockBatchIssuance(selection);
 }
 
 export async function previewBatchIssuance(selection: BatchIssuanceSelection = {}) {
@@ -175,24 +146,6 @@ export async function createBatchRun(selection: BatchIssuanceSelection = {}) {
   }
 
   return createMockBatchRun(selection);
-}
-
-export async function getBatchRuns() {
-  await wait();
-
-  if (shouldUseMockApi()) {
-    return fetchJson<BatchIssuanceRunSummary[]>("/api/credentials/issuance/batch/runs");
-  }
-
-  return listMockBatchRuns();
-}
-
-export async function getBatchRunById(batchId: string) {
-  if (typeof window !== "undefined" && process.env.NODE_ENV !== "test") {
-    return fetchJson<BatchIssuanceRunDetail>(`/api/credentials/issuance/batch/runs/${encodeURIComponent(batchId)}`);
-  }
-
-  return getMockBatchRunDetail(batchId);
 }
 
 export async function retryFailedBatchRun(batchId: string) {

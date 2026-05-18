@@ -1,3 +1,8 @@
+/**
+ * Shared CORS helpers for mock wallet API routes.
+ * Wildcard origin is intentional — these routes are only used in dev/demo
+ * and need to be reachable from the mobile wallet app on any origin.
+ */
 import { NextResponse } from "next/server";
 
 const mockCorsHeaders = {

@@ -1,3 +1,8 @@
+/*
+ * This file fills the mock student database with fake student records.
+ * It only adds the students when the table is empty, so the app has
+ * sample records to work with without using real student data.
+ */
 import type { Client } from "@libsql/client";
 import { getSimulatedUniversityStudentRecords } from "../student-records/simulatedUniversityRecords";
 

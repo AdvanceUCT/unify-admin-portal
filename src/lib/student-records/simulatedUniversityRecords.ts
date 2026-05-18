@@ -1,3 +1,9 @@
+/*
+ * This file was made by Claude to help create simulated student records for testing the app.
+ * It creates sample students, their programme info, and credential
+ * details so we can try issuing records without using real student data.
+ */
+
 import type { BatchIssuanceSelection, CredentialLifecycleState, StudentRecord } from "../api/types";
 import { SIMULATED_FACULTY_PROGRAMMES } from "./facultyProgrammes";
 

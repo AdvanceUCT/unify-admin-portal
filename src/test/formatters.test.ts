@@ -4,23 +4,16 @@ import {
   formatCredentialStatus,
   formatDateTime,
   formatEventType,
-  formatMoney,
-  formatPaymentStatus,
 } from "@/lib/formatters";
 
 describe("formatters", () => {
-  it("formats decimal-string money as rand", () => {
-    expect(formatMoney("42.50")).toContain("42,50");
-  });
-
   it("formats ISO timestamps", () => {
     expect(formatDateTime("2026-01-01T00:00:00Z")).toContain("2026");
   });
 
-  it("formats credential and payment statuses", () => {
+  it("formats credential statuses", () => {
     expect(formatCredentialStatus("ISSUED")).toBe("Issued");
     expect(formatCredentialStatus("NOT_ISSUED")).toBe("Not issued");
-    expect(formatPaymentStatus("Approved")).toBe("Approved");
   });
 
   it("formats activation delivery status and audit events", () => {

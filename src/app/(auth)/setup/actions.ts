@@ -55,6 +55,18 @@ export async function checkAgentStatusAction() {
   }
 }
 
+/**
+ * Gets the issuer DID from the agent, creating it if it doesn't exist yet.
+ *
+ * The flow is:
+ * 1. Try to fetch the existing DID — if found, save and return it.
+ * 2. If the agent returns 404, create a new DID using the university name as the alias.
+ * 3. If creation returns 409 (already exists race), pull the DID from the error
+ *    details and save that instead.
+ *
+ * In all success paths the DID is saved to the university profile and
+ * the setup status is updated to `DID_CREATED`.
+ */
 export async function createOrGetDidAction() {
   const profile = await getUniversityProfile();
   if (!profile) {
@@ -127,6 +139,12 @@ const ISSUANCE_PAYLOAD = {
   },
 };
 
+/**
+ * Runs the one-time issuance setup on the agent using the fixed student schema.
+ * Creates the schema and credential definition on the ledger, saves the resulting
+ * IDs to the DB, then marks the university profile setup as complete.
+ * Requires a DID to already exist — throws if one hasn't been created yet.
+ */
 export async function runIssuanceSetupAction() {
   const profile = await getUniversityProfile();
   if (!profile) {

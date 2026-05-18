@@ -88,6 +88,12 @@ export const superAdminAccess = defaultAc.newRole({
   session: ["list", "revoke", "delete"],
 });
 
+/**
+ * Role definitions passed to the BetterAuth admin plugin.
+ * `SUPER_ADMIN` gets full user and session management access. All other roles
+ * use `userAc` (read-only user access) since we enforce finer permissions
+ * ourselves via `ACTION_ROLE_MAP` and `assertCan`.
+ */
 export const betterAuthAdminRoles = {
   SUPER_ADMIN: superAdminAccess,
   ADMIN: userAc,
@@ -95,6 +101,10 @@ export const betterAuthAdminRoles = {
   VIEWER: userAc,
 } as const;
 
+/**
+ * Thrown when a role check fails on the server side.
+ * Always carries a 403 status so API routes can use it directly in responses.
+ */
 export class PermissionError extends Error {
   readonly status = 403;
 

@@ -11,6 +11,13 @@ import { sendPasswordResetEmail } from "@/lib/email/password-reset";
 
 const passwordResetTokenExpiresIn = 60 * 60;
 
+/**
+ * BetterAuth instance for the admin portal.
+ *
+ * Sign-up is disabled — new users must be invited. Sessions expire after 8 hours
+ * and cookie caching is off so every request hits the DB to validate the session.
+ * Login and logout are audited via database hooks.
+ */
 export const auth = betterAuth({
   appName: "UNIFY Admin Portal",
   database: prismaAdapter(prisma, {

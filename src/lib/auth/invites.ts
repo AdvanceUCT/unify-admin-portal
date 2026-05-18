@@ -47,6 +47,11 @@ export function hashInviteToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
+/**
+ * Compares two hex token hashes using a constant-time comparison to prevent
+ * timing attacks. A regular `===` check would leak information about how many
+ * characters match via response time differences.
+ */
 function isSameTokenHash(left: string, right: string) {
   const leftBuffer = Buffer.from(left, "hex");
   const rightBuffer = Buffer.from(right, "hex");
@@ -64,6 +69,11 @@ function buildInviteUrl(token: string) {
   return inviteUrl.toString();
 }
 
+/**
+ * Writes an `INVITE_EXPIRED` audit entry for an invite, but only if one hasn't
+ * been written already. Prevents duplicate audit entries when the same expired
+ * invite is looked up multiple times (e.g. by the user retrying the link).
+ */
 async function auditExpiredInviteOnce(invite: {
   id: string;
   email: string;
@@ -97,6 +107,17 @@ async function auditExpiredInviteOnce(invite: {
   });
 }
 
+/**
+ * Creates a new admin invite and sends the invite email.
+ * Any existing pending invites for the same email are revoked first so there's
+ * only ever one active invite per address. The token is hashed before storage —
+ * only the hash is persisted, never the raw token.
+ *
+ * @param input - The invite details (email, name, role).
+ * @param createdByUserId - The admin who is sending the invite.
+ * @param request - The current request, used for audit log context.
+ * @returns The created invite record.
+ */
 export async function createAdminInvite({
   input,
   createdByUserId,
@@ -178,6 +199,14 @@ export async function createAdminInvite({
   return invite;
 }
 
+/**
+ * Looks up a valid pending invite by its raw token.
+ * Hashes the token to find the DB record, then does a timing-safe comparison
+ * as a second check. Expired invites are audited (once) before returning null.
+ *
+ * @param token - The raw invite token from the URL.
+ * @returns The invite if it's valid and pending, otherwise `null`.
+ */
 export async function getPendingInviteByToken(token: string) {
   const tokenHash = hashInviteToken(token);
   const invite = await prisma.adminInvite.findUnique({
@@ -203,6 +232,18 @@ export async function getPendingInviteByToken(token: string) {
   return invite;
 }
 
+/**
+ * Validates an invite token and creates the admin user account.
+ *
+ * Uses a conditional `updateMany` to atomically claim the invite, ensuring
+ * it can't be accepted twice even under concurrent requests. The user account
+ * is created with `emailVerified: true` since the invite itself serves as
+ * email verification.
+ *
+ * @param input - The token, password, and confirmation from the accept form.
+ * @returns The newly created user.
+ * @throws If the token is invalid, already used, revoked, or expired.
+ */
 export async function acceptAdminInvite(input: AcceptAdminInviteInput) {
   const data = acceptInviteSchema.parse(input);
   const tokenHash = hashInviteToken(data.token);

@@ -1,15 +1,11 @@
 import type {
-  ActivationDelivery,
   AdminVendor,
-  AuditEvent,
   BatchIssuancePreview,
-  DashboardSummary,
   EligibilityRule,
   StudentRecord,
 } from "@/lib/api/types";
 import {
   getSimulatedUniversityStudentRecords,
-  isStudentRecordEligibleForCredentialIssuance,
   SIMULATED_STUDENT_COHORT_ID,
   SIMULATED_STUDENT_RECORD_COUNT,
 } from "@/lib/student-records/simulatedUniversityRecords";
@@ -46,42 +42,9 @@ export const mockEligibilityRules: EligibilityRule[] = [
   },
 ];
 
-export const mockAuditEvents: AuditEvent[] = [
-  {
-    id: "audit-001",
-    eventType: "CredentialIssued",
-    actorId: "admin-demo-001",
-    targetId: "credential-demo-001",
-    result: "Success",
-    occurredAt: "2026-04-21T07:30:00Z",
-    reason: "Initial simulated cohort issuance",
-  },
-  {
-    id: "audit-002",
-    eventType: "CredentialVerified",
-    actorId: "vendor-001",
-    targetId: "credential-demo-001",
-    servicePointId: "library-cafe",
-    vendorId: "vendor-001",
-    result: "Success",
-    occurredAt: "2026-04-21T08:15:00Z",
-  },
-];
-
-export const mockDashboardSummary: DashboardSummary = {
-  activeBatchJobs: 0,
-  failedCredentials: mockStudents.filter((student) => student.credential.lifecycleState === "FAILED").length,
-  issuedCredentials: mockStudents.filter((student) => student.credential.lifecycleState === "ISSUED").length,
-  pendingIssuance: mockStudents.filter(isStudentRecordEligibleForCredentialIssuance).length,
-  vendorsPendingApproval: 1,
-  auditEventsToday: mockAuditEvents.length,
-};
-
 export const mockBatchIssuancePreview: BatchIssuancePreview = {
   batchId: "batch-001",
   cohortId: SIMULATED_STUDENT_COHORT_ID,
   requestedCount: SIMULATED_STUDENT_RECORD_COUNT,
   status: "Draft",
 };
-
-export const mockActivationDeliveries: ActivationDelivery[] = [];

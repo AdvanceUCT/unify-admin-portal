@@ -37,6 +37,13 @@ export function toPublicCredentialStatus(status?: CredentialIssuanceStatus | nul
   return status && isCredentialIssuanceStatus(status) ? status : "NOT_ISSUED";
 }
 
+/**
+ * Groups issuances by student ID and keeps only the most recent one per student.
+ * Assumes the input is already sorted newest-first, so the first entry wins.
+ *
+ * @param issuances - All issuances to group, ordered by most recent first.
+ * @returns A map from student ID to that student's latest issuance.
+ */
 function latestIssuanceByStudent(issuances: CredentialIssuance[]) {
   const byStudent = new Map<string, CredentialIssuance>();
 
@@ -63,26 +70,40 @@ export function overlayCredentialStatus(
   };
 }
 
+/**
+ * Fetches the latest credential issuance for each student and merges it into
+ * their record. Looks up by both `studentNumber` and `profile.id` since either
+ * may have been used when the issuance was created.
+ *
+ * @param students - The list of students to enrich with live credential statuses.
+ * @returns The same list with `lifecycleState` updated on each student's credential.
+ */
 export async function overlayCredentialStatuses(students: StudentRecord[]): Promise<StudentRecord[]> {
   if (students.length === 0) {
     return students;
   }
+  const studentIds = students.flatMap((student) => [student.credential.studentNumber, student.profile.id]);
 
   const issuances = await prisma.credentialIssuance.findMany({
     orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     where: {
-      studentId: { in: students.map((student) => student.profile.id) },
+      studentId: { in: studentIds },
     },
   });
   const issuancesByStudent = latestIssuanceByStudent(issuances);
 
-  return students.map((student) => overlayCredentialStatus(student, issuancesByStudent.get(student.profile.id)));
+  return students.map((student) =>
+    overlayCredentialStatus(
+      student,
+      issuancesByStudent.get(student.credential.studentNumber) ?? issuancesByStudent.get(student.profile.id),
+    ),
+  );
 }
 
 export async function overlayCredentialStatusForStudent(student: StudentRecord): Promise<StudentRecord> {
   const issuance = await prisma.credentialIssuance.findFirst({
     orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    where: { studentId: student.profile.id },
+    where: { studentId: { in: [student.credential.studentNumber, student.profile.id] } },
   });
 
   return overlayCredentialStatus(student, issuance ?? undefined);
@@ -142,6 +163,15 @@ export async function createCredentialIssuanceFromOffer(params: {
   });
 }
 
+/**
+ * Guards against downgrading a status back to `OFFER_SENT`.
+ * Once a credential has moved past that state, an `OFFER_SENT` event
+ * from a replayed or out-of-order webhook should not overwrite it.
+ *
+ * @param mappedStatus - The status we're about to apply.
+ * @param currentStatus - The status currently stored in the DB.
+ * @returns `true` if it's safe to apply the new status.
+ */
 function shouldApplyStatus(
   mappedStatus: CredentialIssuanceStatus,
   currentStatus?: CredentialIssuanceStatus | null,
@@ -153,6 +183,16 @@ function shouldApplyStatus(
   return true;
 }
 
+/**
+ * Replays all stored event logs for a credential exchange and updates the
+ * issuance record to reflect the correct final status.
+ *
+ * Useful after an issuance is first created, since webhook events may have
+ * arrived and been stored before the issuance record existed. Only writes
+ * to the DB if the status or `issuedAt` timestamp actually changed.
+ *
+ * @param credentialExchangeId - The exchange ID to reconcile.
+ */
 export async function reconcileCredentialEventLogs(credentialExchangeId: string) {
   const issuance = await prisma.credentialIssuance.findUnique({ where: { credentialExchangeId } });
   if (!issuance) {
@@ -183,6 +223,17 @@ export async function reconcileCredentialEventLogs(credentialExchangeId: string)
   }
 }
 
+/**
+ * Handles an incoming `credential.stateChanged` webhook event.
+ *
+ * Skips irrelevant events and deduplicates using `skipDuplicates` on the event log.
+ * If the event is new and a matching issuance exists, updates its status —
+ * guarded by `shouldApplyStatus` to prevent out-of-order overwrites.
+ *
+ * @param payload - The webhook payload from the agent.
+ * @returns `{ duplicate: true }` if already seen, `{ ignored: true }` if not relevant,
+ *          or `{ duplicate: false, status }` with the applied status.
+ */
 export async function recordCredentialStateChangedEvent(payload: CredentialStateChangedWebhookPayload) {
   if (!isRelevantCredentialStateChangedPayload(payload)) {
     return { duplicate: false, ignored: true };
@@ -227,13 +278,6 @@ export async function recordCredentialStateChangedEvent(payload: CredentialState
   }
 
   return { duplicate: false, status: mappedStatus };
-}
-
-export async function getLatestCredentialIssuanceForStudent(studentId: string) {
-  return prisma.credentialIssuance.findFirst({
-    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    where: { studentId },
-  });
 }
 
 export async function getCredentialDeliveryByIssuanceId(issuanceId: string) {
@@ -281,6 +325,13 @@ export async function getDashboardCredentialSummary(): Promise<DashboardSummary>
   };
 }
 
+/**
+ * Fetches the most recent credential event logs and joins each one with its
+ * issuance record to include the student ID in the response.
+ *
+ * @param limit - Max number of events to return, defaults to 10.
+ * @returns A list of activity events ordered newest first.
+ */
 export async function getRecentCredentialActivityEvents(limit = 10): Promise<CredentialActivityEvent[]> {
   const events = await prisma.credentialEventLog.findMany({
     orderBy: { occurredAt: "desc" },
