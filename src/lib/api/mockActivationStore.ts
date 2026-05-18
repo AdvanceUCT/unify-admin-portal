@@ -1,10 +1,8 @@
 import { buildWalletActivationLink } from "@/lib/api/activationLinks";
 import {
-  mockActivationDeliveries,
-  mockAuditEvents,
   mockBatchIssuancePreview,
-  mockDashboardSummary,
   mockStudents,
+  mockVendors,
 } from "@/lib/api/mockData";
 import { selectStudentRecordsForCredentialIssuance } from "@/lib/student-records/simulatedUniversityRecords";
 import type {
@@ -20,10 +18,6 @@ import type {
   BatchIssuanceSelection,
   DashboardSummary,
   StudentRecord,
-  WalletActivationCompleteRequest,
-  WalletActivationCompleteResponse,
-  WalletActivationResolveRequest,
-  WalletActivationResolveResponse,
 } from "@/lib/api/types";
 import { formatCredentialStatus } from "@/lib/formatters";
 
@@ -33,14 +27,6 @@ type MockActivationState = {
   batchRuns: BatchIssuanceRunDetail[];
   students: StudentRecord[];
 };
-
-type MockResult<T> =
-  | { data: T; ok: true }
-  | { code: string; error: string; ok: false; status: number };
-
-const DEMO_WALLET_ID_PREFIX = "wallet-demo";
-const ISSUER_LABEL = "UNIFY Issuer Service";
-const LEDGER_NAME = "BCovrin Test" as const;
 
 declare global {
   var __unifyAdminMockActivationState: MockActivationState | undefined;
@@ -52,8 +38,8 @@ function clone<T>(value: T): T {
 
 function createInitialState(): MockActivationState {
   return {
-    activationDeliveries: clone(mockActivationDeliveries),
-    auditEvents: clone(mockAuditEvents),
+    activationDeliveries: [],
+    auditEvents: [],
     batchRuns: [],
     students: clone(mockStudents),
   };
@@ -77,62 +63,6 @@ function activationIdForToken(token: string) {
   return `activation-${suffixFor(token)}`;
 }
 
-function invitationIdForToken(token: string) {
-  return `unify-oob-${suffixFor(token)}`;
-}
-
-/**
- * Encodes a string as URL-safe base64 (no padding).
- * Replaces `+` with `-`, `/` with `_`, and strips trailing `=` characters
- * so the result is safe to use directly in a URL query parameter.
- */
-function base64UrlEncode(value: string) {
-  const utf8Value = encodeURIComponent(value).replace(/%([0-9A-F]{2})/g, (_match, hex) =>
-    String.fromCharCode(Number.parseInt(hex, 16)),
-  );
-
-  return btoa(utf8Value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-function mockInvitationUrl(invitationId: string) {
-  const invitation = {
-    "@id": invitationId,
-    "@type": "https://didcomm.org/out-of-band/1.1/invitation",
-    handshake_protocols: ["https://didcomm.org/didexchange/1.0"],
-    label: ISSUER_LABEL,
-    services: [
-      {
-        id: "#inline",
-        recipientKeys: ["did:key:z6MkiTBzj1u3bdF7S7Q4TzqzH4Rb9SLGZwk9N4qe68q8nW1N"],
-        routingKeys: [],
-        serviceEndpoint: "https://issuer.advanceuct.test/didcomm",
-        type: "did-communication",
-      },
-    ],
-  };
-
-  return `https://issuer.advanceuct.test/oob?oob=${base64UrlEncode(JSON.stringify(invitation))}`;
-}
-
-function tokenForDelivery(delivery: ActivationDelivery) {
-  try {
-    return new URL(delivery.activationUrl).searchParams.get("token") ?? "";
-  } catch {
-    return "";
-  }
-}
-
-function activationDeliveryForToken(state: MockActivationState, token: string) {
-  return state.activationDeliveries.find((delivery) => tokenForDelivery(delivery) === token);
-}
-
-function activationDeliveryForActivationId(state: MockActivationState, activationId: string) {
-  return state.activationDeliveries.find((delivery) => {
-    const token = tokenForDelivery(delivery);
-    return delivery.activationId === activationId || (token ? activationIdForToken(token) === activationId : false);
-  });
-}
-
 function dashboardSummary(state: MockActivationState): DashboardSummary {
   const issuedCredentials = state.students.filter((student) => student.credential.lifecycleState === "ISSUED").length;
   const failedCredentials = state.students.filter((student) => student.credential.lifecycleState === "FAILED").length;
@@ -146,7 +76,7 @@ function dashboardSummary(state: MockActivationState): DashboardSummary {
     failedCredentials,
     issuedCredentials,
     pendingIssuance,
-    vendorsPendingApproval: mockDashboardSummary.vendorsPendingApproval,
+    vendorsPendingApproval: mockVendors.filter((vendor) => vendor.status === "Pending").length,
   };
 }
 
@@ -494,151 +424,4 @@ export function recordBatchIssuanceResult(result: BatchIssuanceResult, now = new
   }
 
   return getMockAdminState();
-}
-
-/**
- * Simulates the wallet activation resolve step for a given token.
- * Validates the token exists, isn't expired, and the delivery is ready,
- * then returns the mock OOB invitation URL for the holder wallet to open.
- *
- * @param request - The resolve request containing the activation token.
- * @param now - Current time for expiry checks, defaults to `new Date()`.
- * @returns A `MockResult` with the activation details on success, or an error code on failure.
- */
-export function resolveMockWalletActivation(
-  request: WalletActivationResolveRequest,
-  now = new Date(),
-): MockResult<WalletActivationResolveResponse> {
-  const token = request.token?.trim();
-
-  if (!token) {
-    return {
-      code: "ActivationTokenRequired",
-      error: "Activation token is required.",
-      ok: false,
-      status: 400,
-    };
-  }
-
-  const state = mutableState();
-  const delivery = activationDeliveryForToken(state, token);
-
-  if (!delivery) {
-    return {
-      code: "ActivationTokenNotFound",
-      error: "Activation token was not found.",
-      ok: false,
-      status: 404,
-    };
-  }
-
-  if (new Date(delivery.expiresAt).getTime() <= now.getTime()) {
-    return {
-      code: "ActivationTokenExpired",
-      error: "Activation token has expired.",
-      ok: false,
-      status: 410,
-    };
-  }
-
-  if (delivery.status !== "Delivered") {
-    return {
-      code: "ActivationDeliveryNotReady",
-      error: "Activation delivery is not ready for wallet activation.",
-      ok: false,
-      status: 409,
-    };
-  }
-
-  const activationId = delivery.activationId ?? activationIdForToken(token);
-  const invitationId = invitationIdForToken(token);
-  delivery.activationId = activationId;
-
-  return {
-    data: {
-      activationId,
-      activationSource: "token",
-      createdAt: delivery.deliveredAt ?? now.toISOString(),
-      expiresAt: delivery.expiresAt,
-      invitationId,
-      invitationUrl: mockInvitationUrl(invitationId),
-      issuerLabel: ISSUER_LABEL,
-      ledgerName: LEDGER_NAME,
-      studentId: delivery.studentId,
-      walletId: `${DEMO_WALLET_ID_PREFIX}-${suffixFor(delivery.studentId)}`,
-    },
-    ok: true,
-  };
-}
-
-/**
- * Simulates the holder completing wallet activation for a credential.
- * Finds the delivery by activation ID, marks it as activated, updates the
- * student's lifecycle state to `ISSUED`, and appends an audit event.
- *
- * @param request - Contains the activation ID, holder connection ID, and credential record ID.
- * @param now - Current time used for the `activatedAt` timestamp.
- * @returns A `MockResult` with activation confirmation on success, or an error code on failure.
- */
-export function completeMockWalletActivation(
-  request: WalletActivationCompleteRequest,
-  now = new Date(),
-): MockResult<WalletActivationCompleteResponse> {
-  const activationId = request.activationId?.trim();
-  const holderConnectionId = request.holderConnectionId?.trim();
-  const credentialRecordId = request.credentialRecordId?.trim();
-
-  if (!activationId || !holderConnectionId || !credentialRecordId) {
-    return {
-      code: "ActivationCompletionRequired",
-      error: "Activation id, holder connection id, and credential record id are required.",
-      ok: false,
-      status: 400,
-    };
-  }
-
-  const state = mutableState();
-  const delivery = activationDeliveryForActivationId(state, activationId);
-
-  if (!delivery) {
-    return {
-      code: "ActivationNotFound",
-      error: "Activation was not found.",
-      ok: false,
-      status: 404,
-    };
-  }
-
-  const activatedAt = now.toISOString();
-  const student = state.students.find((candidate) => candidate.profile.id === delivery.studentId);
-
-  if (student) {
-    student.credential.lifecycleState = "ISSUED";
-  }
-
-  delivery.activatedAt = activatedAt;
-  delivery.activationId = activationId;
-  delivery.credentialRecordId = credentialRecordId;
-  delivery.holderConnectionId = holderConnectionId;
-
-  appendAuditEvent(state, {
-    actorId: "wallet-demo-001",
-    eventType: "CredentialActivated",
-    occurredAt: activatedAt,
-    reason: "Student wallet completed simulated holder activation",
-    result: "Success",
-    targetId: delivery.credentialId,
-  });
-
-  return {
-    data: {
-      activatedAt,
-      activationId,
-      credentialId: delivery.credentialId,
-      credentialRecordId,
-      holderConnectionId,
-      studentId: delivery.studentId,
-    },
-    ok: true,
-  };
 }
