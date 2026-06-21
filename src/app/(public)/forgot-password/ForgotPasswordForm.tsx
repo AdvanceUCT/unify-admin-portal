@@ -13,11 +13,12 @@ const initialState: ForgotPasswordState = {
   status: "idle",
 };
 
-export function ForgotPasswordForm() {
+export function ForgotPasswordForm({ isVendor = false }: { isVendor?: boolean }) {
   const [state, formAction, isPending] = useActionState(
     requestPasswordResetAction,
     initialState,
   );
+  const backHref = isVendor ? "/vendor/sign-in" : "/sign-in";
 
   return (
     <main className="grid min-h-screen place-items-center bg-[#f7f8fa] px-6">
@@ -33,10 +34,11 @@ export function ForgotPasswordForm() {
         </div>
 
         <p className="mb-6 text-sm text-zinc-600">
-          Enter your admin email and we will send password reset instructions if the account is active.
+          Enter your {isVendor ? "vendor" : "admin"} email and we will send password reset instructions if the account is active.
         </p>
 
         <form action={formAction} className="space-y-4">
+          <input name="portal" type="hidden" value={isVendor ? "vendor" : "admin"} />
           <div>
             <label className="block text-sm font-medium text-zinc-700" htmlFor="email">
               Email
@@ -72,7 +74,7 @@ export function ForgotPasswordForm() {
           </button>
         </form>
 
-        <Link className="mt-6 block text-center text-sm font-medium text-zinc-600 hover:text-zinc-950" href="/sign-in">
+        <Link className="mt-6 block text-center text-sm font-medium text-zinc-600 hover:text-zinc-950" href={backHref}>
           Back to sign in
         </Link>
       </section>

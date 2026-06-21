@@ -26,12 +26,45 @@ export async function getCurrentAdminSession() {
 /**
  * Gets the current session or redirects to `/sign-in` if there isn't one.
  * Use this in server components or route handlers that require authentication.
+ * A signed-in vendor is redirected to `/vendor` rather than shown a 403, since
+ * the admin portal and vendor portal are different sections, not access levels.
  */
 export async function requireAdminSession() {
   const session = await getCurrentAdminSession();
 
   if (!session) {
     redirect("/sign-in");
+  }
+
+  if (session.user.userType !== "ADMIN") {
+    redirect("/vendor");
+  }
+
+  return session;
+}
+
+/**
+ * Gets the current vendor session without redirecting, for callers that need
+ * to branch on whether a vendor is signed in (e.g. the vendor sign-in page).
+ */
+export async function getCurrentVendorSession() {
+  return getCurrentAdminSession();
+}
+
+/**
+ * Gets the current session or redirects to `/vendor/sign-in` if there isn't
+ * one. A signed-in admin is redirected to `/` rather than shown a 403, since
+ * the vendor portal and admin portal are different sections, not access levels.
+ */
+export async function requireVendorSession() {
+  const session = await getCurrentVendorSession();
+
+  if (!session) {
+    redirect("/vendor/sign-in");
+  }
+
+  if (session.user.userType !== "VENDOR") {
+    redirect("/");
   }
 
   return session;

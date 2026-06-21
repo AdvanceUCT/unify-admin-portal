@@ -40,6 +40,7 @@ const session = {
   user: {
     id: "user_1",
     role: "SUPER_ADMIN",
+    userType: "ADMIN",
   },
 };
 
@@ -62,10 +63,24 @@ describe("session helpers", () => {
       user: {
         id: "user_2",
         role: "VIEWER",
+        userType: "ADMIN",
       },
     } as Awaited<ReturnType<typeof auth.api.getSession>>);
 
     await expect(requireRole(["SUPER_ADMIN"])).rejects.toThrow("forbidden");
     expect(forbidden).toHaveBeenCalled();
+  });
+
+  it("redirects a signed-in vendor to /vendor instead of showing 403", async () => {
+    getSessionMock.mockResolvedValueOnce({
+      user: {
+        id: "vendor_1",
+        role: null,
+        userType: "VENDOR",
+      },
+    } as Awaited<ReturnType<typeof auth.api.getSession>>);
+
+    await expect(requireRole(["SUPER_ADMIN"])).rejects.toThrow("redirect:/vendor");
+    expect(redirect).toHaveBeenCalledWith("/vendor");
   });
 });

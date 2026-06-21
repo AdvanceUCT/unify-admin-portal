@@ -2,7 +2,6 @@ import { buildWalletActivationLink } from "@/lib/api/activationLinks";
 import {
   mockBatchIssuancePreview,
   mockStudents,
-  mockVendors,
 } from "@/lib/api/mockData";
 import { selectStudentRecordsForCredentialIssuance } from "@/lib/student-records/simulatedUniversityRecords";
 import type {
@@ -76,7 +75,7 @@ function dashboardSummary(state: MockActivationState): DashboardSummary {
     failedCredentials,
     issuedCredentials,
     pendingIssuance,
-    vendorsPendingApproval: mockVendors.filter((vendor) => vendor.status === "Pending").length,
+    vendorsPendingApproval: 0,
   };
 }
 

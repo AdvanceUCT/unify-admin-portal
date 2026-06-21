@@ -10,12 +10,19 @@ const initialState: ResetPasswordState = {
   status: "idle",
 };
 
-export function ResetPasswordForm({ token }: { token?: string }) {
+export function ResetPasswordForm({
+  isVendor = false,
+  token,
+}: {
+  isVendor?: boolean;
+  token?: string;
+}) {
   const [state, formAction, isPending] = useActionState(
     resetPasswordAction,
     initialState,
   );
   const [showPassword, setShowPassword] = useState(false);
+  const forgotPasswordHref = isVendor ? "/forgot-password?portal=vendor" : "/forgot-password";
 
   return (
     <main className="grid min-h-screen place-items-center bg-[#f7f8fa] px-6">
@@ -37,7 +44,7 @@ export function ResetPasswordForm({ token }: { token?: string }) {
             </p>
             <Link
               className="block text-center text-sm font-medium text-zinc-600 hover:text-zinc-950"
-              href="/forgot-password"
+              href={forgotPasswordHref}
             >
               Request a new reset link
             </Link>
@@ -45,6 +52,7 @@ export function ResetPasswordForm({ token }: { token?: string }) {
         ) : (
           <form action={formAction} className="space-y-4">
             <input name="token" type="hidden" value={token} />
+            <input name="portal" type="hidden" value={isVendor ? "vendor" : "admin"} />
 
             <div>
               <label className="block text-sm font-medium text-zinc-700" htmlFor="password">

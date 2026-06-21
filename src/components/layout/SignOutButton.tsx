@@ -5,14 +5,14 @@ import { useRouter } from "next/navigation";
 
 import { authClient } from "@/lib/auth/auth-client";
 
-export function SignOutButton() {
+export function SignOutButton({ redirectTo = "/sign-in" }: { redirectTo?: string }) {
   const router = useRouter();
   const [isPending, setIsPending] = useState(false);
 
   async function handleSignOut() {
     setIsPending(true);
     await authClient.signOut();
-    router.push("/sign-in");
+    router.push(redirectTo);
     router.refresh();
   }
 

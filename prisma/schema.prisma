@@ -8,19 +8,21 @@ datasource db {
 }
 
 model User {
-  id            String    @id
+  id            String        @id
   name          String
   email         String
-  emailVerified Boolean   @default(false)
+  emailVerified Boolean       @default(false)
   image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
   role          String?
-  banned        Boolean?  @default(false)
+  userType      String        @default("ADMIN")
+  banned        Boolean?      @default(false)
   banReason     String?
   banExpires    DateTime?
   sessions      Session[]
   accounts      Account[]
+  vendorProfile VendorProfile?
 
   @@unique([email])
   @@map("user")
@@ -93,6 +95,46 @@ model AdminInvite {
   @@index([email])
   @@index([expiresAt])
   @@index([createdByUserId])
+}
+
+model VendorProfile {
+  id              String              @id @default(cuid())
+  userId          String              @unique
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName     String
+  serviceCategory String
+  contactEmail    String
+  website         String?
+  description     String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  applications    VendorApplication[]
+
+  @@map("vendor_profile")
+}
+
+model VendorApplication {
+  id               String                  @id @default(cuid())
+  vendorProfileId  String
+  vendorProfile    VendorProfile           @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  status           VendorApplicationStatus @default(PENDING)
+  justification    String
+  requestedScopes  String[]                @default([])
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  reviewNotes      String?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  @@index([vendorProfileId])
+  @@index([status])
+  @@map("vendor_application")
+}
+
+enum VendorApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 model UniversityProfile {
@@ -334,4 +376,8 @@ enum AuditAction {
   BATCH_ISSUANCE_CREATED
   BATCH_ISSUANCE_COMPLETED
   BATCH_ISSUANCE_RETRIED
+  VENDOR_SIGNUP
+  VENDOR_APPLICATION_SUBMITTED
+  VENDOR_APPLICATION_APPROVED
+  VENDOR_APPLICATION_REJECTED
 }

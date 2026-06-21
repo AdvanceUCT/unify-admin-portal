@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getBatchIssuancePreview,
   getStudents,
-  getVendors,
 } from "@/lib/api/client";
 import { mockStudents } from "@/lib/api/mockData";
 import { resetMockActivationStore } from "@/lib/api/mockActivationStore";
@@ -32,12 +31,6 @@ describe("admin mock client", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/admin/students");
     expect(students[0].credential.validFrom).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(students[0].credential.lifecycleState).toBe("NOT_ISSUED");
-  });
-
-  it("returns vendor approval data", async () => {
-    const vendors = await getVendors();
-
-    expect(vendors.map((vendor) => vendor.status)).toContain("Pending");
   });
 
   it("returns the planned MVP batch size", async () => {
