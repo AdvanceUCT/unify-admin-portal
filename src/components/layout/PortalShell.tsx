@@ -14,6 +14,7 @@ export function PortalShell({
   navItems,
   productName,
   sessionLabel,
+  signOutRedirectTo,
   utilityIcon: UtilityIcon,
 }: {
   children: React.ReactNode;
@@ -21,6 +22,7 @@ export function PortalShell({
   navItems: PortalNavItem[];
   productName: string;
   sessionLabel: string;
+  signOutRedirectTo?: string;
   utilityIcon: LucideIcon;
 }) {
   return (
@@ -62,7 +64,7 @@ export function PortalShell({
             </div>
             <div className="flex items-center gap-3">
               <span className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600">{sessionLabel}</span>
-              <SignOutButton />
+              <SignOutButton redirectTo={signOutRedirectTo} />
             </div>
           </div>
         </header>

@@ -21,6 +21,7 @@ export async function requestPasswordResetAction(
   formData: FormData,
 ): Promise<ForgotPasswordState> {
   const email = String(formData.get("email") ?? "").trim();
+  const isVendor = formData.get("portal") === "vendor";
 
   if (!email) {
     return {
@@ -58,10 +59,15 @@ export async function requestPasswordResetAction(
     };
   }
 
+  const resetUrl = new URL("/reset-password", env.APP_URL);
+  if (isVendor) {
+    resetUrl.searchParams.set("portal", "vendor");
+  }
+
   await auth.api.requestPasswordReset({
     body: {
       email: user.email,
-      redirectTo: new URL("/reset-password", env.APP_URL).toString(),
+      redirectTo: resetUrl.toString(),
     },
     headers: await headers(),
   });

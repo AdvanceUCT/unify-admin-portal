@@ -15,7 +15,7 @@ export default async function SignInPage({
   const session = await getCurrentAdminSession();
 
   if (session) {
-    redirect("/");
+    redirect(session.user.userType === "VENDOR" ? "/vendor" : "/");
   }
 
   const { callbackURL, inviteAccepted } = await searchParams;

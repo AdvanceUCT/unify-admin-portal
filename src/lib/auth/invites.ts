@@ -293,6 +293,7 @@ export async function acceptAdminInvite(input: AcceptAdminInviteInput) {
       role: invite.role as AdminRole,
       data: {
         emailVerified: true,
+        userType: "ADMIN",
       },
     },
   });

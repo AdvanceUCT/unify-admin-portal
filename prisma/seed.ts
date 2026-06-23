@@ -74,6 +74,7 @@ async function main() {
           name: env.BOOTSTRAP_ADMIN_NAME,
           emailVerified: true,
           role: BOOTSTRAP_ROLE,
+          userType: "ADMIN",
           createdAt: now,
           updatedAt: now,
         },

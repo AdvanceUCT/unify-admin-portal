@@ -30,6 +30,7 @@ export async function resetPasswordAction(
   const token = String(formData.get("token") ?? "");
   const password = String(formData.get("password") ?? "");
   const confirmPassword = String(formData.get("confirmPassword") ?? "");
+  const isVendor = formData.get("portal") === "vendor";
 
   if (!token) {
     return {
@@ -67,5 +68,5 @@ export async function resetPasswordAction(
     };
   }
 
-  redirect("/sign-in");
+  redirect(isVendor ? "/vendor/sign-in" : "/sign-in");
 }

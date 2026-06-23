@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
-import { Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, Landmark } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { authClient } from "@/lib/auth/auth-client";
 import { sanitizeCallbackUrl } from "@/lib/auth/redirects";
-import { auditLoginFailureAction } from "./actions";
 
 function getSignInErrorMessage(error: unknown) {
   if (
@@ -16,19 +15,13 @@ function getSignInErrorMessage(error: unknown) {
     "code" in error &&
     String(error.code).includes("BANNED")
   ) {
-    return "This account has been deactivated. Contact your administrator.";
+    return "This account has been deactivated. Contact the issuing university.";
   }
 
   return "Invalid email or password";
 }
 
-export function SignInForm({
-  callbackURL,
-  notice,
-}: {
-  callbackURL: string;
-  notice?: string;
-}) {
+export function VendorSignInForm({ callbackURL }: { callbackURL: string }) {
   const router = useRouter();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
@@ -42,7 +35,7 @@ export function SignInForm({
     const formData = new FormData(event.currentTarget);
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
-    const safeCallbackURL = sanitizeCallbackUrl(callbackURL);
+    const safeCallbackURL = sanitizeCallbackUrl(callbackURL, "/vendor");
 
     const result = await authClient.signIn.email({
       email,
@@ -53,10 +46,6 @@ export function SignInForm({
     setIsPending(false);
 
     if (result.error) {
-      await auditLoginFailureAction({
-        email,
-        code: "code" in result.error ? String(result.error.code) : undefined,
-      });
       setErrorMessage(getSignInErrorMessage(result.error));
       return;
     }
@@ -70,19 +59,13 @@ export function SignInForm({
       <section className="w-full max-w-sm rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
         <div className="mb-8 flex items-center gap-3">
           <span className="grid size-10 place-items-center rounded-md bg-zinc-950 text-white">
-            <ShieldCheck size={20} aria-hidden="true" />
+            <Landmark size={20} aria-hidden="true" />
           </span>
           <div>
             <p className="text-sm font-medium text-zinc-500">UNIFY</p>
-            <h1 className="text-xl font-semibold text-zinc-950">Admin portal</h1>
+            <h1 className="text-xl font-semibold text-zinc-950">Vendor portal</h1>
           </div>
         </div>
-
-        {notice ? (
-          <p className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-            {notice}
-          </p>
-        ) : null}
 
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div>
@@ -140,14 +123,20 @@ export function SignInForm({
 
         <Link
           className="mt-6 block text-center text-sm font-medium text-zinc-600 hover:text-zinc-950"
-          href="/forgot-password"
+          href="/forgot-password?portal=vendor"
         >
           Forgot password?
         </Link>
         <p className="mt-2 text-center text-sm font-medium text-zinc-600">
-          Vendor?{" "}
-          <Link className="text-blue-600 underline hover:text-blue-700" href="/vendor/sign-in">
-            Go to the vendor portal
+          Need a vendor account?{" "}
+          <Link className="text-blue-600 underline hover:text-blue-700" href="/vendor/sign-up">
+            Sign up
+          </Link>
+        </p>
+        <p className="mt-2 text-center text-sm font-medium text-zinc-600">
+          Staff member?{" "}
+          <Link className="text-blue-600 underline hover:text-blue-700" href="/sign-in">
+            Go to the admin portal
           </Link>
         </p>
       </section>

@@ -12,11 +12,19 @@ import { sendPasswordResetEmail } from "@/lib/email/password-reset";
 const passwordResetTokenExpiresIn = 60 * 60;
 
 /**
- * BetterAuth instance for the admin portal.
+ * BetterAuth instance shared by the admin portal and the vendor portal.
  *
- * Sign-up is disabled — new users must be invited. Sessions expire after 8 hours
- * and cookie caching is off so every request hits the DB to validate the session.
- * Login and logout are audited via database hooks.
+ * Admin sign-up stays invite-only in practice even though the underlying
+ * `emailAndPassword` sign-up endpoint is enabled (vendors need it for
+ * self-registration): `userType` defaults to `"VENDOR"` and cannot be set by
+ * the client (`input: false`), and the `user.create.before` hook below nulls
+ * `role` for any non-`"ADMIN"` user, so a public sign-up can never grant an
+ * admin role. Admin accounts are only ever created server-side via
+ * `auth.api.createUser` with an explicit `userType: "ADMIN"`.
+ *
+ * Sessions expire after 8 hours and cookie caching is off so every request
+ * hits the DB to validate the session. Login and logout are audited via
+ * database hooks.
  */
 export const auth = betterAuth({
   appName: "UNIFY Admin Portal",
@@ -26,15 +34,34 @@ export const auth = betterAuth({
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,
   trustedOrigins: [env.APP_URL],
+  user: {
+    additionalFields: {
+      userType: {
+        type: "string",
+        required: false,
+        input: false,
+        defaultValue: "VENDOR",
+      },
+    },
+  },
   emailAndPassword: {
     enabled: true,
-    disableSignUp: true,
+    disableSignUp: false,
     minPasswordLength: 12,
     maxPasswordLength: 128,
     resetPasswordTokenExpiresIn: passwordResetTokenExpiresIn,
     revokeSessionsOnPasswordReset: true,
-    async sendResetPassword({ user, token }) {
-      const resetUrl = new URL("/reset-password", env.APP_URL);
+    async sendResetPassword({ user, token, url }) {
+      // `url` is Better Auth's own callback link, which embeds whatever
+      // `redirectTo` was passed to `requestPasswordReset` (including any
+      // extra query params, like `portal=vendor`) as its `callbackURL`
+      // param. Recover it so the emailed link still lands on the portal the
+      // reset was requested from, without taking the extra Better Auth
+      // redirect hop.
+      const callbackURL = new URL(url).searchParams.get("callbackURL");
+      const resetUrl = callbackURL
+        ? new URL(callbackURL)
+        : new URL("/reset-password", env.APP_URL);
       resetUrl.searchParams.set("token", token);
 
       await sendPasswordResetEmail({
@@ -66,6 +93,18 @@ export const auth = betterAuth({
     cookiePrefix: "unify-admin",
   },
   databaseHooks: {
+    user: {
+      create: {
+        // Runs after the admin plugin's own `before` hook (which assigns
+        // `defaultRole` to any user without a role), so this can safely
+        // strip that default back off for non-admin user types.
+        async before(user) {
+          if (user.userType !== "ADMIN") {
+            return { data: { role: null } };
+          }
+        },
+      },
+    },
     session: {
       create: {
         async after(session, context) {

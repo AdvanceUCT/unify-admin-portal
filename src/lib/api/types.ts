@@ -145,13 +145,6 @@ export type StudentRecord = {
   credential: StudentCredential;
 };
 
-export type AdminVendor = {
-  id: string;
-  name: string;
-  serviceCategory: string;
-  status: "Pending" | "Approved" | "Declined";
-};
-
 export type EligibilityRule = {
   id: string;
   name: string;

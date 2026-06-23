@@ -1,5 +1,12 @@
 import { ForgotPasswordForm } from "./ForgotPasswordForm";
 
-export default function ForgotPasswordPage() {
-  return <ForgotPasswordForm />;
+export default async function ForgotPasswordPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ portal?: string | string[] }>;
+}) {
+  const { portal } = await searchParams;
+  const rawPortal = Array.isArray(portal) ? portal[0] : portal;
+
+  return <ForgotPasswordForm isVendor={rawPortal === "vendor"} />;
 }

@@ -1,5 +1,4 @@
 import type {
-  AdminVendor,
   BatchIssuancePreview,
   EligibilityRule,
   StudentRecord,
@@ -11,21 +10,6 @@ import {
 } from "@/lib/student-records/simulatedUniversityRecords";
 
 export const mockStudents: StudentRecord[] = getSimulatedUniversityStudentRecords();
-
-export const mockVendors: AdminVendor[] = [
-  {
-    id: "vendor-001",
-    name: "Library Cafe",
-    serviceCategory: "Food service",
-    status: "Approved",
-  },
-  {
-    id: "vendor-002",
-    name: "Campus Shuttle",
-    serviceCategory: "Transport",
-    status: "Pending",
-  },
-];
 
 export const mockEligibilityRules: EligibilityRule[] = [
   {
