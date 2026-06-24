@@ -33,7 +33,7 @@ describe("proxy", () => {
   it("allows public auth and recovery routes without a session", () => {
     getSessionCookieMock.mockReturnValue(null);
 
-    for (const route of ["/sign-in", "/accept-invite", "/forgot-password", "/reset-password"]) {
+    for (const route of ["/sign-in", "/accept-invite", "/forgot-password", "/reset-password", "/verify", "/verify/sp-public-001"]) {
       expect(proxy(request(route)).status, route).toBe(200);
     }
   });
