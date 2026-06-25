@@ -7,6 +7,20 @@ import { writeAuditLog } from "@/lib/audit/audit";
 import { prisma } from "@/lib/db/prisma";
 
 const createApplicationSchema = z.object({
+  companyName: z.string().trim().min(1, "Company name is required"),
+  companyRegistrationNumber: z.string().trim().min(1, "Company registration number is required"),
+  serviceCategory: z.string().trim().min(1, "Service category is required"),
+  website: z.string().trim().url("Website must be a valid URL").optional().or(z.literal("")),
+  description: z
+    .string()
+    .trim()
+    .min(1, "Service description is required")
+    .refine(
+      (value) => value.split(/\s+/).filter(Boolean).length <= 200,
+      "Description must be 200 words or fewer",
+    ),
+  contactPersonName: z.string().trim().min(1, "Contact person name is required"),
+  contactEmail: z.string().trim().email("Contact email must be valid"),
   justification: z.string().trim().min(1, "Justification is required"),
   requestedScopes: z.array(z.string().trim().min(1)).default([]),
 });
@@ -48,11 +62,24 @@ export async function createVendorApplication({
     throw new Error("You already have an application under review.");
   }
 
+  await prisma.vendorProfile.update({
+    where: { id: vendorProfile.id },
+    data: {
+      companyName: data.companyName,
+      serviceCategory: data.serviceCategory,
+      contactEmail: data.contactEmail,
+      website: data.website || null,
+      description: data.description,
+      contactPersonName: data.contactPersonName,
+    },
+  });
+
   const application = await prisma.vendorApplication.create({
     data: {
       vendorProfileId: vendorProfile.id,
       justification: data.justification,
       requestedScopes: data.requestedScopes,
+      companyRegistrationNumber: data.companyRegistrationNumber,
     },
   });
 

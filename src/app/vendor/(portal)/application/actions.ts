@@ -20,10 +20,17 @@ export async function submitApplicationAction(
     await createVendorApplication({
       userId: session.user.id,
       input: {
+        companyName: String(formData.get("companyName") ?? ""),
+        companyRegistrationNumber: String(formData.get("companyRegistrationNumber") ?? ""),
+        serviceCategory: String(formData.get("serviceCategory") ?? ""),
+        website: String(formData.get("website") ?? ""),
+        description: String(formData.get("description") ?? ""),
+        contactPersonName: String(formData.get("contactPersonName") ?? ""),
+        contactEmail: String(formData.get("contactEmail") ?? ""),
         justification: String(formData.get("justification") ?? ""),
-        requestedScopes: String(formData.get("requestedScopes") ?? "")
-          .split(",")
-          .map((scope) => scope.trim())
+        requestedScopes: formData
+          .getAll("requestedScopes")
+          .map((value) => String(value).trim())
           .filter(Boolean),
       },
     });

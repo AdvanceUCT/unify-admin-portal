@@ -14,6 +14,7 @@ vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     vendorProfile: {
       findUnique: vi.fn(),
+      update: vi.fn(),
     },
     vendorApplication: {
       findFirst: vi.fn(),
@@ -41,40 +42,81 @@ describe("createVendorApplication", () => {
     vendorProfile.findUnique.mockResolvedValueOnce(null);
 
     await expect(
-      createVendorApplication({
-        userId: "user_1",
-        input: { justification: "We verify degrees", requestedScopes: [] },
-      }),
-    ).rejects.toThrow("No vendor profile found for this account.");
-  });
+    createVendorApplication({
+      userId: "user_1",
+      input: {
+        companyName: "Acme Corp",
+        companyRegistrationNumber: "12345",
+        serviceCategory: "Health",
+        description: "We verify credentials for healthcare professionals.",
+        contactPersonName: "Jane Doe",
+        contactEmail: "jane@example.com",
+        justification: "We verify degrees",
+        requestedScopes: [],
+      },
+    }),
+  ).rejects.toThrow("No vendor profile found for this account.");
+});
 
   it("throws when an application is already pending", async () => {
     vendorProfile.findUnique.mockResolvedValueOnce({ id: "profile_1" } as never);
     vendorApplication.findFirst.mockResolvedValueOnce({ id: "app_1" } as never);
 
     await expect(
-      createVendorApplication({
-        userId: "user_1",
-        input: { justification: "We verify degrees", requestedScopes: [] },
-      }),
-    ).rejects.toThrow("You already have an application under review.");
-  });
+    createVendorApplication({
+      userId: "user_1",
+      input: {
+        companyName: "Acme Corp",
+        companyRegistrationNumber: "12345",
+        serviceCategory: "Health",
+        description: "We verify credentials for healthcare professionals.",
+        contactPersonName: "Jane Doe",
+        contactEmail: "jane@example.com",
+        justification: "We verify degrees",
+        requestedScopes: [],
+      },
+    }),
+  ).rejects.toThrow("You already have an application under review.");
+});
 
   it("creates a pending application and writes an audit entry", async () => {
     vendorProfile.findUnique.mockResolvedValueOnce({ id: "profile_1" } as never);
     vendorApplication.findFirst.mockResolvedValueOnce(null);
+    vendorProfile.update.mockResolvedValueOnce({} as never);
     vendorApplication.create.mockResolvedValueOnce({ id: "app_1" } as never);
 
     await createVendorApplication({
       userId: "user_1",
-      input: { justification: "We verify degrees", requestedScopes: ["degree"] },
+      input: {
+        companyName: "Acme Corp",
+        companyRegistrationNumber: "12345",
+        serviceCategory: "Health",
+        website: "https://example.com",
+        description: "We verify credentials for healthcare professionals.",
+        contactPersonName: "Jane Doe",
+        contactEmail: "jane@example.com",
+        justification: "We verify degrees",
+        requestedScopes: ["degree"],
+      },
     });
 
+    expect(vendorProfile.update).toHaveBeenCalledWith({
+      where: { id: "profile_1" },
+      data: {
+        companyName: "Acme Corp",
+        serviceCategory: "Health",
+        contactEmail: "jane@example.com",
+        website: "https://example.com",
+        description: "We verify credentials for healthcare professionals.",
+        contactPersonName: "Jane Doe",
+      },
+    });
     expect(vendorApplication.create).toHaveBeenCalledWith({
       data: {
         vendorProfileId: "profile_1",
         justification: "We verify degrees",
         requestedScopes: ["degree"],
+        companyRegistrationNumber: "12345",
       },
     });
     expect(writeAuditLogMock).toHaveBeenCalledWith(

@@ -98,17 +98,18 @@ model AdminInvite {
 }
 
 model VendorProfile {
-  id              String              @id @default(cuid())
-  userId          String              @unique
-  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  companyName     String
-  serviceCategory String
-  contactEmail    String
-  website         String?
-  description     String?
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  applications    VendorApplication[]
+  id                        String              @id @default(cuid())
+  userId                    String              @unique
+  user                      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName               String
+  serviceCategory           String
+  contactPersonName         String?
+  contactEmail              String
+  website                   String?
+  description               String?
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @updatedAt
+  applications              VendorApplication[]
 
   @@map("vendor_profile")
 }
@@ -125,6 +126,7 @@ model VendorApplication {
   reviewNotes      String?
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
+  companyRegistrationNumber String? 
 
   @@index([vendorProfileId])
   @@index([status])
