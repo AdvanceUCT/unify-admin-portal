@@ -3,7 +3,10 @@ import { Globe, Mail, User } from "lucide-react";
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { requireRole } from "@/lib/auth/session";
-import { listVendorApplications } from "@/lib/vendors/applications";
+import {
+  listDecidedVendorApplications,
+  listVendorApplications,
+} from "@/lib/vendors/applications";
 import {
   approveVendorApplicationAction,
   rejectVendorApplicationAction,
@@ -25,13 +28,15 @@ export default async function VendorsPage({
   await requireRole(["SUPER_ADMIN", "ADMIN"]);
 
   const { tab } = await searchParams;
-  const activeTab = tab === "applications" ? "applications" : "vendors";
+  const activeTab =
+    tab === "applications" ? "applications" : tab === "log" ? "log" : "vendors";
 
-  const [approvedApplications, pendingApplications, rejectedApplications] =
+  const [approvedApplications, pendingApplications, rejectedApplications, decidedApplications] =
     await Promise.all([
       listVendorApplications({ status: "APPROVED" }),
       listVendorApplications({ status: "PENDING" }),
       listVendorApplications({ status: "REJECTED" }),
+      listDecidedVendorApplications(),
     ]);
 
   return (
@@ -58,6 +63,9 @@ export default async function VendorsPage({
               {pendingApplications.length}
             </span>
           )}
+        </TabLink>
+        <TabLink href="/vendors?tab=log" active={activeTab === "log"}>
+          Decision Log
         </TabLink>
       </div>
 
@@ -251,6 +259,95 @@ export default async function VendorsPage({
             </div>
           )}
         </div>
+      )}
+
+      {/* Decision Log tab */}
+      {activeTab === "log" && (
+        <section className="rounded-lg border border-zinc-200 bg-white">
+          <div className="border-b border-zinc-200 px-5 py-4">
+            <h2 className="text-base font-semibold text-zinc-950">Application decisions</h2>
+            <p className="mt-0.5 text-sm text-zinc-500">
+              All approved and rejected vendor applications, ordered by review date.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-zinc-200 text-xs font-medium uppercase tracking-wide text-zinc-500">
+                <tr>
+                  <th className="px-5 py-3">Company</th>
+                  <th className="px-5 py-3">Category</th>
+                  <th className="px-5 py-3">Decision</th>
+                  <th className="px-5 py-3">Reviewed by</th>
+                  <th className="px-5 py-3">Notes</th>
+                  <th className="px-5 py-3">Decided</th>
+                  <th className="px-5 py-3">Submitted</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {decidedApplications.length === 0 ? (
+                  <tr>
+                    <td className="px-5 py-12 text-center text-sm text-zinc-500" colSpan={7}>
+                      No decisions have been made yet.
+                    </td>
+                  </tr>
+                ) : (
+                  decidedApplications.map((application) => (
+                    <tr key={application.id}>
+                      <td className="px-5 py-4">
+                        <div className="font-medium text-zinc-950">
+                          {application.vendorProfile.companyName}
+                        </div>
+                        {application.companyRegistrationNumber && (
+                          <div className="text-xs text-zinc-400">
+                            Reg. {application.companyRegistrationNumber}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-5 py-4 text-zinc-600">
+                        {application.vendorProfile.serviceCategory}
+                      </td>
+                      <td className="px-5 py-4">
+                        {application.status === "APPROVED" ? (
+                          <Badge tone="success">Approved</Badge>
+                        ) : (
+                          <Badge tone="danger">Rejected</Badge>
+                        )}
+                      </td>
+                      <td className="px-5 py-4 text-zinc-600">
+                        {application.reviewerName ?? (
+                          <span className="text-zinc-400">Unknown</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-4 max-w-xs text-zinc-600">
+                        {application.reviewNotes ? (
+                          <span className="line-clamp-2">{application.reviewNotes}</span>
+                        ) : (
+                          <span className="text-zinc-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-4 whitespace-nowrap text-zinc-500">
+                        {application.reviewedAt
+                          ? new Date(application.reviewedAt).toLocaleDateString("en-GB", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })
+                          : <span className="text-zinc-400">—</span>}
+                      </td>
+                      <td className="px-5 py-4 whitespace-nowrap text-zinc-500">
+                        {new Date(application.createdAt).toLocaleDateString("en-GB", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
     </div>
   );

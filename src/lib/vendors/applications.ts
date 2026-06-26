@@ -134,6 +134,46 @@ export async function listVendorApplications({
   });
 }
 
+export async function listDecidedVendorApplications() {
+  const applications = await prisma.vendorApplication.findMany({
+    where: {
+      status: { in: [VendorApplicationStatus.APPROVED, VendorApplicationStatus.REJECTED] },
+    },
+    include: {
+      vendorProfile: {
+        select: {
+          companyName: true,
+          serviceCategory: true,
+          contactEmail: true,
+          contactPersonName: true,
+        },
+      },
+    },
+    orderBy: { reviewedAt: "desc" },
+  });
+
+  const reviewerIds = [
+    ...new Set(applications.map((a) => a.reviewedByUserId).filter(Boolean)),
+  ] as string[];
+
+  const reviewers =
+    reviewerIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: reviewerIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+
+  const reviewerMap = Object.fromEntries(reviewers.map((r) => [r.id, r.name]));
+
+  return applications.map((application) => ({
+    ...application,
+    reviewerName: application.reviewedByUserId
+      ? (reviewerMap[application.reviewedByUserId] ?? null)
+      : null,
+  }));
+}
+
 /**
  * Approves or rejects a pending vendor application. Only pending
  * applications can be reviewed — a decision is final.
