@@ -175,6 +175,47 @@ export async function listDecidedVendorApplications() {
 }
 
 /**
+ * Revokes access for an already-approved vendor application.
+ * Only approved applications can be revoked.
+ *
+ * @throws If the application doesn't exist or isn't approved.
+ */
+export async function revokeVendorApplication({
+  applicationId,
+  reviewerId,
+  notes,
+}: {
+  applicationId: string;
+  reviewerId: string;
+  notes?: string;
+}) {
+  const result = await prisma.vendorApplication.updateMany({
+    where: {
+      id: applicationId,
+      status: VendorApplicationStatus.APPROVED,
+    },
+    data: {
+      status: VendorApplicationStatus.REJECTED,
+      reviewedByUserId: reviewerId,
+      reviewedAt: new Date(),
+      reviewNotes: notes ? `Revoked: ${notes}` : "Access revoked by admin",
+    },
+  });
+
+  if (result.count !== 1) {
+    throw new Error("This vendor is not currently approved.");
+  }
+
+  await writeAuditLog({
+    action: AuditAction.VENDOR_APPLICATION_REJECTED,
+    actorId: reviewerId,
+    targetType: "vendor_application",
+    targetId: applicationId,
+    meta: { revoked: true, ...(notes ? { notes } : {}) },
+  });
+}
+
+/**
  * Approves or rejects a pending vendor application. Only pending
  * applications can be reviewed — a decision is final.
  *

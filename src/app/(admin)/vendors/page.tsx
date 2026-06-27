@@ -10,7 +10,9 @@ import {
 import {
   approveVendorApplicationAction,
   rejectVendorApplicationAction,
+  revokeVendorApplicationAction,
 } from "./actions";
+import { RevokeButton } from "./RevokeButton";
 
 const SCOPE_LABELS: Record<string, string> = {
   enrollment_status: "Enrollment Status",
@@ -130,16 +132,23 @@ export default async function VendorsPage({
                     )}
                   </div>
 
-                  {application.reviewedAt && (
-                    <p className="shrink-0 text-xs text-zinc-400">
-                      Approved{" "}
-                      {new Date(application.reviewedAt).toLocaleDateString("en-GB", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </p>
-                  )}
+                  <div className="flex shrink-0 flex-col items-end gap-2">
+                    {application.reviewedAt && (
+                      <p className="text-xs text-zinc-400">
+                        Approved{" "}
+                        {new Date(application.reviewedAt).toLocaleDateString("en-GB", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </p>
+                    )}
+                    <RevokeButton
+                      applicationId={application.id}
+                      companyName={application.vendorProfile.companyName}
+                      action={revokeVendorApplicationAction}
+                    />
+                  </div>
                 </div>
               </div>
             ))}
