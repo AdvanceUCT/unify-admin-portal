@@ -30,7 +30,13 @@ const createApplicationSchema = z.object({
   contactPersonName: z.string().trim().min(1, "Contact person name is required"),
   contactEmail: z.string().trim().email("Contact email must be valid"),
   justification: z.string().trim().min(1, "Justification is required"),
-  requestedScopes: z.array(z.enum(ALLOWED_SCOPES)).default([]),
+  requestedScopes: z
+    .array(z.string().trim().min(1))
+    .default([])
+    .refine(
+      (scopes) => scopes.every((s) => (ALLOWED_SCOPES as readonly string[]).includes(s)),
+      "One or more requested scopes are not permitted",
+    ),
 });
 
 export type CreateVendorApplicationInput = z.input<typeof createApplicationSchema>;
