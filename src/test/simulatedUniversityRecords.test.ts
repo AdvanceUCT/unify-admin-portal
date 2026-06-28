@@ -34,13 +34,20 @@ describe("simulated university student records", () => {
   });
 
   it("supports lookup and search by university record details", () => {
-    const student = getSimulatedUniversityStudentRecordById("student-demo-100");
+    const joshua = getSimulatedUniversityStudentRecordById("student-demo-100");
+    const caleb = getSimulatedUniversityStudentRecordById("student-demo-099");
 
-    expect(student?.credential.lifecycleState).toBe("NOT_ISSUED");
-    expect(student?.profile.email).toBe("joshuawood.dc@gmail.com");
+    expect(joshua?.credential.lifecycleState).toBe("NOT_ISSUED");
+    expect(joshua?.profile.email).toBe("joshuawood.dc@gmail.com");
     expect(searchSimulatedUniversityStudentRecords("Joshua Wood")).toHaveLength(1);
+    expect(caleb?.profile).toMatchObject({
+      email: "caleb.voskuil@gmail.com",
+      firstName: "Caleb",
+      lastName: "Voskuil",
+    });
+    expect(caleb?.credential.studentNumber).toBe("VOSCAL099");
+    expect(searchSimulatedUniversityStudentRecords("Caleb Voskuil")).toHaveLength(1);
     expect(searchSimulatedUniversityStudentRecords("Sipho Dlamini").length).toBeGreaterThan(0);
-    expect(searchSimulatedUniversityStudentRecords(student?.credential.studentNumber ?? "")).toHaveLength(1);
   });
 
   it("selects issuance-eligible records for the simulated cohort", () => {
