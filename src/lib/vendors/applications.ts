@@ -6,6 +6,14 @@ import { AuditAction, VendorApplicationStatus } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit/audit";
 import { prisma } from "@/lib/db/prisma";
 
+const ALLOWED_SCOPES = [
+  "enrollment_status",
+  "faculty",
+  "programme",
+  "degree",
+  "student_id",
+] as const;
+
 const createApplicationSchema = z.object({
   companyName: z.string().trim().min(1, "Company name is required"),
   companyRegistrationNumber: z.string().trim().min(1, "Company registration number is required"),
@@ -22,7 +30,7 @@ const createApplicationSchema = z.object({
   contactPersonName: z.string().trim().min(1, "Contact person name is required"),
   contactEmail: z.string().trim().email("Contact email must be valid"),
   justification: z.string().trim().min(1, "Justification is required"),
-  requestedScopes: z.array(z.string().trim().min(1)).default([]),
+  requestedScopes: z.array(z.enum(ALLOWED_SCOPES)).default([]),
 });
 
 export type CreateVendorApplicationInput = z.input<typeof createApplicationSchema>;
@@ -80,6 +88,12 @@ export async function createVendorApplication({
       justification: data.justification,
       requestedScopes: data.requestedScopes,
       companyRegistrationNumber: data.companyRegistrationNumber,
+      snapshotCompanyName: data.companyName,
+      snapshotServiceCategory: data.serviceCategory,
+      snapshotContactEmail: data.contactEmail,
+      snapshotContactPersonName: data.contactPersonName,
+      snapshotWebsite: data.website || null,
+      snapshotDescription: data.description,
     },
   });
 
@@ -137,15 +151,19 @@ export async function listVendorApplications({
 export async function listDecidedVendorApplications() {
   const applications = await prisma.vendorApplication.findMany({
     where: {
-      status: { in: [VendorApplicationStatus.APPROVED, VendorApplicationStatus.REJECTED] },
+      status: {
+        in: [
+          VendorApplicationStatus.APPROVED,
+          VendorApplicationStatus.REJECTED,
+          VendorApplicationStatus.REVOKED,
+        ],
+      },
     },
     include: {
       vendorProfile: {
         select: {
           companyName: true,
           serviceCategory: true,
-          contactEmail: true,
-          contactPersonName: true,
         },
       },
     },
@@ -171,6 +189,11 @@ export async function listDecidedVendorApplications() {
     reviewerName: application.reviewedByUserId
       ? (reviewerMap[application.reviewedByUserId] ?? null)
       : null,
+    // Prefer frozen snapshot over live profile to keep history immutable
+    companyName:
+      application.snapshotCompanyName ?? application.vendorProfile.companyName,
+    serviceCategory:
+      application.snapshotServiceCategory ?? application.vendorProfile.serviceCategory,
   }));
 }
 
@@ -195,10 +218,12 @@ export async function revokeVendorApplication({
       status: VendorApplicationStatus.APPROVED,
     },
     data: {
-      status: VendorApplicationStatus.REJECTED,
-      reviewedByUserId: reviewerId,
-      reviewedAt: new Date(),
-      reviewNotes: notes ? `Revoked: ${notes}` : "Access revoked by admin",
+      status: VendorApplicationStatus.REVOKED,
+      revokedByUserId: reviewerId,
+      revokedAt: new Date(),
+      revokedNotes: notes ?? null,
+      // reviewedByUserId / reviewedAt / reviewNotes are intentionally left unchanged
+      // so the original approval record remains intact in history
     },
   });
 
@@ -207,11 +232,11 @@ export async function revokeVendorApplication({
   }
 
   await writeAuditLog({
-    action: AuditAction.VENDOR_APPLICATION_REJECTED,
+    action: AuditAction.VENDOR_APPLICATION_REVOKED,
     actorId: reviewerId,
     targetType: "vendor_application",
     targetId: applicationId,
-    meta: { revoked: true, ...(notes ? { notes } : {}) },
+    meta: notes ? { notes } : undefined,
   });
 }
 

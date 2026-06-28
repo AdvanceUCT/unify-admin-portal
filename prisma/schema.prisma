@@ -121,12 +121,24 @@ model VendorApplication {
   status           VendorApplicationStatus @default(PENDING)
   justification    String
   requestedScopes  String[]                @default([])
+  companyRegistrationNumber String?
+  // Original review decision fields — immutable after approval/rejection
   reviewedByUserId String?
   reviewedAt       DateTime?
   reviewNotes      String?
+  // Revocation fields — populated only when status transitions to REVOKED
+  revokedByUserId  String?
+  revokedAt        DateTime?
+  revokedNotes     String?
+  // Immutable snapshot of vendor profile at time of submission
+  snapshotCompanyName       String?
+  snapshotServiceCategory   String?
+  snapshotContactEmail      String?
+  snapshotContactPersonName String?
+  snapshotWebsite           String?
+  snapshotDescription       String?
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
-  companyRegistrationNumber String? 
 
   @@index([vendorProfileId])
   @@index([status])
@@ -137,6 +149,7 @@ enum VendorApplicationStatus {
   PENDING
   APPROVED
   REJECTED
+  REVOKED
 }
 
 model UniversityProfile {
@@ -382,4 +395,5 @@ enum AuditAction {
   VENDOR_APPLICATION_SUBMITTED
   VENDOR_APPLICATION_APPROVED
   VENDOR_APPLICATION_REJECTED
+  VENDOR_APPLICATION_REVOKED
 }

@@ -304,7 +304,7 @@ export default async function VendorsPage({
                     <tr key={application.id}>
                       <td className="px-5 py-4">
                         <div className="font-medium text-zinc-950">
-                          {application.vendorProfile.companyName}
+                          {application.companyName}
                         </div>
                         {application.companyRegistrationNumber && (
                           <div className="text-xs text-zinc-400">
@@ -313,11 +313,13 @@ export default async function VendorsPage({
                         )}
                       </td>
                       <td className="px-5 py-4 text-zinc-600">
-                        {application.vendorProfile.serviceCategory}
+                        {application.serviceCategory}
                       </td>
                       <td className="px-5 py-4">
                         {application.status === "APPROVED" ? (
                           <Badge tone="success">Approved</Badge>
+                        ) : application.status === "REVOKED" ? (
+                          <Badge tone="warning">Revoked</Badge>
                         ) : (
                           <Badge tone="danger">Rejected</Badge>
                         )}
