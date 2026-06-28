@@ -18,6 +18,14 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
+vi.mock("@/lib/db/prisma", () => ({
+  prisma: {
+    vendorApplication: {
+      findFirst: vi.fn(),
+    },
+  },
+}));
+
 vi.mock("@/lib/auth/auth", () => ({
   auth: {
     api: {

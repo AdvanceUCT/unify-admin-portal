@@ -117,6 +117,12 @@ describe("createVendorApplication", () => {
         justification: "We verify degrees",
         requestedScopes: ["degree"],
         companyRegistrationNumber: "12345",
+        snapshotCompanyName: "Acme Corp",
+        snapshotServiceCategory: "Health",
+        snapshotContactEmail: "jane@example.com",
+        snapshotContactPersonName: "Jane Doe",
+        snapshotWebsite: "https://example.com",
+        snapshotDescription: "We verify credentials for healthcare professionals.",
       },
     });
     expect(writeAuditLogMock).toHaveBeenCalledWith(
