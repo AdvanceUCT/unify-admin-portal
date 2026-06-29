@@ -82,7 +82,7 @@ export default async function AuditPage({
           <div className="border-b border-zinc-200 px-5 py-4">
             <h2 className="text-base font-semibold text-zinc-950">Vendor application decisions</h2>
             <p className="mt-0.5 text-sm text-zinc-500">
-              All approved and rejected vendor applications, ordered by review date.
+              Approved, rejected, and revoked verifier applications, ordered by decision date.
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -92,7 +92,7 @@ export default async function AuditPage({
                   <th className="px-5 py-3">Company</th>
                   <th className="px-5 py-3">Category</th>
                   <th className="px-5 py-3">Decision</th>
-                  <th className="px-5 py-3">Reviewed by</th>
+                  <th className="px-5 py-3">Decided by</th>
                   <th className="px-5 py-3">Notes</th>
                   <th className="px-5 py-3">Decided</th>
                   <th className="px-5 py-3">Submitted</th>
@@ -131,20 +131,20 @@ export default async function AuditPage({
                         )}
                       </td>
                       <td className="px-5 py-4 text-zinc-600">
-                        {application.reviewerName ?? (
+                        {application.decisionActorName ?? (
                           <span className="text-zinc-400">Unknown</span>
                         )}
                       </td>
                       <td className="max-w-xs px-5 py-4 text-zinc-600">
-                        {application.reviewNotes ? (
-                          <span className="line-clamp-2">{application.reviewNotes}</span>
+                        {application.decisionNotes ? (
+                          <span className="line-clamp-2">{application.decisionNotes}</span>
                         ) : (
                           <span className="text-zinc-400">—</span>
                         )}
                       </td>
                       <td className="whitespace-nowrap px-5 py-4 text-zinc-500">
-                        {application.reviewedAt
-                          ? new Date(application.reviewedAt).toLocaleDateString("en-GB", {
+                        {application.decisionAt
+                          ? new Date(application.decisionAt).toLocaleDateString("en-GB", {
                               day: "numeric",
                               month: "short",
                               year: "numeric",

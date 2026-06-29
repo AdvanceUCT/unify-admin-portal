@@ -38,6 +38,7 @@ export async function revokeVendorApplicationAction(formData: FormData) {
   assertCan("vendor:write", session);
 
   const applicationId = String(formData.get("applicationId") ?? "");
+  const notes = String(formData.get("notes") ?? "").trim();
 
   if (!applicationId) {
     return;
@@ -46,6 +47,7 @@ export async function revokeVendorApplicationAction(formData: FormData) {
   await revokeVendorApplication({
     applicationId,
     reviewerId: session.user.id,
+    notes,
   });
 
   revalidatePath("/vendors");
