@@ -1,7 +1,11 @@
 import { redirect } from "next/navigation";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { requireVendorSession } from "@/lib/auth/session";
+import { prisma } from "@/lib/db/prisma";
+import {
+  requireApprovedVendorSession,
+  requireVendorSession,
+} from "@/lib/auth/session";
 
 vi.mock("server-only", () => ({}));
 
@@ -18,6 +22,14 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
+vi.mock("@/lib/db/prisma", () => ({
+  prisma: {
+    vendorApplication: {
+      findFirst: vi.fn(),
+    },
+  },
+}));
+
 vi.mock("@/lib/auth/auth", () => ({
   auth: {
     api: {
@@ -28,6 +40,11 @@ vi.mock("@/lib/auth/auth", () => ({
 
 const { auth } = await import("@/lib/auth/auth");
 const getSessionMock = vi.mocked(auth.api.getSession);
+const vendorApplication = vi.mocked(prisma.vendorApplication);
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe("requireVendorSession", () => {
   it("redirects to /vendor/sign-in when there is no session", async () => {
@@ -61,5 +78,40 @@ describe("requireVendorSession", () => {
     getSessionMock.mockResolvedValueOnce(session as Awaited<ReturnType<typeof auth.api.getSession>>);
 
     await expect(requireVendorSession()).resolves.toEqual(session);
+  });
+});
+
+describe("requireApprovedVendorSession", () => {
+  const vendorSession = {
+    user: {
+      id: "vendor_1",
+      role: null,
+      userType: "VENDOR",
+    },
+  };
+
+  it("returns an approved vendor session", async () => {
+    getSessionMock.mockResolvedValueOnce(
+      vendorSession as Awaited<ReturnType<typeof auth.api.getSession>>,
+    );
+    vendorApplication.findFirst.mockResolvedValueOnce({ id: "application_1" } as never);
+
+    await expect(requireApprovedVendorSession()).resolves.toEqual(vendorSession);
+    expect(vendorApplication.findFirst).toHaveBeenCalledWith({
+      where: {
+        vendorProfile: { userId: "vendor_1" },
+        status: "APPROVED",
+      },
+      select: { id: true },
+    });
+  });
+
+  it("forbids a vendor without current approval", async () => {
+    getSessionMock.mockResolvedValueOnce(
+      vendorSession as Awaited<ReturnType<typeof auth.api.getSession>>,
+    );
+    vendorApplication.findFirst.mockResolvedValueOnce(null);
+
+    await expect(requireApprovedVendorSession()).rejects.toThrow("forbidden");
   });
 });

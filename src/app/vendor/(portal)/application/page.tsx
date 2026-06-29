@@ -8,13 +8,17 @@ const STATUS_TONE = {
   PENDING: "warning",
   APPROVED: "success",
   REJECTED: "danger",
+  REVOKED: "warning",
 } as const;
 
 export default async function VendorApplicationPage() {
   const session = await requireVendorSession();
   const application = await getVendorApplicationForUser(session.user.id);
 
-  const canApply = !application || application.status === "REJECTED";
+  const canApply =
+    !application ||
+    application.status === "REJECTED" ||
+    application.status === "REVOKED";
 
   return (
     <div className="space-y-6">

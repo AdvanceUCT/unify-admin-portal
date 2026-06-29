@@ -5,6 +5,7 @@ import {
   CredentialDeliveryStatus,
   CredentialEventType,
   CredentialIssuanceStatus,
+  VendorApplicationStatus,
 } from "@/generated/prisma/enums";
 import type { CredentialEventLog, CredentialIssuance } from "@/generated/prisma/client";
 import type {
@@ -304,7 +305,7 @@ export async function getCredentialDeliveryByIssuanceId(issuanceId: string) {
 }
 
 export async function getDashboardCredentialSummary(): Promise<DashboardSummary> {
-  const [pendingIssuance, issuedCredentials, failedCredentials, activeBatchJobs] = await Promise.all([
+  const [pendingIssuance, issuedCredentials, failedCredentials, activeBatchJobs, vendorsPendingApproval] = await Promise.all([
     prisma.credentialIssuance.count({
       where: { status: { in: [CredentialIssuanceStatus.OFFER_SENT, CredentialIssuanceStatus.ACCEPTED] } },
     }),
@@ -313,6 +314,7 @@ export async function getDashboardCredentialSummary(): Promise<DashboardSummary>
     prisma.batchIssuanceRun.count({
       where: { status: { in: [BatchIssuanceRunStatus.QUEUED, BatchIssuanceRunStatus.PROCESSING] } },
     }),
+    prisma.vendorApplication.count({ where: { status: VendorApplicationStatus.PENDING } }),
   ]);
 
   return {
@@ -321,7 +323,7 @@ export async function getDashboardCredentialSummary(): Promise<DashboardSummary>
     failedCredentials,
     issuedCredentials,
     pendingIssuance,
-    vendorsPendingApproval: 0,
+    vendorsPendingApproval,
   };
 }
 

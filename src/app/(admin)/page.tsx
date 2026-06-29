@@ -25,6 +25,10 @@ export default async function AdminOverviewPage() {
         <Metric label="Active batches" value={summary.activeBatchJobs} detail="queued or processing" />
       </section>
 
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Metric label="Vendor applications" value={summary.vendorsPendingApproval} detail="awaiting review" />
+      </section>
+
       <section className="rounded-lg border border-zinc-200 bg-white">
         <div className="border-b border-zinc-200 px-5 py-4">
           <h2 className="text-base font-semibold text-zinc-950">Recent credential events</h2>
