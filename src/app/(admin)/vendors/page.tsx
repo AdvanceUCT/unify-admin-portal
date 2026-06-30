@@ -1,251 +1,400 @@
 import Link from "next/link";
+import { Globe, Mail, User } from "lucide-react";
 
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { requireRole } from "@/lib/auth/session";
-import { formatDateTime } from "@/lib/formatters";
-import { listVendorApplications } from "@/lib/vendors/applications";
+import {
+  listDecidedVendorApplications,
+  listVendorApplications,
+} from "@/lib/vendors/applications";
+import { VENDOR_VERIFICATION_SCOPE_OPTIONS } from "@/lib/vendors/scopes";
 import {
   approveVendorApplicationAction,
   rejectVendorApplicationAction,
   revokeVendorApplicationAction,
 } from "./actions";
+import { RevokeButton } from "./RevokeButton";
 
-type Tab = "applications" | "approved" | "closed";
-
-const TABS: { id: Tab; label: string }[] = [
-  { id: "applications", label: "Applications" },
-  { id: "approved", label: "Active Vendors" },
-  { id: "closed", label: "Closed" },
-];
-
-function parseTab(value: string | string[] | undefined): Tab {
-  const raw = Array.isArray(value) ? value[0] : value;
-  if (raw === "approved" || raw === "closed") return raw;
-  return "applications";
-}
+const SCOPE_LABELS = Object.fromEntries(
+  VENDOR_VERIFICATION_SCOPE_OPTIONS.map(({ value, label }) => [value, label]),
+);
 
 export default async function VendorsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string | string[] }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   await requireRole(["SUPER_ADMIN", "ADMIN"]);
 
-  const { tab: rawTab } = await searchParams;
-  const activeTab = parseTab(rawTab);
+  const { tab } = await searchParams;
+  const activeTab =
+    tab === "applications" ? "applications" : tab === "log" ? "log" : "vendors";
 
-  const [pending, approved, closed] = await Promise.all([
-    listVendorApplications({ status: "PENDING" }),
-    listVendorApplications({ status: "APPROVED" }),
-    listVendorApplications({ status: ["REJECTED", "REVOKED"] }),
-  ]);
-
-  const counts: Record<Tab, number> = {
-    applications: pending.length,
-    approved: approved.length,
-    closed: closed.length,
-  };
-
-  const newCount = pending.filter((a) => !a.viewedByAdminAt).length;
+  const [approvedApplications, pendingApplications, rejectedApplications, decidedApplications] =
+    await Promise.all([
+      listVendorApplications({ status: "APPROVED" }),
+      listVendorApplications({ status: "PENDING" }),
+      listVendorApplications({ status: "REJECTED" }),
+      listDecidedVendorApplications(),
+    ]);
 
   return (
     <div className="space-y-6">
       <SectionHeader
         title="Vendors"
-        description="Manage verifier applications and active vendor access."
+        description="Manage onboarded service providers and review verifier applications."
       />
 
-      <nav aria-label="Vendor sections" className="flex gap-2 border-b border-zinc-200">
-        {TABS.map(({ id, label }) => {
-          const isActive = activeTab === id;
-          const count = counts[id];
-          const showNew = id === "applications" && newCount > 0;
-          return (
-            <Link
-              key={id}
-              href={id === "applications" ? "/vendors" : `/vendors?tab=${id}`}
-              aria-current={isActive ? "page" : undefined}
-              className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition ${
-                isActive
-                  ? "border-zinc-950 text-zinc-950"
-                  : "border-transparent text-zinc-500 hover:text-zinc-950"
-              }`}
-            >
-              {label}
-              {count > 0 && (
-                <span
-                  className={`rounded-full px-1.5 py-0.5 text-xs font-medium ${
-                    isActive ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-600"
-                  }`}
-                >
-                  {count}
-                </span>
-              )}
-              {showNew && (
-                <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-medium text-white">
-                  {newCount} new
-                </span>
-              )}
-            </Link>
-          );
-        })}
-      </nav>
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-zinc-200">
+        <TabLink href="/vendors" active={activeTab === "vendors"}>
+          Active Vendors
+          {approvedApplications.length > 0 && (
+            <span className="ml-2 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600">
+              {approvedApplications.length}
+            </span>
+          )}
+        </TabLink>
+        <TabLink href="/vendors?tab=applications" active={activeTab === "applications"}>
+          Applications
+          {pendingApplications.length > 0 && (
+            <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+              {pendingApplications.length}
+            </span>
+          )}
+        </TabLink>
+        <TabLink href="/vendors?tab=log" active={activeTab === "log"}>
+          Decision Log
+        </TabLink>
+      </div>
 
-      {activeTab === "applications" && (
+      {/* Active Vendors tab */}
+      {activeTab === "vendors" && (
         <section className="rounded-lg border border-zinc-200 bg-white">
           <div className="divide-y divide-zinc-100">
-            {pending.map((application) => {
-              const isNew = !application.viewedByAdminAt;
-              return (
-                <div
-                  key={application.id}
-                  className="grid gap-4 px-5 py-4 md:grid-cols-[1fr_auto_auto]"
-                >
-                  <div>
+            {approvedApplications.map((application) => (
+              <div key={application.id} className="px-5 py-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <h2 className="font-medium text-zinc-950">
+                      <h2 className="font-semibold text-zinc-950">
                         {application.vendorProfile.companyName}
                       </h2>
-                      {isNew && (
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                          New
+                      <Badge tone="success">Active</Badge>
+                    </div>
+                    <p className="mt-0.5 text-sm text-zinc-500">
+                      {application.vendorProfile.serviceCategory}
+                      {application.companyRegistrationNumber && (
+                        <> &middot; Reg. {application.companyRegistrationNumber}</>
+                      )}
+                    </p>
+
+                    <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-zinc-600">
+                      {application.vendorProfile.contactPersonName && (
+                        <span className="flex items-center gap-1.5">
+                          <User className="size-3.5 shrink-0 text-zinc-400" />
+                          {application.vendorProfile.contactPersonName}
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1.5">
+                        <Mail className="size-3.5 shrink-0 text-zinc-400" />
+                        {application.vendorProfile.contactEmail}
+                      </span>
+                      {application.vendorProfile.website && (
+                        <span className="flex items-center gap-1.5">
+                          <Globe className="size-3.5 shrink-0 text-zinc-400" />
+                          <a
+                            className="text-blue-600 hover:underline"
+                            href={application.vendorProfile.website}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            {application.vendorProfile.website.replace(/^https?:\/\//, "")}
+                          </a>
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-zinc-500">{application.vendorProfile.serviceCategory}</p>
-                    <p className="mt-0.5 text-xs text-zinc-400">
-                      Submitted {formatDateTime(application.createdAt.toISOString())}
-                    </p>
-                  </div>
-                  <Badge tone="warning">PENDING</Badge>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Link
-                      href={`/vendors/${application.id}`}
-                      className="inline-flex h-9 items-center rounded-md border border-zinc-300 px-3 text-sm font-medium"
-                    >
-                      View
-                    </Link>
-                    <form action={approveVendorApplicationAction}>
-                      <input type="hidden" name="applicationId" value={application.id} />
-                      <button
-                        type="submit"
-                        className="h-9 rounded-md bg-zinc-900 px-3 text-sm font-medium text-white"
-                      >
-                        Approve
-                      </button>
-                    </form>
-                    <form action={rejectVendorApplicationAction}>
-                      <input type="hidden" name="applicationId" value={application.id} />
-                      <button
-                        type="submit"
-                        className="h-9 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700"
-                      >
-                        Reject
-                      </button>
-                    </form>
-                  </div>
-                </div>
-              );
-            })}
-            {pending.length === 0 && (
-              <p className="px-5 py-6 text-sm text-zinc-500">No pending applications.</p>
-            )}
-          </div>
-        </section>
-      )}
 
-      {activeTab === "approved" && (
-        <section className="rounded-lg border border-zinc-200 bg-white">
-          <div className="divide-y divide-zinc-100">
-            {approved.map((application) => (
-              <div
-                key={application.id}
-                className="grid gap-4 px-5 py-4 md:grid-cols-[1fr_auto_auto]"
-              >
-                <div>
-                  <h2 className="font-medium text-zinc-950">
-                    {application.vendorProfile.companyName}
-                  </h2>
-                  <p className="text-sm text-zinc-500">{application.vendorProfile.serviceCategory}</p>
-                  <p className="text-xs text-zinc-400">{application.vendorProfile.contactEmail}</p>
-                  {application.reviewedAt && (
-                    <p className="mt-0.5 text-xs text-zinc-400">
-                      Approved {formatDateTime(application.reviewedAt.toISOString())}
-                    </p>
-                  )}
-                </div>
-                <Badge tone="success">APPROVED</Badge>
-                <div className="flex items-center gap-2">
-                  <Link
-                    href={`/vendors/${application.id}`}
-                    className="inline-flex h-9 items-center rounded-md border border-zinc-300 px-3 text-sm font-medium"
-                  >
-                    View
-                  </Link>
-                  <form action={revokeVendorApplicationAction}>
-                    <input type="hidden" name="applicationId" value={application.id} />
-                    <button
-                      type="submit"
-                      className="h-9 rounded-md border border-rose-200 px-3 text-sm font-medium text-rose-700 hover:bg-rose-50"
-                    >
-                      Revoke
-                    </button>
-                  </form>
+                    {application.requestedScopes.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {application.requestedScopes.map((scope) => (
+                          <span
+                            key={scope}
+                            className="inline-flex items-center rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-600"
+                          >
+                            {SCOPE_LABELS[scope] ?? scope}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex shrink-0 flex-col items-end gap-2">
+                    {application.reviewedAt && (
+                      <p className="text-xs text-zinc-400">
+                        Approved{" "}
+                        {new Date(application.reviewedAt).toLocaleDateString("en-GB", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </p>
+                    )}
+                    <RevokeButton
+                      applicationId={application.id}
+                      companyName={application.vendorProfile.companyName}
+                      action={revokeVendorApplicationAction}
+                    />
+                  </div>
                 </div>
               </div>
             ))}
-            {approved.length === 0 && (
-              <p className="px-5 py-6 text-sm text-zinc-500">No active vendors.</p>
+
+            {approvedApplications.length === 0 && (
+              <p className="px-5 py-8 text-center text-sm text-zinc-500">
+                No approved vendors yet. Approve a verifier application to onboard them.
+              </p>
             )}
           </div>
         </section>
       )}
 
-      {activeTab === "closed" && (
-        <section className="rounded-lg border border-zinc-200 bg-white">
-          <div className="divide-y divide-zinc-100">
-            {closed.map((application) => {
-              const isRevoked = application.status === "REVOKED";
-              return (
-                <div
-                  key={application.id}
-                  className="grid gap-4 px-5 py-4 md:grid-cols-[1fr_auto_auto]"
-                >
-                  <div>
-                    <h2 className="font-medium text-zinc-950">
-                      {application.vendorProfile.companyName}
-                    </h2>
-                    <p className="text-sm text-zinc-500">{application.vendorProfile.serviceCategory}</p>
-                    {isRevoked && application.revokedAt ? (
-                      <p className="mt-0.5 text-xs text-zinc-400">
-                        Revoked {formatDateTime(application.revokedAt.toISOString())}
-                      </p>
-                    ) : application.reviewedAt ? (
-                      <p className="mt-0.5 text-xs text-zinc-400">
-                        Rejected {formatDateTime(application.reviewedAt.toISOString())}
-                      </p>
-                    ) : null}
-                    {application.reviewNotes && (
-                      <p className="mt-1 text-xs text-zinc-500 italic">{application.reviewNotes}</p>
-                    )}
-                  </div>
-                  <Badge tone="danger">{application.status}</Badge>
-                  <Link
-                    href={`/vendors/${application.id}`}
-                    className="inline-flex h-9 items-center rounded-md border border-zinc-300 px-3 text-sm font-medium"
-                  >
-                    View
-                  </Link>
+      {/* Applications tab */}
+      {activeTab === "applications" && (
+        <div className="space-y-6">
+          {/* Pending */}
+          <div>
+            <h2 className="mb-3 text-sm font-medium text-zinc-500 uppercase tracking-wide">
+              Pending ({pendingApplications.length})
+            </h2>
+            <section className="rounded-lg border border-zinc-200 bg-white">
+              <div className="divide-y divide-zinc-100">
+                {pendingApplications.map((application) => {
+                  const isNew = !application.viewedByAdminAt;
+                  return (
+                    <div
+                      key={application.id}
+                      className="grid gap-4 px-5 py-4 md:grid-cols-[1fr_auto]"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-medium text-zinc-950">
+                            {application.snapshotCompanyName ?? application.vendorProfile.companyName}
+                          </h3>
+                          <Badge tone="warning">Pending</Badge>
+                          {isNew && (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                              New
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-zinc-500">
+                          {application.snapshotServiceCategory ?? application.vendorProfile.serviceCategory}
+                        </p>
+                        <p className="mt-1 text-sm text-zinc-600">{application.justification}</p>
+                        <p className="mt-1 text-xs text-zinc-400">
+                          Submitted{" "}
+                          {new Date(application.createdAt).toLocaleDateString("en-GB", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-start gap-2">
+                        <Link
+                          href={`/vendors/${application.id}`}
+                          className="inline-flex h-9 items-center rounded-md border border-zinc-300 px-3 text-sm font-medium"
+                        >
+                          View
+                        </Link>
+                        <form action={approveVendorApplicationAction}>
+                          <input type="hidden" name="applicationId" value={application.id} />
+                          <button
+                            className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                            type="submit"
+                          >
+                            Approve
+                          </button>
+                        </form>
+                        <form action={rejectVendorApplicationAction}>
+                          <input type="hidden" name="applicationId" value={application.id} />
+                          <button
+                            className="h-9 rounded-md border border-rose-200 bg-rose-50 px-3 text-sm font-medium text-rose-700 hover:bg-rose-100"
+                            type="submit"
+                          >
+                            Reject
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                  );
+                })}
+                {pendingApplications.length === 0 && (
+                  <p className="px-5 py-6 text-sm text-zinc-500">No pending applications.</p>
+                )}
+              </div>
+            </section>
+          </div>
+
+          {/* Rejected */}
+          {rejectedApplications.length > 0 && (
+            <div>
+              <h2 className="mb-3 text-sm font-medium text-zinc-500 uppercase tracking-wide">
+                Rejected ({rejectedApplications.length})
+              </h2>
+              <section className="rounded-lg border border-zinc-200 bg-white">
+                <div className="divide-y divide-zinc-100">
+                  {rejectedApplications.map((application) => (
+                    <div key={application.id} className="flex items-center gap-4 px-5 py-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-medium text-zinc-950">
+                            {application.snapshotCompanyName ?? application.vendorProfile.companyName}
+                          </h3>
+                          <Badge tone="danger">Rejected</Badge>
+                        </div>
+                        <p className="text-sm text-zinc-500">
+                          {application.snapshotServiceCategory ?? application.vendorProfile.serviceCategory}
+                        </p>
+                        {application.reviewNotes && (
+                          <p className="mt-1 text-sm text-zinc-600">
+                            Note: {application.reviewNotes}
+                          </p>
+                        )}
+                      </div>
+                      {application.reviewedAt && (
+                        <p className="shrink-0 text-xs text-zinc-400">
+                          {new Date(application.reviewedAt).toLocaleDateString("en-GB", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </p>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              );
-            })}
-            {closed.length === 0 && (
-              <p className="px-5 py-6 text-sm text-zinc-500">No closed applications.</p>
-            )}
+              </section>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Decision Log tab */}
+      {activeTab === "log" && (
+        <section className="rounded-lg border border-zinc-200 bg-white">
+          <div className="border-b border-zinc-200 px-5 py-4">
+            <h2 className="text-base font-semibold text-zinc-950">Application decisions</h2>
+            <p className="mt-0.5 text-sm text-zinc-500">
+              Approved, rejected, and revoked verifier applications, ordered by decision date.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-zinc-200 text-xs font-medium uppercase tracking-wide text-zinc-500">
+                <tr>
+                  <th className="px-5 py-3">Company</th>
+                  <th className="px-5 py-3">Category</th>
+                  <th className="px-5 py-3">Decision</th>
+                  <th className="px-5 py-3">Decided by</th>
+                  <th className="px-5 py-3">Notes</th>
+                  <th className="px-5 py-3">Decided</th>
+                  <th className="px-5 py-3">Submitted</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {decidedApplications.length === 0 ? (
+                  <tr>
+                    <td className="px-5 py-12 text-center text-sm text-zinc-500" colSpan={7}>
+                      No decisions have been made yet.
+                    </td>
+                  </tr>
+                ) : (
+                  decidedApplications.map((application) => (
+                    <tr key={application.id}>
+                      <td className="px-5 py-4">
+                        <div className="font-medium text-zinc-950">
+                          {application.companyName}
+                        </div>
+                        {application.companyRegistrationNumber && (
+                          <div className="text-xs text-zinc-400">
+                            Reg. {application.companyRegistrationNumber}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-5 py-4 text-zinc-600">
+                        {application.serviceCategory}
+                      </td>
+                      <td className="px-5 py-4">
+                        {application.status === "APPROVED" ? (
+                          <Badge tone="success">Approved</Badge>
+                        ) : application.status === "REVOKED" ? (
+                          <Badge tone="warning">Revoked</Badge>
+                        ) : (
+                          <Badge tone="danger">Rejected</Badge>
+                        )}
+                      </td>
+                      <td className="px-5 py-4 text-zinc-600">
+                        {application.decisionActorName ?? (
+                          <span className="text-zinc-400">Unknown</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-4 max-w-xs text-zinc-600">
+                        {application.decisionNotes ? (
+                          <span className="line-clamp-2">{application.decisionNotes}</span>
+                        ) : (
+                          <span className="text-zinc-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-4 whitespace-nowrap text-zinc-500">
+                        {application.decisionAt
+                          ? new Date(application.decisionAt).toLocaleDateString("en-GB", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })
+                          : <span className="text-zinc-400">—</span>}
+                      </td>
+                      <td className="px-5 py-4 whitespace-nowrap text-zinc-500">
+                        {new Date(application.createdAt).toLocaleDateString("en-GB", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </section>
       )}
     </div>
+  );
+}
+
+function TabLink({
+  href,
+  active,
+  children,
+}: {
+  href: string;
+  active: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      className={`flex items-center px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+        active
+          ? "border-zinc-900 text-zinc-900"
+          : "border-transparent text-zinc-500 hover:text-zinc-700 hover:border-zinc-300"
+      }`}
+    >
+      {children}
+    </a>
   );
 }

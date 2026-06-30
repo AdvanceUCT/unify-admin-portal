@@ -2,9 +2,16 @@ import "server-only";
 
 import { z } from "zod";
 
+import type { Prisma } from "@/generated/prisma/client";
 import { AuditAction, VendorApplicationStatus } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit/audit";
 import { prisma } from "@/lib/db/prisma";
+import { VENDOR_VERIFICATION_SCOPES } from "@/lib/vendors/scopes";
+
+const ACTIVE_APPLICATION_STATUSES = [
+  VendorApplicationStatus.PENDING,
+  VendorApplicationStatus.APPROVED,
+] as const;
 
 const createApplicationSchema = z.object({
   companyName: z.string().trim().min(1, "Company name is required"),
@@ -22,17 +29,61 @@ const createApplicationSchema = z.object({
   contactPersonName: z.string().trim().min(1, "Contact person name is required"),
   contactEmail: z.string().trim().email("Contact email must be valid"),
   justification: z.string().trim().min(1, "Justification is required"),
-  requestedScopes: z.array(z.string().trim().min(1)).default([]),
+  requestedScopes: z
+    .array(z.enum(VENDOR_VERIFICATION_SCOPES))
+    .min(1, "Select at least one credential scope")
+    .transform((scopes) => [...new Set(scopes)]),
 });
 
-export type CreateVendorApplicationInput = z.input<typeof createApplicationSchema>;
+const revokeApplicationSchema = z.object({
+  applicationId: z.string().trim().min(1),
+  reviewerId: z.string().trim().min(1),
+  notes: z.string().trim().min(1, "A revocation reason is required").max(500),
+});
+
+export type CreateVendorApplicationInput = Omit<
+  z.input<typeof createApplicationSchema>,
+  "requestedScopes"
+> & {
+  requestedScopes: string[];
+};
+
+function hasPrismaErrorCode(error: unknown, code: string) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === code
+  );
+}
+
+async function runSerializableTransaction<T>(
+  operation: (transaction: Prisma.TransactionClient) => Promise<T>,
+) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await prisma.$transaction(operation, {
+        isolationLevel: "Serializable",
+      });
+    } catch (error) {
+      if (!hasPrismaErrorCode(error, "P2034") || attempt === 2) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error("The transaction could not be completed.");
+}
+
+function activeApplicationError(status?: VendorApplicationStatus) {
+  return status === VendorApplicationStatus.APPROVED
+    ? new Error("Your verifier application is already approved.")
+    : new Error("You already have an application under review.");
+}
 
 /**
- * Submits a new verifier application for the vendor's profile. Vendors can
- * only have one open (pending) application at a time — they must wait for a
- * decision before submitting another.
- *
- * @throws If the user has no vendor profile, or already has a pending application.
+ * Stores a verifier application as an immutable snapshot. The live vendor
+ * profile is only updated after an administrator approves the application.
  */
 export async function createVendorApplication({
   userId,
@@ -43,57 +94,63 @@ export async function createVendorApplication({
 }) {
   const data = createApplicationSchema.parse(input);
 
-  const vendorProfile = await prisma.vendorProfile.findUnique({
-    where: { userId },
-  });
+  try {
+    return await runSerializableTransaction(async (transaction) => {
+      const vendorProfile = await transaction.vendorProfile.findUnique({
+        where: { userId },
+      });
 
-  if (!vendorProfile) {
-    throw new Error("No vendor profile found for this account.");
+      if (!vendorProfile) {
+        throw new Error("No vendor profile found for this account.");
+      }
+
+      const existingApplication = await transaction.vendorApplication.findFirst({
+        where: {
+          vendorProfileId: vendorProfile.id,
+          status: { in: [...ACTIVE_APPLICATION_STATUSES] },
+        },
+        select: { status: true },
+      });
+
+      if (existingApplication) {
+        throw activeApplicationError(existingApplication.status);
+      }
+
+      const application = await transaction.vendorApplication.create({
+        data: {
+          vendorProfileId: vendorProfile.id,
+          justification: data.justification,
+          requestedScopes: data.requestedScopes,
+          companyRegistrationNumber: data.companyRegistrationNumber,
+          snapshotCompanyName: data.companyName,
+          snapshotServiceCategory: data.serviceCategory,
+          snapshotContactEmail: data.contactEmail,
+          snapshotContactPersonName: data.contactPersonName,
+          snapshotWebsite: data.website || null,
+          snapshotDescription: data.description,
+        },
+      });
+
+      await writeAuditLog(
+        {
+          action: AuditAction.VENDOR_APPLICATION_SUBMITTED,
+          actorId: userId,
+          targetType: "vendor_application",
+          targetId: application.id,
+          meta: { vendorProfileId: vendorProfile.id },
+        },
+        transaction,
+      );
+
+      return application;
+    });
+  } catch (error) {
+    if (hasPrismaErrorCode(error, "P2002")) {
+      throw activeApplicationError();
+    }
+
+    throw error;
   }
-
-  const existingPendingApplication = await prisma.vendorApplication.findFirst({
-    where: {
-      vendorProfileId: vendorProfile.id,
-      status: VendorApplicationStatus.PENDING,
-    },
-  });
-
-  if (existingPendingApplication) {
-    throw new Error("You already have an application under review.");
-  }
-
-  await prisma.vendorProfile.update({
-    where: { id: vendorProfile.id },
-    data: {
-      companyName: data.companyName,
-      serviceCategory: data.serviceCategory,
-      contactEmail: data.contactEmail,
-      website: data.website || null,
-      description: data.description,
-      contactPersonName: data.contactPersonName,
-    },
-  });
-
-  const application = await prisma.vendorApplication.create({
-    data: {
-      vendorProfileId: vendorProfile.id,
-      justification: data.justification,
-      requestedScopes: data.requestedScopes,
-      companyRegistrationNumber: data.companyRegistrationNumber,
-    },
-  });
-
-  await writeAuditLog({
-    action: AuditAction.VENDOR_APPLICATION_SUBMITTED,
-    actorId: userId,
-    targetType: "vendor_application",
-    targetId: application.id,
-    meta: {
-      vendorProfileId: vendorProfile.id,
-    },
-  });
-
-  return application;
 }
 
 export async function getVendorApplicationForUser(userId: string) {
@@ -149,6 +206,9 @@ export async function listVendorApplications({
           companyName: true,
           serviceCategory: true,
           contactEmail: true,
+          contactPersonName: true,
+          website: true,
+          description: true,
         },
       },
     },
@@ -156,12 +216,112 @@ export async function listVendorApplications({
   });
 }
 
-/**
- * Approves or rejects a pending vendor application. Only pending
- * applications can be reviewed — a decision is final.
- *
- * @throws If the application doesn't exist or isn't pending.
- */
+export async function listDecidedVendorApplications() {
+  const applications = await prisma.vendorApplication.findMany({
+    where: {
+      status: {
+        in: [
+          VendorApplicationStatus.APPROVED,
+          VendorApplicationStatus.REJECTED,
+          VendorApplicationStatus.REVOKED,
+        ],
+      },
+    },
+    include: {
+      vendorProfile: {
+        select: { companyName: true, serviceCategory: true },
+      },
+    },
+  });
+
+  const actorIds = [
+    ...new Set(
+      applications
+        .flatMap((application) => [
+          application.reviewedByUserId,
+          application.revokedByUserId,
+        ])
+        .filter(Boolean),
+    ),
+  ] as string[];
+
+  const actors =
+    actorIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: actorIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+  const actorMap = Object.fromEntries(actors.map((actor) => [actor.id, actor.name]));
+
+  return applications
+    .map((application) => {
+      const isRevoked = application.status === VendorApplicationStatus.REVOKED;
+      const decisionActorId = isRevoked
+        ? application.revokedByUserId
+        : application.reviewedByUserId;
+
+      return {
+        ...application,
+        decisionActorName: decisionActorId
+          ? (actorMap[decisionActorId] ?? null)
+          : null,
+        decisionAt: isRevoked ? application.revokedAt : application.reviewedAt,
+        decisionNotes: isRevoked
+          ? application.revokedNotes
+          : application.reviewNotes,
+        companyName:
+          application.snapshotCompanyName ?? application.vendorProfile.companyName,
+        serviceCategory:
+          application.snapshotServiceCategory ?? application.vendorProfile.serviceCategory,
+      };
+    })
+    .sort(
+      (left, right) =>
+        (right.decisionAt?.getTime() ?? 0) - (left.decisionAt?.getTime() ?? 0),
+    );
+}
+
+/** Removes verifier privileges while leaving the vendor account available. */
+export async function revokeVendorApplication(input: {
+  applicationId: string;
+  reviewerId: string;
+  notes: string;
+}) {
+  const data = revokeApplicationSchema.parse(input);
+
+  return runSerializableTransaction(async (transaction) => {
+    const result = await transaction.vendorApplication.updateMany({
+      where: {
+        id: data.applicationId,
+        status: VendorApplicationStatus.APPROVED,
+      },
+      data: {
+        status: VendorApplicationStatus.REVOKED,
+        revokedByUserId: data.reviewerId,
+        revokedAt: new Date(),
+        revokedNotes: data.notes,
+      },
+    });
+
+    if (result.count !== 1) {
+      throw new Error("This vendor is not currently approved.");
+    }
+
+    await writeAuditLog(
+      {
+        action: AuditAction.VENDOR_APPLICATION_REVOKED,
+        actorId: data.reviewerId,
+        targetType: "vendor_application",
+        targetId: data.applicationId,
+        meta: { notes: data.notes },
+      },
+      transaction,
+    );
+  });
+}
+
+/** Approves or rejects a pending application and records the decision atomically. */
 export async function reviewVendorApplication({
   applicationId,
   decision,
@@ -173,76 +333,76 @@ export async function reviewVendorApplication({
   reviewerId: string;
   notes?: string;
 }) {
-  const result = await prisma.vendorApplication.updateMany({
-    where: {
-      id: applicationId,
-      status: VendorApplicationStatus.PENDING,
-    },
-    data: {
-      status: decision,
-      reviewedByUserId: reviewerId,
-      reviewedAt: new Date(),
-      reviewNotes: notes,
-    },
-  });
+  try {
+    return await runSerializableTransaction(async (transaction) => {
+      const application = await transaction.vendorApplication.findUnique({
+        where: { id: applicationId },
+        include: { vendorProfile: true },
+      });
 
-  if (result.count !== 1) {
-    throw new Error("This application is not pending review.");
+      if (!application || application.status !== VendorApplicationStatus.PENDING) {
+        throw new Error("This application is not pending review.");
+      }
+
+      const result = await transaction.vendorApplication.updateMany({
+        where: { id: applicationId, status: VendorApplicationStatus.PENDING },
+        data: {
+          status: decision,
+          reviewedByUserId: reviewerId,
+          reviewedAt: new Date(),
+          reviewNotes: notes?.trim() || null,
+        },
+      });
+
+      if (result.count !== 1) {
+        throw new Error("This application is not pending review.");
+      }
+
+      if (decision === VendorApplicationStatus.APPROVED) {
+        await transaction.vendorProfile.update({
+          where: { id: application.vendorProfileId },
+          data: {
+            companyName:
+              application.snapshotCompanyName ?? application.vendorProfile.companyName,
+            serviceCategory:
+              application.snapshotServiceCategory ?? application.vendorProfile.serviceCategory,
+            contactEmail:
+              application.snapshotContactEmail ?? application.vendorProfile.contactEmail,
+            contactPersonName:
+              application.snapshotContactPersonName ??
+              application.vendorProfile.contactPersonName,
+            website: application.snapshotWebsite,
+            description:
+              application.snapshotDescription ?? application.vendorProfile.description,
+          },
+        });
+      }
+
+      await writeAuditLog(
+        {
+          action:
+            decision === VendorApplicationStatus.APPROVED
+              ? AuditAction.VENDOR_APPLICATION_APPROVED
+              : AuditAction.VENDOR_APPLICATION_REJECTED,
+          actorId: reviewerId,
+          targetType: "vendor_application",
+          targetId: applicationId,
+          meta: notes?.trim() ? { notes: notes.trim() } : undefined,
+        },
+        transaction,
+      );
+
+      return transaction.vendorApplication.findUniqueOrThrow({
+        where: { id: applicationId },
+      });
+    });
+  } catch (error) {
+    if (hasPrismaErrorCode(error, "P2002")) {
+      throw new Error("This vendor already has an active verifier application.");
+    }
+
+    throw error;
   }
-
-  await writeAuditLog({
-    action:
-      decision === "APPROVED"
-        ? AuditAction.VENDOR_APPLICATION_APPROVED
-        : AuditAction.VENDOR_APPLICATION_REJECTED,
-    actorId: reviewerId,
-    targetType: "vendor_application",
-    targetId: applicationId,
-    meta: notes ? { notes } : undefined,
-  });
-
-  return prisma.vendorApplication.findUniqueOrThrow({
-    where: { id: applicationId },
-  });
-}
-
-export async function revokeVendorApplication({
-  applicationId,
-  revokerId,
-  notes,
-}: {
-  applicationId: string;
-  revokerId: string;
-  notes?: string;
-}) {
-  const result = await prisma.vendorApplication.updateMany({
-    where: {
-      id: applicationId,
-      status: VendorApplicationStatus.APPROVED,
-    },
-    data: {
-      status: VendorApplicationStatus.REVOKED,
-      revokedAt: new Date(),
-      revokedByUserId: revokerId,
-      reviewNotes: notes,
-    },
-  });
-
-  if (result.count !== 1) {
-    throw new Error("This application is not approved and cannot be revoked.");
-  }
-
-  await writeAuditLog({
-    action: AuditAction.VENDOR_APPLICATION_REVOKED,
-    actorId: revokerId,
-    targetType: "vendor_application",
-    targetId: applicationId,
-    meta: notes ? { notes } : undefined,
-  });
-
-  return prisma.vendorApplication.findUniqueOrThrow({
-    where: { id: applicationId },
-  });
 }
 
 export async function markApplicationViewed({

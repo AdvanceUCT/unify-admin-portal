@@ -16,8 +16,10 @@ type IssuanceSelectionOptions = BatchIssuanceSelection;
 const INSTITUTION = "University of Cape Town";
 const VALID_FROM = "2026-01-01T00:00:00Z";
 const EXPIRES_AT = "2026-12-31T23:59:59Z";
-const CALEB_DEMO_INDEX = 100;
-const CALEB_EMAIL = "joshuawood.dc@gmail.com";
+const JOSHUA_DEMO_INDEX = 100;
+const JOSHUA_EMAIL = "joshuawood.dc@gmail.com";
+const CALEB_DEMO_INDEX = 99;
+const CALEB_EMAIL = "caleb.voskuil@gmail.com";
 
 const firstNames = [
   "Sipho",
@@ -82,6 +84,10 @@ function studentNumberFor(firstName: string, lastName: string, index: number) {
 }
 
 function emailForStudent(firstName: string, lastName: string, index: number) {
+  if (index === JOSHUA_DEMO_INDEX) {
+    return JOSHUA_EMAIL;
+  }
+
   if (index === CALEB_DEMO_INDEX) {
     return CALEB_EMAIL;
   }
@@ -90,7 +96,7 @@ function emailForStudent(firstName: string, lastName: string, index: number) {
   return `${safeName}.${padded(index)}@students.uct.ac.za`;
 }
 
-function lifecycleStateFor(index: number): CredentialLifecycleState {
+function lifecycleStateFor(_index: number): CredentialLifecycleState {
   return "NOT_ISSUED";
 }
 
@@ -99,8 +105,18 @@ function buildStudentRecord(index: number): StudentRecord {
   const faculty = facultyNames[(index - 1) % facultyNames.length];
   const programmes = SIMULATED_FACULTY_PROGRAMMES[faculty];
   const programme = programmes[(index - 1) % programmes.length];
-  const firstName = index === CALEB_DEMO_INDEX ? "Joshua" : firstNames[(index - 1) % firstNames.length];
-  const lastName = index === CALEB_DEMO_INDEX ? "Wood" : lastNames[(index * 7 - 7) % lastNames.length];
+  const firstName =
+    index === JOSHUA_DEMO_INDEX
+      ? "Joshua"
+      : index === CALEB_DEMO_INDEX
+        ? "Caleb"
+        : firstNames[(index - 1) % firstNames.length];
+  const lastName =
+    index === JOSHUA_DEMO_INDEX
+      ? "Wood"
+      : index === CALEB_DEMO_INDEX
+        ? "Voskuil"
+        : lastNames[(index * 7 - 7) % lastNames.length];
   const idSuffix = padded(index);
   const studentNumber = studentNumberFor(firstName, lastName, index);
 

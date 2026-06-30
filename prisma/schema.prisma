@@ -1,6 +1,7 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
@@ -122,18 +123,29 @@ model VendorApplication {
   status           VendorApplicationStatus @default(PENDING)
   justification    String
   requestedScopes  String[]                @default([])
+  companyRegistrationNumber String?
+  // Original review decision fields — immutable after approval/rejection
   reviewedByUserId String?
   reviewedAt       DateTime?
   reviewNotes      String?
-  revokedAt        DateTime?
+  // Revocation fields — populated only when status transitions to REVOKED
   revokedByUserId  String?
+  revokedAt        DateTime?
+  revokedNotes     String?
   viewedByAdminAt  DateTime?
+  // Immutable snapshot of vendor profile at time of submission
+  snapshotCompanyName       String?
+  snapshotServiceCategory   String?
+  snapshotContactEmail      String?
+  snapshotContactPersonName String?
+  snapshotWebsite           String?
+  snapshotDescription       String?
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
-  companyRegistrationNumber String?
 
   @@index([vendorProfileId])
   @@index([status])
+  @@unique([vendorProfileId], map: "vendor_application_one_active_per_profile", where: raw("\"status\" IN ('PENDING', 'APPROVED')"))
   @@map("vendor_application")
 }
 

@@ -33,7 +33,7 @@ const failedCredoStates = new Set([
  */
 export function mapCredoStateToCredentialStatus(
   state: string,
-  currentStatus?: CredentialIssuanceStatus | null,
+  _currentStatus?: CredentialIssuanceStatus | null,
 ): CredentialIssuanceStatus | undefined {
   if (state === "offer-sent") return CredentialIssuanceStatus.OFFER_SENT;
   if (state === "done") return CredentialIssuanceStatus.ISSUED;
