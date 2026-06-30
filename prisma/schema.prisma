@@ -124,9 +124,12 @@ model VendorApplication {
   reviewedByUserId String?
   reviewedAt       DateTime?
   reviewNotes      String?
+  revokedAt        DateTime?
+  revokedByUserId  String?
+  viewedByAdminAt  DateTime?
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
-  companyRegistrationNumber String? 
+  companyRegistrationNumber String?
 
   @@index([vendorProfileId])
   @@index([status])
@@ -137,6 +140,7 @@ enum VendorApplicationStatus {
   PENDING
   APPROVED
   REJECTED
+  REVOKED
 }
 
 model UniversityProfile {
@@ -382,4 +386,5 @@ enum AuditAction {
   VENDOR_APPLICATION_SUBMITTED
   VENDOR_APPLICATION_APPROVED
   VENDOR_APPLICATION_REJECTED
+  VENDOR_APPLICATION_REVOKED
 }

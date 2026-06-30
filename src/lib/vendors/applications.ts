@@ -107,17 +107,42 @@ export async function getVendorApplicationForUser(userId: string) {
 
   return prisma.vendorApplication.findFirst({
     where: { vendorProfileId: vendorProfile.id },
+    include: { vendorProfile: true },
     orderBy: { createdAt: "desc" },
+  });
+}
+
+export async function getVendorApplicationById(applicationId: string) {
+  return prisma.vendorApplication.findUnique({
+    where: { id: applicationId },
+    include: {
+      vendorProfile: {
+        select: {
+          companyName: true,
+          serviceCategory: true,
+          website: true,
+          description: true,
+          contactPersonName: true,
+          contactEmail: true,
+        },
+      },
+    },
   });
 }
 
 export async function listVendorApplications({
   status,
 }: {
-  status?: VendorApplicationStatus;
+  status?: VendorApplicationStatus | VendorApplicationStatus[];
 } = {}) {
+  const where = status
+    ? Array.isArray(status)
+      ? { status: { in: status } }
+      : { status }
+    : undefined;
+
   return prisma.vendorApplication.findMany({
-    where: status ? { status } : undefined,
+    where,
     include: {
       vendorProfile: {
         select: {
@@ -178,5 +203,60 @@ export async function reviewVendorApplication({
 
   return prisma.vendorApplication.findUniqueOrThrow({
     where: { id: applicationId },
+  });
+}
+
+export async function revokeVendorApplication({
+  applicationId,
+  revokerId,
+  notes,
+}: {
+  applicationId: string;
+  revokerId: string;
+  notes?: string;
+}) {
+  const result = await prisma.vendorApplication.updateMany({
+    where: {
+      id: applicationId,
+      status: VendorApplicationStatus.APPROVED,
+    },
+    data: {
+      status: VendorApplicationStatus.REVOKED,
+      revokedAt: new Date(),
+      revokedByUserId: revokerId,
+      reviewNotes: notes,
+    },
+  });
+
+  if (result.count !== 1) {
+    throw new Error("This application is not approved and cannot be revoked.");
+  }
+
+  await writeAuditLog({
+    action: AuditAction.VENDOR_APPLICATION_REVOKED,
+    actorId: revokerId,
+    targetType: "vendor_application",
+    targetId: applicationId,
+    meta: notes ? { notes } : undefined,
+  });
+
+  return prisma.vendorApplication.findUniqueOrThrow({
+    where: { id: applicationId },
+  });
+}
+
+export async function markApplicationViewed({
+  applicationId,
+}: {
+  applicationId: string;
+}) {
+  await prisma.vendorApplication.updateMany({
+    where: {
+      id: applicationId,
+      viewedByAdminAt: null,
+    },
+    data: {
+      viewedByAdminAt: new Date(),
+    },
   });
 }
