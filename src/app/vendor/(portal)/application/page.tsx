@@ -34,6 +34,20 @@ export default async function VendorApplicationPage() {
             <Badge tone={STATUS_TONE[application.status]}>{application.status}</Badge>
           </div>
           <p className="mt-2 text-sm text-zinc-600">{application.justification}</p>
+
+          {application.status === "REJECTED" && application.reviewNotes && (
+            <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3">
+              <p className="text-xs font-medium text-red-700">Reason for rejection</p>
+              <p className="mt-1 text-sm text-red-600">{application.reviewNotes}</p>
+            </div>
+          )}
+
+          {application.status === "REVOKED" && application.revokedNotes && (
+            <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs font-medium text-amber-700">Reason for revocation</p>
+              <p className="mt-1 text-sm text-amber-600">{application.revokedNotes}</p>
+            </div>
+          )}
         </section>
       ) : null}
 
