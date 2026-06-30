@@ -110,6 +110,7 @@ model VendorProfile {
   createdAt                 DateTime            @default(now())
   updatedAt                 DateTime            @updatedAt
   applications              VendorApplication[]
+  verifications             VendorVerification[]
 
   @@map("vendor_profile")
 }
@@ -141,6 +142,38 @@ enum VendorApplicationStatus {
   APPROVED
   REJECTED
   REVOKED
+}
+
+model VendorVerification {
+  id                     String                    @id @default(cuid())
+  vendorProfileId        String
+  vendorProfile          VendorProfile             @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  verificationRequestId  String?                   @unique
+  servicePointId         String?
+  servicePointName       String?
+  status                 VendorVerificationStatus  @default(PENDING)
+  isVerified             Boolean?
+  failureCode            String?
+  studentNumber          String?
+  faculty                String?
+  year                   String?
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+  completedAt            DateTime?
+  expiresAt              DateTime?
+
+  @@index([vendorProfileId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("vendor_verification")
+}
+
+enum VendorVerificationStatus {
+  PENDING
+  APPROVED
+  DECLINED
+  EXPIRED
+  FAILED
 }
 
 model UniversityProfile {
