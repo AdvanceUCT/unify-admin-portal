@@ -7,6 +7,7 @@ import {
   listDecidedVendorApplications,
   listVendorApplications,
 } from "@/lib/vendors/applications";
+import { VENDOR_VERIFICATION_SCOPE_OPTIONS } from "@/lib/vendors/scopes";
 import {
   approveVendorApplicationAction,
   rejectVendorApplicationAction,
@@ -15,13 +16,9 @@ import {
 import { RejectForm } from "./RejectForm";
 import { RevokeButton } from "./RevokeButton";
 
-const SCOPE_LABELS: Record<string, string> = {
-  enrollment_status: "Enrollment Status",
-  faculty: "Faculty",
-  programme: "Programme",
-  degree: "Degree",
-  student_id: "Student ID",
-};
+const SCOPE_LABELS = Object.fromEntries(
+  VENDOR_VERIFICATION_SCOPE_OPTIONS.map(({ value, label }) => [value, label]),
+);
 
 export default async function VendorsPage({
   searchParams,
@@ -181,12 +178,12 @@ export default async function VendorsPage({
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="font-medium text-zinc-950">
-                          {application.vendorProfile.companyName}
+                          {application.snapshotCompanyName ?? application.vendorProfile.companyName}
                         </h3>
                         <Badge tone="warning">Pending</Badge>
                       </div>
                       <p className="text-sm text-zinc-500">
-                        {application.vendorProfile.serviceCategory}
+                        {application.snapshotServiceCategory ?? application.vendorProfile.serviceCategory}
                       </p>
                       <p className="mt-1 text-sm text-zinc-600">{application.justification}</p>
                       <p className="mt-1 text-xs text-zinc-400">
@@ -235,12 +232,12 @@ export default async function VendorsPage({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <h3 className="font-medium text-zinc-950">
-                            {application.vendorProfile.companyName}
+                            {application.snapshotCompanyName ?? application.vendorProfile.companyName}
                           </h3>
                           <Badge tone="danger">Rejected</Badge>
                         </div>
                         <p className="text-sm text-zinc-500">
-                          {application.vendorProfile.serviceCategory}
+                          {application.snapshotServiceCategory ?? application.vendorProfile.serviceCategory}
                         </p>
                         {application.reviewNotes && (
                           <p className="mt-1 text-sm text-zinc-600">
@@ -272,7 +269,7 @@ export default async function VendorsPage({
           <div className="border-b border-zinc-200 px-5 py-4">
             <h2 className="text-base font-semibold text-zinc-950">Application decisions</h2>
             <p className="mt-0.5 text-sm text-zinc-500">
-              All approved and rejected vendor applications, ordered by review date.
+              Approved, rejected, and revoked verifier applications, ordered by decision date.
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -282,7 +279,7 @@ export default async function VendorsPage({
                   <th className="px-5 py-3">Company</th>
                   <th className="px-5 py-3">Category</th>
                   <th className="px-5 py-3">Decision</th>
-                  <th className="px-5 py-3">Reviewed by</th>
+                  <th className="px-5 py-3">Decided by</th>
                   <th className="px-5 py-3">Notes</th>
                   <th className="px-5 py-3">Decided</th>
                   <th className="px-5 py-3">Submitted</th>
@@ -321,20 +318,20 @@ export default async function VendorsPage({
                         )}
                       </td>
                       <td className="px-5 py-4 text-zinc-600">
-                        {application.reviewerName ?? (
+                        {application.decisionActorName ?? (
                           <span className="text-zinc-400">Unknown</span>
                         )}
                       </td>
                       <td className="px-5 py-4 max-w-xs text-zinc-600">
-                        {application.reviewNotes ? (
-                          <span className="line-clamp-2">{application.reviewNotes}</span>
+                        {application.decisionNotes ? (
+                          <span className="line-clamp-2">{application.decisionNotes}</span>
                         ) : (
                           <span className="text-zinc-400">—</span>
                         )}
                       </td>
                       <td className="px-5 py-4 whitespace-nowrap text-zinc-500">
-                        {application.reviewedAt
-                          ? new Date(application.reviewedAt).toLocaleDateString("en-GB", {
+                        {application.decisionAt
+                          ? new Date(application.decisionAt).toLocaleDateString("en-GB", {
                               day: "numeric",
                               month: "short",
                               year: "numeric",

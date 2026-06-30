@@ -1,4 +1,5 @@
 import { AuditAction } from "@/generated/prisma/enums";
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 
 type AuditMetadata = Record<string, string | number | boolean | null>;
@@ -22,17 +23,20 @@ function getRequestIpAddress(request?: Request | null) {
   );
 }
 
-export async function writeAuditLog({
-  action,
-  actorId = null,
-  targetType = null,
-  targetId = null,
-  meta,
-  ipAddress,
-  userAgent,
-  request,
-}: WriteAuditLogInput) {
-  await prisma.auditLog.create({
+export async function writeAuditLog(
+  {
+    action,
+    actorId = null,
+    targetType = null,
+    targetId = null,
+    meta,
+    ipAddress,
+    userAgent,
+    request,
+  }: WriteAuditLogInput,
+  database: Pick<Prisma.TransactionClient, "auditLog"> = prisma,
+) {
+  await database.auditLog.create({
     data: {
       action,
       actorId,

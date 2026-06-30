@@ -11,7 +11,6 @@ async function reviewAction(formData: FormData, decision: "APPROVED" | "REJECTED
   assertCan("vendor:write", session);
 
   const applicationId = String(formData.get("applicationId") ?? "");
-  const notes = String(formData.get("notes") ?? "").trim() || undefined;
 
   if (!applicationId) {
     return;
@@ -21,7 +20,6 @@ async function reviewAction(formData: FormData, decision: "APPROVED" | "REJECTED
     applicationId,
     decision,
     reviewerId: session.user.id,
-    notes,
   });
 
   revalidatePath("/vendors");
@@ -40,6 +38,7 @@ export async function revokeVendorApplicationAction(formData: FormData) {
   assertCan("vendor:write", session);
 
   const applicationId = String(formData.get("applicationId") ?? "");
+  const notes = String(formData.get("notes") ?? "").trim();
 
   if (!applicationId) {
     return;
@@ -48,6 +47,7 @@ export async function revokeVendorApplicationAction(formData: FormData) {
   await revokeVendorApplication({
     applicationId,
     reviewerId: session.user.id,
+    notes,
   });
 
   revalidatePath("/vendors");

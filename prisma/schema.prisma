@@ -1,6 +1,7 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
@@ -142,6 +143,7 @@ model VendorApplication {
 
   @@index([vendorProfileId])
   @@index([status])
+  @@unique([vendorProfileId], map: "vendor_application_one_active_per_profile", where: raw("\"status\" IN ('PENDING', 'APPROVED')"))
   @@map("vendor_application")
 }
 
