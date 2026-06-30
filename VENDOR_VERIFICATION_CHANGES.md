@@ -46,7 +46,7 @@ I deliberately did **not** add a separate "service point" table (the concept the
 
 ### 2. Database migration — `prisma/migrations/20260630120000_add_vendor_verifications/`
 
-The raw SQL that creates the `vendor_verification` table and the new enum. This has been applied to your personal dev database directly (using `prisma db execute`, which runs just this one file) — it has **not** been applied through the normal `prisma migrate dev` flow, because your personal database has unrelated, pre-existing drift against the migration history (see "Database notes" below).
+The raw SQL that creates the `vendor_verification` table and the new enum.
 
 ### 3. New file — `src/lib/vendors/verifications.ts`
 
@@ -84,12 +84,6 @@ This is for context — none of this is built yet, but it explains what the data
 6. The vendor then sees the result on their dashboard — which is the part that's already built.
 
 Steps 1–5 don't exist in this codebase yet. Step 6 (the dashboard) is what this round of work built.
-
----
-
-## Database notes (personal dev database)
-
-While working on this, we discovered your personal Supabase database had drifted from what the migration files expect — it had leftover tables from an older version of the schema (`student`, `batch`, `issued_credential`, `activation_delivery`) that don't match any current model, and it was missing two migrations that already exist on `main` (related to vendor revocation). This is unrelated to the verification work and wasn't fixed here — only the one new migration for `vendor_verification` was applied, directly and surgically, without touching anything else. The rest of the drift is still there and will need separate attention, probably alongside merging `main` into this branch.
 
 ---
 
