@@ -12,6 +12,7 @@ import {
   rejectVendorApplicationAction,
   revokeVendorApplicationAction,
 } from "./actions";
+import { RejectForm } from "./RejectForm";
 import { RevokeButton } from "./RevokeButton";
 
 const SCOPE_LABELS: Record<string, string> = {
@@ -197,7 +198,7 @@ export default async function VendorsPage({
                         })}
                       </p>
                     </div>
-                    <div className="flex shrink-0 gap-2">
+                    <div className="flex shrink-0 items-start gap-2">
                       <form action={approveVendorApplicationAction}>
                         <input type="hidden" name="applicationId" value={application.id} />
                         <button
@@ -207,15 +208,10 @@ export default async function VendorsPage({
                           Approve
                         </button>
                       </form>
-                      <form action={rejectVendorApplicationAction}>
-                        <input type="hidden" name="applicationId" value={application.id} />
-                        <button
-                          className="h-9 rounded-md border border-rose-200 bg-rose-50 px-3 text-sm font-medium text-rose-700 hover:bg-rose-100"
-                          type="submit"
-                        >
-                          Reject
-                        </button>
-                      </form>
+                      <RejectForm
+                        action={rejectVendorApplicationAction}
+                        applicationId={application.id}
+                      />
                     </div>
                   </div>
                 ))}
