@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Globe, Mail, User } from "lucide-react";
 
 import { SectionHeader } from "@/components/layout/SectionHeader";
@@ -7,17 +8,13 @@ import {
   listDecidedVendorApplications,
   listVendorApplications,
 } from "@/lib/vendors/applications";
-import { VENDOR_VERIFICATION_SCOPE_OPTIONS } from "@/lib/vendors/scopes";
 import {
   approveVendorApplicationAction,
   rejectVendorApplicationAction,
   revokeVendorApplicationAction,
 } from "./actions";
+import { RejectForm } from "./RejectForm";
 import { RevokeButton } from "./RevokeButton";
-
-const SCOPE_LABELS = Object.fromEntries(
-  VENDOR_VERIFICATION_SCOPE_OPTIONS.map(({ value, label }) => [value, label]),
-);
 
 export default async function VendorsPage({
   searchParams,
@@ -115,18 +112,9 @@ export default async function VendorsPage({
                       )}
                     </div>
 
-                    {application.requestedScopes.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {application.requestedScopes.map((scope) => (
-                          <span
-                            key={scope}
-                            className="inline-flex items-center rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-600"
-                          >
-                            {SCOPE_LABELS[scope] ?? scope}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    <p className="mt-3 text-xs text-zinc-500">
+                      Verification requests include all attributes in the active student credential schema.
+                    </p>
                   </div>
 
                   <div className="flex shrink-0 flex-col items-end gap-2">
@@ -169,53 +157,62 @@ export default async function VendorsPage({
             </h2>
             <section className="rounded-lg border border-zinc-200 bg-white">
               <div className="divide-y divide-zinc-100">
-                {pendingApplications.map((application) => (
-                  <div
-                    key={application.id}
-                    className="grid gap-4 px-5 py-4 md:grid-cols-[1fr_auto]"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-medium text-zinc-950">
-                          {application.snapshotCompanyName ?? application.vendorProfile.companyName}
-                        </h3>
-                        <Badge tone="warning">Pending</Badge>
+                {pendingApplications.map((application) => {
+                  const isNew = !application.viewedByAdminAt;
+                  return (
+                    <div
+                      key={application.id}
+                      className="grid gap-4 px-5 py-4 md:grid-cols-[1fr_auto]"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-medium text-zinc-950">
+                            {application.snapshotCompanyName ?? application.vendorProfile.companyName}
+                          </h3>
+                          <Badge tone="warning">Pending</Badge>
+                          {isNew && (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                              New
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-zinc-500">
+                          {application.snapshotServiceCategory ?? application.vendorProfile.serviceCategory}
+                        </p>
+                        <p className="mt-1 text-sm text-zinc-600">{application.justification}</p>
+                        <p className="mt-1 text-xs text-zinc-400">
+                          Submitted{" "}
+                          {new Date(application.createdAt).toLocaleDateString("en-GB", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </p>
                       </div>
-                      <p className="text-sm text-zinc-500">
-                        {application.snapshotServiceCategory ?? application.vendorProfile.serviceCategory}
-                      </p>
-                      <p className="mt-1 text-sm text-zinc-600">{application.justification}</p>
-                      <p className="mt-1 text-xs text-zinc-400">
-                        Submitted{" "}
-                        {new Date(application.createdAt).toLocaleDateString("en-GB", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        })}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 gap-2">
-                      <form action={approveVendorApplicationAction}>
-                        <input type="hidden" name="applicationId" value={application.id} />
-                        <button
-                          className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-                          type="submit"
+                      <div className="flex shrink-0 items-start gap-2">
+                        <Link
+                          href={`/vendors/${application.id}`}
+                          className="inline-flex h-9 items-center rounded-md border border-zinc-300 px-3 text-sm font-medium"
                         >
-                          Approve
-                        </button>
-                      </form>
-                      <form action={rejectVendorApplicationAction}>
-                        <input type="hidden" name="applicationId" value={application.id} />
-                        <button
-                          className="h-9 rounded-md border border-rose-200 bg-rose-50 px-3 text-sm font-medium text-rose-700 hover:bg-rose-100"
-                          type="submit"
-                        >
-                          Reject
-                        </button>
-                      </form>
+                          View
+                        </Link>
+                        <form action={approveVendorApplicationAction}>
+                          <input type="hidden" name="applicationId" value={application.id} />
+                          <button
+                            className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                            type="submit"
+                          >
+                            Approve
+                          </button>
+                        </form>
+                        <RejectForm
+                          action={rejectVendorApplicationAction}
+                          applicationId={application.id}
+                        />
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {pendingApplications.length === 0 && (
                   <p className="px-5 py-6 text-sm text-zinc-500">No pending applications.</p>
                 )}

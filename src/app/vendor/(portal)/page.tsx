@@ -2,12 +2,38 @@ import Link from "next/link";
 
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
+import { VendorVerificationOverview } from "@/components/vendors/VendorVerificationOverview";
 import { requireVendorSession } from "@/lib/auth/session";
+import { getUniversityProfile } from "@/lib/university/profile";
 import { getVendorApplicationForUser } from "@/lib/vendors/applications";
+import { getVendorVerificationStats, listRecentVendorVerifications } from "@/lib/vendors/verifications";
 
 export default async function VendorDashboardPage() {
   const session = await requireVendorSession();
   const application = await getVendorApplicationForUser(session.user.id);
+
+  if (application?.status === "APPROVED") {
+    const [stats, recentVerifications, universityProfile] = await Promise.all([
+      getVendorVerificationStats(application.vendorProfileId),
+      listRecentVendorVerifications(application.vendorProfileId),
+      getUniversityProfile(),
+    ]);
+
+    return (
+      <div className="space-y-6">
+        <SectionHeader
+          title={`Welcome, ${session.user.name}`}
+          description="Your verifier application is approved. Verification service setup is in progress."
+        />
+        <VendorVerificationOverview
+          companyName={application.vendorProfile.companyName}
+          stats={stats}
+          recentVerifications={recentVerifications}
+          supportEmail={universityProfile?.contactEmail}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -19,7 +45,7 @@ export default async function VendorDashboardPage() {
       <section className="rounded-lg border border-zinc-200 bg-white p-5">
         <div className="flex items-center justify-between">
           <h2 className="font-medium text-zinc-950">Application status</h2>
-          {application ? <Badge tone={application.status === "APPROVED" ? "success" : application.status === "REJECTED" ? "danger" : "warning"}>{application.status}</Badge> : null}
+          {application ? <Badge tone={application.status === "REJECTED" ? "danger" : "warning"}>{application.status}</Badge> : null}
         </div>
         <p className="mt-2 text-sm text-zinc-600">
           {application

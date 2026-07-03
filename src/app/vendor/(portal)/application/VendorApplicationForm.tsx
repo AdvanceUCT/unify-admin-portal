@@ -2,8 +2,6 @@
 
 import { useActionState } from "react";
 
-import { VENDOR_VERIFICATION_SCOPE_OPTIONS } from "@/lib/vendors/scopes";
-
 import { submitApplicationAction, type SubmitApplicationState } from "./actions";
 
 const initialState: SubmitApplicationState = {
@@ -143,23 +141,9 @@ export function VendorApplicationForm() {
         />
       </div>
 
-      <fieldset className="rounded-lg border border-zinc-200 p-4">
-        <legend className="text-sm font-medium text-zinc-700">Requested credential scopes</legend>
-        <p className="mt-1 text-xs text-zinc-500">Select the student data you need access to.</p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          {VENDOR_VERIFICATION_SCOPE_OPTIONS.map((option) => (
-            <label key={option.value} className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm transition hover:border-zinc-300">
-              <input
-                type="checkbox"
-                name="requestedScopes"
-                value={option.value}
-                className="h-4 w-4 rounded border-zinc-300 text-zinc-950 focus:ring-zinc-950"
-              />
-              <span>{option.label}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      <div className="rounded-md border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+        Verification requests include all attributes in the university&apos;s active student credential schema.
+      </div>
 
       {state.message ? (
         <p
