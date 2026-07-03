@@ -3,6 +3,7 @@ import { CheckCircle2, Mail, QrCode, ShieldCheck, SmartphoneNfc, UserCheck } fro
 import { Badge } from "@/components/ui/Badge";
 import { Metric } from "@/components/ui/Metric";
 import { formatDateTime } from "@/lib/formatters";
+import { parseVerificationAttributes } from "@/lib/vendors/verificationContract";
 import type { getVendorVerificationStats, listRecentVendorVerifications } from "@/lib/vendors/verifications";
 
 const STATUS_TONE = {
@@ -21,30 +22,26 @@ const HOW_IT_WORKS = [
   },
   {
     title: "Student grants or denies access",
-    description: "They review the request and choose whether to share their faculty, enrollment status, and student number.",
+    description: "They review every attribute in the active student credential schema and approve or deny the complete request.",
     icon: UserCheck,
   },
   {
     title: "You see the result here",
-    description: "Once they respond, the outcome appears in your verification history below — no paperwork.",
+    description: "Once they respond, the verified result and disclosed values appear in your history.",
     icon: ShieldCheck,
   },
 ];
-
-function maskStudentNumber(studentNumber: string | null) {
-  if (!studentNumber) return "Student";
-  const visible = studentNumber.slice(-4);
-  return `•••• ${visible}`;
-}
 
 export function VendorVerificationOverview({
   companyName,
   stats,
   recentVerifications,
+  supportEmail,
 }: {
   companyName: string;
   stats: Awaited<ReturnType<typeof getVendorVerificationStats>>;
   recentVerifications: Awaited<ReturnType<typeof listRecentVendorVerifications>>;
+  supportEmail?: string;
 }) {
   const approvalRate = stats.total > 0 ? Math.round((stats.approved / stats.total) * 100) : null;
 
@@ -53,9 +50,9 @@ export function VendorVerificationOverview({
       <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
         <CheckCircle2 className="mt-0.5 shrink-0 text-emerald-600" size={20} aria-hidden="true" />
         <div>
-          <p className="font-medium text-emerald-900">Access verification services</p>
+          <p className="font-medium text-emerald-900">Verifier application approved</p>
           <p className="mt-1 text-sm text-emerald-700">
-            {companyName} is verified and approved to use UNIFY verification services.
+            {companyName} is approved. Your verification QR code will appear here once service setup is complete.
           </p>
         </div>
       </div>
@@ -111,21 +108,38 @@ export function VendorVerificationOverview({
           <h2 className="font-medium text-zinc-950">Recent verifications</h2>
         </div>
         <div className="divide-y divide-zinc-100">
-          {recentVerifications.map((verification) => (
-            <div className="flex items-center justify-between gap-4 px-5 py-3" key={verification.id}>
-              <div>
-                <p className="text-sm font-medium text-zinc-900">{maskStudentNumber(verification.studentNumber)}</p>
-                <p className="text-xs text-zinc-500">{verification.faculty ?? "Faculty not shared"}</p>
+          {recentVerifications.map((verification) => {
+            const attributes = Object.entries(parseVerificationAttributes(verification.attributes));
+
+            return (
+              <div className="space-y-3 px-5 py-4" key={verification.id}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-zinc-900">
+                      {verification.servicePointName ?? "Student verification"}
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      {formatDateTime(verification.createdAt.toISOString())}
+                    </p>
+                  </div>
+                  <Badge tone={STATUS_TONE[verification.status]}>{verification.status}</Badge>
+                </div>
+                {attributes.length > 0 ? (
+                  <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {attributes.map(([name, value]) => (
+                      <div className="rounded-md bg-zinc-50 px-3 py-2" key={name}>
+                        <dt className="text-xs font-medium text-zinc-500">{name}</dt>
+                        <dd className="mt-0.5 break-words text-sm text-zinc-900">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : null}
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-zinc-400">{formatDateTime(verification.createdAt.toISOString())}</span>
-                <Badge tone={STATUS_TONE[verification.status]}>{verification.status}</Badge>
-              </div>
-            </div>
-          ))}
+            );
+          })}
           {recentVerifications.length === 0 && (
             <p className="px-5 py-6 text-sm text-zinc-500">
-              No verifications yet — once students start verifying with your QR code, they&apos;ll show up here.
+              No verifications yet. Results will appear here once QR verification is enabled.
             </p>
           )}
         </div>
@@ -137,13 +151,17 @@ export function VendorVerificationOverview({
         </span>
         <div>
           <p className="font-medium text-zinc-950">Need help?</p>
-          <p className="text-sm text-zinc-500">
-            Contact{" "}
-            <a className="font-medium text-zinc-700 underline" href="mailto:support@unify.app">
-              support@unify.app
-            </a>{" "}
-            if you have any questions about verification services.
-          </p>
+          {supportEmail ? (
+            <p className="text-sm text-zinc-500">
+              Contact{" "}
+              <a className="font-medium text-zinc-700 underline" href={`mailto:${supportEmail}`}>
+                {supportEmail}
+              </a>{" "}
+              if you have any questions about verification services.
+            </p>
+          ) : (
+            <p className="text-sm text-zinc-500">Contact your university administrator for verification support.</p>
+          )}
         </div>
       </section>
     </div>

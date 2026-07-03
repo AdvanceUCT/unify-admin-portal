@@ -6,7 +6,6 @@ import type { Prisma } from "@/generated/prisma/client";
 import { AuditAction, VendorApplicationStatus } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit/audit";
 import { prisma } from "@/lib/db/prisma";
-import { VENDOR_VERIFICATION_SCOPES } from "@/lib/vendors/scopes";
 
 const ACTIVE_APPLICATION_STATUSES = [
   VendorApplicationStatus.PENDING,
@@ -29,10 +28,6 @@ const createApplicationSchema = z.object({
   contactPersonName: z.string().trim().min(1, "Contact person name is required"),
   contactEmail: z.string().trim().email("Contact email must be valid"),
   justification: z.string().trim().min(1, "Justification is required"),
-  requestedScopes: z
-    .array(z.enum(VENDOR_VERIFICATION_SCOPES))
-    .min(1, "Select at least one credential scope")
-    .transform((scopes) => [...new Set(scopes)]),
 });
 
 const revokeApplicationSchema = z.object({
@@ -41,12 +36,7 @@ const revokeApplicationSchema = z.object({
   notes: z.string().trim().min(1, "A revocation reason is required").max(500),
 });
 
-export type CreateVendorApplicationInput = Omit<
-  z.input<typeof createApplicationSchema>,
-  "requestedScopes"
-> & {
-  requestedScopes: string[];
-};
+export type CreateVendorApplicationInput = z.input<typeof createApplicationSchema>;
 
 function hasPrismaErrorCode(error: unknown, code: string) {
   return (
@@ -120,7 +110,6 @@ export async function createVendorApplication({
         data: {
           vendorProfileId: vendorProfile.id,
           justification: data.justification,
-          requestedScopes: data.requestedScopes,
           companyRegistrationNumber: data.companyRegistrationNumber,
           snapshotCompanyName: data.companyName,
           snapshotServiceCategory: data.serviceCategory,
@@ -333,6 +322,11 @@ export async function reviewVendorApplication({
   reviewerId: string;
   notes?: string;
 }) {
+  const normalizedNotes = notes?.trim();
+  if (decision === VendorApplicationStatus.REJECTED && !normalizedNotes) {
+    throw new Error("A rejection reason is required.");
+  }
+
   try {
     return await runSerializableTransaction(async (transaction) => {
       const application = await transaction.vendorApplication.findUnique({
@@ -350,7 +344,7 @@ export async function reviewVendorApplication({
           status: decision,
           reviewedByUserId: reviewerId,
           reviewedAt: new Date(),
-          reviewNotes: notes?.trim() || null,
+          reviewNotes: normalizedNotes || null,
         },
       });
 
@@ -387,7 +381,7 @@ export async function reviewVendorApplication({
           actorId: reviewerId,
           targetType: "vendor_application",
           targetId: applicationId,
-          meta: notes?.trim() ? { notes: notes.trim() } : undefined,
+          meta: normalizedNotes ? { notes: normalizedNotes } : undefined,
         },
         transaction,
       );

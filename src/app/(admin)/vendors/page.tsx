@@ -8,17 +8,13 @@ import {
   listDecidedVendorApplications,
   listVendorApplications,
 } from "@/lib/vendors/applications";
-import { VENDOR_VERIFICATION_SCOPE_OPTIONS } from "@/lib/vendors/scopes";
 import {
   approveVendorApplicationAction,
   rejectVendorApplicationAction,
   revokeVendorApplicationAction,
 } from "./actions";
+import { RejectForm } from "./RejectForm";
 import { RevokeButton } from "./RevokeButton";
-
-const SCOPE_LABELS = Object.fromEntries(
-  VENDOR_VERIFICATION_SCOPE_OPTIONS.map(({ value, label }) => [value, label]),
-);
 
 export default async function VendorsPage({
   searchParams,
@@ -116,18 +112,9 @@ export default async function VendorsPage({
                       )}
                     </div>
 
-                    {application.requestedScopes.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {application.requestedScopes.map((scope) => (
-                          <span
-                            key={scope}
-                            className="inline-flex items-center rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-600"
-                          >
-                            {SCOPE_LABELS[scope] ?? scope}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    <p className="mt-3 text-xs text-zinc-500">
+                      Verification requests include all attributes in the active student credential schema.
+                    </p>
                   </div>
 
                   <div className="flex shrink-0 flex-col items-end gap-2">
@@ -218,15 +205,10 @@ export default async function VendorsPage({
                             Approve
                           </button>
                         </form>
-                        <form action={rejectVendorApplicationAction}>
-                          <input type="hidden" name="applicationId" value={application.id} />
-                          <button
-                            className="h-9 rounded-md border border-rose-200 bg-rose-50 px-3 text-sm font-medium text-rose-700 hover:bg-rose-100"
-                            type="submit"
-                          >
-                            Reject
-                          </button>
-                        </form>
+                        <RejectForm
+                          action={rejectVendorApplicationAction}
+                          applicationId={application.id}
+                        />
                       </div>
                     </div>
                   );

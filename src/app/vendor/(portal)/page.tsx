@@ -4,6 +4,7 @@ import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { VendorVerificationOverview } from "@/components/vendors/VendorVerificationOverview";
 import { requireVendorSession } from "@/lib/auth/session";
+import { getUniversityProfile } from "@/lib/university/profile";
 import { getVendorApplicationForUser } from "@/lib/vendors/applications";
 import { getVendorVerificationStats, listRecentVendorVerifications } from "@/lib/vendors/verifications";
 
@@ -12,21 +13,23 @@ export default async function VendorDashboardPage() {
   const application = await getVendorApplicationForUser(session.user.id);
 
   if (application?.status === "APPROVED") {
-    const [stats, recentVerifications] = await Promise.all([
+    const [stats, recentVerifications, universityProfile] = await Promise.all([
       getVendorVerificationStats(application.vendorProfileId),
       listRecentVendorVerifications(application.vendorProfileId),
+      getUniversityProfile(),
     ]);
 
     return (
       <div className="space-y-6">
         <SectionHeader
           title={`Welcome, ${session.user.name}`}
-          description="Share your verification QR code with students so they can verify your service instantly."
+          description="Your verifier application is approved. Verification service setup is in progress."
         />
         <VendorVerificationOverview
           companyName={application.vendorProfile.companyName}
           stats={stats}
           recentVerifications={recentVerifications}
+          supportEmail={universityProfile?.contactEmail}
         />
       </div>
     );

@@ -58,7 +58,6 @@ const validInput = {
   contactPersonName: "Jane Doe",
   contactEmail: "jane@example.com",
   justification: "We need to confirm student eligibility.",
-  requestedScopes: ["faculty", "year"],
 };
 
 const vendorProfile = {
@@ -100,43 +99,18 @@ describe("createVendorApplication", () => {
     ).rejects.toThrow(message);
   });
 
-  it.each([
-    { requestedScopes: [] },
-    { requestedScopes: ["degree"] },
-    { requestedScopes: ["student_id"] },
-  ])(
-    "rejects unsupported scope selections: %j",
-    async ({ requestedScopes }) => {
-      await expect(
-        createVendorApplication({
-          userId: "user_1",
-          input: { ...validInput, requestedScopes },
-        }),
-      ).rejects.toThrow();
-
-      expect(database.runTransaction).not.toHaveBeenCalled();
-    },
-  );
-
-  it("stores a deduplicated snapshot without changing the live profile", async () => {
+  it("stores an immutable application snapshot without changing the live profile", async () => {
     database.transaction.vendorProfile.findUnique.mockResolvedValueOnce(vendorProfile);
     database.transaction.vendorApplication.findFirst.mockResolvedValueOnce(null);
     database.transaction.vendorApplication.create.mockResolvedValueOnce({ id: "app_1" });
 
-    await createVendorApplication({
-      userId: "user_1",
-      input: {
-        ...validInput,
-        requestedScopes: ["faculty", "year", "faculty"],
-      },
-    });
+    await createVendorApplication({ userId: "user_1", input: validInput });
 
     expect(database.transaction.vendorProfile.update).not.toHaveBeenCalled();
     expect(database.transaction.vendorApplication.create).toHaveBeenCalledWith({
       data: {
         vendorProfileId: "profile_1",
         justification: validInput.justification,
-        requestedScopes: ["faculty", "year"],
         companyRegistrationNumber: "12345",
         snapshotCompanyName: "Acme Corp",
         snapshotServiceCategory: "Healthcare",
@@ -179,6 +153,19 @@ describe("reviewVendorApplication", () => {
     snapshotDescription: validInput.description,
     vendorProfile,
   };
+
+  it("requires a reason before rejecting an application", async () => {
+    await expect(
+      reviewVendorApplication({
+        applicationId: "app_1",
+        decision: "REJECTED",
+        reviewerId: "admin_1",
+        notes: "   ",
+      }),
+    ).rejects.toThrow("A rejection reason is required");
+
+    expect(database.runTransaction).not.toHaveBeenCalled();
+  });
 
   it("throws when the application is not pending", async () => {
     database.transaction.vendorApplication.findUnique.mockResolvedValueOnce({
@@ -245,6 +232,15 @@ describe("reviewVendorApplication", () => {
     });
 
     expect(database.transaction.vendorProfile.update).not.toHaveBeenCalled();
+    expect(database.transaction.vendorApplication.updateMany).toHaveBeenCalledWith({
+      where: { id: "app_1", status: VendorApplicationStatus.PENDING },
+      data: {
+        status: VendorApplicationStatus.REJECTED,
+        reviewedByUserId: "admin_1",
+        reviewedAt: expect.any(Date),
+        reviewNotes: "Insufficient documentation",
+      },
+    });
     expect(writeAuditLogMock).toHaveBeenCalledWith(
       expect.objectContaining({
         action: AuditAction.VENDOR_APPLICATION_REJECTED,
