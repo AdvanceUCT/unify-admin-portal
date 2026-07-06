@@ -60,6 +60,24 @@ export function assertRequiredFieldsMapped(
 }
 
 /**
+ * Throws if ANY field (platform or schema) is missing a mapped column.
+ * Unlike `assertRequiredFieldsMapped` (Phase 2's lighter mapping-save gate,
+ * which only requires the platform fields), this is the stricter check run
+ * before generating a preview — every active schema attribute needs data to
+ * validate rows against, so an unmapped schema field is caught once, clearly,
+ * instead of surfacing as the same "missing value" error on every row.
+ */
+export function assertMappingComplete(columnMap: Record<string, string>, fieldDefinitions: ImportFieldDefinition[]) {
+  const missing = fieldDefinitions.filter((field) => !columnMap[field.name]?.trim());
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Mapping is incomplete: ${missing.map((field) => field.label).join(", ")}. Go back and finish mapping these fields before previewing.`,
+    );
+  }
+}
+
+/**
  * Strips an untrusted client-submitted column map down to known field names
  * with non-empty string values, dropping anything else.
  */

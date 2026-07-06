@@ -215,6 +215,7 @@ model UniversityProfile {
   updatedAt          DateTime           @updatedAt
   credentialSchemas  CredentialSchema[]
   importMapping      ImportMapping?
+  importRun          ImportRun?
 
   @@map("university_profile")
 }
@@ -229,6 +230,46 @@ model ImportMapping {
   updatedAt             DateTime          @updatedAt
 
   @@map("import_mapping")
+}
+
+/// The single pending (uncommitted) CSV import preview for a university.
+/// Replaced wholesale by each new preview and deleted once committed —
+/// this is transient staging, not a permanent import history.
+model ImportRun {
+  id                  String            @id @default(cuid())
+  universityProfileId String            @unique
+  universityProfile   UniversityProfile @relation(fields: [universityProfileId], references: [id])
+  filename            String
+  mappingSnapshot     Json
+  createdAt           DateTime          @default(now())
+  rows                ImportRow[]
+
+  @@map("import_run")
+}
+
+model ImportRow {
+  id            String          @id @default(cuid())
+  importRunId   String
+  importRun     ImportRun       @relation(fields: [importRunId], references: [id], onDelete: Cascade)
+  rowNumber     Int?
+  studentNumber String?
+  status        ImportRowStatus
+  mappedData    Json?
+  errors        Json?
+  diff          Json?
+  createdAt     DateTime        @default(now())
+
+  @@index([importRunId])
+  @@index([status])
+  @@map("import_row")
+}
+
+enum ImportRowStatus {
+  NEW
+  UPDATED
+  UNCHANGED
+  MISSING
+  ERROR
 }
 
 model CredentialSchema {

@@ -3,10 +3,11 @@
 import { useState } from "react";
 
 import { MappingStep } from "@/features/imports/steps/MappingStep";
+import { PreviewStep } from "@/features/imports/steps/PreviewStep";
 import { UploadStep } from "@/features/imports/steps/UploadStep";
 import type { ImportFieldDefinition } from "@/lib/imports/mapping";
 
-const steps = ["Upload", "Map columns"] as const;
+const steps = ["Upload", "Map columns", "Preview"] as const;
 
 export function ImportWizard({
   existingColumnMap,
@@ -16,12 +17,13 @@ export function ImportWizard({
   fieldDefinitions: ImportFieldDefinition[];
 }) {
   const [currentStep, setCurrentStep] = useState(0);
+  const [file, setFile] = useState<File | null>(null);
   const [columns, setColumns] = useState<string[]>([]);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
 
   return (
     <div className="space-y-6">
-      <ol className="grid gap-2 sm:grid-cols-2">
+      <ol className="grid gap-2 sm:grid-cols-3">
         {steps.map((label, index) => {
           const isCurrent = index === currentStep;
           const isComplete = index < currentStep;
@@ -59,7 +61,8 @@ export function ImportWizard({
       <section className="rounded-lg border border-zinc-200 bg-white p-6">
         {currentStep === 0 ? (
           <UploadStep
-            onUploaded={(nextColumns) => {
+            onUploaded={(nextFile, nextColumns) => {
+              setFile(nextFile);
               setColumns(nextColumns);
               setSavedAt(null);
               setCurrentStep(1);
@@ -75,12 +78,22 @@ export function ImportWizard({
             onSaved={() => setSavedAt(new Date())}
           />
         ) : null}
+        {currentStep === 2 && file ? (
+          <PreviewStep file={file} fieldDefinitions={fieldDefinitions} onBack={() => setCurrentStep(1)} />
+        ) : null}
       </section>
 
-      {savedAt ? (
-        <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          Mapping saved. The next CSV upload will pre-fill these choices.
-        </p>
+      {currentStep === 1 && savedAt ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          <span>Mapping saved. The next CSV upload will pre-fill these choices.</span>
+          <button
+            className="h-8 rounded-md bg-emerald-800 px-3 text-xs font-medium text-white transition hover:bg-emerald-900"
+            onClick={() => setCurrentStep(2)}
+            type="button"
+          >
+            Continue to preview
+          </button>
+        </div>
       ) : null}
     </div>
   );

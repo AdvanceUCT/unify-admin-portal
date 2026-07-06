@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { prisma } from "@/lib/db/prisma";
 import {
+  assertMappingComplete,
   assertRequiredFieldsMapped,
   getImportFieldDefinitions,
   getImportMapping,
@@ -66,6 +67,28 @@ describe("assertRequiredFieldsMapped", () => {
         definitions,
       ),
     ).not.toThrow();
+  });
+});
+
+describe("assertMappingComplete", () => {
+  const definitions = getImportFieldDefinitions(["faculty", "year"]);
+  const completeMap = {
+    email: "Email",
+    faculty: "Faculty",
+    firstName: "First",
+    lastName: "Last",
+    studentNumber: "No.",
+    year: "Year",
+  };
+
+  it("throws when a schema field is unmapped, even though mapping-save gating allows it", () => {
+    const { faculty: _faculty, ...incomplete } = completeMap;
+
+    expect(() => assertMappingComplete(incomplete, definitions)).toThrow(/Faculty/);
+  });
+
+  it("does not throw when every field, platform and schema, is mapped", () => {
+    expect(() => assertMappingComplete(completeMap, definitions)).not.toThrow();
   });
 });
 

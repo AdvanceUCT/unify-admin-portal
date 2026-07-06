@@ -7,7 +7,7 @@ async function readErrorMessage(response: Response) {
   return body?.error?.message ?? `Upload failed with status ${response.status}.`;
 }
 
-export function UploadStep({ onUploaded }: { onUploaded: (columns: string[]) => void }) {
+export function UploadStep({ onUploaded }: { onUploaded: (file: File, columns: string[]) => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -36,7 +36,7 @@ export function UploadStep({ onUploaded }: { onUploaded: (columns: string[]) => 
       }
 
       const result = (await response.json()) as { columns: string[] };
-      onUploaded(result.columns);
+      onUploaded(file, result.columns);
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "Upload failed.");
     } finally {

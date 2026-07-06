@@ -24,3 +24,26 @@ export function parseCsvHeader(text: string): ParsedCsvHeader {
 
   return { columns, errors };
 }
+
+export type ParsedCsvRows = {
+  rows: Record<string, string>[];
+  errors: string[];
+};
+
+/**
+ * Parses the full body of a CSV file into row objects keyed by column name,
+ * for validation/reconciliation. Row values are trimmed; blank lines are
+ * skipped rather than surfaced as empty rows.
+ */
+export function parseCsvRows(text: string): ParsedCsvRows {
+  const result = Papa.parse<Record<string, string>>(text, {
+    header: true,
+    skipEmptyLines: true,
+    transform: (value) => value.trim(),
+    transformHeader: (header) => header.trim(),
+  });
+
+  const errors = result.errors.map((error) => (error.row != null ? `Row ${error.row + 2}: ${error.message}` : error.message));
+
+  return { rows: result.data, errors };
+}
