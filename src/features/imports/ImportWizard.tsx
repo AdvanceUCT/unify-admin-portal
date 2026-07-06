@@ -75,6 +75,7 @@ export function ImportWizard({
             existingColumnMap={existingColumnMap}
             fieldDefinitions={fieldDefinitions}
             onBack={() => setCurrentStep(0)}
+            onContinue={() => setCurrentStep(2)}
             onSaved={() => setSavedAt(new Date())}
           />
         ) : null}
@@ -84,16 +85,9 @@ export function ImportWizard({
       </section>
 
       {currentStep === 1 && savedAt ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          <span>Mapping saved. The next CSV upload will pre-fill these choices.</span>
-          <button
-            className="h-8 rounded-md bg-emerald-800 px-3 text-xs font-medium text-white transition hover:bg-emerald-900"
-            onClick={() => setCurrentStep(2)}
-            type="button"
-          >
-            Continue to preview
-          </button>
-        </div>
+        <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          Mapping saved. The next CSV upload will pre-fill these choices.
+        </p>
       ) : null}
     </div>
   );

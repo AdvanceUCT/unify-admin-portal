@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
@@ -41,7 +42,7 @@ const CATEGORIES: {
 
 async function readErrorMessage(response: Response) {
   const body = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
-  return body?.error?.message ?? `Preview failed with status ${response.status}.`;
+  return body?.error?.message ?? `Request failed with status ${response.status}.`;
 }
 
 export function PreviewStep({
@@ -53,9 +54,12 @@ export function PreviewStep({
   fieldDefinitions: ImportFieldDefinition[];
   onBack: () => void;
 }) {
+  const router = useRouter();
   const [result, setResult] = useState<PreviewResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isCommitting, setIsCommitting] = useState(false);
+  const [commitError, setCommitError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<ImportRowStatus>>(new Set());
   const [fullViewStatus, setFullViewStatus] = useState<ImportRowStatus | null>(null);
   const [fullViewPage, setFullViewPage] = useState(1);
@@ -112,6 +116,25 @@ export function PreviewStep({
       setError(previewError instanceof Error ? previewError.message : "Failed to generate preview.");
     } finally {
       setIsGenerating(false);
+    }
+  }
+
+  async function handleCommit() {
+    setCommitError(null);
+    setIsCommitting(true);
+
+    try {
+      const response = await fetch("/api/students/import/commit", { cache: "no-store", method: "POST" });
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+
+      const body = (await response.json()) as { newCount: number; updatedCount: number };
+      router.push(`/students?imported=${body.newCount}&updated=${body.updatedCount}`);
+    } catch (commitFailure) {
+      setCommitError(commitFailure instanceof Error ? commitFailure.message : "Failed to commit import.");
+      setIsCommitting(false);
     }
   }
 
@@ -263,14 +286,29 @@ export function PreviewStep({
             })}
           </div>
 
-          <button
-            className="h-9 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={isGenerating}
-            onClick={handleGenerate}
-            type="button"
-          >
-            {isGenerating ? "Regenerating" : "Regenerate preview"}
-          </button>
+          {commitError ? <p className="text-sm text-amber-700">{commitError}</p> : null}
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              className="h-9 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={isGenerating || isCommitting}
+              onClick={handleGenerate}
+              type="button"
+            >
+              {isGenerating ? "Regenerating" : "Regenerate preview"}
+            </button>
+
+            <button
+              className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+              disabled={isCommitting || isGenerating || result.counts.new + result.counts.updated === 0}
+              onClick={handleCommit}
+              type="button"
+            >
+              {isCommitting
+                ? "Committing"
+                : `Commit ${result.counts.new} new, ${result.counts.updated} updated`}
+            </button>
+          </div>
         </div>
       ) : null}
 

@@ -16,12 +16,14 @@ export function MappingStep({
   existingColumnMap,
   fieldDefinitions,
   onBack,
+  onContinue,
   onSaved,
 }: {
   columns: string[];
   existingColumnMap: Record<string, string>;
   fieldDefinitions: ImportFieldDefinition[];
   onBack: () => void;
+  onContinue: (columnMap: Record<string, string>) => void;
   onSaved: (columnMap: Record<string, string>) => void;
 }) {
   const [selections, setSelections] = useState<Record<string, string>>(() => {
@@ -36,12 +38,13 @@ export function MappingStep({
   });
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isContinuing, setIsContinuing] = useState(false);
 
   const missingRequired = useMemo(
     () => fieldDefinitions.filter((field) => field.required && !selections[field.name]),
     [fieldDefinitions, selections],
   );
-  const canSave = missingRequired.length === 0 && !isSaving;
+  const canSave = missingRequired.length === 0 && !isSaving && !isContinuing;
 
   function handleSelect(fieldName: string, column: string) {
     setSelections((current) => {
@@ -55,28 +58,45 @@ export function MappingStep({
     });
   }
 
+  async function saveMapping() {
+    const response = await fetch("/api/students/import/mapping", {
+      body: JSON.stringify({ columnMap: selections }),
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response));
+    }
+
+    const result = (await response.json()) as { columnMap: Record<string, string> };
+    return result.columnMap;
+  }
+
   async function handleSave() {
     setError(null);
     setIsSaving(true);
 
     try {
-      const response = await fetch("/api/students/import/mapping", {
-        body: JSON.stringify({ columnMap: selections }),
-        cache: "no-store",
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
-
-      if (!response.ok) {
-        throw new Error(await readErrorMessage(response));
-      }
-
-      const result = (await response.json()) as { columnMap: Record<string, string> };
-      onSaved(result.columnMap);
+      onSaved(await saveMapping());
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Failed to save mapping.");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleContinue() {
+    setError(null);
+    setIsContinuing(true);
+
+    try {
+      onContinue(await saveMapping());
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Failed to save mapping.");
+    } finally {
+      setIsContinuing(false);
     }
   }
 
@@ -124,12 +144,20 @@ export function MappingStep({
           Back
         </button>
         <button
-          className="h-10 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+          className="h-10 rounded-md border border-zinc-300 px-4 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
           disabled={!canSave}
           onClick={handleSave}
           type="button"
         >
           {isSaving ? "Saving" : "Save mapping"}
+        </button>
+        <button
+          className="h-10 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+          disabled={!canSave}
+          onClick={handleContinue}
+          type="button"
+        >
+          {isContinuing ? "Continuing" : "Continue to preview"}
         </button>
       </div>
     </div>
