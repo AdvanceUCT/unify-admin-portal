@@ -188,6 +188,20 @@ enum VendorVerificationStatus {
   FAILED
 }
 
+model Student {
+  id            String   @id @default(cuid())
+  studentNumber String   @unique
+  email         String
+  firstName     String
+  lastName      String
+  attributes    Json     @default("{}")
+  source        String   @default("csv")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("student")
+}
+
 model UniversityProfile {
   id                 String             @id @default(cuid())
   name               String

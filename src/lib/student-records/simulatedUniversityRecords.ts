@@ -129,7 +129,6 @@ function buildStudentRecord(index: number): StudentRecord {
       lastName,
     },
     credential: {
-      enrolmentStatus: "Registered",
       expiresAt: EXPIRES_AT,
       faculty,
       holderName: `${firstName} ${lastName}`,
@@ -157,7 +156,6 @@ function matchesQuery(student: StudentRecord, normalizedQuery: string) {
     student.profile.institution,
     student.credential.faculty,
     student.credential.programme,
-    student.credential.enrolmentStatus,
     student.credential.lifecycleState,
     student.credential.studentNumber,
   ];
@@ -185,10 +183,7 @@ export function searchSimulatedUniversityStudentRecords(query: string): StudentR
 }
 
 export function isStudentRecordEligibleForCredentialIssuance(student: StudentRecord) {
-  return (
-    student.credential.enrolmentStatus === "Registered" &&
-    ["NOT_ISSUED", "FAILED", "REVOKED"].includes(student.credential.lifecycleState)
-  );
+  return ["NOT_ISSUED", "FAILED", "REVOKED"].includes(student.credential.lifecycleState);
 }
 
 export function selectStudentRecordsForCredentialIssuance(
@@ -196,9 +191,8 @@ export function selectStudentRecordsForCredentialIssuance(
   {
     cohortId = SIMULATED_STUDENT_COHORT_ID,
     credentialStatus,
-    enrolmentStatus,
     faculty,
-    limit = SIMULATED_STUDENT_RECORD_COUNT,
+    limit = Number.MAX_SAFE_INTEGER,
     programme,
   }: IssuanceSelectionOptions = {},
 ): StudentRecord[] {
@@ -212,18 +206,10 @@ export function selectStudentRecordsForCredentialIssuance(
         const matchesEligibility = isStudentRecordEligibleForCredentialIssuance(student);
         const matchesFaculty = !faculty || student.credential.faculty === faculty;
         const matchesProgramme = !programme || student.credential.programme === programme;
-        const matchesEnrolmentStatus =
-          !enrolmentStatus || student.credential.enrolmentStatus === enrolmentStatus;
         const matchesCredentialStatus =
           !credentialStatus || student.credential.lifecycleState === credentialStatus;
 
-        return (
-          matchesEligibility &&
-          matchesFaculty &&
-          matchesProgramme &&
-          matchesEnrolmentStatus &&
-          matchesCredentialStatus
-        );
+        return matchesEligibility && matchesFaculty && matchesProgramme && matchesCredentialStatus;
       })
       .slice(0, limit),
   );

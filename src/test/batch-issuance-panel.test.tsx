@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { BatchIssuancePanel } from "@/features/credentials/BatchIssuancePanel";
 import { getMockAdminState, resetMockActivationStore } from "@/lib/api/mockActivationStore";
 import type { BatchIssuancePreview } from "@/lib/api/types";
+import { SIMULATED_FACULTY_PROGRAMMES } from "@/lib/student-records/facultyProgrammes";
 
 const routerPush = vi.fn();
 
@@ -41,7 +42,7 @@ describe("BatchIssuancePanel", () => {
 
   it("previews and processes a batch run", async () => {
     mockAdminStateFetch();
-    render(<BatchIssuancePanel preview={preview} />);
+    render(<BatchIssuancePanel preview={preview} programmesByFaculty={SIMULATED_FACULTY_PROGRAMMES} />);
 
     expect(screen.getByRole("link", { name: "Batch history" })).toHaveAttribute(
       "href",
@@ -60,7 +61,7 @@ describe("BatchIssuancePanel", () => {
 
   it("filters batch issuance by faculty before queueing", async () => {
     mockAdminStateFetch();
-    render(<BatchIssuancePanel preview={preview} />);
+    render(<BatchIssuancePanel preview={preview} programmesByFaculty={SIMULATED_FACULTY_PROGRAMMES} />);
 
     fireEvent.change(screen.getByLabelText("Faculty"), { target: { value: "Commerce" } });
     fireEvent.click(screen.getByRole("button", { name: "Preview batch" }));
@@ -75,7 +76,7 @@ describe("BatchIssuancePanel", () => {
 
   it("filters batch issuance by faculty and programme dropdowns", async () => {
     mockAdminStateFetch();
-    render(<BatchIssuancePanel preview={preview} />);
+    render(<BatchIssuancePanel preview={preview} programmesByFaculty={SIMULATED_FACULTY_PROGRAMMES} />);
 
     fireEvent.change(screen.getByLabelText("Faculty"), { target: { value: "Commerce" } });
     fireEvent.change(screen.getByLabelText("Programme"), { target: { value: "Bachelor of Accounting" } });
@@ -88,7 +89,7 @@ describe("BatchIssuancePanel", () => {
   it("keeps the preview table on screen until navigation occurs", async () => {
     mockAdminStateFetch();
 
-    render(<BatchIssuancePanel preview={preview} />);
+    render(<BatchIssuancePanel preview={preview} programmesByFaculty={SIMULATED_FACULTY_PROGRAMMES} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Preview batch" }));
     fireEvent.click(await screen.findByRole("button", { name: "Generate 100 offers" }));
