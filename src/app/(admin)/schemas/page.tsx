@@ -3,8 +3,9 @@ import { Badge } from "@/components/ui/Badge";
 import { requireRole } from "@/lib/auth/session";
 import { listCredentialSchemas } from "@/lib/university/credentialSchema";
 import { getUniversityProfile } from "@/lib/university/profile";
-import { createSchemaVersionAction } from "./actions";
+import { createSchemaVersionAction, publishSchemaVersionAction } from "./actions";
 import { NewVersionButton } from "./NewVersionButton";
+import { PublishButton } from "./PublishButton";
 
 export default async function SchemasPage() {
   const session = await requireRole(["SUPER_ADMIN", "ADMIN", "ISSUER", "VIEWER"]);
@@ -12,13 +13,13 @@ export default async function SchemasPage() {
 
   const profile = await getUniversityProfile();
   const schemas = profile ? await listCredentialSchemas(profile.id) : [];
-  const activeSchema = schemas.find((schema) => schema.isActive);
+  const activeSchema = schemas.find((schema) => schema.status === "ACTIVE");
 
   return (
     <div className="space-y-6">
       <SectionHeader
         title="Schemas"
-        description="Credential schema versions for this issuer. Creating a new version doesn't invalidate credentials already issued."
+        description="Credential schema versions for this issuer. New versions start as drafts — publish one to make it active and start issuing credentials with it. Already-issued credentials aren't affected by publishing."
       />
 
       {canWrite && activeSchema ? (
@@ -41,8 +42,10 @@ export default async function SchemasPage() {
                     <h2 className="font-semibold text-zinc-950">
                       {schema.schemaName} · v{schema.schemaVersion}
                     </h2>
-                    {schema.isActive ? (
+                    {schema.status === "ACTIVE" ? (
                       <Badge tone="success">Active</Badge>
+                    ) : schema.status === "DRAFT" ? (
+                      <Badge tone="warning">Draft</Badge>
                     ) : (
                       <Badge tone="neutral">Retired</Badge>
                     )}
@@ -58,14 +61,24 @@ export default async function SchemasPage() {
                     ))}
                   </div>
                 </div>
-                <p className="shrink-0 text-xs text-zinc-400">
-                  Created{" "}
-                  {new Date(schema.createdAt).toLocaleDateString("en-GB", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </p>
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                  <p className="text-xs text-zinc-400">
+                    Created{" "}
+                    {new Date(schema.createdAt).toLocaleDateString("en-GB", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </p>
+                  {canWrite && schema.status === "DRAFT" ? (
+                    <PublishButton
+                      action={publishSchemaVersionAction}
+                      currentActiveVersion={activeSchema?.schemaVersion ?? null}
+                      schemaId={schema.id}
+                      schemaVersion={schema.schemaVersion}
+                    />
+                  ) : null}
+                </div>
               </div>
             </div>
           ))}

@@ -184,6 +184,8 @@ export async function runIssuanceSetupAction(formData: FormData) {
       schemaId,
       credentialDefinitionId,
       revocationRegistryDefinitionId,
+      status: "ACTIVE",
+      publishedAt: new Date(),
     });
 
     await prisma.universityProfile.update({

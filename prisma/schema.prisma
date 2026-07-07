@@ -205,20 +205,22 @@ model UniversityProfile {
 }
 
 model CredentialSchema {
-  id                             String            @id @default(cuid())
+  id                             String                 @id @default(cuid())
   universityProfileId            String
-  universityProfile              UniversityProfile @relation(fields: [universityProfileId], references: [id])
+  universityProfile              UniversityProfile      @relation(fields: [universityProfileId], references: [id])
   schemaName                     String
   schemaVersion                  String
   schemaAttributes               String[]
   schemaId                       String?
   credentialDefinitionId         String?
   revocationRegistryDefinitionId String?
-  isActive                       Boolean           @default(true)
-  createdAt                      DateTime          @default(now())
-  updatedAt                      DateTime          @updatedAt
+  status                         CredentialSchemaStatus @default(DRAFT)
+  publishedAt                    DateTime?
+  createdAt                      DateTime               @default(now())
+  updatedAt                      DateTime               @updatedAt
 
   @@index([universityProfileId])
+  @@index([universityProfileId, status])
   @@map("credential_schema")
 }
 
@@ -394,6 +396,12 @@ enum SetupStatus {
   COMPLETE
 }
 
+enum CredentialSchemaStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
 model AuditLog {
   id         String      @id @default(cuid())
   actorId    String?
@@ -433,4 +441,5 @@ enum AuditAction {
   VENDOR_APPLICATION_REJECTED
   VENDOR_APPLICATION_REVOKED
   SCHEMA_VERSION_CREATED
+  SCHEMA_PUBLISHED
 }

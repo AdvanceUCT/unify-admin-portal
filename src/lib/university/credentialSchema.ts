@@ -16,7 +16,7 @@ export async function getActiveCredentialSchema(
   return prisma.credentialSchema.findFirst({
     where: {
       universityProfileId: profileId,
-      isActive: true,
+      status: "ACTIVE",
     },
   });
 }
@@ -64,19 +64,14 @@ export async function createCredentialSchema(
 }
 
 /**
- * Creates a new version of a university's credential schema and retires the
- * previously active version. Runs as a single serializable transaction so
- * there is never more than one active version for a university profile.
- *
- * Already-issued credentials reference their credential definition directly
- * (not the schema row), so retiring the old version does not affect them.
- *
- * @param input.previousSchemaId - The ID of the version being retired, used for the audit trail.
+ * Creates a new draft version of a university's credential schema. The
+ * draft sits alongside the current active version and does not affect
+ * issuance until an admin explicitly publishes it via
+ * `publishCredentialSchema`.
  */
-export async function createSchemaVersion(input: {
+export async function createDraftSchemaVersion(input: {
   profileId: string;
   actorId: string;
-  previousSchemaId?: string;
   schemaName: string;
   schemaVersion: string;
   schemaAttributes: string[];
@@ -87,7 +82,6 @@ export async function createSchemaVersion(input: {
   const {
     profileId,
     actorId,
-    previousSchemaId,
     schemaName,
     schemaVersion,
     schemaAttributes,
@@ -96,41 +90,99 @@ export async function createSchemaVersion(input: {
     revocationRegistryDefinitionId,
   } = input;
 
+  const created = await prisma.credentialSchema.create({
+    data: {
+      universityProfileId: profileId,
+      schemaName,
+      schemaVersion,
+      schemaAttributes,
+      schemaId,
+      credentialDefinitionId,
+      revocationRegistryDefinitionId,
+      status: "DRAFT",
+    },
+  });
+
+  await writeAuditLog({
+    action: AuditAction.SCHEMA_VERSION_CREATED,
+    actorId,
+    targetType: "credential_schema",
+    targetId: created.id,
+    meta: {
+      schemaName,
+      schemaVersion,
+    },
+  });
+
+  return created;
+}
+
+/**
+ * Publishes a draft credential schema version, making it the active schema
+ * for its university profile. Atomically retires the currently active
+ * version (if any) in the same serializable transaction, so there is never
+ * more than one active version for a university profile.
+ *
+ * Already-issued credentials reference their credential definition directly
+ * (not the schema row), so retiring the old version does not affect them.
+ *
+ * @throws If the schema doesn't exist, doesn't belong to the given profile,
+ *   or is not in DRAFT status.
+ */
+export async function publishCredentialSchema(input: {
+  schemaId: string;
+  profileId: string;
+  actorId: string;
+}): Promise<CredentialSchema> {
+  const { schemaId, profileId, actorId } = input;
+
   return runSerializableTransaction(async (transaction) => {
-    await transaction.credentialSchema.updateMany({
-      where: { universityProfileId: profileId, isActive: true },
-      data: { isActive: false },
+    const target = await transaction.credentialSchema.findUnique({
+      where: { id: schemaId },
     });
 
-    const created = await transaction.credentialSchema.create({
-      data: {
-        universityProfileId: profileId,
-        schemaName,
-        schemaVersion,
-        schemaAttributes,
-        schemaId,
-        credentialDefinitionId,
-        revocationRegistryDefinitionId,
-        isActive: true,
-      },
+    if (!target || target.universityProfileId !== profileId) {
+      throw new Error("Schema version not found.");
+    }
+    if (target.status === "ACTIVE") {
+      throw new Error("This version is already published.");
+    }
+    if (target.status !== "DRAFT") {
+      throw new Error("Only draft versions can be published.");
+    }
+
+    const previousActive = await transaction.credentialSchema.findFirst({
+      where: { universityProfileId: profileId, status: "ACTIVE" },
+    });
+
+    if (previousActive) {
+      await transaction.credentialSchema.update({
+        where: { id: previousActive.id },
+        data: { status: "RETIRED" },
+      });
+    }
+
+    const published = await transaction.credentialSchema.update({
+      where: { id: schemaId },
+      data: { status: "ACTIVE", publishedAt: new Date() },
     });
 
     await writeAuditLog(
       {
-        action: AuditAction.SCHEMA_VERSION_CREATED,
+        action: AuditAction.SCHEMA_PUBLISHED,
         actorId,
         targetType: "credential_schema",
-        targetId: created.id,
+        targetId: published.id,
         meta: {
-          schemaName,
-          schemaVersion,
-          previousSchemaId: previousSchemaId ?? null,
+          schemaName: published.schemaName,
+          schemaVersion: published.schemaVersion,
+          previousSchemaId: previousActive?.id ?? null,
         },
       },
       transaction,
     );
 
-    return created;
+    return published;
   });
 }
 
