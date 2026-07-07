@@ -8,6 +8,11 @@ import {
   upsertUniversityProfile,
 } from "@/lib/university/profile";
 import { createCredentialSchema } from "@/lib/university/credentialSchema";
+import {
+  schemaAttributesSchema,
+  schemaNameSchema,
+  schemaVersionSchema,
+} from "@/lib/university/schemaValidation";
 import * as agentClient from "@/lib/agentClient";
 import { AgentServiceError } from "@/lib/agentClient";
 
@@ -125,27 +130,19 @@ export async function createOrGetDidAction() {
   }
 }
 
-const STUDENT_SCHEMA = {
-  name: "StudentIdentity",
-  version: "1.0",
-  attributes: ["studentNumber", "firstName", "lastName", "faculty", "year"],
-};
-
-const ISSUANCE_PAYLOAD = {
-  schema: STUDENT_SCHEMA,
-  credentialDefinition: {
-    tag: "default",
-    supportRevocation: false,
-  },
-};
+const issuanceSetupSchema = z.object({
+  schemaName: schemaNameSchema,
+  schemaVersion: schemaVersionSchema,
+  attributes: schemaAttributesSchema,
+});
 
 /**
- * Runs the one-time issuance setup on the agent using the fixed student schema.
+ * Runs the one-time issuance setup on the agent using the admin-defined schema.
  * Creates the schema and credential definition on the ledger, saves the resulting
  * IDs to the DB, then marks the university profile setup as complete.
  * Requires a DID to already exist — throws if one hasn't been created yet.
  */
-export async function runIssuanceSetupAction() {
+export async function runIssuanceSetupAction(formData: FormData) {
   const profile = await getUniversityProfile();
   if (!profile) {
     throw new Error("University profile not found.");
@@ -154,18 +151,36 @@ export async function runIssuanceSetupAction() {
     throw new Error("Issuer DID not found. Create the DID first.");
   }
 
+  const parsed = issuanceSetupSchema.safeParse({
+    schemaName: formData.get("schemaName"),
+    schemaVersion: formData.get("schemaVersion"),
+    attributes: formData.get("attributes"),
+  });
+
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? "Invalid schema data.");
+  }
+
   try {
     const { schemaId, credentialDefinitionId, revocationRegistryDefinitionId } =
       await agentClient.issuanceSetup({
         issuerDid: profile.issuerDid,
-        ...ISSUANCE_PAYLOAD,
+        schema: {
+          name: parsed.data.schemaName,
+          version: parsed.data.schemaVersion,
+          attributes: parsed.data.attributes,
+        },
+        credentialDefinition: {
+          tag: "default",
+          supportRevocation: false,
+        },
       });
 
     await createCredentialSchema({
       universityProfileId: profile.id,
-      schemaName: STUDENT_SCHEMA.name,
-      schemaVersion: STUDENT_SCHEMA.version,
-      schemaAttributes: STUDENT_SCHEMA.attributes,
+      schemaName: parsed.data.schemaName,
+      schemaVersion: parsed.data.schemaVersion,
+      schemaAttributes: parsed.data.attributes,
       schemaId,
       credentialDefinitionId,
       revocationRegistryDefinitionId,

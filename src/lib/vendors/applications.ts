@@ -2,10 +2,10 @@ import "server-only";
 
 import { z } from "zod";
 
-import type { Prisma } from "@/generated/prisma/client";
 import { AuditAction, VendorApplicationStatus } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit/audit";
 import { prisma } from "@/lib/db/prisma";
+import { hasPrismaErrorCode, runSerializableTransaction } from "@/lib/db/transaction";
 
 const ACTIVE_APPLICATION_STATUSES = [
   VendorApplicationStatus.PENDING,
@@ -37,33 +37,6 @@ const revokeApplicationSchema = z.object({
 });
 
 export type CreateVendorApplicationInput = z.input<typeof createApplicationSchema>;
-
-function hasPrismaErrorCode(error: unknown, code: string) {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === code
-  );
-}
-
-async function runSerializableTransaction<T>(
-  operation: (transaction: Prisma.TransactionClient) => Promise<T>,
-) {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      return await prisma.$transaction(operation, {
-        isolationLevel: "Serializable",
-      });
-    } catch (error) {
-      if (!hasPrismaErrorCode(error, "P2034") || attempt === 2) {
-        throw error;
-      }
-    }
-  }
-
-  throw new Error("The transaction could not be completed.");
-}
 
 function activeApplicationError(status?: VendorApplicationStatus) {
   return status === VendorApplicationStatus.APPROVED

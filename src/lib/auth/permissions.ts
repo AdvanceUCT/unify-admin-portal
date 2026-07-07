@@ -25,6 +25,10 @@ export const ROLE_ROUTE_MAP: readonly RoleRoute[] = [
     allowedRoles: ["SUPER_ADMIN", "ADMIN", "ISSUER"],
   },
   {
+    prefix: "/schemas",
+    allowedRoles: ["SUPER_ADMIN", "ADMIN", "ISSUER", "VIEWER"],
+  },
+  {
     prefix: "/vendors",
     allowedRoles: ["SUPER_ADMIN", "ADMIN"],
   },
@@ -52,6 +56,8 @@ export const ADMIN_ACTIONS = [
   "credential:write",
   "student:read",
   "student:write",
+  "schema:read",
+  "schema:write",
   "vendor:read",
   "vendor:write",
   "rule:read",
@@ -71,6 +77,8 @@ const ACTION_ROLE_MAP: Record<AdminAction, readonly AdminRole[]> = {
   "credential:write": ["SUPER_ADMIN", "ADMIN", "ISSUER"],
   "student:read": ["SUPER_ADMIN", "ADMIN", "ISSUER", "VIEWER"],
   "student:write": ["SUPER_ADMIN", "ADMIN", "ISSUER"],
+  "schema:read": ["SUPER_ADMIN", "ADMIN", "ISSUER", "VIEWER"],
+  "schema:write": ["SUPER_ADMIN", "ADMIN"],
   "vendor:read": ["SUPER_ADMIN", "ADMIN", "VIEWER"],
   "vendor:write": ["SUPER_ADMIN", "ADMIN"],
   "rule:read": ["SUPER_ADMIN", "ADMIN", "VIEWER"],
