@@ -18,3 +18,19 @@ export type PreviewRow = {
 export function rowKey(row: Pick<PreviewRow, "studentNumber" | "rowNumber">): string {
   return row.studentNumber ?? `row-${row.rowNumber}`;
 }
+
+/** Suggests a machine key (camelCase) from an admin-entered label, e.g. "Home Province" -> "homeProvince". Editable before submitting. */
+export function slugifyToFieldKey(label: string): string {
+  const words = label
+    .trim()
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean);
+
+  if (words.length === 0) return "";
+
+  const [first, ...rest] = words;
+  const head = first.charAt(0).toLowerCase() + first.slice(1).toLowerCase();
+  const tail = rest.map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join("");
+
+  return head + tail;
+}

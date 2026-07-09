@@ -2,14 +2,17 @@ import { NextResponse } from "next/server";
 
 import { assertCan, PermissionError, type SessionWithRole } from "@/lib/auth/permissions";
 import { getCurrentAdminSession } from "@/lib/auth/session";
+import { getActiveCustomFieldDefinitions } from "@/lib/imports/customFields";
 import {
+  assertNoDuplicateMappingTargets,
+  assertNoSharedColumns,
   assertRequiredFieldsMapped,
+  assignmentsToColumnMap,
   getImportFieldDefinitions,
   getImportMapping,
-  sanitizeColumnMap,
+  parseMappingAssignments,
   saveImportMapping,
 } from "@/lib/imports/mapping";
-import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfile } from "@/lib/university/profile";
 
 /** Thrown when the university hasn't finished setup yet, so CSV import has nothing to map against. */
@@ -24,13 +27,9 @@ async function loadFieldDefinitions() {
     throw new ImportNotConfiguredError("University profile has not been configured.");
   }
 
-  const schema = await getActiveCredentialSchema(profile.id);
+  const customFields = await getActiveCustomFieldDefinitions(profile.id);
 
-  if (!schema) {
-    throw new ImportNotConfiguredError("Active credential schema was not found.");
-  }
-
-  return { fieldDefinitions: getImportFieldDefinitions(schema.schemaAttributes), profile, schema };
+  return { fieldDefinitions: getImportFieldDefinitions(customFields), profile };
 }
 
 export async function GET() {
@@ -71,17 +70,17 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { fieldDefinitions, profile, schema } = await loadFieldDefinitions();
-    const body = (await request.json().catch(() => undefined)) as { columnMap?: unknown } | undefined;
-    const columnMap = sanitizeColumnMap(body?.columnMap, fieldDefinitions);
+    const { fieldDefinitions, profile } = await loadFieldDefinitions();
+    const body = (await request.json().catch(() => undefined)) as { assignments?: unknown } | undefined;
+    const assignments = parseMappingAssignments(body?.assignments, fieldDefinitions);
 
+    assertNoDuplicateMappingTargets(assignments);
+    assertNoSharedColumns(assignments);
+
+    const columnMap = assignmentsToColumnMap(assignments);
     assertRequiredFieldsMapped(columnMap, fieldDefinitions);
 
-    const saved = await saveImportMapping({
-      columnMap,
-      schemaVersionSnapshot: `${schema.schemaName}@${schema.schemaVersion}`,
-      universityProfileId: profile.id,
-    });
+    const saved = await saveImportMapping({ columnMap, universityProfileId: profile.id });
 
     return NextResponse.json({ columnMap: saved.columnMap });
   } catch (error) {

@@ -9,24 +9,26 @@ vi.mock("@/lib/db/prisma", () => ({
   prisma: {},
 }));
 
-const fieldDefinitions = getImportFieldDefinitions(["studentNumber", "firstName", "lastName", "faculty", "year"]);
+const fieldDefinitions = getImportFieldDefinitions([{ key: "cohort", label: "Cohort" }]);
 const columnMap = {
+  cohort: "Cohort",
   email: "Email",
   faculty: "Faculty",
   firstName: "First Name",
   lastName: "Surname",
+  programme: "Programme",
   studentNumber: "Student No",
-  year: "Year",
 };
 
 function row(overrides: Partial<Record<string, string>> = {}) {
   return {
+    Cohort: "2026",
     Email: "ada@example.edu",
     Faculty: "Science",
     "First Name": "Ada",
+    Programme: "Computer Science",
     "Student No": "ADA001",
     Surname: "Lovelace",
-    Year: "2026",
     ...overrides,
   };
 }
@@ -38,20 +40,36 @@ describe("validateRows", () => {
     expect(result.errors).toEqual([]);
     expect(result.studentNumber).toBe("ADA001");
     expect(result.mappedData).toEqual({
+      cohort: "2026",
       email: "ada@example.edu",
       faculty: "Science",
       firstName: "Ada",
       lastName: "Lovelace",
+      programme: "Computer Science",
       studentNumber: "ADA001",
-      year: "2026",
     });
   });
 
-  it("flags a missing required value", () => {
+  it("flags a missing required (system field) value", () => {
     const [result] = validateRows([row({ "Student No": "" })], columnMap, fieldDefinitions);
 
     expect(result.studentNumber).toBeNull();
     expect(result.errors).toContain('Missing value for "Student number".');
+  });
+
+  it("flags a missing custom-field value the same as a missing system-field value — custom fields are required once added to the template", () => {
+    const [result] = validateRows([row({ Cohort: "" })], columnMap, fieldDefinitions);
+
+    expect(result.errors).toContain('Missing value for "Cohort".');
+    expect(result.mappedData).not.toHaveProperty("cohort");
+  });
+
+  it("flags a custom field with no mapped column at all", () => {
+    const { cohort: _cohort, ...columnMapWithoutCohort } = columnMap;
+    const [result] = validateRows([row()], columnMapWithoutCohort, fieldDefinitions);
+
+    expect(result.errors).toContain('Missing value for "Cohort".');
+    expect(result.mappedData).not.toHaveProperty("cohort");
   });
 
   it("flags an invalid email address", () => {

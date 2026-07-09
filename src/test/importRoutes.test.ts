@@ -9,12 +9,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, POST as postMapping } from "@/app/api/students/import/mapping/route";
 import { POST as postUpload } from "@/app/api/students/import/upload/route";
 import { getCurrentAdminSession } from "@/lib/auth/session";
-import {
-  getImportFieldDefinitions,
-  getImportMapping,
-  saveImportMapping,
-} from "@/lib/imports/mapping";
-import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
+import { getActiveCustomFieldDefinitions } from "@/lib/imports/customFields";
+import { getImportFieldDefinitions, getImportMapping, saveImportMapping } from "@/lib/imports/mapping";
 import { getUniversityProfile } from "@/lib/university/profile";
 
 vi.mock("server-only", () => ({}));
@@ -36,8 +32,8 @@ vi.mock("@/lib/university/profile", () => ({
   getUniversityProfile: vi.fn(),
 }));
 
-vi.mock("@/lib/university/credentialSchema", () => ({
-  getActiveCredentialSchema: vi.fn(),
+vi.mock("@/lib/imports/customFields", () => ({
+  getActiveCustomFieldDefinitions: vi.fn(),
 }));
 
 vi.mock("@/lib/imports/mapping", async () => {
@@ -56,11 +52,7 @@ function adminSession(role: string | null = "SUPER_ADMIN") {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getUniversityProfile).mockResolvedValue({ id: "profile-001" } as never);
-  vi.mocked(getActiveCredentialSchema).mockResolvedValue({
-    schemaAttributes: ["studentNumber", "firstName", "lastName", "faculty", "year"],
-    schemaName: "StudentIdentity",
-    schemaVersion: "1.0",
-  } as never);
+  vi.mocked(getActiveCustomFieldDefinitions).mockResolvedValue([{ key: "cohort", label: "Cohort" }] as never);
 });
 
 describe("POST /api/students/import/upload", () => {
@@ -132,7 +124,7 @@ describe("GET /api/students/import/mapping", () => {
     expect(response.status).toBe(409);
   });
 
-  it("returns field definitions and any saved mapping", async () => {
+  it("returns field definitions (system + active custom fields) and any saved mapping", async () => {
     vi.mocked(getCurrentAdminSession).mockResolvedValue(adminSession() as never);
     vi.mocked(getImportMapping).mockResolvedValue({ columnMap: { email: "Email" } } as never);
 
@@ -141,14 +133,14 @@ describe("GET /api/students/import/mapping", () => {
 
     expect(response.status).toBe(200);
     expect(body.columnMap).toEqual({ email: "Email" });
-    expect(body.fieldDefinitions).toEqual(getImportFieldDefinitions(["studentNumber", "firstName", "lastName", "faculty", "year"]));
+    expect(body.fieldDefinitions).toEqual(getImportFieldDefinitions([{ key: "cohort", label: "Cohort" }]));
   });
 });
 
 describe("POST /api/students/import/mapping", () => {
-  function mappingRequest(columnMap: unknown) {
+  function mappingRequest(assignments: unknown) {
     return new Request("http://localhost:3000/api/students/import/mapping", {
-      body: JSON.stringify({ columnMap }),
+      body: JSON.stringify({ assignments }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
     });
@@ -157,49 +149,103 @@ describe("POST /api/students/import/mapping", () => {
   it("rejects a viewer role (read-only)", async () => {
     vi.mocked(getCurrentAdminSession).mockResolvedValue(adminSession("VIEWER") as never);
 
-    const response = await postMapping(mappingRequest({ email: "Email" }));
+    const response = await postMapping(mappingRequest([{ csvColumn: "Email", fieldName: "email" }]));
 
     expect(response.status).toBe(403);
   });
 
-  it("rejects a mapping missing required platform fields", async () => {
+  it("rejects a mapping missing required system fields", async () => {
     vi.mocked(getCurrentAdminSession).mockResolvedValue(adminSession() as never);
 
-    const response = await postMapping(mappingRequest({ email: "Email" }));
+    const response = await postMapping(mappingRequest([{ csvColumn: "Email", fieldName: "email" }]));
 
     expect(response.status).toBe(400);
     expect(saveImportMapping).not.toHaveBeenCalled();
   });
 
-  it("saves a complete mapping", async () => {
+  it("rejects two columns mapped to the same field", async () => {
+    vi.mocked(getCurrentAdminSession).mockResolvedValue(adminSession() as never);
+
+    const response = await postMapping(
+      mappingRequest([
+        { csvColumn: "Cohort A", fieldName: "cohort" },
+        { csvColumn: "Cohort B", fieldName: "cohort" },
+      ]),
+    );
+
+    expect(response.status).toBe(400);
+    expect(saveImportMapping).not.toHaveBeenCalled();
+  });
+
+  it("rejects one column mapped to two fields", async () => {
+    vi.mocked(getCurrentAdminSession).mockResolvedValue(adminSession() as never);
+
+    const response = await postMapping(
+      mappingRequest([
+        { csvColumn: "Email", fieldName: "email" },
+        { csvColumn: "Email", fieldName: "cohort" },
+      ]),
+    );
+
+    expect(response.status).toBe(400);
+    expect(saveImportMapping).not.toHaveBeenCalled();
+  });
+
+  it("rejects a mapping missing a required custom field", async () => {
+    vi.mocked(getCurrentAdminSession).mockResolvedValue(adminSession() as never);
+
+    const response = await postMapping(
+      mappingRequest([
+        { csvColumn: "Email", fieldName: "email" },
+        { csvColumn: "First", fieldName: "firstName" },
+        { csvColumn: "Last", fieldName: "lastName" },
+        { csvColumn: "No.", fieldName: "studentNumber" },
+        { csvColumn: "Faculty", fieldName: "faculty" },
+        { csvColumn: "Programme", fieldName: "programme" },
+      ]),
+    );
+
+    expect(response.status).toBe(400);
+    expect(saveImportMapping).not.toHaveBeenCalled();
+  });
+
+  it("saves a complete mapping, including required custom fields", async () => {
     vi.mocked(getCurrentAdminSession).mockResolvedValue(adminSession() as never);
     vi.mocked(saveImportMapping).mockResolvedValue({
       columnMap: {
+        cohort: "Cohort",
         email: "Email",
+        faculty: "Faculty",
         firstName: "First",
         lastName: "Last",
+        programme: "Programme",
         studentNumber: "No.",
       },
     } as never);
 
     const response = await postMapping(
-      mappingRequest({
-        email: "Email",
-        firstName: "First",
-        lastName: "Last",
-        studentNumber: "No.",
-      }),
+      mappingRequest([
+        { csvColumn: "Email", fieldName: "email" },
+        { csvColumn: "First", fieldName: "firstName" },
+        { csvColumn: "Last", fieldName: "lastName" },
+        { csvColumn: "No.", fieldName: "studentNumber" },
+        { csvColumn: "Faculty", fieldName: "faculty" },
+        { csvColumn: "Programme", fieldName: "programme" },
+        { csvColumn: "Cohort", fieldName: "cohort" },
+      ]),
     );
 
     expect(response.status).toBe(200);
     expect(saveImportMapping).toHaveBeenCalledWith({
       columnMap: {
+        cohort: "Cohort",
         email: "Email",
+        faculty: "Faculty",
         firstName: "First",
         lastName: "Last",
+        programme: "Programme",
         studentNumber: "No.",
       },
-      schemaVersionSnapshot: "StudentIdentity@1.0",
       universityProfileId: "profile-001",
     });
   });

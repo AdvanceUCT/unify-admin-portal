@@ -16,10 +16,16 @@ function isValidEmail(email: string) {
 }
 
 /**
- * Maps one raw CSV row through the column mapping and validates it.
- * Assumes `assertMappingComplete` has already run, so every field definition
- * has a mapped column — an empty resolved value here is a per-row data gap,
- * not a mapping gap.
+ * Maps one raw CSV row through the column mapping and validates it. A field
+ * is hard-required per row exactly when `field.required` is true — that's
+ * every system field, and every currently-active custom field (an active
+ * custom field is a live commitment to track that data, so it's required
+ * throughout the import process, same as a system field). The only way a
+ * custom field stops being required is falling out of `fieldDefinitions`
+ * entirely by being removed from the template via Manage Fields — at that
+ * point it's not validated, not diffed, and not written on commit for future
+ * imports, though `commit.ts`'s merge-not-overwrite update still leaves any
+ * value already stored under that key on existing students untouched.
  */
 function validateRow(
   rawRow: Record<string, string>,
@@ -36,7 +42,7 @@ function validateRow(
 
     if (value) {
       mappedData[field.name] = value;
-    } else {
+    } else if (field.required) {
       errors.push(`Missing value for "${field.label}".`);
     }
   }

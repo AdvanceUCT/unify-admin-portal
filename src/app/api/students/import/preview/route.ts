@@ -3,12 +3,12 @@ import { NextResponse } from "next/server";
 import { assertCan, PermissionError, type SessionWithRole } from "@/lib/auth/permissions";
 import { getCurrentAdminSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
+import { getActiveCustomFieldDefinitions } from "@/lib/imports/customFields";
 import { parseCsvRows } from "@/lib/imports/csv";
-import { assertMappingComplete, getImportFieldDefinitions, getImportMapping } from "@/lib/imports/mapping";
+import { assertRequiredFieldsMapped, getImportFieldDefinitions, getImportMapping } from "@/lib/imports/mapping";
 import { reconcileRows, type ReconciledImportRow } from "@/lib/imports/reconcile";
 import { saveImportPreview } from "@/lib/imports/run";
 import { validateRows } from "@/lib/imports/validate";
-import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfile } from "@/lib/university/profile";
 
 /** Thrown when the university hasn't finished setup or saved a mapping yet, so there's nothing to preview against. */
@@ -42,21 +42,17 @@ export async function POST(request: Request) {
       throw new ImportNotConfiguredError("University profile has not been configured.");
     }
 
-    const schema = await getActiveCredentialSchema(profile.id);
-    if (!schema) {
-      throw new ImportNotConfiguredError("Active credential schema was not found.");
-    }
-
     const savedMapping = await getImportMapping(profile.id);
     if (!savedMapping) {
       throw new ImportNotConfiguredError("Save a column mapping before generating a preview.");
     }
 
-    const fieldDefinitions = getImportFieldDefinitions(schema.schemaAttributes);
+    const customFields = await getActiveCustomFieldDefinitions(profile.id);
+    const fieldDefinitions = getImportFieldDefinitions(customFields);
     const columnMap = savedMapping.columnMap as Record<string, string>;
 
     try {
-      assertMappingComplete(columnMap, fieldDefinitions);
+      assertRequiredFieldsMapped(columnMap, fieldDefinitions);
     } catch (error) {
       throw new ImportNotConfiguredError(error instanceof Error ? error.message : "Mapping is incomplete.");
     }

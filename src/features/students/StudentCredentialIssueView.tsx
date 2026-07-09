@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/Badge";
 import type { ActivationDelivery, StudentRecord } from "@/lib/api/types";
 import { credentialStatusTone, formatCredentialStatus, formatDateTime } from "@/lib/formatters";
 import { StudentCredentialActions } from "@/features/students/StudentCredentialActions";
+import { humanizeFieldName } from "@/lib/imports/mapping";
 
 export function StudentCredentialIssueView({
   delivery,
@@ -10,6 +11,10 @@ export function StudentCredentialIssueView({
   delivery?: ActivationDelivery;
   student: StudentRecord;
 }) {
+  const customAttributes = Object.entries(student.credential.attributes ?? {}).filter(
+    (entry): entry is [string, string] => entry[1] != null,
+  );
+
   return (
     <section className="grid gap-4 lg:grid-cols-2">
       <div className="rounded-lg border border-zinc-200 bg-white p-5">
@@ -48,6 +53,19 @@ export function StudentCredentialIssueView({
       <div className="rounded-lg border border-zinc-200 bg-white p-5">
         <StudentCredentialActions delivery={delivery} student={student} />
       </div>
+      {customAttributes.length > 0 ? (
+        <div className="rounded-lg border border-zinc-200 bg-white p-5 lg:col-span-2">
+          <h2 className="mb-4 text-base font-semibold text-zinc-950">Additional information</h2>
+          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+            {customAttributes.map(([key, value]) => (
+              <div className="flex justify-between gap-4" key={key}>
+                <dt className="text-zinc-500">{humanizeFieldName(key)}</dt>
+                <dd className="text-right text-zinc-900">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      ) : null}
     </section>
   );
 }

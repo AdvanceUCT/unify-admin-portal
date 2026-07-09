@@ -3,14 +3,12 @@ import "server-only";
 import { AuditAction, ImportRowStatus } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit/audit";
 import { prisma } from "@/lib/db/prisma";
-import { PLATFORM_FIELDS } from "@/lib/imports/mapping";
+import { isSystemFieldName } from "@/lib/imports/mapping";
 
 /** Thrown when there is no pending import preview to commit — generate one first. */
 export class NoImportRunError extends Error {
   status = 409;
 }
-
-const PLATFORM_FIELD_NAMES = new Set(PLATFORM_FIELDS.map((field) => field.name));
 
 function asMappedData(value: unknown): Record<string, string> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -19,11 +17,11 @@ function asMappedData(value: unknown): Record<string, string> {
   return value as Record<string, string>;
 }
 
-/** Schema-attribute values only — platform fields are their own Student columns, not part of `attributes`. */
-function schemaAttributesFrom(mappedData: Record<string, string>): Record<string, string> {
+/** Custom-field values only — system fields are their own Student columns, not part of `attributes`. */
+function customFieldValuesFrom(mappedData: Record<string, string>): Record<string, string> {
   const attributes: Record<string, string> = {};
   for (const [name, value] of Object.entries(mappedData)) {
-    if (!PLATFORM_FIELD_NAMES.has(name)) {
+    if (!isSystemFieldName(name)) {
       attributes[name] = value;
     }
   }
@@ -77,10 +75,12 @@ export async function commitImportRun(params: {
           data: rowsToCreate.map((row) => {
             const mappedData = asMappedData(row.mappedData);
             return {
-              attributes: schemaAttributesFrom(mappedData),
+              attributes: customFieldValuesFrom(mappedData),
               email: mappedData.email,
+              faculty: mappedData.faculty,
               firstName: mappedData.firstName,
               lastName: mappedData.lastName,
+              programme: mappedData.programme,
               source: "csv",
               studentNumber: row.studentNumber!,
             };
@@ -94,6 +94,8 @@ export async function commitImportRun(params: {
         const emails: string[] = [];
         const firstNames: string[] = [];
         const lastNames: string[] = [];
+        const faculties: string[] = [];
+        const programmes: string[] = [];
         const attributesJson: string[] = [];
 
         for (const row of rowsToUpdate) {
@@ -102,27 +104,40 @@ export async function commitImportRun(params: {
           emails.push(mappedData.email);
           firstNames.push(mappedData.firstName);
           lastNames.push(mappedData.lastName);
-          attributesJson.push(JSON.stringify(schemaAttributesFrom(mappedData)));
+          faculties.push(mappedData.faculty);
+          programmes.push(mappedData.programme);
+          attributesJson.push(JSON.stringify(customFieldValuesFrom(mappedData)));
         }
 
         // Bulk update via unnest(): one round trip for every changed row, instead of
         // one upsert per row — Prisma's query builder has no bulk-update-with-per-row-values
         // primitive, so this is the standard Postgres pattern for it.
+        //
+        // `attributes` is merged (jsonb `||` concat), not overwritten: `v.attributes`
+        // only contains custom-field keys this row actually had a value for this
+        // import (validate.ts omits anything else from mappedData), so a key absent
+        // from it — whether the field was removed from the template, or this file
+        // simply had no column for it — is left untouched on the existing row rather
+        // than silently dropped.
         await tx.$executeRaw`
           UPDATE "student" AS s
           SET
             email = v.email,
             "firstName" = v."firstName",
             "lastName" = v."lastName",
-            attributes = v.attributes,
+            faculty = v.faculty,
+            programme = v.programme,
+            attributes = COALESCE(s.attributes, '{}'::jsonb) || v.attributes,
             "updatedAt" = now()
           FROM unnest(
             ${studentNumbers}::text[],
             ${emails}::text[],
             ${firstNames}::text[],
             ${lastNames}::text[],
+            ${faculties}::text[],
+            ${programmes}::text[],
             ${attributesJson}::jsonb[]
-          ) AS v("studentNumber", email, "firstName", "lastName", attributes)
+          ) AS v("studentNumber", email, "firstName", "lastName", faculty, programme, attributes)
           WHERE s."studentNumber" = v."studentNumber"
         `;
       }

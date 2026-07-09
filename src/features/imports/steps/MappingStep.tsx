@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import type { ImportFieldDefinition } from "@/lib/imports/mapping";
@@ -40,6 +41,12 @@ export function MappingStep({
   const [isSaving, setIsSaving] = useState(false);
   const [isContinuing, setIsContinuing] = useState(false);
 
+  const systemFields = useMemo(() => fieldDefinitions.filter((field) => field.kind === "system"), [fieldDefinitions]);
+  const customFields = useMemo(() => fieldDefinitions.filter((field) => field.kind === "custom"), [fieldDefinitions]);
+
+  const mappedColumns = useMemo(() => new Set(Object.values(selections)), [selections]);
+  const unmappedColumns = useMemo(() => columns.filter((column) => !mappedColumns.has(column)), [columns, mappedColumns]);
+
   const missingRequired = useMemo(
     () => fieldDefinitions.filter((field) => field.required && !selections[field.name]),
     [fieldDefinitions, selections],
@@ -59,8 +66,9 @@ export function MappingStep({
   }
 
   async function saveMapping() {
+    const assignments = Object.entries(selections).map(([fieldName, csvColumn]) => ({ csvColumn, fieldName }));
     const response = await fetch("/api/students/import/mapping", {
-      body: JSON.stringify({ columnMap: selections }),
+      body: JSON.stringify({ assignments }),
       cache: "no-store",
       headers: { "Content-Type": "application/json" },
       method: "POST",
@@ -100,38 +108,66 @@ export function MappingStep({
     }
   }
 
+  function renderFieldRow(field: ImportFieldDefinition) {
+    const selectedColumn = selections[field.name] ?? NOT_MAPPED;
+    // Excludes columns already claimed by another field so two fields can't be
+    // pointed at the same column from the UI — the server enforces this too
+    // (assertNoSharedColumns), this is just the primary, earlier defense.
+    const availableColumns = columns.filter((column) => column === selectedColumn || !mappedColumns.has(column));
+
+    return (
+      <label key={field.name} className="grid grid-cols-[1fr_2fr] items-center gap-4 text-sm">
+        <span className="font-medium text-zinc-700">
+          {field.label}
+          {field.required ? <span className="ml-1 text-rose-600">*</span> : null}
+        </span>
+        <select
+          className="h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-800 focus:border-zinc-500 focus:outline-none"
+          onChange={(event) => handleSelect(field.name, event.target.value)}
+          value={selectedColumn}
+        >
+          <option value={NOT_MAPPED}>Not mapped</option>
+          {availableColumns.map((column) => (
+            <option key={column} value={column}>
+              {column}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold">Map columns</h2>
         <p className="mt-1 text-sm text-zinc-600">
-          Match each system field to a column from your uploaded file. This mapping is saved so future imports
-          don&apos;t need remapping from scratch.
+          Match each field to a column from your uploaded file. This mapping is saved so future imports don&apos;t
+          need remapping from scratch.
         </p>
       </div>
 
       <div className="space-y-3">
-        {fieldDefinitions.map((field) => (
-          <label key={field.name} className="grid grid-cols-[1fr_2fr] items-center gap-4 text-sm">
-            <span className="font-medium text-zinc-700">
-              {field.label}
-              {field.required ? <span className="ml-1 text-rose-600">*</span> : null}
-            </span>
-            <select
-              className="h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-800 focus:border-zinc-500 focus:outline-none"
-              onChange={(event) => handleSelect(field.name, event.target.value)}
-              value={selections[field.name] ?? NOT_MAPPED}
-            >
-              <option value={NOT_MAPPED}>Not mapped</option>
-              {columns.map((column) => (
-                <option key={column} value={column}>
-                  {column}
-                </option>
-              ))}
-            </select>
-          </label>
-        ))}
+        <h3 className="text-sm font-semibold text-zinc-800">System fields</h3>
+        {systemFields.map(renderFieldRow)}
       </div>
+
+      {customFields.length > 0 ? (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-zinc-800">Custom fields</h3>
+          {customFields.map(renderFieldRow)}
+        </div>
+      ) : null}
+
+      {unmappedColumns.length > 0 ? (
+        <p className="text-sm text-amber-800">
+          <span className="font-medium">Unmapped:</span> {unmappedColumns.join(", ")}. Map above, or add a field in{" "}
+          <Link className="underline underline-offset-2" href="/students/import/fields">
+            Manage fields
+          </Link>
+          .
+        </p>
+      ) : null}
 
       {error ? <p className="text-sm text-amber-700">{error}</p> : null}
 

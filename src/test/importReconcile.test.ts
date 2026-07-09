@@ -11,16 +11,18 @@ vi.mock("@/lib/db/prisma", () => ({
   prisma: {},
 }));
 
-const fieldDefinitions = getImportFieldDefinitions(["studentNumber", "firstName", "lastName", "faculty", "year"]);
+const fieldDefinitions = getImportFieldDefinitions([{ key: "cohort", label: "Cohort" }]);
 
 function student(overrides: Partial<Student> = {}): Student {
   return {
-    attributes: { faculty: "Science", year: "2026" },
+    attributes: { cohort: "2026" },
     createdAt: new Date("2026-01-01"),
     email: "ada@example.edu",
+    faculty: "Science",
     firstName: "Ada",
     id: "student-1",
     lastName: "Lovelace",
+    programme: "Computer Science",
     source: "csv",
     studentNumber: "ADA001",
     updatedAt: new Date("2026-01-01"),
@@ -32,12 +34,13 @@ function validRow(overrides: Partial<ValidatedImportRow> = {}): ValidatedImportR
   return {
     errors: [],
     mappedData: {
+      cohort: "2026",
       email: "ada@example.edu",
       faculty: "Science",
       firstName: "Ada",
       lastName: "Lovelace",
+      programme: "Computer Science",
       studentNumber: "ADA001",
-      year: "2026",
     },
     rowNumber: 2,
     studentNumber: "ADA001",
@@ -60,20 +63,36 @@ describe("reconcileRows", () => {
     expect(result.diff).toBeUndefined();
   });
 
-  it("classifies a row with a changed field as Updated, with a diff of only the changed fields", () => {
+  it("classifies a row with a changed custom-field value as Updated, with a diff of only the changed fields", () => {
     const [result] = reconcileRows(
-      [validRow({ mappedData: { ...validRow().mappedData, faculty: "Engineering" } })],
+      [validRow({ mappedData: { ...validRow().mappedData, cohort: "2027" } })],
       [student()],
       fieldDefinitions,
     );
 
     expect(result.status).toBe("Updated");
-    expect(result.diff).toEqual({ faculty: { new: "Engineering", old: "Science" } });
+    expect(result.diff).toEqual({ cohort: { new: "2027", old: "2026" } });
+  });
+
+  it("reads faculty/programme off their dedicated columns for the diff, not out of the attributes JSON", () => {
+    // A student whose `attributes` JSON still has a stale faculty/programme key
+    // (as pre-migration rows briefly could) must not be diffed against those
+    // stale JSON values — the real columns are authoritative.
+    const staleJsonStudent = student({
+      attributes: { cohort: "2026", faculty: "Stale JSON value", programme: "Stale JSON value" },
+      faculty: "Science",
+      programme: "Computer Science",
+    });
+
+    const [result] = reconcileRows([validRow()], [staleJsonStudent], fieldDefinitions);
+
+    expect(result.status).toBe("Unchanged");
+    expect(result.diff).toBeUndefined();
   });
 
   it("never includes studentNumber itself in the diff", () => {
     const [result] = reconcileRows(
-      [validRow({ mappedData: { ...validRow().mappedData, faculty: "Engineering" } })],
+      [validRow({ mappedData: { ...validRow().mappedData, cohort: "2027" } })],
       [student()],
       fieldDefinitions,
     );
@@ -106,12 +125,13 @@ describe("reconcileRows", () => {
 
     const ada = results.find((row) => row.studentNumber === "ADA001");
     expect(ada?.mappedData).toEqual({
+      cohort: "2026",
       email: "ada@example.edu",
       faculty: "Science",
       firstName: "Ada",
       lastName: "Lovelace",
+      programme: "Computer Science",
       studentNumber: "ADA001",
-      year: "2026",
     });
   });
 

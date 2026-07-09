@@ -194,11 +194,15 @@ model Student {
   email         String
   firstName     String
   lastName      String
+  faculty       String?
+  programme     String?
   attributes    Json     @default("{}")
   source        String   @default("csv")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  @@index([faculty])
+  @@index([programme])
   @@map("student")
 }
 
@@ -213,23 +217,44 @@ model UniversityProfile {
   setupCompletedAt   DateTime?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
-  credentialSchemas  CredentialSchema[]
-  importMapping      ImportMapping?
-  importRun          ImportRun?
+  credentialSchemas       CredentialSchema[]
+  importMapping           ImportMapping?
+  importRun               ImportRun?
+  customFieldDefinitions  CustomFieldDefinition[]
 
   @@map("university_profile")
 }
 
 model ImportMapping {
-  id                    String            @id @default(cuid())
-  universityProfileId   String            @unique
-  universityProfile     UniversityProfile @relation(fields: [universityProfileId], references: [id])
-  columnMap             Json
-  schemaVersionSnapshot String
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
+  id                  String            @id @default(cuid())
+  universityProfileId String            @unique
+  universityProfile   UniversityProfile @relation(fields: [universityProfileId], references: [id])
+  columnMap           Json
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 
   @@map("import_mapping")
+}
+
+/// Admin-defined per-university custom fields available as CSV import mapping
+/// targets, independent of `CredentialSchema.schemaAttributes`. Soft-deleted
+/// (`removedAt`) rather than hard-deleted on removal — historical `Student.attributes`
+/// data under a removed field's key is never touched, only future imports stop
+/// offering/populating it. Re-adding a previously removed key reactivates the
+/// same row rather than creating an ambiguous duplicate.
+model CustomFieldDefinition {
+  id                   String            @id @default(cuid())
+  universityProfileId  String
+  universityProfile    UniversityProfile @relation(fields: [universityProfileId], references: [id])
+  key                  String
+  label                String
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  removedAt            DateTime?
+
+  @@unique([universityProfileId, key], map: "custom_field_definition_active_key", where: raw("\"removedAt\" IS NULL"))
+  @@index([universityProfileId])
+  @@map("custom_field_definition")
 }
 
 /// The single pending (uncommitted) CSV import preview for a university.

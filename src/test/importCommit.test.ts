@@ -30,7 +30,15 @@ function row(overrides: Partial<{ status: ImportRowStatus; studentNumber: string
   return {
     diff: null,
     errors: null,
-    mappedData: { email: "ada@example.edu", faculty: "Science", firstName: "Ada", lastName: "Lovelace", studentNumber: "ADA001" },
+    mappedData: {
+      cohort: "2025",
+      email: "ada@example.edu",
+      faculty: "Science",
+      firstName: "Ada",
+      lastName: "Lovelace",
+      programme: "Computer Science",
+      studentNumber: "ADA001",
+    },
     rowNumber: 2,
     status: ImportRowStatus.NEW,
     studentNumber: "ADA001",
@@ -74,7 +82,7 @@ describe("commitImportRun", () => {
     expect(studentNumbers).toEqual(["UPD002"]);
   });
 
-  it("splits mappedData into platform columns vs schema attributes for created rows", async () => {
+  it("splits mappedData into system columns vs custom-field attributes for created rows", async () => {
     vi.mocked(prisma.importRun.findUnique).mockResolvedValue({
       filename: "students.csv",
       id: "run-001",
@@ -85,10 +93,12 @@ describe("commitImportRun", () => {
 
     const createManyCall = vi.mocked(txMock.student.createMany).mock.calls[0][0];
     expect(createManyCall.data[0]).toMatchObject({
-      attributes: { faculty: "Science" },
+      attributes: { cohort: "2025" },
       email: "ada@example.edu",
+      faculty: "Science",
       firstName: "Ada",
       lastName: "Lovelace",
+      programme: "Computer Science",
       source: "csv",
       studentNumber: "ADA001",
     });
@@ -103,13 +113,54 @@ describe("commitImportRun", () => {
 
     await commitImportRun({ universityProfileId: "profile-001" });
 
-    const [, studentNumbers, emails, firstNames, lastNames, attributesJson] = vi.mocked(txMock.$executeRaw).mock
-      .calls[0] as [unknown, string[], string[], string[], string[], string[]];
+    const [, studentNumbers, emails, firstNames, lastNames, faculties, programmes, attributesJson] = vi.mocked(
+      txMock.$executeRaw,
+    ).mock.calls[0] as [unknown, string[], string[], string[], string[], string[], string[], string[]];
     expect(studentNumbers).toEqual(["ADA001"]);
     expect(emails).toEqual(["ada@example.edu"]);
     expect(firstNames).toEqual(["Ada"]);
     expect(lastNames).toEqual(["Lovelace"]);
-    expect(attributesJson).toEqual([JSON.stringify({ faculty: "Science" })]);
+    expect(faculties).toEqual(["Science"]);
+    expect(programmes).toEqual(["Computer Science"]);
+    expect(attributesJson).toEqual([JSON.stringify({ cohort: "2025" })]);
+  });
+
+  it("merges attributes via jsonb concat rather than overwriting, and only serializes the row's current custom-field keys", async () => {
+    // Real merge-vs-overwrite behavior is a Postgres-level guarantee of the `||`
+    // jsonb concat operator (not something a mocked-prisma unit test can execute
+    // against real data) — this test guards the query shape that makes that
+    // guarantee hold: the SQL must concat onto the existing row rather than
+    // replace it, and the serialized payload must only contain keys this row
+    // actually mapped this import, never a stale/untouched key.
+    vi.mocked(prisma.importRun.findUnique).mockResolvedValue({
+      filename: "students.csv",
+      id: "run-001",
+      rows: [
+        row({
+          mappedData: {
+            cohort: "2027",
+            email: "ada@example.edu",
+            faculty: "Science",
+            firstName: "Ada",
+            lastName: "Lovelace",
+            programme: "Computer Science",
+            studentNumber: "ADA001",
+          },
+          status: ImportRowStatus.UPDATED,
+        }),
+      ],
+    } as never);
+
+    await commitImportRun({ universityProfileId: "profile-001" });
+
+    const [strings, , , , , , , attributesJson] = vi.mocked(txMock.$executeRaw).mock.calls[0] as [
+      TemplateStringsArray,
+      ...unknown[],
+    ];
+    const sql = Array.from(strings).join("");
+
+    expect(sql).toContain("COALESCE(s.attributes, '{}'::jsonb) || v.attributes");
+    expect(attributesJson).toEqual([JSON.stringify({ cohort: "2027" })]);
   });
 
   it("skips the bulk update call entirely when there are no Updated rows", async () => {

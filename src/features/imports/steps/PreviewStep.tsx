@@ -46,15 +46,21 @@ async function readErrorMessage(response: Response) {
 }
 
 export function PreviewStep({
+  columns,
+  columnMap,
   file,
   fieldDefinitions,
   onBack,
 }: {
+  columns: string[];
+  columnMap: Record<string, string>;
   file: File;
   fieldDefinitions: ImportFieldDefinition[];
   onBack: () => void;
 }) {
   const router = useRouter();
+  const mappedColumns = useMemo(() => new Set(Object.values(columnMap)), [columnMap]);
+  const unmappedColumns = useMemo(() => columns.filter((column) => !mappedColumns.has(column)), [columns, mappedColumns]);
   const [result, setResult] = useState<PreviewResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -221,6 +227,16 @@ export function PreviewStep({
       ) : null}
 
       {error ? <p className="text-sm text-amber-700">{error}</p> : null}
+
+      {unmappedColumns.length > 0 ? (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <p className="font-medium">
+            {unmappedColumns.length} column{unmappedColumns.length === 1 ? "" : "s"} from this file{" "}
+            {unmappedColumns.length === 1 ? "was" : "were"} left unmapped: {unmappedColumns.join(", ")}.
+          </p>
+          <p className="mt-1">Data in these columns was not imported. Go back to map them if needed.</p>
+        </div>
+      ) : null}
 
       {result ? (
         <div className="space-y-4">

@@ -18,6 +18,10 @@ function currentValueFor(student: Student, fieldName: string): string | null {
       return student.firstName;
     case "lastName":
       return student.lastName;
+    case "faculty":
+      return student.faculty;
+    case "programme":
+      return student.programme;
     default: {
       const attributes = student.attributes;
       if (!attributes || typeof attributes !== "object" || Array.isArray(attributes)) {

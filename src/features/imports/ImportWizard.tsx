@@ -19,6 +19,7 @@ export function ImportWizard({
   const [currentStep, setCurrentStep] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [columns, setColumns] = useState<string[]>([]);
+  const [columnMap, setColumnMap] = useState<Record<string, string>>({});
   const [savedAt, setSavedAt] = useState<Date | null>(null);
 
   return (
@@ -75,12 +76,24 @@ export function ImportWizard({
             existingColumnMap={existingColumnMap}
             fieldDefinitions={fieldDefinitions}
             onBack={() => setCurrentStep(0)}
-            onContinue={() => setCurrentStep(2)}
-            onSaved={() => setSavedAt(new Date())}
+            onContinue={(nextColumnMap) => {
+              setColumnMap(nextColumnMap);
+              setCurrentStep(2);
+            }}
+            onSaved={(nextColumnMap) => {
+              setColumnMap(nextColumnMap);
+              setSavedAt(new Date());
+            }}
           />
         ) : null}
         {currentStep === 2 && file ? (
-          <PreviewStep file={file} fieldDefinitions={fieldDefinitions} onBack={() => setCurrentStep(1)} />
+          <PreviewStep
+            columns={columns}
+            columnMap={columnMap}
+            file={file}
+            fieldDefinitions={fieldDefinitions}
+            onBack={() => setCurrentStep(1)}
+          />
         ) : null}
       </section>
 

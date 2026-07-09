@@ -27,14 +27,12 @@ async function main() {
     for (const record of demoRecords) {
       await prisma.student.upsert({
         create: {
-          attributes: {
-            faculty: record.credential.faculty,
-            programme: record.credential.programme,
-            year: "2026",
-          },
+          attributes: { year: "2026" },
           email: record.profile.email,
+          faculty: record.credential.faculty,
           firstName: record.profile.firstName,
           lastName: record.profile.lastName,
+          programme: record.credential.programme,
           source: "seed",
           studentNumber: record.credential.studentNumber,
         },

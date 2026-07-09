@@ -7,9 +7,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/students/import/preview/route";
 import { prisma } from "@/lib/db/prisma";
 import { getCurrentAdminSession } from "@/lib/auth/session";
+import { getActiveCustomFieldDefinitions } from "@/lib/imports/customFields";
 import { getImportMapping } from "@/lib/imports/mapping";
 import { saveImportPreview } from "@/lib/imports/run";
-import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfile } from "@/lib/university/profile";
 
 vi.mock("server-only", () => ({}));
@@ -30,8 +30,8 @@ vi.mock("@/lib/university/profile", () => ({
   getUniversityProfile: vi.fn(),
 }));
 
-vi.mock("@/lib/university/credentialSchema", () => ({
-  getActiveCredentialSchema: vi.fn(),
+vi.mock("@/lib/imports/customFields", () => ({
+  getActiveCustomFieldDefinitions: vi.fn(),
 }));
 
 vi.mock("@/lib/imports/mapping", async () => {
@@ -59,28 +59,27 @@ function previewRequest(file: File | null) {
 }
 
 const csvContent = [
-  "Student No,First Name,Surname,Email,Faculty,Year",
-  "ADA001,Ada,Lovelace,ada@example.edu,Science,2026",
-  "BOB002,Bob,Marley,bob@example.edu,Engineering,2026",
+  "Student No,First Name,Surname,Email,Faculty,Programme,Cohort",
+  "ADA001,Ada,Lovelace,ada@example.edu,Science,Computer Science,2026",
+  "BOB002,Bob,Marley,bob@example.edu,Engineering,Mechanical Engineering,2026",
 ].join("\n");
+
+const fullColumnMap = {
+  cohort: "Cohort",
+  email: "Email",
+  faculty: "Faculty",
+  firstName: "First Name",
+  lastName: "Surname",
+  programme: "Programme",
+  studentNumber: "Student No",
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getCurrentAdminSession).mockResolvedValue(adminSession() as never);
   vi.mocked(getUniversityProfile).mockResolvedValue({ id: "profile-001" } as never);
-  vi.mocked(getActiveCredentialSchema).mockResolvedValue({
-    schemaAttributes: ["studentNumber", "firstName", "lastName", "faculty", "year"],
-  } as never);
-  vi.mocked(getImportMapping).mockResolvedValue({
-    columnMap: {
-      email: "Email",
-      faculty: "Faculty",
-      firstName: "First Name",
-      lastName: "Surname",
-      studentNumber: "Student No",
-      year: "Year",
-    },
-  } as never);
+  vi.mocked(getActiveCustomFieldDefinitions).mockResolvedValue([{ key: "cohort", label: "Cohort" }] as never);
+  vi.mocked(getImportMapping).mockResolvedValue({ columnMap: fullColumnMap } as never);
   vi.mocked(prisma.student.findMany).mockResolvedValue([]);
   vi.mocked(saveImportPreview).mockResolvedValue({} as never);
 });
@@ -102,16 +101,26 @@ describe("POST /api/students/import/preview", () => {
     expect(response.status).toBe(409);
   });
 
-  it("returns 409 when the saved mapping is missing a schema field", async () => {
-    vi.mocked(getImportMapping).mockResolvedValue({
-      columnMap: { email: "Email", firstName: "First Name", lastName: "Surname", studentNumber: "Student No" },
-    } as never);
+  it("returns 409 when the saved mapping is missing a required system field", async () => {
+    const { faculty: _faculty, ...incompleteMap } = fullColumnMap;
+    vi.mocked(getImportMapping).mockResolvedValue({ columnMap: incompleteMap } as never);
 
     const response = await POST(previewRequest(new File([csvContent], "students.csv")));
     const body = (await response.json()) as { error: { message: string } };
 
     expect(response.status).toBe(409);
     expect(body.error.message).toMatch(/Faculty/);
+  });
+
+  it("returns 409 when the saved mapping is missing a required custom field", async () => {
+    const { cohort: _cohort, ...columnMapWithoutCohort } = fullColumnMap;
+    vi.mocked(getImportMapping).mockResolvedValue({ columnMap: columnMapWithoutCohort } as never);
+
+    const response = await POST(previewRequest(new File([csvContent], "students.csv")));
+    const body = (await response.json()) as { error: { message: string } };
+
+    expect(response.status).toBe(409);
+    expect(body.error.message).toMatch(/Cohort/);
   });
 
   it("returns 400 when no file is provided", async () => {
@@ -123,11 +132,13 @@ describe("POST /api/students/import/preview", () => {
   it("classifies rows and persists the preview", async () => {
     vi.mocked(prisma.student.findMany).mockResolvedValue([
       {
-        attributes: { faculty: "Science", year: "2026" },
+        attributes: { cohort: "2026" },
         email: "ada@example.edu",
+        faculty: "Science",
         firstName: "Ada",
         id: "student-1",
         lastName: "Lovelace",
+        programme: "Computer Science",
         studentNumber: "ADA001",
       },
     ] as never);
