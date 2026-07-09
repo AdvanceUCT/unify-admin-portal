@@ -13,6 +13,7 @@ type VendorApplicationDetailsProps = {
     reviewedAt: Date | null;
     reviewNotes: string | null;
     reviewedByUserId: string | null;
+    snapshotDescription: string | null;
     vendorProfile: {
       companyName: string;
       serviceCategory: string;
@@ -112,7 +113,7 @@ export function VendorApplicationDetails({ application }: VendorApplicationDetai
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-lg border border-zinc-200 bg-white p-4">
           <h3 className="text-sm font-semibold text-zinc-800">Service description</h3>
-          <p className="mt-2 text-sm text-zinc-600 whitespace-pre-line">{application.vendorProfile.description ?? "Not provided"}</p>
+          <p className="mt-2 text-sm text-zinc-600 whitespace-pre-line">{application.snapshotDescription ?? application.vendorProfile.description ?? "Not provided"}</p>
         </div>
         <div className="rounded-lg border border-zinc-200 bg-white p-4">
           <h3 className="text-sm font-semibold text-zinc-800">Why verification access is needed</h3>

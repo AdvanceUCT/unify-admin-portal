@@ -1,6 +1,8 @@
+import QRCode from "qrcode";
 import { CheckCircle2, Mail, QrCode, ShieldCheck, SmartphoneNfc, UserCheck } from "lucide-react";
 
 import { Badge } from "@/components/ui/Badge";
+import { CopyButton } from "@/components/ui/CopyButton";
 import { Metric } from "@/components/ui/Metric";
 import { formatDateTime } from "@/lib/formatters";
 import type { getVendorVerificationStats, listRecentVendorVerifications } from "@/lib/vendors/verifications";
@@ -37,16 +39,21 @@ function maskStudentNumber(studentNumber: string | null) {
   return `•••• ${visible}`;
 }
 
-export function VendorVerificationOverview({
+export async function VendorVerificationOverview({
   companyName,
+  verificationUrl,
   stats,
   recentVerifications,
 }: {
   companyName: string;
+  verificationUrl: string | null;
   stats: Awaited<ReturnType<typeof getVendorVerificationStats>>;
   recentVerifications: Awaited<ReturnType<typeof listRecentVendorVerifications>>;
 }) {
   const approvalRate = stats.total > 0 ? Math.round((stats.approved / stats.total) * 100) : null;
+  const qrSvg = verificationUrl
+    ? await QRCode.toString(verificationUrl, { type: "svg", margin: 1 })
+    : null;
 
   return (
     <div className="space-y-6">
@@ -72,14 +79,34 @@ export function VendorVerificationOverview({
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <section className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-zinc-300 bg-white p-8 text-center">
-          <span className="grid size-16 place-items-center rounded-md bg-zinc-100 text-zinc-400">
-            <QrCode size={32} aria-hidden="true" />
-          </span>
-          <p className="font-medium text-zinc-950">QR verification is coming soon</p>
-          <p className="max-w-xs text-sm text-zinc-500">
-            Once enabled, you&apos;ll display this code at your service point so students can verify in seconds.
-          </p>
+        <section className="flex flex-col items-center justify-center gap-4 rounded-lg border border-zinc-200 bg-white p-8 text-center">
+          {qrSvg ? (
+            <>
+              <div
+                className="size-48"
+                dangerouslySetInnerHTML={{ __html: qrSvg }}
+                aria-label="Verification QR code"
+              />
+              <div>
+                <p className="font-medium text-zinc-950">Your verification QR code</p>
+                <p className="mt-1 max-w-xs text-sm text-zinc-500">
+                  Display this at your service point so students can scan and verify instantly.
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <span className="grid size-16 place-items-center rounded-md bg-zinc-100 text-zinc-400">
+                <QrCode size={32} aria-hidden="true" />
+              </span>
+              <div>
+                <p className="font-medium text-zinc-950">QR code is being set up</p>
+                <p className="mt-1 max-w-xs text-sm text-zinc-500">
+                  Your QR code will appear here shortly. Refresh the page in a moment.
+                </p>
+              </div>
+            </>
+          )}
         </section>
 
         <section className="rounded-lg border border-zinc-200 bg-white p-5">
@@ -105,6 +132,26 @@ export function VendorVerificationOverview({
           </ol>
         </section>
       </div>
+
+      {verificationUrl && (
+        <section className="rounded-lg border border-zinc-200 bg-white p-5">
+          <h2 className="font-medium text-zinc-950">Verification link</h2>
+          <p className="mt-1 text-sm text-zinc-500">
+            Share this link directly for online or remote verifications where a QR code isn&apos;t practical.
+          </p>
+          <div className="mt-3 flex items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2">
+            <a
+              href={verificationUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="min-w-0 flex-1 truncate text-sm text-blue-600 hover:underline"
+            >
+              {verificationUrl}
+            </a>
+            <CopyButton value={verificationUrl} />
+          </div>
+        </section>
+      )}
 
       <section className="rounded-lg border border-zinc-200 bg-white">
         <div className="border-b border-zinc-100 px-5 py-4">

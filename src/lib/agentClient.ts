@@ -227,3 +227,16 @@ export async function resolveActivation(payload: {
   });
   return response.json();
 }
+
+export async function createVerificationServicePoint(payload: {
+  vendorId: string;
+  vendorName: string;
+  externalId: string;
+  name: string;
+}): Promise<{ id: string; verificationUrl: string }> {
+  const response = await agentFetch("/api/verifier/service-points", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return response.json();
+}

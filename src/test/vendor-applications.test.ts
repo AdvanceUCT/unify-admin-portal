@@ -36,6 +36,13 @@ const database = vi.hoisted(() => {
 
 vi.mock("server-only", () => ({}));
 
+vi.mock("@/lib/agentClient", () => ({
+  createVerificationServicePoint: vi.fn().mockResolvedValue({
+    id: "sp_1",
+    verificationUrl: "https://verify.example.com/verify/sp-public-1",
+  }),
+}));
+
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     ...database.transaction,

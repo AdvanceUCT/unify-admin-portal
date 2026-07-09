@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import type { Prisma } from "@/generated/prisma/client";
 import { AuditAction, VendorApplicationStatus } from "@/generated/prisma/enums";
+import { createVerificationServicePoint } from "@/lib/agentClient";
 import { writeAuditLog } from "@/lib/audit/audit";
 import { prisma } from "@/lib/db/prisma";
 import { VENDOR_VERIFICATION_SCOPES } from "@/lib/vendors/scopes";
@@ -333,8 +334,10 @@ export async function reviewVendorApplication({
   reviewerId: string;
   notes?: string;
 }) {
+  let approvedVendor: { vendorProfileId: string; companyName: string } | undefined;
+
   try {
-    return await runSerializableTransaction(async (transaction) => {
+    const result = await runSerializableTransaction(async (transaction) => {
       const application = await transaction.vendorApplication.findUnique({
         where: { id: applicationId },
         include: { vendorProfile: true },
@@ -344,7 +347,7 @@ export async function reviewVendorApplication({
         throw new Error("This application is not pending review.");
       }
 
-      const result = await transaction.vendorApplication.updateMany({
+      const updateResult = await transaction.vendorApplication.updateMany({
         where: { id: applicationId, status: VendorApplicationStatus.PENDING },
         data: {
           status: decision,
@@ -354,16 +357,18 @@ export async function reviewVendorApplication({
         },
       });
 
-      if (result.count !== 1) {
+      if (updateResult.count !== 1) {
         throw new Error("This application is not pending review.");
       }
 
       if (decision === VendorApplicationStatus.APPROVED) {
+        const companyName =
+          application.snapshotCompanyName ?? application.vendorProfile.companyName;
+
         await transaction.vendorProfile.update({
           where: { id: application.vendorProfileId },
           data: {
-            companyName:
-              application.snapshotCompanyName ?? application.vendorProfile.companyName,
+            companyName,
             serviceCategory:
               application.snapshotServiceCategory ?? application.vendorProfile.serviceCategory,
             contactEmail:
@@ -376,6 +381,8 @@ export async function reviewVendorApplication({
               application.snapshotDescription ?? application.vendorProfile.description,
           },
         });
+
+        approvedVendor = { vendorProfileId: application.vendorProfileId, companyName };
       }
 
       await writeAuditLog(
@@ -396,6 +403,28 @@ export async function reviewVendorApplication({
         where: { id: applicationId },
       });
     });
+
+    if (approvedVendor) {
+      const { vendorProfileId, companyName } = approvedVendor;
+      void createVerificationServicePoint({
+        vendorId: vendorProfileId,
+        vendorName: companyName,
+        externalId: vendorProfileId,
+        name: `${companyName} Verification Point`,
+      }).then(({ verificationUrl }) =>
+        prisma.vendorProfile.update({
+          where: { id: vendorProfileId },
+          data: { verificationUrl },
+        })
+      ).catch((error) => {
+        console.error(
+          `[verification] Failed to create service point for vendor ${vendorProfileId}:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+    }
+
+    return result;
   } catch (error) {
     if (hasPrismaErrorCode(error, "P2002")) {
       throw new Error("This vendor already has an active verifier application.");

@@ -25,6 +25,7 @@ export default async function VendorDashboardPage() {
         />
         <VendorVerificationOverview
           companyName={application.vendorProfile.companyName}
+          verificationUrl={application.vendorProfile.verificationUrl}
           stats={stats}
           recentVerifications={recentVerifications}
         />
