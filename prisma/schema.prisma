@@ -1,6 +1,7 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
@@ -98,17 +99,20 @@ model AdminInvite {
 }
 
 model VendorProfile {
-  id              String              @id @default(cuid())
-  userId          String              @unique
-  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  companyName     String
-  serviceCategory String
-  contactEmail    String
-  website         String?
-  description     String?
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  applications    VendorApplication[]
+  id                        String              @id @default(cuid())
+  userId                    String              @unique
+  user                      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName               String
+  serviceCategory           String
+  contactPersonName         String?
+  contactEmail              String
+  website                   String?
+  description               String?
+  verificationUrl           String?
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @updatedAt
+  applications              VendorApplication[]
+  verifications             VendorVerification[]
 
   @@map("vendor_profile")
 }
@@ -120,14 +124,29 @@ model VendorApplication {
   status           VendorApplicationStatus @default(PENDING)
   justification    String
   requestedScopes  String[]                @default([])
+  companyRegistrationNumber String?
+  // Original review decision fields — immutable after approval/rejection
   reviewedByUserId String?
   reviewedAt       DateTime?
   reviewNotes      String?
+  // Revocation fields — populated only when status transitions to REVOKED
+  revokedByUserId  String?
+  revokedAt        DateTime?
+  revokedNotes     String?
+  viewedByAdminAt  DateTime?
+  // Immutable snapshot of vendor profile at time of submission
+  snapshotCompanyName       String?
+  snapshotServiceCategory   String?
+  snapshotContactEmail      String?
+  snapshotContactPersonName String?
+  snapshotWebsite           String?
+  snapshotDescription       String?
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
 
   @@index([vendorProfileId])
   @@index([status])
+  @@unique([vendorProfileId], map: "vendor_application_one_active_per_profile", where: raw("\"status\" IN ('PENDING', 'APPROVED')"))
   @@map("vendor_application")
 }
 
@@ -135,6 +154,39 @@ enum VendorApplicationStatus {
   PENDING
   APPROVED
   REJECTED
+  REVOKED
+}
+
+model VendorVerification {
+  id                     String                    @id @default(cuid())
+  vendorProfileId        String
+  vendorProfile          VendorProfile             @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  verificationRequestId  String?                   @unique
+  servicePointId         String?
+  servicePointName       String?
+  status                 VendorVerificationStatus  @default(PENDING)
+  isVerified             Boolean?
+  failureCode            String?
+  attributes             Json?
+  schemaId               String?
+  credentialDefinitionId String?
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+  completedAt            DateTime?
+  expiresAt              DateTime?
+
+  @@index([vendorProfileId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("vendor_verification")
+}
+
+enum VendorVerificationStatus {
+  PENDING
+  APPROVED
+  DECLINED
+  EXPIRED
+  FAILED
 }
 
 model UniversityProfile {
@@ -409,4 +461,5 @@ enum AuditAction {
   VENDOR_APPLICATION_SUBMITTED
   VENDOR_APPLICATION_APPROVED
   VENDOR_APPLICATION_REJECTED
+  VENDOR_APPLICATION_REVOKED
 }

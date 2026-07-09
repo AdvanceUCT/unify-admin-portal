@@ -96,7 +96,7 @@ function emailForStudent(firstName: string, lastName: string, index: number) {
   return `${safeName}.${padded(index)}@students.uct.ac.za`;
 }
 
-function lifecycleStateFor(index: number): CredentialLifecycleState {
+function lifecycleStateFor(_index: number): CredentialLifecycleState {
   return "NOT_ISSUED";
 }
 

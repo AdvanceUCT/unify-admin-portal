@@ -1,0 +1,1 @@
+-- Consolidated into 20260625000000_add_vendor_profile_fields

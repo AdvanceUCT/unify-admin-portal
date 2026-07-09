@@ -8,6 +8,17 @@ const initialState: SubmitApplicationState = {
   status: "idle",
 };
 
+const serviceCategories = [
+  "Food",
+  "Retail",
+  "Transport",
+  "Healthcare",
+  "Education",
+  "Finance",
+  "Logistics",
+  "Professional services",
+];
+
 export function VendorApplicationForm() {
   const [state, formAction, isPending] = useActionState(
     submitApplicationAction,
@@ -15,7 +26,109 @@ export function VendorApplicationForm() {
   );
 
   return (
-    <form action={formAction} className="space-y-4 rounded-lg border border-zinc-200 bg-white p-5">
+    <form action={formAction} className="space-y-6 rounded-lg border border-zinc-200 bg-white p-5">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="block text-sm font-medium text-zinc-700" htmlFor="companyName">
+            Company name
+          </label>
+          <input
+            className="mt-2 h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950"
+            id="companyName"
+            name="companyName"
+            type="text"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-zinc-700" htmlFor="companyRegistrationNumber">
+            Company registration number
+          </label>
+          <input
+            className="mt-2 h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950"
+            id="companyRegistrationNumber"
+            name="companyRegistrationNumber"
+            type="text"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-zinc-700" htmlFor="serviceCategory">
+            Service category
+          </label>
+          <select
+            className="mt-2 h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none transition focus:border-zinc-950"
+            id="serviceCategory"
+            name="serviceCategory"
+            required
+          >
+            <option value="">Select a category</option>
+            {serviceCategories.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-zinc-700" htmlFor="website">
+            Website
+          </label>
+          <input
+            className="mt-2 h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950"
+            id="website"
+            name="website"
+            type="url"
+            placeholder="https://"
+          />
+        </div>
+
+        <div className="sm:col-span-2">
+          <label className="block text-sm font-medium text-zinc-700" htmlFor="description">
+            Description of service
+          </label>
+          <textarea
+            className="mt-2 min-h-28 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none transition focus:border-zinc-950"
+            id="description"
+            name="description"
+            required
+            aria-describedby="description-help"
+          />
+          <p id="description-help" className="mt-1 text-xs text-zinc-500">
+            Describe your service in 200 words or fewer.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-zinc-700" htmlFor="contactPersonName">
+            Contact person name
+          </label>
+          <input
+            className="mt-2 h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950"
+            id="contactPersonName"
+            name="contactPersonName"
+            type="text"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-zinc-700" htmlFor="contactEmail">
+            Contact email
+          </label>
+          <input
+            className="mt-2 h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950"
+            id="contactEmail"
+            name="contactEmail"
+            type="email"
+            required
+          />
+        </div>
+      </div>
+
       <div>
         <label className="block text-sm font-medium text-zinc-700" htmlFor="justification">
           Why should we approve you as a verifier?
@@ -28,17 +141,8 @@ export function VendorApplicationForm() {
         />
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-zinc-700" htmlFor="requestedScopes">
-          Requested credential scopes
-        </label>
-        <input
-          className="mt-2 h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950"
-          id="requestedScopes"
-          name="requestedScopes"
-          placeholder="degree, transcript"
-        />
-        <p className="mt-1 text-xs text-zinc-500">Comma-separated.</p>
+      <div className="rounded-md border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+        Verification requests include all attributes in the university&apos;s active student credential schema.
       </div>
 
       {state.message ? (

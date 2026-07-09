@@ -287,3 +287,31 @@ export async function registerTrustedCredentialDefinition(
   });
   return response.json();
 }
+
+export async function createVerificationServicePoint(payload: {
+  vendorId: string;
+  vendorName: string;
+  externalId: string;
+  name: string;
+}): Promise<{ id: string; verificationUrl: string }> {
+  const response = await agentFetch("/api/verifier/service-points", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return response.json();
+}
+
+export async function listVerificationServicePoints(): Promise<
+  Array<{
+    id: string;
+    vendorId: string;
+    vendorName: string;
+    externalId: string;
+    name: string;
+    active: boolean;
+    verificationUrl: string;
+  }>
+> {
+  const response = await agentFetch("/api/verifier/service-points");
+  return response.json();
+}

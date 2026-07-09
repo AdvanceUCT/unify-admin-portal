@@ -22,6 +22,10 @@ export default async function VendorProfilePage() {
           <p className="text-zinc-950">{profile?.serviceCategory ?? "—"}</p>
         </div>
         <div>
+          <p className="text-sm font-medium text-zinc-500">Contact person name</p>
+          <p className="text-zinc-950">{profile?.contactPersonName ?? "—"}</p>
+        </div>
+        <div>
           <p className="text-sm font-medium text-zinc-500">Contact email</p>
           <p className="text-zinc-950">{profile?.contactEmail ?? "—"}</p>
         </div>
