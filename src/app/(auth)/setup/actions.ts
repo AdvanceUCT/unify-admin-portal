@@ -152,10 +152,10 @@ const ISSUANCE_PAYLOAD = {
 export async function runIssuanceSetupAction() {
   const profile = await getUniversityProfile();
   if (!profile) {
-    throw new Error("University profile not found.");
+    return { ok: false, error: "University profile not found." };
   }
   if (!profile.issuerDid) {
-    throw new Error("Issuer DID not found. Create the DID first.");
+    return { ok: false, error: "Issuer DID not found. Create the DID first." };
   }
 
   try {
@@ -192,12 +192,18 @@ export async function runIssuanceSetupAction() {
         message: error.message,
         details: error.details,
       });
-      throw new Error(
-        `${error.message} (status ${error.status}) — details: ${JSON.stringify(error.details)}`,
-      );
+      return {
+        ok: false,
+        error: `${error.message} (status ${error.status})`,
+      };
     }
-    throw error;
+    console.error("issuanceSetup failed", error);
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Issuance setup failed.",
+    };
   }
   revalidatePath("/setup");
+  return { ok: true };
 }
 
