@@ -25,6 +25,73 @@ describe("StudentCredentialActions", () => {
     expect(screen.queryByRole("button", { name: "Renew" })).not.toBeInTheDocument();
   });
 
+  it("explains why legacy non-revocable credentials cannot use lifecycle actions yet", () => {
+    if (!caleb) throw new Error("Caleb test record missing.");
+    const legacyStudent = {
+      ...caleb,
+      credential: {
+        ...caleb.credential,
+        lifecycleState: "LEGACY_NON_REVOCABLE" as const,
+      },
+    };
+
+    render(<StudentCredentialActions student={legacyStudent} />);
+
+    expect(screen.queryByRole("button", { name: "Issue credential" })).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "This credential was issued before revocation support was enabled. Lifecycle actions require reissue under a revocation-enabled schema.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("requires a reason before suspending an active credential", async () => {
+    if (!caleb) throw new Error("Caleb test record missing.");
+    const activeStudent = {
+      ...caleb,
+      credential: { ...caleb.credential, lifecycleState: "ACTIVE" as const },
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ lifecycleState: "SUSPENDED" }), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<StudentCredentialActions student={activeStudent} />);
+    fireEvent.click(screen.getByRole("button", { name: "Suspend" }));
+
+    const confirm = screen.getByRole("button", { name: "Confirm" });
+    expect(confirm).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "Enrolment review" } });
+    fireEvent.click(confirm);
+
+    await screen.findByText("Credential suspended.");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/students/student-demo-100/credentials/lifecycle",
+      {
+        body: JSON.stringify({ action: "suspend", reason: "Enrolment review" }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      },
+    );
+  });
+
+  it("offers reactivation and permanent revocation for suspended credentials", () => {
+    if (!caleb) throw new Error("Caleb test record missing.");
+    const suspendedStudent = {
+      ...caleb,
+      credential: { ...caleb.credential, lifecycleState: "SUSPENDED" as const },
+    };
+
+    render(<StudentCredentialActions student={suspendedStudent} />);
+
+    expect(screen.getByRole("button", { name: "Reactivate" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Revoke" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Suspend" })).not.toBeInTheDocument();
+  });
+
   it("calls the single-student issue endpoint and shows the returned delivery", async () => {
     if (!caleb) throw new Error("Caleb test record missing.");
 

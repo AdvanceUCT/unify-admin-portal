@@ -10,6 +10,8 @@ export function StudentCredentialIssueView({
   delivery?: ActivationDelivery;
   student: StudentRecord;
 }) {
+  const isLegacyNonRevocable = student.credential.lifecycleState === "LEGACY_NON_REVOCABLE";
+
   return (
     <section className="grid gap-4 lg:grid-cols-2">
       <div className="rounded-lg border border-zinc-200 bg-white p-5">
@@ -23,6 +25,11 @@ export function StudentCredentialIssueView({
               </Badge>
             </dd>
           </div>
+          {isLegacyNonRevocable ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+              This credential does not have revocation metadata. Reissue it after revocation-enabled setup before using suspend or revoke actions.
+            </div>
+          ) : null}
           <div className="flex justify-between gap-4">
             <dt className="text-zinc-500">Faculty</dt>
             <dd className="text-right text-zinc-900">{student.credential.faculty}</dd>

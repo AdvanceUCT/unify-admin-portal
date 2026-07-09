@@ -81,7 +81,7 @@ describe("simulated university student records", () => {
   it("keeps batch selection limited to credential issuance states", () => {
     const selected = selectStudentRecordsForCredentialIssuance(undefined, {
       cohortId: SIMULATED_STUDENT_COHORT_ID,
-      credentialStatus: "ISSUED",
+      credentialStatus: "ACTIVE",
     });
 
     expect(selected).toEqual([]);

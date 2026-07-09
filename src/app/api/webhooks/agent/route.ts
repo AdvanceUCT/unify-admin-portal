@@ -4,7 +4,11 @@ import { NextResponse } from "next/server";
 
 import { env } from "@/lib/config/env";
 import { recordCredentialStateChangedEvent } from "@/lib/credentials/status";
-import type { CredentialStateChangedWebhookPayload } from "@/lib/credentials/statusMapping";
+import { recordCredentialLifecycleChangedEvent } from "@/lib/credentials/lifecycleActions";
+import type {
+  CredentialLifecycleChangedWebhookPayload,
+  CredentialStateChangedWebhookPayload,
+} from "@/lib/credentials/statusMapping";
 
 /**
  * Computes the expected HMAC-SHA256 signature for a webhook body.
@@ -44,6 +48,21 @@ function isCredentialStateChangedPayload(value: unknown): value is CredentialSta
   );
 }
 
+function isCredentialLifecycleChangedPayload(value: unknown): value is CredentialLifecycleChangedWebhookPayload {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.type === "credential.lifecycleChanged" &&
+    typeof record.credentialExchangeId === "string" &&
+    typeof record.credentialRevocationId === "string" &&
+    typeof record.revocationRegistryDefinitionId === "string" &&
+    typeof record.eventId === "string" &&
+    (record.previousStatus === "ACTIVE" || record.previousStatus === "SUSPENDED" || record.previousStatus === "REVOKED") &&
+    (record.status === "ACTIVE" || record.status === "SUSPENDED" || record.status === "REVOKED") &&
+    typeof record.timestamp === "string"
+  );
+}
+
 /**
  * Receives incoming webhook events from the Identity Agent Service.
  * Validates the HMAC signature before processing, then records the event
@@ -77,6 +96,11 @@ export async function POST(request: Request) {
       { duplicate: result.duplicate, ignored: result.ignored ?? false, received: true },
       { status: 202 },
     );
+  }
+
+  if (isCredentialLifecycleChangedPayload(payload)) {
+    await recordCredentialLifecycleChangedEvent(payload);
+    return NextResponse.json({ received: true }, { status: 202 });
   }
 
   return NextResponse.json({ ignored: true, received: true }, { status: 202 });

@@ -364,6 +364,9 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
       ? { failures: [], offers: [] }
       : await createBatchActivationLinks({
           credentialDefinitionId: activeSchema.credentialDefinitionId,
+          ...(activeSchema.revocationRegistryDefinitionId
+            ? { revocationRegistryDefinitionId: activeSchema.revocationRegistryDefinitionId }
+            : {}),
           students: allowedPendingItems
             .map((item) => studentsById.get(item.studentId))
             .filter((student): student is StudentRecord => Boolean(student))
@@ -422,9 +425,11 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
       activationUrl: publicActivationUrl,
       credentialDefinitionId: activeSchema.credentialDefinitionId,
       credentialExchangeId: offer.credentialExchangeId,
+      credentialRevocationId: offer.credentialRevocationId,
       email: offer.email,
       expiresAt: offer.expiresAt,
       failureReason: delivery.failureReason,
+      revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId,
       studentId: item.studentId,
       wasDelivered: delivery.status === "Delivered",
     });
