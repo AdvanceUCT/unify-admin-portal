@@ -4,6 +4,7 @@ import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { VendorVerificationOverview } from "@/features/vendors/VendorVerificationOverview";
 import { requireVendorSession } from "@/lib/auth/session";
+import { getUniversityProfile } from "@/lib/university/profile";
 import { getVendorApplicationForUser } from "@/lib/vendors/applications";
 import { getVendorVerificationStats, listRecentVendorVerifications } from "@/lib/vendors/verifications";
 
@@ -12,9 +13,10 @@ export default async function VendorDashboardPage() {
   const application = await getVendorApplicationForUser(session.user.id);
 
   if (application?.status === "APPROVED") {
-    const [stats, recentVerifications] = await Promise.all([
+    const [stats, recentVerifications, universityProfile] = await Promise.all([
       getVendorVerificationStats(application.vendorProfileId),
       listRecentVendorVerifications(application.vendorProfileId),
+      getUniversityProfile(),
     ]);
 
     return (
@@ -28,6 +30,7 @@ export default async function VendorDashboardPage() {
           verificationUrl={application.vendorProfile.verificationUrl}
           stats={stats}
           recentVerifications={recentVerifications}
+          supportEmail={universityProfile?.contactEmail}
         />
       </div>
     );

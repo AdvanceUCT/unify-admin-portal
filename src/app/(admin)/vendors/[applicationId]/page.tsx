@@ -4,11 +4,10 @@ import { notFound } from "next/navigation";
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { VendorApplicationDetails } from "@/features/vendors/VendorApplicationDetails";
 import { requireRole } from "@/lib/auth/session";
-import {
-  getVendorApplicationById,
-  markApplicationViewed,
-} from "@/lib/vendors/applications";
+import { getVendorApplicationById } from "@/lib/vendors/applications";
 import { revokeVendorApplicationAction } from "../actions";
+import { RevokeButton } from "../RevokeButton";
+import { MarkApplicationViewed } from "./MarkApplicationViewed";
 
 export default async function VendorApplicationDetailPage({
   params,
@@ -23,12 +22,11 @@ export default async function VendorApplicationDetailPage({
     notFound();
   }
 
-  if (application.status === "PENDING" && !application.viewedByAdminAt) {
-    await markApplicationViewed({ applicationId });
-  }
-
   return (
     <div className="space-y-6">
+      {application.status === "PENDING" && !application.viewedByAdminAt ? (
+        <MarkApplicationViewed applicationId={application.id} />
+      ) : null}
       <SectionHeader
         title="Vendor application"
         description={`Details for ${application.vendorProfile.companyName}.`}
@@ -42,15 +40,11 @@ export default async function VendorApplicationDetailPage({
           ← Back to vendors
         </Link>
         {application.status === "APPROVED" && (
-          <form action={revokeVendorApplicationAction}>
-            <input type="hidden" name="applicationId" value={application.id} />
-            <button
-              type="submit"
-              className="h-9 rounded-md border border-rose-200 px-3 text-sm font-medium text-rose-700 hover:bg-rose-50"
-            >
-              Revoke access
-            </button>
-          </form>
+          <RevokeButton
+            action={revokeVendorApplicationAction}
+            applicationId={application.id}
+            companyName={application.snapshotCompanyName ?? application.vendorProfile.companyName}
+          />
         )}
       </div>
 

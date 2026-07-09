@@ -7,7 +7,6 @@ type VendorApplicationDetailsProps = {
     status: "PENDING" | "APPROVED" | "REJECTED" | "REVOKED";
     companyRegistrationNumber: string | null;
     justification: string;
-    requestedScopes: string[];
     createdAt: Date;
     updatedAt: Date;
     reviewedAt: Date | null;
@@ -118,20 +117,9 @@ export function VendorApplicationDetails({ application }: VendorApplicationDetai
         <div className="rounded-lg border border-zinc-200 bg-white p-4">
           <h3 className="text-sm font-semibold text-zinc-800">Why verification access is needed</h3>
           <p className="mt-2 text-sm text-zinc-600 whitespace-pre-line">{application.justification}</p>
-          <div className="mt-4">
-            <h4 className="text-sm font-semibold text-zinc-800">Requested verification scopes</h4>
-            {application.requestedScopes.length > 0 ? (
-              <ul className="mt-2 space-y-2 text-sm text-zinc-600">
-                {application.requestedScopes.map((scope) => (
-                  <li key={scope} className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2">
-                    {scope}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-2 text-sm text-zinc-600">No additional scopes requested.</p>
-            )}
-          </div>
+          <p className="mt-4 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
+            Verification requests include every attribute in the active student credential schema.
+          </p>
         </div>
       </div>
     </div>

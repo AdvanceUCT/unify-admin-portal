@@ -28,10 +28,6 @@ export async function submitApplicationAction(
         contactPersonName: String(formData.get("contactPersonName") ?? ""),
         contactEmail: String(formData.get("contactEmail") ?? ""),
         justification: String(formData.get("justification") ?? ""),
-        requestedScopes: formData
-          .getAll("requestedScopes")
-          .map((value) => String(value).trim())
-          .filter(Boolean),
       },
     });
 

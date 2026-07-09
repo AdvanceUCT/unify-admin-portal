@@ -167,9 +167,9 @@ model VendorVerification {
   status                 VendorVerificationStatus  @default(PENDING)
   isVerified             Boolean?
   failureCode            String?
-  studentNumber          String?
-  faculty                String?
-  year                   String?
+  attributes             Json?
+  schemaId               String?
+  credentialDefinitionId String?
   createdAt              DateTime                  @default(now())
   updatedAt              DateTime                  @updatedAt
   completedAt            DateTime?

@@ -240,3 +240,18 @@ export async function createVerificationServicePoint(payload: {
   });
   return response.json();
 }
+
+export async function listVerificationServicePoints(): Promise<
+  Array<{
+    id: string;
+    vendorId: string;
+    vendorName: string;
+    externalId: string;
+    name: string;
+    active: boolean;
+    verificationUrl: string;
+  }>
+> {
+  const response = await agentFetch("/api/verifier/service-points");
+  return response.json();
+}

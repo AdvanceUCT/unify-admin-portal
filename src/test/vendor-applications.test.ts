@@ -4,10 +4,26 @@ import { AuditAction, VendorApplicationStatus } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit/audit";
 import {
   createVendorApplication,
+  ensureVendorVerificationServicePoint,
   listDecidedVendorApplications,
   reviewVendorApplication,
   revokeVendorApplication,
 } from "@/lib/vendors/applications";
+
+const agentClient = vi.hoisted(() => ({
+  AgentServiceError: class AgentServiceError extends Error {
+    constructor(
+      message: string,
+      public status: number,
+      public details?: unknown,
+    ) {
+      super(message);
+      this.name = "AgentServiceError";
+    }
+  },
+  createVerificationServicePoint: vi.fn(),
+  listVerificationServicePoints: vi.fn(),
+}));
 
 const database = vi.hoisted(() => {
   const transaction = {
@@ -37,10 +53,9 @@ const database = vi.hoisted(() => {
 vi.mock("server-only", () => ({}));
 
 vi.mock("@/lib/agentClient", () => ({
-  createVerificationServicePoint: vi.fn().mockResolvedValue({
-    id: "sp_1",
-    verificationUrl: "https://verify.example.com/verify/sp-public-1",
-  }),
+  AgentServiceError: agentClient.AgentServiceError,
+  createVerificationServicePoint: agentClient.createVerificationServicePoint,
+  listVerificationServicePoints: agentClient.listVerificationServicePoints,
 }));
 
 vi.mock("@/lib/db/prisma", () => ({
@@ -65,7 +80,6 @@ const validInput = {
   contactPersonName: "Jane Doe",
   contactEmail: "jane@example.com",
   justification: "We need to confirm student eligibility.",
-  requestedScopes: ["faculty", "year"],
 };
 
 const vendorProfile = {
@@ -84,6 +98,11 @@ beforeEach(() => {
   database.runTransaction.mockImplementation(async (operation) =>
     operation(database.transaction),
   );
+  agentClient.createVerificationServicePoint.mockResolvedValue({
+    id: "sp_1",
+    verificationUrl: "https://verify.example.com/verify/sp-public-1",
+  });
+  agentClient.listVerificationServicePoints.mockResolvedValue([]);
 });
 
 describe("createVendorApplication", () => {
@@ -107,43 +126,18 @@ describe("createVendorApplication", () => {
     ).rejects.toThrow(message);
   });
 
-  it.each([
-    { requestedScopes: [] },
-    { requestedScopes: ["degree"] },
-    { requestedScopes: ["student_id"] },
-  ])(
-    "rejects unsupported scope selections: %j",
-    async ({ requestedScopes }) => {
-      await expect(
-        createVendorApplication({
-          userId: "user_1",
-          input: { ...validInput, requestedScopes },
-        }),
-      ).rejects.toThrow();
-
-      expect(database.runTransaction).not.toHaveBeenCalled();
-    },
-  );
-
-  it("stores a deduplicated snapshot without changing the live profile", async () => {
+  it("stores an immutable application snapshot without changing the live profile", async () => {
     database.transaction.vendorProfile.findUnique.mockResolvedValueOnce(vendorProfile);
     database.transaction.vendorApplication.findFirst.mockResolvedValueOnce(null);
     database.transaction.vendorApplication.create.mockResolvedValueOnce({ id: "app_1" });
 
-    await createVendorApplication({
-      userId: "user_1",
-      input: {
-        ...validInput,
-        requestedScopes: ["faculty", "year", "faculty"],
-      },
-    });
+    await createVendorApplication({ userId: "user_1", input: validInput });
 
     expect(database.transaction.vendorProfile.update).not.toHaveBeenCalled();
     expect(database.transaction.vendorApplication.create).toHaveBeenCalledWith({
       data: {
         vendorProfileId: "profile_1",
         justification: validInput.justification,
-        requestedScopes: ["faculty", "year"],
         companyRegistrationNumber: "12345",
         snapshotCompanyName: "Acme Corp",
         snapshotServiceCategory: "Healthcare",
@@ -187,6 +181,19 @@ describe("reviewVendorApplication", () => {
     vendorProfile,
   };
 
+  it("requires a reason before rejecting an application", async () => {
+    await expect(
+      reviewVendorApplication({
+        applicationId: "app_1",
+        decision: "REJECTED",
+        reviewerId: "admin_1",
+        notes: "   ",
+      }),
+    ).rejects.toThrow("A rejection reason is required");
+
+    expect(database.runTransaction).not.toHaveBeenCalled();
+  });
+
   it("throws when the application is not pending", async () => {
     database.transaction.vendorApplication.findUnique.mockResolvedValueOnce({
       ...pendingApplication,
@@ -209,6 +216,11 @@ describe("reviewVendorApplication", () => {
       id: "app_1",
       status: VendorApplicationStatus.APPROVED,
     });
+    database.transaction.vendorProfile.findUnique.mockResolvedValueOnce({
+      ...vendorProfile,
+      companyName: "Acme Corp",
+      verificationUrl: null,
+    });
 
     await reviewVendorApplication({
       applicationId: "app_1",
@@ -226,6 +238,16 @@ describe("reviewVendorApplication", () => {
         website: "https://example.com",
         description: validInput.description,
       },
+    });
+    expect(agentClient.createVerificationServicePoint).toHaveBeenCalledWith({
+      vendorId: "profile_1",
+      vendorName: "Acme Corp",
+      externalId: "profile_1",
+      name: "Acme Corp Verification Point",
+    });
+    expect(database.transaction.vendorProfile.update).toHaveBeenCalledWith({
+      where: { id: "profile_1" },
+      data: { verificationUrl: "https://verify.example.com/verify/sp-public-1" },
     });
     expect(writeAuditLogMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -252,6 +274,15 @@ describe("reviewVendorApplication", () => {
     });
 
     expect(database.transaction.vendorProfile.update).not.toHaveBeenCalled();
+    expect(database.transaction.vendorApplication.updateMany).toHaveBeenCalledWith({
+      where: { id: "app_1", status: VendorApplicationStatus.PENDING },
+      data: {
+        status: VendorApplicationStatus.REJECTED,
+        reviewedByUserId: "admin_1",
+        reviewedAt: expect.any(Date),
+        reviewNotes: "Insufficient documentation",
+      },
+    });
     expect(writeAuditLogMock).toHaveBeenCalledWith(
       expect.objectContaining({
         action: AuditAction.VENDOR_APPLICATION_REJECTED,
@@ -259,6 +290,49 @@ describe("reviewVendorApplication", () => {
       }),
       database.transaction,
     );
+  });
+});
+
+describe("ensureVendorVerificationServicePoint", () => {
+  it("returns the existing URL without recreating the service point", async () => {
+    database.transaction.vendorProfile.findUnique.mockResolvedValueOnce({
+      ...vendorProfile,
+      verificationUrl: "https://verify.example.com/verify/existing",
+    });
+
+    await expect(ensureVendorVerificationServicePoint("profile_1")).resolves.toBe(
+      "https://verify.example.com/verify/existing",
+    );
+    expect(agentClient.createVerificationServicePoint).not.toHaveBeenCalled();
+  });
+
+  it("recovers the URL when the agent reports a duplicate service point", async () => {
+    database.transaction.vendorProfile.findUnique.mockResolvedValueOnce({
+      ...vendorProfile,
+      verificationUrl: null,
+    });
+    agentClient.createVerificationServicePoint.mockRejectedValueOnce(
+      new agentClient.AgentServiceError("Duplicate service point", 409),
+    );
+    agentClient.listVerificationServicePoints.mockResolvedValueOnce([
+      {
+        id: "sp_1",
+        vendorId: "profile_1",
+        vendorName: "Existing Company",
+        externalId: "profile_1",
+        name: "Existing Company Verification Point",
+        active: true,
+        verificationUrl: "https://verify.example.com/verify/recovered",
+      },
+    ]);
+
+    await expect(ensureVendorVerificationServicePoint("profile_1")).resolves.toBe(
+      "https://verify.example.com/verify/recovered",
+    );
+    expect(database.transaction.vendorProfile.update).toHaveBeenCalledWith({
+      where: { id: "profile_1" },
+      data: { verificationUrl: "https://verify.example.com/verify/recovered" },
+    });
   });
 });
 

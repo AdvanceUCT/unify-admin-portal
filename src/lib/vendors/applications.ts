@@ -4,10 +4,13 @@ import { z } from "zod";
 
 import type { Prisma } from "@/generated/prisma/client";
 import { AuditAction, VendorApplicationStatus } from "@/generated/prisma/enums";
-import { createVerificationServicePoint } from "@/lib/agentClient";
+import {
+  AgentServiceError,
+  createVerificationServicePoint,
+  listVerificationServicePoints,
+} from "@/lib/agentClient";
 import { writeAuditLog } from "@/lib/audit/audit";
 import { prisma } from "@/lib/db/prisma";
-import { VENDOR_VERIFICATION_SCOPES } from "@/lib/vendors/scopes";
 
 const ACTIVE_APPLICATION_STATUSES = [
   VendorApplicationStatus.PENDING,
@@ -30,10 +33,6 @@ const createApplicationSchema = z.object({
   contactPersonName: z.string().trim().min(1, "Contact person name is required"),
   contactEmail: z.string().trim().email("Contact email must be valid"),
   justification: z.string().trim().min(1, "Justification is required"),
-  requestedScopes: z
-    .array(z.enum(VENDOR_VERIFICATION_SCOPES))
-    .min(1, "Select at least one credential scope")
-    .transform((scopes) => [...new Set(scopes)]),
 });
 
 const revokeApplicationSchema = z.object({
@@ -42,12 +41,7 @@ const revokeApplicationSchema = z.object({
   notes: z.string().trim().min(1, "A revocation reason is required").max(500),
 });
 
-export type CreateVendorApplicationInput = Omit<
-  z.input<typeof createApplicationSchema>,
-  "requestedScopes"
-> & {
-  requestedScopes: string[];
-};
+export type CreateVendorApplicationInput = z.input<typeof createApplicationSchema>;
 
 function hasPrismaErrorCode(error: unknown, code: string) {
   return (
@@ -121,7 +115,6 @@ export async function createVendorApplication({
         data: {
           vendorProfileId: vendorProfile.id,
           justification: data.justification,
-          requestedScopes: data.requestedScopes,
           companyRegistrationNumber: data.companyRegistrationNumber,
           snapshotCompanyName: data.companyName,
           snapshotServiceCategory: data.serviceCategory,
@@ -182,6 +175,7 @@ export async function getVendorApplicationById(applicationId: string) {
           description: true,
           contactPersonName: true,
           contactEmail: true,
+          verificationUrl: true,
         },
       },
     },
@@ -210,6 +204,7 @@ export async function listVendorApplications({
           contactPersonName: true,
           website: true,
           description: true,
+          verificationUrl: true,
         },
       },
     },
@@ -334,6 +329,11 @@ export async function reviewVendorApplication({
   reviewerId: string;
   notes?: string;
 }) {
+  const normalizedNotes = notes?.trim();
+  if (decision === VendorApplicationStatus.REJECTED && !normalizedNotes) {
+    throw new Error("A rejection reason is required.");
+  }
+
   let approvedVendor: { vendorProfileId: string; companyName: string } | undefined;
 
   try {
@@ -353,7 +353,7 @@ export async function reviewVendorApplication({
           status: decision,
           reviewedByUserId: reviewerId,
           reviewedAt: new Date(),
-          reviewNotes: notes?.trim() || null,
+          reviewNotes: normalizedNotes || null,
         },
       });
 
@@ -394,7 +394,7 @@ export async function reviewVendorApplication({
           actorId: reviewerId,
           targetType: "vendor_application",
           targetId: applicationId,
-          meta: notes?.trim() ? { notes: notes.trim() } : undefined,
+          meta: normalizedNotes ? { notes: normalizedNotes } : undefined,
         },
         transaction,
       );
@@ -405,29 +405,74 @@ export async function reviewVendorApplication({
     });
 
     if (approvedVendor) {
-      const { vendorProfileId, companyName } = approvedVendor;
-      void createVerificationServicePoint({
-        vendorId: vendorProfileId,
-        vendorName: companyName,
-        externalId: vendorProfileId,
-        name: `${companyName} Verification Point`,
-      }).then(({ verificationUrl }) =>
-        prisma.vendorProfile.update({
-          where: { id: vendorProfileId },
-          data: { verificationUrl },
-        })
-      ).catch((error) => {
+      try {
+        await ensureVendorVerificationServicePoint(approvedVendor.vendorProfileId);
+      } catch (error) {
         console.error(
-          `[verification] Failed to create service point for vendor ${vendorProfileId}:`,
+          `[verification] Failed to create service point for vendor ${approvedVendor.vendorProfileId}:`,
           error instanceof Error ? error.message : String(error),
         );
-      });
+      }
     }
 
     return result;
   } catch (error) {
     if (hasPrismaErrorCode(error, "P2002")) {
       throw new Error("This vendor already has an active verifier application.");
+    }
+
+    throw error;
+  }
+}
+
+export async function ensureVendorVerificationServicePoint(vendorProfileId: string) {
+  const vendorProfile = await prisma.vendorProfile.findUnique({
+    where: { id: vendorProfileId },
+    select: {
+      id: true,
+      companyName: true,
+      verificationUrl: true,
+    },
+  });
+
+  if (!vendorProfile) {
+    throw new Error("Vendor profile not found.");
+  }
+
+  if (vendorProfile.verificationUrl) {
+    return vendorProfile.verificationUrl;
+  }
+
+  try {
+    const { verificationUrl } = await createVerificationServicePoint({
+      vendorId: vendorProfile.id,
+      vendorName: vendorProfile.companyName,
+      externalId: vendorProfile.id,
+      name: `${vendorProfile.companyName} Verification Point`,
+    });
+
+    await prisma.vendorProfile.update({
+      where: { id: vendorProfile.id },
+      data: { verificationUrl },
+    });
+
+    return verificationUrl;
+  } catch (error) {
+    if (error instanceof AgentServiceError && error.status === 409) {
+      const existingServicePoint = (await listVerificationServicePoints()).find(
+        (servicePoint) =>
+          servicePoint.vendorId === vendorProfile.id &&
+          servicePoint.externalId === vendorProfile.id,
+      );
+
+      if (existingServicePoint) {
+        await prisma.vendorProfile.update({
+          where: { id: vendorProfile.id },
+          data: { verificationUrl: existingServicePoint.verificationUrl },
+        });
+
+        return existingServicePoint.verificationUrl;
+      }
     }
 
     throw error;
