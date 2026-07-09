@@ -2,7 +2,7 @@ import QRCode from "qrcode";
 import { CheckCircle2, Mail, QrCode, ShieldCheck, SmartphoneNfc, UserCheck } from "lucide-react";
 
 import { Badge } from "@/components/ui/Badge";
-import { CopyButton } from "@/components/ui/CopyButton";
+import { CopyButton, QrCodeActions } from "@/components/vendors/QrCodeActions";
 import { Metric } from "@/components/ui/Metric";
 import { formatDateTime } from "@/lib/formatters";
 import type { getVendorVerificationStats, listRecentVendorVerifications } from "@/lib/vendors/verifications";
@@ -93,6 +93,7 @@ export async function VendorVerificationOverview({
                   Display this at your service point so students can scan and verify instantly.
                 </p>
               </div>
+              <QrCodeActions svg={qrSvg} filename={`${companyName.toLowerCase().replace(/\s+/g, "-")}-qr`} />
             </>
           ) : (
             <>
