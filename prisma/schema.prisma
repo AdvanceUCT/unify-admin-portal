@@ -108,6 +108,7 @@ model VendorProfile {
   contactEmail              String
   website                   String?
   description               String?
+  verificationUrl           String?
   createdAt                 DateTime            @default(now())
   updatedAt                 DateTime            @updatedAt
   applications              VendorApplication[]

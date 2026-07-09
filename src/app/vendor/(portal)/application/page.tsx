@@ -1,5 +1,5 @@
 import { SectionHeader } from "@/components/layout/SectionHeader";
-import { VendorApplicationDetails } from "@/components/vendors/VendorApplicationDetails";
+import { VendorApplicationDetails } from "@/features/vendors/VendorApplicationDetails";
 import { requireVendorSession } from "@/lib/auth/session";
 import { getVendorApplicationForUser } from "@/lib/vendors/applications";
 import { VendorApplicationForm } from "./VendorApplicationForm";

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { assertCan } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
 import {
+  ensureVendorVerificationServicePoint,
   markApplicationViewed,
   reviewVendorApplication,
   revokeVendorApplication,
@@ -68,4 +69,16 @@ export async function markVendorApplicationViewedAction(applicationId: string) {
 
   await markApplicationViewed({ applicationId });
   revalidatePath("/vendors");
+}
+
+export async function createVendorVerificationQrAction(formData: FormData) {
+  const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
+  assertCan("vendor:write", session);
+
+  const vendorProfileId = String(formData.get("vendorProfileId") ?? "");
+  if (!vendorProfileId.trim()) return;
+
+  await ensureVendorVerificationServicePoint(vendorProfileId);
+  revalidatePath("/vendors", "layout");
+  revalidatePath("/vendor");
 }

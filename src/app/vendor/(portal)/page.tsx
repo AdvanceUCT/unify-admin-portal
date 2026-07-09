@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
-import { VendorVerificationOverview } from "@/components/vendors/VendorVerificationOverview";
+import { VendorVerificationOverview } from "@/features/vendors/VendorVerificationOverview";
 import { requireVendorSession } from "@/lib/auth/session";
 import { getUniversityProfile } from "@/lib/university/profile";
 import { getVendorApplicationForUser } from "@/lib/vendors/applications";
@@ -23,10 +23,11 @@ export default async function VendorDashboardPage() {
       <div className="space-y-6">
         <SectionHeader
           title={`Welcome, ${session.user.name}`}
-          description="Your verifier application is approved. Verification service setup is in progress."
+          description="Share your verification QR code with students so they can verify your service instantly."
         />
         <VendorVerificationOverview
           companyName={application.vendorProfile.companyName}
+          verificationUrl={application.vendorProfile.verificationUrl}
           stats={stats}
           recentVerifications={recentVerifications}
           supportEmail={universityProfile?.contactEmail}
