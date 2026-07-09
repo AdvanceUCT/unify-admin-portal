@@ -2,7 +2,7 @@ import QRCode from "qrcode";
 import { CheckCircle2, Mail, QrCode, ShieldCheck, SmartphoneNfc, UserCheck } from "lucide-react";
 
 import { Badge } from "@/components/ui/Badge";
-import { CopyButton, QrCodeActions } from "@/components/vendors/QrCodeActions";
+import { CopyButton, QrCodeActions } from "@/features/vendors/QrCodeActions";
 import { Metric } from "@/components/ui/Metric";
 import { formatDateTime } from "@/lib/formatters";
 import type { getVendorVerificationStats, listRecentVendorVerifications } from "@/lib/vendors/verifications";

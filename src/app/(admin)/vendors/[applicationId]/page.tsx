@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { SectionHeader } from "@/components/layout/SectionHeader";
-import { VendorApplicationDetails } from "@/components/vendors/VendorApplicationDetails";
+import { VendorApplicationDetails } from "@/features/vendors/VendorApplicationDetails";
 import { requireRole } from "@/lib/auth/session";
 import {
   getVendorApplicationById,

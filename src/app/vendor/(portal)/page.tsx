@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
-import { VendorVerificationOverview } from "@/components/vendors/VendorVerificationOverview";
+import { VendorVerificationOverview } from "@/features/vendors/VendorVerificationOverview";
 import { requireVendorSession } from "@/lib/auth/session";
 import { getVendorApplicationForUser } from "@/lib/vendors/applications";
 import { getVendorVerificationStats, listRecentVendorVerifications } from "@/lib/vendors/verifications";
