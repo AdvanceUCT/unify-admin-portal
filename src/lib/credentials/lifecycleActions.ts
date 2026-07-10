@@ -123,6 +123,20 @@ function expectedStatusFor(action: CredentialLifecycleAction) {
   return action === "reactivate" ? "ACTIVE" : action === "suspend" ? "SUSPENDED" : "REVOKED";
 }
 
+function hasRevocationHandle(issuance: {
+  credentialRevocationId?: string | null;
+  revocationRegistryDefinitionId?: string | null;
+}) {
+  return Boolean(issuance.revocationRegistryDefinitionId && issuance.credentialRevocationId);
+}
+
+function canRevokeRevocationBackedPendingCredential(status: string, issuance: {
+  credentialRevocationId?: string | null;
+  revocationRegistryDefinitionId?: string | null;
+}) {
+  return (status === "OFFER_SENT" || status === "ACCEPTED") && hasRevocationHandle(issuance);
+}
+
 export async function requestCredentialLifecycleChange(params: {
   action: CredentialLifecycleAction;
   actorId?: string | null;
@@ -145,7 +159,10 @@ export async function requestCredentialLifecycleChange(params: {
   const allowed =
     (params.action === "suspend" && currentStatus === "ACTIVE") ||
     (params.action === "reactivate" && currentStatus === "SUSPENDED") ||
-    (params.action === "revoke" && (currentStatus === "ACTIVE" || currentStatus === "SUSPENDED"));
+    (params.action === "revoke" &&
+      (currentStatus === "ACTIVE" ||
+        currentStatus === "SUSPENDED" ||
+        canRevokeRevocationBackedPendingCredential(currentStatus, issuance)));
   if (!allowed) {
     const verb = params.action === "suspend" ? "suspended" : params.action === "reactivate" ? "reactivated" : "revoked";
     throw new CredentialLifecycleActionError(
@@ -172,7 +189,7 @@ export async function requestCredentialLifecycleChange(params: {
     credentialExchangeId: result.credentialExchangeId,
     credentialRevocationId: result.credentialRevocationId,
     eventId: result.eventId ?? `${params.action}:${result.credentialExchangeId}:${result.updatedAt}`,
-    previousStatus: currentStatus as "ACTIVE" | "SUSPENDED",
+    previousStatus: currentStatus === "SUSPENDED" ? "SUSPENDED" : "ACTIVE",
     reason,
     revocationRegistryDefinitionId: result.revocationRegistryDefinitionId,
     status: result.status,

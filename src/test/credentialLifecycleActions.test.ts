@@ -100,6 +100,47 @@ describe("credential lifecycle actions", () => {
     );
   });
 
+  it("allows revoking an offer-sent issuance when revocation metadata already exists", async () => {
+    mocks.issuanceFindFirst.mockResolvedValue({
+      ...issuance,
+      lifecycleStatus: null,
+      status: "OFFER_SENT",
+    });
+    mocks.changeCredentialLifecycle.mockResolvedValue({
+      credentialExchangeId: "exchange-1",
+      credentialRevocationId: "7",
+      eventId: "event-revoked",
+      reason: "Demo cleanup",
+      revocationRegistryDefinitionId: "rev-reg-1",
+      status: "REVOKED",
+      statusListTimestamp: 1_720_000_100,
+      updatedAt: "2026-07-08T09:05:00.000Z",
+    });
+
+    await expect(
+      requestCredentialLifecycleChange({
+        action: "revoke",
+        actorId: "admin-1",
+        reason: "Demo cleanup",
+        studentId: "STU001",
+      }),
+    ).resolves.toEqual({
+      lifecycleState: "REVOKED",
+      updatedAt: "2026-07-08T09:05:00.000Z",
+    });
+
+    expect(mocks.changeCredentialLifecycle).toHaveBeenCalledWith("exchange-1", "revoke", "Demo cleanup");
+    expect(mocks.auditCreateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "CREDENTIAL_REVOKED",
+          eventId: "event-revoked",
+          metadata: expect.objectContaining({ previousStatus: "ACTIVE" }),
+        }),
+      }),
+    );
+  });
+
   it("rejects legacy credentials before calling the agent", async () => {
     mocks.issuanceFindFirst.mockResolvedValue({
       ...issuance,

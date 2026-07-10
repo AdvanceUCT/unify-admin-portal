@@ -113,6 +113,41 @@ describe("StudentCredentialActions", () => {
     );
   });
 
+  it("allows revoking an offer-sent credential when revocation metadata exists", async () => {
+    if (!caleb) throw new Error("Caleb test record missing.");
+    const offerSentStudent = {
+      ...caleb,
+      credential: {
+        ...caleb.credential,
+        isRevocable: true,
+        lifecycleState: "OFFER_SENT" as const,
+      },
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ lifecycleState: "REVOKED" }), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<StudentCredentialActions student={offerSentStudent} />);
+
+    expect(screen.getByRole("button", { name: "Revoke" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+    fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "Demo cleanup" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    await screen.findByText("Credential revoked.");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/students/student-demo-100/credentials/lifecycle",
+      expect.objectContaining({
+        body: JSON.stringify({ action: "revoke", reason: "Demo cleanup" }),
+        method: "POST",
+      }),
+    );
+  });
+
   it("offers reactivation and permanent revocation for suspended credentials", () => {
     if (!caleb) throw new Error("Caleb test record missing.");
     const suspendedStudent = {

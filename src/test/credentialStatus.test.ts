@@ -70,4 +70,5 @@ describe("credential status mapping", () => {
       }),
     ).toBe("ACTIVE");
   });
+
 });

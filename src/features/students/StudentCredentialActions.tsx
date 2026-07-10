@@ -37,11 +37,18 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
   }, [currentDelivery?.status, student.credential.lifecycleState]);
   const canSuspend = student.credential.lifecycleState === "ACTIVE";
   const canReactivate = student.credential.lifecycleState === "SUSPENDED";
-  const canRevoke = canSuspend || canReactivate;
+  const canRevoke =
+    canSuspend ||
+    canReactivate ||
+    (Boolean(student.credential.isRevocable) &&
+      ["ACCEPTED", "OFFER_SENT"].includes(student.credential.lifecycleState));
   const lifecycleUnavailableReason = useMemo(() => {
     switch (student.credential.lifecycleState) {
       case "ACCEPTED":
       case "OFFER_SENT":
+        if (student.credential.isRevocable) {
+          return null;
+        }
         return "The student has not stored this credential yet. Revocation becomes available once the credential is active.";
       case "EXPIRED":
         return "This credential has already expired.";
@@ -55,7 +62,7 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
       default:
         return null;
     }
-  }, [student.credential.lifecycleState]);
+  }, [student.credential.isRevocable, student.credential.lifecycleState]);
 
   async function issueCredential() {
     setCopyLabel("Copy");

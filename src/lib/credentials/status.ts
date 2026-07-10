@@ -27,6 +27,10 @@ export const ACTIVE_CREDENTIAL_STATUSES = [
   CredentialIssuanceStatus.ISSUED,
 ] as const;
 
+function hasRevocationHandle(issuance?: Pick<CredentialLifecycleSource, "credentialRevocationId" | "revocationRegistryDefinitionId"> | null) {
+  return Boolean(issuance?.revocationRegistryDefinitionId && issuance.credentialRevocationId);
+}
+
 /**
  * Groups issuances by student ID and keeps only the most recent one per student.
  * Assumes the input is already sorted newest-first, so the first entry wins.
@@ -55,6 +59,7 @@ export function overlayCredentialStatus(
     credential: {
       ...student.credential,
       id: issuance?.id ?? student.credential.id,
+      isRevocable: hasRevocationHandle(issuance),
       lifecycleState: toPublicCredentialStatus(issuance),
     },
   };

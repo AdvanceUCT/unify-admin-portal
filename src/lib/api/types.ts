@@ -27,6 +27,7 @@ export type StudentCredential = {
   programme: string;
   enrolmentStatus: "Registered" | "Suspended" | "Withdrawn" | "Graduated";
   lifecycleState: CredentialLifecycleState;
+  isRevocable?: boolean;
   studentNumber: string;
   validFrom: string;
   expiresAt: string;
