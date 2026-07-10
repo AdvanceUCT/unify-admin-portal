@@ -9,7 +9,6 @@ import type {
   BatchIssuanceResult,
   BatchIssuanceSelection,
   CredentialLifecycleState,
-  StudentCredential,
   StudentRecord,
 } from "@/lib/api/types";
 import { createBatchActivationLinks } from "@/lib/agentClient";
@@ -20,7 +19,7 @@ import {
   overlayCredentialStatusForStudent,
   reconcileCredentialEventLogs,
 } from "@/lib/credentials/status";
-import { getAllStudents, getStudentById } from "@/lib/db/store";
+import { getAllStudents, getStudentById } from "@/lib/students/repository";
 import { sendCredentialActivationEmail } from "@/lib/email/credential-activation";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfile } from "@/lib/university/profile";
@@ -28,10 +27,10 @@ import {
   isStudentRecordEligibleForCredentialIssuance,
   selectStudentRecordsForCredentialIssuance,
   SIMULATED_STUDENT_COHORT_ID,
-  SIMULATED_STUDENT_RECORD_COUNT,
 } from "@/lib/student-records/simulatedUniversityRecords";
 
 const DEFAULT_YEAR = "2026";
+const MAX_BATCH_ISSUANCE_LIMIT = 100_000;
 const credentialStatuses = new Set<CredentialLifecycleState>([
   "ACCEPTED",
   "FAILED",
@@ -39,12 +38,6 @@ const credentialStatuses = new Set<CredentialLifecycleState>([
   "NOT_ISSUED",
   "OFFER_SENT",
   "REVOKED",
-]);
-const enrolmentStatuses = new Set<StudentCredential["enrolmentStatus"]>([
-  "Graduated",
-  "Registered",
-  "Suspended",
-  "Withdrawn",
 ]);
 
 /**
@@ -63,8 +56,11 @@ export class StudentIssuanceError extends Error {
 
 /**
  * Looks up the value for a credential attribute by name from the student's data.
- * Throws if the attribute name doesn't match any known field, so schema mismatches
- * are caught early instead of silently producing empty credentials.
+ * Fixed platform/simulated fields are checked first; anything else falls back to
+ * the student's stored `attributes` bag (schema fields sourced from CSV import),
+ * so per-university custom schema attributes resolve without code changes.
+ * Throws if no value is found anywhere, so schema mismatches are caught early
+ * instead of silently producing empty credentials.
  *
  * @param student - The student to read data from.
  * @param attributeName - The schema attribute name to look up.
@@ -74,7 +70,6 @@ export class StudentIssuanceError extends Error {
 function attributeValue(student: StudentRecord, attributeName: string): string {
   const values: Record<string, string | undefined> = {
     email: student.profile.email,
-    enrolmentStatus: student.credential.enrolmentStatus,
     expiresAt: student.credential.expiresAt,
     faculty: student.credential.faculty,
     firstName: student.profile.firstName,
@@ -88,10 +83,10 @@ function attributeValue(student: StudentRecord, attributeName: string): string {
     validFrom: student.credential.validFrom,
     year: DEFAULT_YEAR,
   };
-  const value = values[attributeName];
+  const value = values[attributeName] ?? student.credential.attributes?.[attributeName];
 
   if (!value) {
-    throw new Error(`No simulated student value is available for schema attribute "${attributeName}".`);
+    throw new Error(`No student value is available for schema attribute "${attributeName}".`);
   }
 
   return value;
@@ -143,20 +138,15 @@ export function parseBatchIssuanceSelection(value: unknown): BatchIssuanceSelect
   const faculty = optionalTrimmedString(record.faculty);
   const programme = optionalTrimmedString(record.programme);
   const credentialStatus = optionalTrimmedString(record.credentialStatus);
-  const enrolmentStatus = optionalTrimmedString(record.enrolmentStatus);
   const limit = record.limit === undefined || record.limit === "" ? undefined : Number(record.limit);
 
   if (credentialStatus && !credentialStatuses.has(credentialStatus as CredentialLifecycleState)) {
     throw new StudentIssuanceError("Credential status filter is not valid.", 400);
   }
 
-  if (enrolmentStatus && !enrolmentStatuses.has(enrolmentStatus as StudentCredential["enrolmentStatus"])) {
-    throw new StudentIssuanceError("Enrolment status filter is not valid.", 400);
-  }
-
-  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > SIMULATED_STUDENT_RECORD_COUNT)) {
+  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > MAX_BATCH_ISSUANCE_LIMIT)) {
     throw new StudentIssuanceError(
-      `Batch issuance limit must be an integer between 1 and ${SIMULATED_STUDENT_RECORD_COUNT}.`,
+      `Batch issuance limit must be an integer between 1 and ${MAX_BATCH_ISSUANCE_LIMIT}.`,
       400,
     );
   }
@@ -164,7 +154,6 @@ export function parseBatchIssuanceSelection(value: unknown): BatchIssuanceSelect
   return {
     cohortId,
     credentialStatus: credentialStatus as CredentialLifecycleState | undefined,
-    enrolmentStatus: enrolmentStatus as StudentCredential["enrolmentStatus"] | undefined,
     faculty,
     limit,
     programme,
@@ -387,7 +376,7 @@ export async function queueRealBatchIssuance(
   const selection = selectionInputOrNow instanceof Date ? {} : parseBatchIssuanceSelection(selectionInputOrNow);
   const studentsForIssuance = selectStudentRecordsForCredentialIssuance(await getAllStudents(), {
     ...selection,
-    limit: selection.limit ?? mockBatchIssuancePreview.requestedCount,
+    limit: selection.limit ?? MAX_BATCH_ISSUANCE_LIMIT,
   });
 
   return issueStudentActivationLinks(studentsForIssuance, now, studentsForIssuance.length, selection, actorId, true);

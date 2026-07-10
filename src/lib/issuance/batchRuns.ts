@@ -23,7 +23,7 @@ import {
   reconcileCredentialEventLogs,
 } from "@/lib/credentials/status";
 import { prisma } from "@/lib/db/prisma";
-import { getAllStudents } from "@/lib/db/store";
+import { getAllStudents } from "@/lib/students/repository";
 import { sendCredentialActivationEmail } from "@/lib/email/credential-activation";
 import { formatCredentialStatus } from "@/lib/formatters";
 import { parseBatchIssuanceSelection, attributesForStudent, getActiveCredentialDefinition } from "@/lib/issuance/batchIssuance";
@@ -109,16 +109,11 @@ function filterMatches(student: StudentRecord, selection: BatchIssuanceSelection
   return (
     (!selection.faculty || student.credential.faculty === selection.faculty) &&
     (!selection.programme || student.credential.programme === selection.programme) &&
-    (!selection.enrolmentStatus || student.credential.enrolmentStatus === selection.enrolmentStatus) &&
     (!selection.credentialStatus || student.credential.lifecycleState === selection.credentialStatus)
   );
 }
 
 function skipReasonFor(student: StudentRecord) {
-  if (student.credential.enrolmentStatus !== "Registered") {
-    return `Enrolment status is ${student.credential.enrolmentStatus}.`;
-  }
-
   return `Credential status is ${formatCredentialStatus(student.credential.lifecycleState)}.`;
 }
 

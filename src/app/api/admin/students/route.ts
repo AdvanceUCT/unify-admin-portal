@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { overlayCredentialStatuses } from "@/lib/credentials/status";
-import { getAllStudents, searchStudents } from "@/lib/db/store";
+import { getAllStudents, searchStudents } from "@/lib/students/repository";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);

@@ -189,6 +189,24 @@ enum VendorVerificationStatus {
   FAILED
 }
 
+model Student {
+  id            String   @id @default(cuid())
+  studentNumber String   @unique
+  email         String
+  firstName     String
+  lastName      String
+  faculty       String?
+  programme     String?
+  attributes    Json     @default("{}")
+  source        String   @default("csv")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([faculty])
+  @@index([programme])
+  @@map("student")
+}
+
 model UniversityProfile {
   id                 String             @id @default(cuid())
   name               String
@@ -200,9 +218,84 @@ model UniversityProfile {
   setupCompletedAt   DateTime?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
-  credentialSchemas  CredentialSchema[]
+  credentialSchemas       CredentialSchema[]
+  importMapping           ImportMapping?
+  importRuns              ImportRun[]
+  customFieldDefinitions  CustomFieldDefinition[]
 
   @@map("university_profile")
+}
+
+model ImportMapping {
+  id                  String            @id @default(cuid())
+  universityProfileId String            @unique
+  universityProfile   UniversityProfile @relation(fields: [universityProfileId], references: [id])
+  columnMap           Json
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@map("import_mapping")
+}
+
+/// Admin-defined per-university custom fields available as CSV import mapping
+/// targets, independent of `CredentialSchema.schemaAttributes`. Soft-deleted
+/// (`removedAt`) rather than hard-deleted on removal — historical `Student.attributes`
+/// data under a removed field's key is never touched, only future imports stop
+/// offering/populating it. Re-adding a previously removed key reactivates the
+/// same row rather than creating an ambiguous duplicate.
+model CustomFieldDefinition {
+  id                   String            @id @default(cuid())
+  universityProfileId  String
+  universityProfile    UniversityProfile @relation(fields: [universityProfileId], references: [id])
+  key                  String
+  label                String
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  removedAt            DateTime?
+
+  @@unique([universityProfileId, key], map: "custom_field_definition_active_key", where: raw("\"removedAt\" IS NULL"))
+  @@index([universityProfileId])
+  @@map("custom_field_definition")
+}
+
+/// Pending CSV import previews for a university. A commit must name the exact
+/// run to apply, so concurrent admins cannot overwrite each other's previews.
+model ImportRun {
+  id                  String            @id @default(cuid())
+  universityProfileId String
+  universityProfile   UniversityProfile @relation(fields: [universityProfileId], references: [id])
+  filename            String
+  mappingSnapshot     Json
+  createdAt           DateTime          @default(now())
+  rows                ImportRow[]
+
+  @@index([universityProfileId])
+  @@map("import_run")
+}
+
+model ImportRow {
+  id            String          @id @default(cuid())
+  importRunId   String
+  importRun     ImportRun       @relation(fields: [importRunId], references: [id], onDelete: Cascade)
+  rowNumber     Int?
+  studentNumber String?
+  status        ImportRowStatus
+  mappedData    Json?
+  errors        Json?
+  diff          Json?
+  createdAt     DateTime        @default(now())
+
+  @@index([importRunId])
+  @@index([status])
+  @@map("import_row")
+}
+
+enum ImportRowStatus {
+  NEW
+  UPDATED
+  UNCHANGED
+  MISSING
+  ERROR
 }
 
 model CredentialSchema {
@@ -433,4 +526,5 @@ enum AuditAction {
   VENDOR_APPLICATION_APPROVED
   VENDOR_APPLICATION_REJECTED
   VENDOR_APPLICATION_REVOKED
+  STUDENT_IMPORT_COMMITTED
 }
