@@ -2,14 +2,7 @@
 
 import { useState } from "react";
 import { runIssuanceSetupAction } from "@/app/(auth)/setup/actions";
-
-const DEFAULT_ATTRIBUTES = [
-  "studentNumber",
-  "firstName",
-  "lastName",
-  "faculty",
-  "year",
-];
+import { SchemaAttributesField } from "@/components/schema/SchemaAttributesField";
 
 export function IssuanceSetupStep({
   onComplete,
@@ -18,7 +11,6 @@ export function IssuanceSetupStep({
 }) {
   const [schemaName, setSchemaName] = useState("StudentIdentity");
   const [schemaVersion, setSchemaVersion] = useState("1.0");
-  const [attributes, setAttributes] = useState(DEFAULT_ATTRIBUTES.join("\n"));
   const [isWorking, setIsWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,10 +19,7 @@ export function IssuanceSetupStep({
     setError(null);
     setIsWorking(true);
     try {
-      const formData = new FormData();
-      formData.append("schemaName", schemaName.trim());
-      formData.append("schemaVersion", schemaVersion.trim());
-      formData.append("attributes", attributes);
+      const formData = new FormData(event.currentTarget);
       await runIssuanceSetupAction(formData);
       onComplete();
     } catch (err) {
@@ -55,6 +44,7 @@ export function IssuanceSetupStep({
           <span className="font-medium text-zinc-700">Schema name</span>
           <input
             className="mt-2 h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm focus:border-zinc-500 focus:outline-none"
+            name="schemaName"
             onChange={(event) => setSchemaName(event.target.value)}
             placeholder="StudentIdentity"
             required
@@ -65,6 +55,7 @@ export function IssuanceSetupStep({
           <span className="font-medium text-zinc-700">Version</span>
           <input
             className="mt-2 h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm focus:border-zinc-500 focus:outline-none"
+            name="schemaVersion"
             onChange={(event) => setSchemaVersion(event.target.value)}
             placeholder="1.0"
             required
@@ -73,21 +64,18 @@ export function IssuanceSetupStep({
         </label>
       </div>
 
-      <label className="block text-sm">
-        <span className="font-medium text-zinc-700">
-          Attributes (one per line)
+      <div>
+        <span className="text-sm font-medium text-zinc-700">
+          Schema fields
         </span>
-        <textarea
-          className="mt-2 min-h-32 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-sm focus:border-zinc-500 focus:outline-none"
-          onChange={(event) => setAttributes(event.target.value)}
-          required
-          value={attributes}
-        />
-        <span className="mt-1 block text-xs text-zinc-500">
+        <p className="mt-1 text-xs text-zinc-500">
           These become the fields captured on every credential issued under
-          this schema — e.g. studentNumber, firstName, faculty.
-        </span>
-      </label>
+          this schema.
+        </p>
+        <div className="mt-2">
+          <SchemaAttributesField name="attributes" />
+        </div>
+      </div>
 
       {error ? <p className="text-sm text-amber-700">{error}</p> : null}
 

@@ -27,7 +27,8 @@ async function main() {
     if (process.env.NODE_ENV === "production") {
       throw new Error("Refusing to run bootstrap seed in production.");
     }
-
+console.log("process.env.BOOTSTRAP_ADMIN_EMAIL =", process.env.BOOTSTRAP_ADMIN_EMAIL);
+console.log("env.BOOTSTRAP_ADMIN_EMAIL =", env.BOOTSTRAP_ADMIN_EMAIL);
     const bootstrapEmail = env.BOOTSTRAP_ADMIN_EMAIL.toLowerCase();
     const users = await prisma.user.findMany({
       select: {

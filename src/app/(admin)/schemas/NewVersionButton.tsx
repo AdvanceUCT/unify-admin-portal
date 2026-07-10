@@ -3,6 +3,7 @@
 import { Layers, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { SchemaAttributesField } from "@/components/schema/SchemaAttributesField";
 
 export function NewVersionButton({
   action,
@@ -65,10 +66,10 @@ export function NewVersionButton({
             aria-describedby="new-schema-version-description"
             aria-labelledby="new-schema-version-title"
             aria-modal="true"
-            className="w-full max-w-md rounded-lg border border-zinc-200 bg-white shadow-xl"
+            className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-xl"
             role="dialog"
           >
-            <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4">
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4">
               <div className="flex gap-3">
                 <span className="grid size-9 shrink-0 place-items-center rounded-md bg-zinc-100 text-zinc-700">
                   <Layers className="size-5" aria-hidden="true" />
@@ -93,37 +94,38 @@ export function NewVersionButton({
               </button>
             </div>
 
-            <form action={handleSubmit} className="space-y-4 px-5 py-4">
-              <div>
-                <label className="text-sm font-medium text-zinc-800" htmlFor="new-schema-version">
-                  Version
-                </label>
-                <input
-                  autoFocus
-                  className="mt-2 h-9 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none focus:border-zinc-950"
-                  id="new-schema-version"
-                  name="version"
-                  placeholder={`e.g. ${nextVersionSuggestion(currentVersion)}`}
-                  required
-                  type="text"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-zinc-800" htmlFor="new-schema-attributes">
-                  Attributes (one per line)
-                </label>
-                <textarea
-                  className="mt-2 min-h-32 w-full rounded-md border border-zinc-300 px-3 py-2 font-mono text-sm outline-none focus:border-zinc-950"
-                  defaultValue={currentAttributes.join("\n")}
-                  id="new-schema-attributes"
-                  name="attributes"
-                  required
-                />
+            <form action={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+                <div>
+                  <label className="text-sm font-medium text-zinc-800" htmlFor="new-schema-version">
+                    Version
+                  </label>
+                  <input
+                    autoFocus
+                    className="mt-2 h-9 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none focus:border-zinc-950"
+                    id="new-schema-version"
+                    name="version"
+                    placeholder={`e.g. ${nextVersionSuggestion(currentVersion)}`}
+                    required
+                    type="text"
+                  />
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-zinc-800">
+                    Schema fields
+                  </span>
+                  <div className="mt-2">
+                    <SchemaAttributesField
+                      initialAttributes={currentAttributes}
+                      name="attributes"
+                    />
+                  </div>
+                </div>
+
+                {error ? <p className="text-sm text-rose-700">{error}</p> : null}
               </div>
 
-              {error ? <p className="text-sm text-rose-700">{error}</p> : null}
-
-              <div className="flex justify-end gap-2">
+              <div className="flex shrink-0 justify-end gap-2 border-t border-zinc-200 px-5 py-4">
                 <button
                   className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
                   type="button"
@@ -142,10 +144,14 @@ export function NewVersionButton({
 }
 
 function nextVersionSuggestion(currentVersion: string) {
-  const asNumber = Number(currentVersion);
-  if (!Number.isNaN(asNumber)) {
-    return String(asNumber + 1);
+  const parts = currentVersion.split(".");
+  const lastPart = Number(parts.at(-1));
+
+  if (parts.length >= 2 && !Number.isNaN(lastPart)) {
+    parts[parts.length - 1] = String(lastPart + 1);
+    return parts.join(".");
   }
+
   return `${currentVersion}.1`;
 }
 
