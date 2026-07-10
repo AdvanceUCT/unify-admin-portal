@@ -141,6 +141,25 @@ describe("credential lifecycle actions", () => {
     );
   });
 
+  it("looks up lifecycle issuances by both profile id and student number", async () => {
+    await requestCredentialLifecycleChange({
+      action: "suspend",
+      actorId: "admin-1",
+      reason: "Enrolment review",
+      studentId: "student-demo-099",
+      studentLookupIds: ["student-demo-099", "VOSCAL099"],
+    });
+
+    expect(mocks.issuanceFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          credentialExchangeId: { not: null },
+          studentId: { in: ["student-demo-099", "VOSCAL099"] },
+        },
+      }),
+    );
+  });
+
   it("rejects legacy credentials before calling the agent", async () => {
     mocks.issuanceFindFirst.mockResolvedValue({
       ...issuance,

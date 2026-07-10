@@ -7,6 +7,7 @@ import {
   requestCredentialLifecycleChange,
   type CredentialLifecycleAction,
 } from "@/lib/credentials/lifecycleActions";
+import { getStudentById } from "@/lib/db/store";
 
 function isLifecycleAction(value: unknown): value is CredentialLifecycleAction {
   return value === "reactivate" || value === "revoke" || value === "suspend";
@@ -38,12 +39,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ stu
 
   try {
     const [{ studentId }, auditSession] = await Promise.all([params, getSessionForAudit()]);
+    const student = await getStudentById(studentId);
     return NextResponse.json(
       await requestCredentialLifecycleChange({
         action: record.action,
         actorId: auditSession.actorId,
         reason: record.reason,
         studentId,
+        studentLookupIds: student ? [student.profile.id, student.credential.studentNumber] : undefined,
       }),
     );
   } catch (error) {

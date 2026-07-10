@@ -142,14 +142,16 @@ export async function requestCredentialLifecycleChange(params: {
   actorId?: string | null;
   reason: string;
   studentId: string;
+  studentLookupIds?: string[];
 }) {
   const reason = params.reason.trim();
   if (!reason) throw new CredentialLifecycleActionError("A reason is required for lifecycle changes.", 400);
   if (reason.length > 500) throw new CredentialLifecycleActionError("Reason must be 500 characters or fewer.", 400);
 
+  const studentLookupIds = Array.from(new Set([params.studentId, ...(params.studentLookupIds ?? [])].filter(Boolean)));
   const issuance = await prisma.credentialIssuance.findFirst({
     orderBy: { createdAt: "desc" },
-    where: { credentialExchangeId: { not: null }, studentId: params.studentId },
+    where: { credentialExchangeId: { not: null }, studentId: { in: studentLookupIds } },
   });
   if (!issuance?.credentialExchangeId) {
     throw new CredentialLifecycleActionError("No issued credential was found for this student.", 404);
