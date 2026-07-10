@@ -35,10 +35,27 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
     const stateAllowsIssue = ["NOT_ISSUED", "FAILED", "REVOKED"].includes(student.credential.lifecycleState);
     return stateAllowsIssue && (student.credential.lifecycleState === "REVOKED" || currentDelivery?.status !== "Delivered");
   }, [currentDelivery?.status, student.credential.lifecycleState]);
-  const isLegacyNonRevocable = student.credential.lifecycleState === "LEGACY_NON_REVOCABLE";
   const canSuspend = student.credential.lifecycleState === "ACTIVE";
   const canReactivate = student.credential.lifecycleState === "SUSPENDED";
   const canRevoke = canSuspend || canReactivate;
+  const lifecycleUnavailableReason = useMemo(() => {
+    switch (student.credential.lifecycleState) {
+      case "ACCEPTED":
+      case "OFFER_SENT":
+        return "The student has not stored this credential yet. Revocation becomes available once the credential is active.";
+      case "EXPIRED":
+        return "This credential has already expired.";
+      case "FAILED":
+      case "NOT_ISSUED":
+        return "No issued credential exists for this student yet.";
+      case "LEGACY_NON_REVOCABLE":
+        return "This credential was issued before revocation support was enabled. Reissue it under a revocation-enabled schema first.";
+      case "REVOKED":
+        return "This credential has already been permanently revoked.";
+      default:
+        return null;
+    }
+  }, [student.credential.lifecycleState]);
 
   async function issueCredential() {
     setCopyLabel("Copy");
@@ -127,24 +144,21 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
       <div>
         <h2 className="mb-4 text-base font-semibold text-zinc-950">Available actions</h2>
         {canIssue ? (
-          <button
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-zinc-950 bg-zinc-950 px-3 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:border-zinc-300 disabled:bg-zinc-200 disabled:text-zinc-500"
-            disabled={isIssuing}
-            onClick={issueCredential}
-            type="button"
-          >
-            {isIssuing ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Send aria-hidden className="size-4" />}
-            {isIssuing ? "Issuing..." : "Issue credential"}
-          </button>
-        ) : !canSuspend && !canReactivate ? (
-          <p className="text-sm text-zinc-600">
-            {isLegacyNonRevocable
-              ? "This credential was issued before revocation support was enabled. Lifecycle actions require reissue under a revocation-enabled schema."
-              : "No credential actions are available for this lifecycle state."}
-          </p>
+          <div>
+            <button
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-zinc-950 bg-zinc-950 px-3 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:border-zinc-300 disabled:bg-zinc-200 disabled:text-zinc-500"
+              disabled={isIssuing}
+              onClick={issueCredential}
+              type="button"
+            >
+              {isIssuing ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Send aria-hidden className="size-4" />}
+              {isIssuing ? "Issuing..." : "Issue credential"}
+            </button>
+          </div>
         ) : null}
 
-        {canSuspend || canReactivate ? (
+        <div className="mt-4 space-y-2">
+          <h3 className="text-sm font-medium text-zinc-950">Lifecycle controls</h3>
           <div className="flex flex-wrap gap-2">
             {canSuspend ? (
               <button
@@ -168,19 +182,20 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
                 Reactivate
               </button>
             ) : null}
-            {canRevoke ? (
-              <button
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-rose-300 bg-white px-3 text-sm font-medium text-rose-700 transition hover:bg-rose-50 disabled:opacity-50"
-                disabled={isChangingLifecycle}
-                onClick={() => selectLifecycleAction("revoke")}
-                type="button"
-              >
-                <Ban aria-hidden className="size-4" />
-                Revoke
-              </button>
-            ) : null}
+            <button
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-rose-300 bg-white px-3 text-sm font-medium text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:bg-zinc-50 disabled:text-zinc-400"
+              disabled={isChangingLifecycle || !canRevoke}
+              onClick={() => selectLifecycleAction("revoke")}
+              type="button"
+            >
+              <Ban aria-hidden className="size-4" />
+              Revoke
+            </button>
           </div>
-        ) : null}
+          {!canSuspend && !canReactivate && lifecycleUnavailableReason ? (
+            <p className="text-xs leading-5 text-zinc-600">{lifecycleUnavailableReason}</p>
+          ) : null}
+        </div>
 
         {lifecycleAction ? (
           <div className="mt-4 space-y-3 border-t border-zinc-200 pt-4">

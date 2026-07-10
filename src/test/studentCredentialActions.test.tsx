@@ -13,7 +13,7 @@ describe("StudentCredentialActions", () => {
     vi.unstubAllGlobals();
   });
 
-  it("only shows the working issue action for Caleb before issuance", () => {
+  it("shows issue as available and explains why revoke is disabled before issuance", () => {
     if (!caleb) throw new Error("Caleb test record missing.");
 
     render(<StudentCredentialActions student={caleb} />);
@@ -21,7 +21,8 @@ describe("StudentCredentialActions", () => {
     expect(screen.getByRole("button", { name: "Issue credential" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Suspend" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reinstate" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Revoke" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Revoke" })).toBeDisabled();
+    expect(screen.getByText("No issued credential exists for this student yet.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Renew" })).not.toBeInTheDocument();
   });
 
@@ -38,9 +39,10 @@ describe("StudentCredentialActions", () => {
     render(<StudentCredentialActions student={legacyStudent} />);
 
     expect(screen.queryByRole("button", { name: "Issue credential" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Revoke" })).toBeDisabled();
     expect(
       screen.getByText(
-        "This credential was issued before revocation support was enabled. Lifecycle actions require reissue under a revocation-enabled schema.",
+        "This credential was issued before revocation support was enabled. Reissue it under a revocation-enabled schema first.",
       ),
     ).toBeInTheDocument();
   });
@@ -72,6 +74,39 @@ describe("StudentCredentialActions", () => {
       "/api/students/student-demo-100/credentials/lifecycle",
       {
         body: JSON.stringify({ action: "suspend", reason: "Enrolment review" }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      },
+    );
+  });
+
+  it("requires a reason before permanently revoking an active credential", async () => {
+    if (!caleb) throw new Error("Caleb test record missing.");
+    const activeStudent = {
+      ...caleb,
+      credential: { ...caleb.credential, lifecycleState: "ACTIVE" as const },
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ lifecycleState: "REVOKED" }), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<StudentCredentialActions student={activeStudent} />);
+    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+
+    const confirm = screen.getByRole("button", { name: "Confirm" });
+    expect(confirm).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "Student left the university" } });
+    fireEvent.click(confirm);
+
+    await screen.findByText("Credential revoked.");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/students/student-demo-100/credentials/lifecycle",
+      {
+        body: JSON.stringify({ action: "revoke", reason: "Student left the university" }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       },
