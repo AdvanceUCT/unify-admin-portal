@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuditAction, ImportRowStatus } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit/audit";
 import { prisma } from "@/lib/db/prisma";
-import { commitImportRun, NoImportRunError } from "@/lib/imports/commit";
+import { commitImportRun, ImportRunHasErrorsError, NoImportRunError } from "@/lib/imports/commit";
 
 vi.mock("server-only", () => ({}));
 
@@ -22,7 +22,7 @@ const { txMock } = vi.hoisted(() => ({
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     $transaction: vi.fn(async (callback: (tx: typeof txMock) => Promise<void>) => callback(txMock)),
-    importRun: { findUnique: vi.fn() },
+    importRun: { findFirst: vi.fn() },
   },
 }));
 
@@ -52,13 +52,31 @@ beforeEach(() => {
 
 describe("commitImportRun", () => {
   it("throws NoImportRunError when there is no pending run", async () => {
-    vi.mocked(prisma.importRun.findUnique).mockResolvedValue(null);
+    vi.mocked(prisma.importRun.findFirst).mockResolvedValue(null);
 
-    await expect(commitImportRun({ universityProfileId: "profile-001" })).rejects.toBeInstanceOf(NoImportRunError);
+    await expect(commitImportRun({ importRunId: "run-001", universityProfileId: "profile-001" })).rejects.toBeInstanceOf(NoImportRunError);
+    expect(prisma.importRun.findFirst).toHaveBeenCalledWith({
+      include: { rows: true },
+      where: { id: "run-001", universityProfileId: "profile-001" },
+    });
   });
 
-  it("bulk-creates New rows and bulk-updates Updated rows in one call each, skipping Unchanged/Missing/Error", async () => {
-    vi.mocked(prisma.importRun.findUnique).mockResolvedValue({
+  it("blocks commits when the selected run still has error rows", async () => {
+    vi.mocked(prisma.importRun.findFirst).mockResolvedValue({
+      filename: "students.csv",
+      id: "run-001",
+      rows: [row({ status: ImportRowStatus.ERROR, studentNumber: "BAD005" })],
+    } as never);
+
+    await expect(commitImportRun({ importRunId: "run-001", universityProfileId: "profile-001" })).rejects.toBeInstanceOf(
+      ImportRunHasErrorsError,
+    );
+    expect(txMock.student.createMany).not.toHaveBeenCalled();
+    expect(txMock.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it("bulk-creates New rows and bulk-updates Updated rows in one call each, skipping Unchanged/Missing", async () => {
+    vi.mocked(prisma.importRun.findFirst).mockResolvedValue({
       filename: "students.csv",
       id: "run-001",
       rows: [
@@ -66,11 +84,10 @@ describe("commitImportRun", () => {
         row({ status: ImportRowStatus.UPDATED, studentNumber: "UPD002" }),
         row({ status: ImportRowStatus.UNCHANGED, studentNumber: "SAME003" }),
         row({ status: ImportRowStatus.MISSING, studentNumber: "GONE004" }),
-        row({ status: ImportRowStatus.ERROR, studentNumber: "BAD005" }),
       ],
     } as never);
 
-    await commitImportRun({ universityProfileId: "profile-001" });
+    await commitImportRun({ importRunId: "run-001", universityProfileId: "profile-001" });
 
     expect(txMock.student.createMany).toHaveBeenCalledTimes(1);
     const createManyCall = vi.mocked(txMock.student.createMany).mock.calls[0][0];
@@ -83,13 +100,13 @@ describe("commitImportRun", () => {
   });
 
   it("splits mappedData into system columns vs custom-field attributes for created rows", async () => {
-    vi.mocked(prisma.importRun.findUnique).mockResolvedValue({
+    vi.mocked(prisma.importRun.findFirst).mockResolvedValue({
       filename: "students.csv",
       id: "run-001",
       rows: [row()],
     } as never);
 
-    await commitImportRun({ universityProfileId: "profile-001" });
+    await commitImportRun({ importRunId: "run-001", universityProfileId: "profile-001" });
 
     const createManyCall = vi.mocked(txMock.student.createMany).mock.calls[0][0];
     expect(createManyCall.data[0]).toMatchObject({
@@ -105,13 +122,13 @@ describe("commitImportRun", () => {
   });
 
   it("passes each field as a parallel array for the bulk update, with attributes pre-serialized to JSON", async () => {
-    vi.mocked(prisma.importRun.findUnique).mockResolvedValue({
+    vi.mocked(prisma.importRun.findFirst).mockResolvedValue({
       filename: "students.csv",
       id: "run-001",
       rows: [row({ status: ImportRowStatus.UPDATED })],
     } as never);
 
-    await commitImportRun({ universityProfileId: "profile-001" });
+    await commitImportRun({ importRunId: "run-001", universityProfileId: "profile-001" });
 
     const [, studentNumbers, emails, firstNames, lastNames, faculties, programmes, attributesJson] = vi.mocked(
       txMock.$executeRaw,
@@ -132,7 +149,7 @@ describe("commitImportRun", () => {
     // guarantee hold: the SQL must concat onto the existing row rather than
     // replace it, and the serialized payload must only contain keys this row
     // actually mapped this import, never a stale/untouched key.
-    vi.mocked(prisma.importRun.findUnique).mockResolvedValue({
+    vi.mocked(prisma.importRun.findFirst).mockResolvedValue({
       filename: "students.csv",
       id: "run-001",
       rows: [
@@ -151,7 +168,7 @@ describe("commitImportRun", () => {
       ],
     } as never);
 
-    await commitImportRun({ universityProfileId: "profile-001" });
+    await commitImportRun({ importRunId: "run-001", universityProfileId: "profile-001" });
 
     const [strings, , , , , , , attributesJson] = vi.mocked(txMock.$executeRaw).mock.calls[0] as [
       TemplateStringsArray,
@@ -164,19 +181,19 @@ describe("commitImportRun", () => {
   });
 
   it("skips the bulk update call entirely when there are no Updated rows", async () => {
-    vi.mocked(prisma.importRun.findUnique).mockResolvedValue({
+    vi.mocked(prisma.importRun.findFirst).mockResolvedValue({
       filename: "students.csv",
       id: "run-001",
       rows: [row({ status: ImportRowStatus.NEW })],
     } as never);
 
-    await commitImportRun({ universityProfileId: "profile-001" });
+    await commitImportRun({ importRunId: "run-001", universityProfileId: "profile-001" });
 
     expect(txMock.$executeRaw).not.toHaveBeenCalled();
   });
 
   it("writes a single audit log entry with the counts, and deletes the staged run", async () => {
-    vi.mocked(prisma.importRun.findUnique).mockResolvedValue({
+    vi.mocked(prisma.importRun.findFirst).mockResolvedValue({
       filename: "students.csv",
       id: "run-001",
       rows: [
@@ -184,19 +201,18 @@ describe("commitImportRun", () => {
         row({ status: ImportRowStatus.UPDATED, studentNumber: "UPD002" }),
         row({ status: ImportRowStatus.UNCHANGED, studentNumber: "SAME003" }),
         row({ status: ImportRowStatus.MISSING, studentNumber: "GONE004" }),
-        row({ status: ImportRowStatus.ERROR, studentNumber: "BAD005" }),
       ],
     } as never);
 
-    const result = await commitImportRun({ actorId: "admin-001", universityProfileId: "profile-001" });
+    const result = await commitImportRun({ actorId: "admin-001", importRunId: "run-001", universityProfileId: "profile-001" });
 
-    expect(result).toEqual({ errorCount: 1, missingCount: 1, newCount: 1, unchangedCount: 1, updatedCount: 1 });
+    expect(result).toEqual({ errorCount: 0, missingCount: 1, newCount: 1, unchangedCount: 1, updatedCount: 1 });
     expect(writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         action: AuditAction.STUDENT_IMPORT_COMMITTED,
         actorId: "admin-001",
         meta: {
-          errorCount: 1,
+          errorCount: 0,
           filename: "students.csv",
           missingCount: 1,
           newCount: 1,

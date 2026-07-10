@@ -108,6 +108,7 @@ model VendorProfile {
   contactEmail              String
   website                   String?
   description               String?
+  verificationUrl           String?
   createdAt                 DateTime            @default(now())
   updatedAt                 DateTime            @updatedAt
   applications              VendorApplication[]
@@ -219,7 +220,7 @@ model UniversityProfile {
   updatedAt          DateTime           @updatedAt
   credentialSchemas       CredentialSchema[]
   importMapping           ImportMapping?
-  importRun               ImportRun?
+  importRuns              ImportRun[]
   customFieldDefinitions  CustomFieldDefinition[]
 
   @@map("university_profile")
@@ -257,18 +258,18 @@ model CustomFieldDefinition {
   @@map("custom_field_definition")
 }
 
-/// The single pending (uncommitted) CSV import preview for a university.
-/// Replaced wholesale by each new preview and deleted once committed —
-/// this is transient staging, not a permanent import history.
+/// Pending CSV import previews for a university. A commit must name the exact
+/// run to apply, so concurrent admins cannot overwrite each other's previews.
 model ImportRun {
   id                  String            @id @default(cuid())
-  universityProfileId String            @unique
+  universityProfileId String
   universityProfile   UniversityProfile @relation(fields: [universityProfileId], references: [id])
   filename            String
   mappingSnapshot     Json
   createdAt           DateTime          @default(now())
   rows                ImportRow[]
 
+  @@index([universityProfileId])
   @@map("import_run")
 }
 

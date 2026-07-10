@@ -12,18 +12,13 @@ const STATUS_MAP: Record<ReconciledImportRow["status"], ImportRowStatus> = {
   Updated: ImportRowStatus.UPDATED,
 };
 
-/**
- * Replaces the university's single pending import preview wholesale — this
- * is transient staging (not history), so any existing run is discarded first.
- */
+/** Stores a pending import preview. Commit must name the returned run id. */
 export async function saveImportPreview(params: {
   universityProfileId: string;
   filename: string;
   mappingSnapshot: Record<string, string>;
   rows: ReconciledImportRow[];
 }) {
-  await prisma.importRun.deleteMany({ where: { universityProfileId: params.universityProfileId } });
-
   return prisma.importRun.create({
     data: {
       filename: params.filename,

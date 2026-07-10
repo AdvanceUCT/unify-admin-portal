@@ -8,6 +8,7 @@ import { POST } from "@/app/api/students/import/preview/route";
 import { prisma } from "@/lib/db/prisma";
 import { getCurrentAdminSession } from "@/lib/auth/session";
 import { getActiveCustomFieldDefinitions } from "@/lib/imports/customFields";
+import { MAX_CSV_FILE_SIZE_BYTES, MAX_CSV_ROWS } from "@/lib/imports/limits";
 import { getImportMapping } from "@/lib/imports/mapping";
 import { saveImportPreview } from "@/lib/imports/run";
 import { getUniversityProfile } from "@/lib/university/profile";
@@ -81,7 +82,7 @@ beforeEach(() => {
   vi.mocked(getActiveCustomFieldDefinitions).mockResolvedValue([{ key: "cohort", label: "Cohort" }] as never);
   vi.mocked(getImportMapping).mockResolvedValue({ columnMap: fullColumnMap } as never);
   vi.mocked(prisma.student.findMany).mockResolvedValue([]);
-  vi.mocked(saveImportPreview).mockResolvedValue({} as never);
+  vi.mocked(saveImportPreview).mockResolvedValue({ id: "run-001" } as never);
 });
 
 describe("POST /api/students/import/preview", () => {
@@ -129,6 +130,26 @@ describe("POST /api/students/import/preview", () => {
     expect(response.status).toBe(400);
   });
 
+  it("returns 400 when the CSV file is too large", async () => {
+    const response = await POST(previewRequest(new File(["x".repeat(MAX_CSV_FILE_SIZE_BYTES + 1)], "large.csv")));
+
+    expect(response.status).toBe(400);
+    expect(saveImportPreview).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when the CSV has too many data rows", async () => {
+    const rows = Array.from(
+      { length: MAX_CSV_ROWS + 1 },
+      (_unused, index) => `STU${index},Ada,Lovelace,ada${index}@example.edu,Science,Computer Science,2026`,
+    );
+    const csv = ["Student No,First Name,Surname,Email,Faculty,Programme,Cohort", ...rows].join("\n");
+
+    const response = await POST(previewRequest(new File([csv], "too-many.csv")));
+
+    expect(response.status).toBe(400);
+    expect(saveImportPreview).not.toHaveBeenCalled();
+  });
+
   it("classifies rows and persists the preview", async () => {
     vi.mocked(prisma.student.findMany).mockResolvedValue([
       {
@@ -146,11 +167,13 @@ describe("POST /api/students/import/preview", () => {
     const response = await POST(previewRequest(new File([csvContent], "students.csv")));
     const body = (await response.json()) as {
       counts: Record<string, number>;
+      importRunId: string;
       rows: { status: string; studentNumber: string | null }[];
     };
 
     expect(response.status).toBe(200);
     expect(body.counts).toEqual({ error: 0, missing: 0, new: 1, unchanged: 1, updated: 0 });
+    expect(body.importRunId).toBe("run-001");
     expect(saveImportPreview).toHaveBeenCalledWith(
       expect.objectContaining({ filename: "students.csv", universityProfileId: "profile-001" }),
     );

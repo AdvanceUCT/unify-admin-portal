@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db/prisma";
 import { getActiveCustomFieldDefinitions } from "@/lib/imports/customFields";
 import { parseCsvRows } from "@/lib/imports/csv";
 import { assertRequiredFieldsMapped, getImportFieldDefinitions, getImportMapping } from "@/lib/imports/mapping";
+import { csvFileTooLargeMessage, csvRowLimitMessage, MAX_CSV_FILE_SIZE_BYTES, MAX_CSV_ROWS } from "@/lib/imports/limits";
 import { reconcileRows, type ReconciledImportRow } from "@/lib/imports/reconcile";
 import { saveImportPreview } from "@/lib/imports/run";
 import { validateRows } from "@/lib/imports/validate";
@@ -64,6 +65,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: { message: "A CSV file is required." } }, { status: 400 });
     }
 
+    if (file.size > MAX_CSV_FILE_SIZE_BYTES) {
+      return NextResponse.json({ error: { message: csvFileTooLargeMessage() } }, { status: 400 });
+    }
+
     const text = await file.text();
     const { rows: rawRows, errors: fileErrors } = parseCsvRows(text);
 
@@ -71,11 +76,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: { message: "The uploaded file has no data rows." } }, { status: 400 });
     }
 
+    if (rawRows.length > MAX_CSV_ROWS) {
+      return NextResponse.json({ error: { message: csvRowLimitMessage() } }, { status: 400 });
+    }
+
     const validatedRows = validateRows(rawRows, columnMap, fieldDefinitions);
     const existingStudents = await prisma.student.findMany();
     const reconciledRows = reconcileRows(validatedRows, existingStudents, fieldDefinitions);
 
-    await saveImportPreview({
+    const run = await saveImportPreview({
       filename: file.name,
       mappingSnapshot: columnMap,
       rows: reconciledRows,
@@ -86,6 +95,7 @@ export async function POST(request: Request) {
       counts: countBy(reconciledRows),
       fileErrors: fileErrors.length > 0 ? fileErrors : undefined,
       filename: file.name,
+      importRunId: run.id,
       rows: reconciledRows,
     });
   } catch (error) {

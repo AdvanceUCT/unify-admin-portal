@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  createVendorVerificationQrAction,
   markVendorApplicationViewedAction,
   rejectVendorApplicationAction,
 } from "@/app/(admin)/vendors/actions";
 import { requireRole } from "@/lib/auth/session";
 import {
+  ensureVendorVerificationServicePoint,
   markApplicationViewed,
   reviewVendorApplication,
 } from "@/lib/vendors/applications";
@@ -22,12 +24,14 @@ vi.mock("@/lib/auth/session", () => ({
 }));
 
 vi.mock("@/lib/vendors/applications", () => ({
+  ensureVendorVerificationServicePoint: vi.fn(),
   markApplicationViewed: vi.fn(),
   reviewVendorApplication: vi.fn(),
   revokeVendorApplication: vi.fn(),
 }));
 
 const requireRoleMock = vi.mocked(requireRole);
+const ensureVendorVerificationServicePointMock = vi.mocked(ensureVendorVerificationServicePoint);
 const markApplicationViewedMock = vi.mocked(markApplicationViewed);
 const reviewVendorApplicationMock = vi.mocked(reviewVendorApplication);
 const revalidatePathMock = vi.mocked(revalidatePath);
@@ -77,5 +81,16 @@ describe("vendor application actions", () => {
       applicationId: "application_1",
     });
     expect(revalidatePathMock).toHaveBeenCalledWith("/vendors");
+  });
+
+  it("creates a verification QR for an approved vendor", async () => {
+    const formData = new FormData();
+    formData.set("vendorProfileId", "profile_1");
+
+    await createVendorVerificationQrAction(formData);
+
+    expect(ensureVendorVerificationServicePointMock).toHaveBeenCalledWith("profile_1");
+    expect(revalidatePathMock).toHaveBeenCalledWith("/vendors", "layout");
+    expect(revalidatePathMock).toHaveBeenCalledWith("/vendor");
   });
 });

@@ -10,6 +10,7 @@ import { GET, POST as postMapping } from "@/app/api/students/import/mapping/rout
 import { POST as postUpload } from "@/app/api/students/import/upload/route";
 import { getCurrentAdminSession } from "@/lib/auth/session";
 import { getActiveCustomFieldDefinitions } from "@/lib/imports/customFields";
+import { MAX_CSV_FILE_SIZE_BYTES } from "@/lib/imports/limits";
 import { getImportFieldDefinitions, getImportMapping, saveImportMapping } from "@/lib/imports/mapping";
 import { getUniversityProfile } from "@/lib/university/profile";
 
@@ -99,6 +100,15 @@ describe("POST /api/students/import/upload", () => {
   it("returns 400 for a file with no detectable columns", async () => {
     vi.mocked(getCurrentAdminSession).mockResolvedValue(adminSession() as never);
     const file = new File([""], "empty.csv", { type: "text/csv" });
+
+    const response = await postUpload(uploadRequest(file));
+
+    expect(response.status).toBe(400);
+  });
+
+  it("returns 400 when the CSV file is too large", async () => {
+    vi.mocked(getCurrentAdminSession).mockResolvedValue(adminSession() as never);
+    const file = new File(["x".repeat(MAX_CSV_FILE_SIZE_BYTES + 1)], "large.csv", { type: "text/csv" });
 
     const response = await postUpload(uploadRequest(file));
 

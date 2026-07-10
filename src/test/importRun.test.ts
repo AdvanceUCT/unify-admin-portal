@@ -11,7 +11,6 @@ vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     importRun: {
       create: vi.fn(),
-      deleteMany: vi.fn(),
     },
   },
 }));
@@ -21,8 +20,8 @@ beforeEach(() => {
 });
 
 describe("saveImportPreview", () => {
-  it("deletes any existing run for the university before creating the new one", async () => {
-    vi.mocked(prisma.importRun.create).mockResolvedValue({} as never);
+  it("creates a separate import run without deleting other pending previews", async () => {
+    vi.mocked(prisma.importRun.create).mockResolvedValue({ id: "run-001" } as never);
 
     const rows: ReconciledImportRow[] = [
       { mappedData: { studentNumber: "ADA001" }, rowNumber: 2, status: "New", studentNumber: "ADA001" },
@@ -35,7 +34,6 @@ describe("saveImportPreview", () => {
       universityProfileId: "profile-001",
     });
 
-    expect(prisma.importRun.deleteMany).toHaveBeenCalledWith({ where: { universityProfileId: "profile-001" } });
     expect(prisma.importRun.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({

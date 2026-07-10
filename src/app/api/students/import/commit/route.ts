@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 
 import { assertCan, PermissionError, type SessionWithRole } from "@/lib/auth/permissions";
 import { getCurrentAdminSession, getSessionForAudit } from "@/lib/auth/session";
-import { commitImportRun, NoImportRunError } from "@/lib/imports/commit";
+import { commitImportRun, ImportRunHasErrorsError, NoImportRunError } from "@/lib/imports/commit";
 import { getUniversityProfile } from "@/lib/university/profile";
 
-export async function POST() {
+export async function POST(request: Request) {
   const session = await getCurrentAdminSession();
 
   try {
@@ -16,6 +16,13 @@ export async function POST() {
   }
 
   try {
+    const body = (await request.json().catch(() => undefined)) as { importRunId?: unknown } | undefined;
+    const importRunId = typeof body?.importRunId === "string" ? body.importRunId.trim() : "";
+
+    if (!importRunId) {
+      return NextResponse.json({ error: { message: "An import run ID is required." } }, { status: 400 });
+    }
+
     const profile = await getUniversityProfile();
     if (!profile) {
       return NextResponse.json(
@@ -25,11 +32,11 @@ export async function POST() {
     }
 
     const auditSession = await getSessionForAudit();
-    const result = await commitImportRun({ actorId: auditSession.actorId, universityProfileId: profile.id });
+    const result = await commitImportRun({ actorId: auditSession.actorId, importRunId, universityProfileId: profile.id });
 
     return NextResponse.json(result);
   } catch (error) {
-    const status = error instanceof NoImportRunError ? error.status : 500;
+    const status = error instanceof NoImportRunError || error instanceof ImportRunHasErrorsError ? error.status : 500;
     return NextResponse.json(
       { error: { message: error instanceof Error ? error.message : "Failed to commit import." } },
       { status },

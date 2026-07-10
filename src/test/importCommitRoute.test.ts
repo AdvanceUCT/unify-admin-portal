@@ -39,11 +39,19 @@ beforeEach(() => {
   vi.mocked(getUniversityProfile).mockResolvedValue({ id: "profile-001" } as never);
 });
 
+function commitRequest(importRunId: unknown = "run-001") {
+  return new Request("http://localhost:3000/api/students/import/commit", {
+    body: JSON.stringify({ importRunId }),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+  });
+}
+
 describe("POST /api/students/import/commit", () => {
   it("rejects a viewer role (read-only)", async () => {
     vi.mocked(getCurrentAdminSession).mockResolvedValue({ user: { role: "VIEWER" } } as never);
 
-    const response = await POST();
+    const response = await POST(commitRequest());
 
     expect(response.status).toBe(403);
     expect(commitImportRun).not.toHaveBeenCalled();
@@ -52,9 +60,16 @@ describe("POST /api/students/import/commit", () => {
   it("returns 409 when there is no pending import to commit", async () => {
     vi.mocked(commitImportRun).mockRejectedValue(new NoImportRunError("No pending import preview to commit."));
 
-    const response = await POST();
+    const response = await POST(commitRequest());
 
     expect(response.status).toBe(409);
+  });
+
+  it("returns 400 when the selected import run ID is missing", async () => {
+    const response = await POST(commitRequest(""));
+
+    expect(response.status).toBe(400);
+    expect(commitImportRun).not.toHaveBeenCalled();
   });
 
   it("commits and returns the counts", async () => {
@@ -66,11 +81,15 @@ describe("POST /api/students/import/commit", () => {
       updatedCount: 0,
     });
 
-    const response = await POST();
+    const response = await POST(commitRequest("run-001"));
     const body = (await response.json()) as { newCount: number; updatedCount: number };
 
     expect(response.status).toBe(200);
     expect(body).toMatchObject({ newCount: 90, updatedCount: 0 });
-    expect(commitImportRun).toHaveBeenCalledWith({ actorId: "admin-001", universityProfileId: "profile-001" });
+    expect(commitImportRun).toHaveBeenCalledWith({
+      actorId: "admin-001",
+      importRunId: "run-001",
+      universityProfileId: "profile-001",
+    });
   });
 });

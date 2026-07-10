@@ -12,14 +12,6 @@ type VendorApplicationDetailsProps = {
     reviewedAt: Date | null;
     reviewNotes: string | null;
     reviewedByUserId: string | null;
-    revokedAt: Date | null;
-    revokedNotes: string | null;
-    revokedByUserId: string | null;
-    snapshotCompanyName: string | null;
-    snapshotServiceCategory: string | null;
-    snapshotContactEmail: string | null;
-    snapshotContactPersonName: string | null;
-    snapshotWebsite: string | null;
     snapshotDescription: string | null;
     vendorProfile: {
       companyName: string;
@@ -33,13 +25,6 @@ type VendorApplicationDetailsProps = {
 };
 
 export function VendorApplicationDetails({ application }: VendorApplicationDetailsProps) {
-  const companyName = application.snapshotCompanyName ?? application.vendorProfile.companyName;
-  const serviceCategory = application.snapshotServiceCategory ?? application.vendorProfile.serviceCategory;
-  const website = application.snapshotWebsite ?? application.vendorProfile.website;
-  const contactPersonName = application.snapshotContactPersonName ?? application.vendorProfile.contactPersonName;
-  const contactEmail = application.snapshotContactEmail ?? application.vendorProfile.contactEmail;
-  const description = application.snapshotDescription ?? application.vendorProfile.description;
-
   return (
     <div className="space-y-6 rounded-lg border border-zinc-200 bg-white p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -66,23 +51,23 @@ export function VendorApplicationDetails({ application }: VendorApplicationDetai
           <dl className="grid gap-3 text-sm text-zinc-600">
             <div>
               <dt className="font-medium text-zinc-900">Company</dt>
-              <dd>{companyName}</dd>
+              <dd>{application.vendorProfile.companyName}</dd>
             </div>
             <div>
               <dt className="font-medium text-zinc-900">Category</dt>
-              <dd>{serviceCategory}</dd>
+              <dd>{application.vendorProfile.serviceCategory}</dd>
             </div>
             <div>
               <dt className="font-medium text-zinc-900">Website</dt>
-              <dd>{website ?? "Not provided"}</dd>
+              <dd>{application.vendorProfile.website ?? "Not provided"}</dd>
             </div>
             <div>
               <dt className="font-medium text-zinc-900">Contact person</dt>
-              <dd>{contactPersonName ?? "Not provided"}</dd>
+              <dd>{application.vendorProfile.contactPersonName ?? "Not provided"}</dd>
             </div>
             <div>
               <dt className="font-medium text-zinc-900">Contact email</dt>
-              <dd>{contactEmail}</dd>
+              <dd>{application.vendorProfile.contactEmail}</dd>
             </div>
           </dl>
         </div>
@@ -120,24 +105,6 @@ export function VendorApplicationDetails({ application }: VendorApplicationDetai
                 <dd>{application.reviewNotes}</dd>
               </div>
             ) : null}
-            {application.revokedAt ? (
-              <div>
-                <dt className="font-medium text-zinc-900">Revoked</dt>
-                <dd>{formatDateTime(application.revokedAt.toISOString())}</dd>
-              </div>
-            ) : null}
-            {application.revokedByUserId ? (
-              <div>
-                <dt className="font-medium text-zinc-900">Revoked by</dt>
-                <dd>{application.revokedByUserId}</dd>
-              </div>
-            ) : null}
-            {application.revokedNotes ? (
-              <div>
-                <dt className="font-medium text-zinc-900">Revocation reason</dt>
-                <dd>{application.revokedNotes}</dd>
-              </div>
-            ) : null}
           </dl>
         </div>
       </div>
@@ -145,14 +112,14 @@ export function VendorApplicationDetails({ application }: VendorApplicationDetai
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-lg border border-zinc-200 bg-white p-4">
           <h3 className="text-sm font-semibold text-zinc-800">Service description</h3>
-          <p className="mt-2 whitespace-pre-line text-sm text-zinc-600">{description ?? "Not provided"}</p>
+          <p className="mt-2 text-sm text-zinc-600 whitespace-pre-line">{application.snapshotDescription ?? application.vendorProfile.description ?? "Not provided"}</p>
         </div>
         <div className="rounded-lg border border-zinc-200 bg-white p-4">
           <h3 className="text-sm font-semibold text-zinc-800">Why verification access is needed</h3>
           <p className="mt-2 text-sm text-zinc-600 whitespace-pre-line">{application.justification}</p>
-          <div className="mt-4 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
-            Approved vendors request all attributes in the active student credential schema.
-          </div>
+          <p className="mt-4 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
+            Verification requests include every attribute in the active student credential schema.
+          </p>
         </div>
       </div>
     </div>

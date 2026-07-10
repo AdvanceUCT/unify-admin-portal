@@ -5,8 +5,13 @@ import { writeAuditLog } from "@/lib/audit/audit";
 import { prisma } from "@/lib/db/prisma";
 import { isSystemFieldName } from "@/lib/imports/mapping";
 
-/** Thrown when there is no pending import preview to commit — generate one first. */
+/** Thrown when the selected import preview cannot be found for this university. */
 export class NoImportRunError extends Error {
+  status = 409;
+}
+
+/** Thrown when a preview still has invalid rows that need fixing before commit. */
+export class ImportRunHasErrorsError extends Error {
   status = 409;
 }
 
@@ -37,25 +42,24 @@ export type CommitImportRunResult = {
 };
 
 /**
- * Commits the university's pending import preview: New rows are bulk-inserted
+ * Commits a selected import preview: New rows are bulk-inserted
  * and Updated rows are bulk-updated (each in a single round trip regardless
  * of row count), matched on studentNumber. Unchanged rows are no-ops, Missing
- * rows are never touched, and Error rows are skipped — the admin already saw
- * exactly which rows had errors in the preview. The staged run is deleted
- * afterward (transient staging, not history); the only lasting trace is a
- * single audit log entry with the counts.
+ * rows are never touched, and Error rows block the commit so partial imports
+ * cannot happen by accident.
  */
 export async function commitImportRun(params: {
   universityProfileId: string;
+  importRunId: string;
   actorId?: string | null;
 }): Promise<CommitImportRunResult> {
-  const run = await prisma.importRun.findUnique({
+  const run = await prisma.importRun.findFirst({
     include: { rows: true },
-    where: { universityProfileId: params.universityProfileId },
+    where: { id: params.importRunId, universityProfileId: params.universityProfileId },
   });
 
   if (!run) {
-    throw new NoImportRunError("No pending import preview to commit. Generate a preview first.");
+    throw new NoImportRunError("Selected import preview was not found. Generate a preview first.");
   }
 
   const counts: CommitImportRunResult = {
@@ -65,6 +69,11 @@ export async function commitImportRun(params: {
     unchangedCount: run.rows.filter((row) => row.status === ImportRowStatus.UNCHANGED).length,
     updatedCount: run.rows.filter((row) => row.status === ImportRowStatus.UPDATED).length,
   };
+
+  if (counts.errorCount > 0) {
+    throw new ImportRunHasErrorsError("Fix or remove rows with errors before committing this import.");
+  }
+
   const rowsToCreate = run.rows.filter((row) => row.status === ImportRowStatus.NEW && row.studentNumber);
   const rowsToUpdate = run.rows.filter((row) => row.status === ImportRowStatus.UPDATED && row.studentNumber);
 

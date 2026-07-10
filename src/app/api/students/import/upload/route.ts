@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { assertCan, PermissionError, type SessionWithRole } from "@/lib/auth/permissions";
 import { getCurrentAdminSession } from "@/lib/auth/session";
 import { parseCsvHeader } from "@/lib/imports/csv";
+import { csvFileTooLargeMessage, MAX_CSV_FILE_SIZE_BYTES } from "@/lib/imports/limits";
 
 /**
  * Parses an uploaded CSV's header row for the column-mapping step.
@@ -24,6 +25,10 @@ export async function POST(request: Request) {
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: { message: "A CSV file is required." } }, { status: 400 });
+  }
+
+  if (file.size > MAX_CSV_FILE_SIZE_BYTES) {
+    return NextResponse.json({ error: { message: csvFileTooLargeMessage() } }, { status: 400 });
   }
 
   const text = await file.text();

@@ -22,6 +22,7 @@ type PreviewCounts = {
 
 type PreviewResult = {
   filename: string;
+  importRunId: string;
   counts: PreviewCounts;
   rows: PreviewRow[];
   fileErrors?: string[];
@@ -69,6 +70,7 @@ export function PreviewStep({
   const [expanded, setExpanded] = useState<Set<ImportRowStatus>>(new Set());
   const [fullViewStatus, setFullViewStatus] = useState<ImportRowStatus | null>(null);
   const [fullViewPage, setFullViewPage] = useState(1);
+  const hasBlockingErrors = Boolean(result?.counts.error);
 
   const rowsByStatus = useMemo(() => {
     const map = new Map<ImportRowStatus, PreviewRow[]>();
@@ -116,6 +118,7 @@ export function PreviewStep({
 
       const body = (await response.json()) as PreviewResult;
       setResult(body);
+      setCommitError(null);
       setExpanded(new Set());
       setFullViewStatus(null);
     } catch (previewError) {
@@ -130,7 +133,16 @@ export function PreviewStep({
     setIsCommitting(true);
 
     try {
-      const response = await fetch("/api/students/import/commit", { cache: "no-store", method: "POST" });
+      if (!result?.importRunId) {
+        throw new Error("Generate a preview before committing this import.");
+      }
+
+      const response = await fetch("/api/students/import/commit", {
+        body: JSON.stringify({ importRunId: result.importRunId }),
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
 
       if (!response.ok) {
         throw new Error(await readErrorMessage(response));
@@ -316,7 +328,7 @@ export function PreviewStep({
 
             <button
               className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
-              disabled={isCommitting || isGenerating || result.counts.new + result.counts.updated === 0}
+              disabled={isCommitting || isGenerating || hasBlockingErrors || result.counts.new + result.counts.updated === 0}
               onClick={handleCommit}
               type="button"
             >
@@ -325,6 +337,9 @@ export function PreviewStep({
                 : `Commit ${result.counts.new} new, ${result.counts.updated} updated`}
             </button>
           </div>
+          {hasBlockingErrors ? (
+            <p className="text-sm text-amber-700">Fix or remove rows with errors before committing this import.</p>
+          ) : null}
         </div>
       ) : null}
 
