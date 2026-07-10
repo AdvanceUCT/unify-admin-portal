@@ -13,10 +13,8 @@ import type {
   BatchIssuancePreviewResult,
   BatchIssuanceSelection,
   CredentialLifecycleState,
-  StudentCredential,
 } from "@/lib/api/types";
 import { formatCredentialStatus } from "@/lib/formatters";
-import { SIMULATED_FACULTY_PROGRAMMES } from "@/lib/student-records/facultyProgrammes";
 
 const credentialStatusOptions: Array<{ label: string; value: "" | CredentialLifecycleState }> = [
   { label: "Eligible statuses", value: "" },
@@ -31,15 +29,6 @@ const credentialStatusOptions: Array<{ label: string; value: "" | CredentialLife
   { label: formatCredentialStatus("REVOKED"), value: "REVOKED" },
 ];
 
-const enrolmentStatusOptions: Array<StudentCredential["enrolmentStatus"]> = [
-  "Registered",
-  "Suspended",
-  "Withdrawn",
-  "Graduated",
-];
-const facultyOptions = Object.keys(SIMULATED_FACULTY_PROGRAMMES);
-const allProgrammeOptions = Object.values(SIMULATED_FACULTY_PROGRAMMES).flat();
-
 function itemTone(status: BatchIssuanceItemStatus | "Eligible" | "Skipped") {
   if (status === "Delivered" || status === "Activated" || status === "Eligible") return "success";
   if (status === "Failed" || status === "DeliveryFailed") return "danger";
@@ -47,10 +36,15 @@ function itemTone(status: BatchIssuanceItemStatus | "Eligible" | "Skipped") {
   return "warning";
 }
 
-export function BatchIssuancePanel({ preview }: { preview: BatchIssuancePreview }) {
+export function BatchIssuancePanel({
+  preview,
+  programmesByFaculty,
+}: {
+  preview: BatchIssuancePreview;
+  programmesByFaculty: Record<string, string[]>;
+}) {
   const router = useRouter();
   const [credentialStatus, setCredentialStatus] = useState<"" | CredentialLifecycleState>("");
-  const [enrolmentStatus, setEnrolmentStatus] = useState<StudentCredential["enrolmentStatus"]>("Registered");
   const [faculty, setFaculty] = useState("");
   const [programme, setProgramme] = useState("");
   const [batchPreview, setBatchPreview] = useState<BatchIssuancePreviewResult | null>(null);
@@ -58,18 +52,19 @@ export function BatchIssuancePanel({ preview }: { preview: BatchIssuancePreview 
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  const facultyOptions = Object.keys(programmesByFaculty);
+  const allProgrammeOptions = Object.values(programmesByFaculty).flat();
   const selection: BatchIssuanceSelection = {
     cohortId: preview.cohortId,
     credentialStatus: credentialStatus || undefined,
-    enrolmentStatus,
     faculty: faculty || undefined,
     programme: programme || undefined,
   };
-  const programmeOptions = faculty ? SIMULATED_FACULTY_PROGRAMMES[faculty] : allProgrammeOptions;
+  const programmeOptions = faculty ? programmesByFaculty[faculty] : allProgrammeOptions;
   const canConfirm = Boolean(batchPreview?.eligibleCount) && !isProcessing;
 
   function handleFacultyChange(nextFaculty: string) {
-    const nextProgrammeOptions = nextFaculty ? SIMULATED_FACULTY_PROGRAMMES[nextFaculty] : allProgrammeOptions;
+    const nextProgrammeOptions = nextFaculty ? programmesByFaculty[nextFaculty] : allProgrammeOptions;
     setFaculty(nextFaculty);
 
     if (programme && !nextProgrammeOptions.includes(programme)) {
@@ -162,20 +157,6 @@ export function BatchIssuancePanel({ preview }: { preview: BatchIssuancePreview 
               {credentialStatusOptions.map((option) => (
                 <option key={option.label} value={option.value}>
                   {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="space-y-1.5 text-sm">
-            <span className="font-medium text-zinc-700">Enrolment status</span>
-            <select
-              className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-800 focus:border-zinc-500 focus:outline-none"
-              onChange={(event) => setEnrolmentStatus(event.target.value as StudentCredential["enrolmentStatus"])}
-              value={enrolmentStatus}
-            >
-              {enrolmentStatusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {status}
                 </option>
               ))}
             </select>

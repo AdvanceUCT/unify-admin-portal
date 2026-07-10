@@ -7,7 +7,7 @@ import {
   requestCredentialLifecycleChange,
   type CredentialLifecycleAction,
 } from "@/lib/credentials/lifecycleActions";
-import { getStudentById } from "@/lib/db/store";
+import { getStudentById } from "@/lib/students/repository";
 
 function isLifecycleAction(value: unknown): value is CredentialLifecycleAction {
   return value === "reactivate" || value === "revoke" || value === "suspend";

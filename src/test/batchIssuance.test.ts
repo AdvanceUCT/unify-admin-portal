@@ -32,6 +32,16 @@ vi.mock("@/lib/university/profile", () => ({
   getUniversityProfile: vi.fn(async () => ({ id: "profile-001" })),
 }));
 
+vi.mock("@/lib/students/repository", async () => {
+  const { getMockAdminState } = await import("@/lib/api/mockActivationStore");
+  return {
+    getAllStudents: vi.fn(async () => getMockAdminState().students),
+    getStudentById: vi.fn(async (id: string) =>
+      getMockAdminState().students.find((student) => student.profile.id === id),
+    ),
+  };
+});
+
 vi.mock("@/lib/university/credentialSchema", () => ({
   getActiveCredentialSchema: vi.fn(async () => ({
     credentialDefinitionId: "cred-def-id",

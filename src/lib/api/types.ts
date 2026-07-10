@@ -25,18 +25,18 @@ export type StudentCredential = {
   issuer: string;
   faculty?: string;
   programme: string;
-  enrolmentStatus: "Registered" | "Suspended" | "Withdrawn" | "Graduated";
   lifecycleState: CredentialLifecycleState;
   isRevocable?: boolean;
   studentNumber: string;
   validFrom: string;
   expiresAt: string;
+  /** Raw schema-attribute values sourced from the student's stored `attributes` bag, used as a fallback when resolving credential attributes that aren't one of the fixed platform fields. */
+  attributes?: Record<string, string | undefined>;
 };
 
 export type BatchIssuanceSelection = {
   cohortId?: string;
   credentialStatus?: CredentialLifecycleState;
-  enrolmentStatus?: StudentCredential["enrolmentStatus"];
   faculty?: string;
   limit?: number;
   programme?: string;
