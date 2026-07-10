@@ -27,6 +27,36 @@ function shouldUseMockApi() {
   return typeof window !== "undefined" && process.env.NODE_ENV !== "test";
 }
 
+function toHttpsOrigin(value: string | undefined) {
+  if (!value) {
+    return undefined;
+  }
+
+  return value.startsWith("http://") || value.startsWith("https://")
+    ? value
+    : `https://${value}`;
+}
+
+function firstHeaderValue(value: string | null) {
+  return value?.split(",")[0]?.trim() || undefined;
+}
+
+function requestOriginFromHeaders(requestHeaders: Headers) {
+  const host = firstHeaderValue(requestHeaders.get("x-forwarded-host")) ?? firstHeaderValue(requestHeaders.get("host"));
+  if (!host) {
+    return undefined;
+  }
+
+  const forwardedProto = firstHeaderValue(requestHeaders.get("x-forwarded-proto"));
+  const protocol = forwardedProto ?? (host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
+  return `${protocol}://${host}`;
+}
+
+export const __apiClientTestInternals = {
+  requestOriginFromHeaders,
+  toHttpsOrigin,
+};
+
 /**
  * Fetch wrapper that parses the response as JSON and throws on non-2xx responses.
  * Tries to pull the error message from `body.error.message` before falling back
@@ -65,7 +95,12 @@ async function apiFetch<T>(path: string): Promise<T> {
   const { headers } = await import("next/headers");
   const requestHeaders = await headers();
   const cookie = requestHeaders.get("cookie");
-  const base = process.env.APP_URL ?? process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+  const base =
+    requestOriginFromHeaders(requestHeaders) ??
+    toHttpsOrigin(process.env.VERCEL_URL) ??
+    process.env.APP_URL ??
+    process.env.BETTER_AUTH_URL ??
+    "http://localhost:3000";
   const res = await fetch(`${base}${path}`, {
     headers: cookie ? { cookie } : undefined,
   });
