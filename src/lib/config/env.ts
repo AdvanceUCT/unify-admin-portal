@@ -74,6 +74,7 @@ const envSchema = z.object({
   CREDENTIAL_EMAIL_FROM: optionalNonEmptyString,
   CREDENTIAL_EMAIL_DELIVERY_MODE: z.enum(["resend", "console"]).default("resend"),
   WEBHOOK_SIGNING_SECRET: optionalNonEmptyString,
+  CRON_SECRET: optionalNonEmptyString,
 });
 
 export const env = envSchema.parse(process.env);

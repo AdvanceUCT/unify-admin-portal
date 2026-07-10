@@ -34,6 +34,7 @@ import {
 const DEFAULT_YEAR = "2026";
 const credentialStatuses = new Set<CredentialLifecycleState>([
   "ACCEPTED",
+  "EXPIRED",
   "FAILED",
   "ISSUED",
   "NOT_ISSUED",
@@ -262,6 +263,7 @@ async function issueStudentActivationLinks(
   selection: BatchIssuanceSelection = {},
   actorId?: string | null,
   includeBatchIdInAudit = false,
+  renewedFromIssuanceId?: string,
 ): Promise<BatchIssuanceResult> {
   const activeSchema = await getActiveCredentialDefinition();
   const batchId = batchIdFrom(now);
@@ -307,6 +309,7 @@ async function issueStudentActivationLinks(
       email: offer.email,
       expiresAt: offer.expiresAt,
       failureReason: emailDelivery.status === "Failed" ? emailDelivery.failureReason : undefined,
+      renewedFromIssuanceId,
       studentId: persistedStudentId,
       wasDelivered: emailDelivery.status === "Delivered",
     });
@@ -394,6 +397,26 @@ export async function queueRealBatchIssuance(
 }
 
 /**
+ * Runs the issuance pipeline for a single student, optionally linking the new
+ * issuance back to the one it's renewing. Exported so the renewal service can
+ * reuse the exact same agent-call/email/audit/event-log logic as a fresh issuance.
+ *
+ * @param student - The student (with current credential status) to issue to.
+ * @param now - Current time, used for the batch ID and queued-at timestamp.
+ * @param actorId - Who triggered the issuance, if anyone.
+ * @param options.renewedFromIssuanceId - The prior issuance this one supersedes, if any.
+ * @returns A `BatchIssuanceResult` scoped to the single student.
+ */
+export async function issueSingleStudentActivationLink(
+  student: StudentRecord,
+  now: Date,
+  actorId?: string | null,
+  options: { renewedFromIssuanceId?: string } = {},
+): Promise<BatchIssuanceResult> {
+  return issueStudentActivationLinks([student], now, 1, {}, actorId, false, options.renewedFromIssuanceId);
+}
+
+/**
  * Issues a credential to a single student. Checks the student exists and is
  * eligible before running the issuance pipeline. Used for one-off issuance
  * outside of a batch run.
@@ -424,5 +447,5 @@ export async function queueRealStudentIssuance(
     );
   }
 
-  return issueStudentActivationLinks([studentWithCredentialStatus], now, 1, {}, actorId, false);
+  return issueSingleStudentActivationLink(studentWithCredentialStatus, now, actorId);
 }

@@ -65,6 +65,7 @@ function activationIdForToken(token: string) {
 function dashboardSummary(state: MockActivationState): DashboardSummary {
   const issuedCredentials = state.students.filter((student) => student.credential.lifecycleState === "ISSUED").length;
   const failedCredentials = state.students.filter((student) => student.credential.lifecycleState === "FAILED").length;
+  const expiredCredentials = state.students.filter((student) => student.credential.lifecycleState === "EXPIRED").length;
   const pendingIssuance = state.students.filter((student) =>
     ["OFFER_SENT", "ACCEPTED"].includes(student.credential.lifecycleState),
   ).length;
@@ -72,6 +73,7 @@ function dashboardSummary(state: MockActivationState): DashboardSummary {
   return {
     activeBatchJobs: state.batchRuns.filter((run) => run.status === "Queued" || run.status === "Processing").length,
     auditEventsToday: state.auditEvents.length,
+    expiredCredentials,
     failedCredentials,
     issuedCredentials,
     pendingIssuance,

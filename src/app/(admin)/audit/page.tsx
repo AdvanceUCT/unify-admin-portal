@@ -4,7 +4,7 @@ import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { CredentialAuditLogTable } from "@/features/audit/CredentialAuditLogTable";
 import { requireRole } from "@/lib/auth/session";
-import { getPaginatedCredentialOfferSentAuditLogs } from "@/lib/credentials/audit";
+import { getPaginatedCredentialAuditLogs } from "@/lib/credentials/audit";
 import { listDecidedVendorApplications } from "@/lib/vendors/applications";
 
 const CREDENTIAL_AUDIT_PAGE_SIZE = 25;
@@ -26,7 +26,7 @@ export default async function AuditPage({
   const activeTab = params.tab === "vendors" ? "vendors" : "credentials";
 
   const [credentialLogs, decidedVendorApplications] = await Promise.all([
-    getPaginatedCredentialOfferSentAuditLogs({
+    getPaginatedCredentialAuditLogs({
       page: parsePage(params.credentialPage),
       pageSize: CREDENTIAL_AUDIT_PAGE_SIZE,
     }),

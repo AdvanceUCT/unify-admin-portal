@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ClipboardList, UserRoundCheck } from "lucide-react";
+import { ClipboardList, RefreshCw, UserRoundCheck } from "lucide-react";
 
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { requireRole } from "@/lib/auth/session";
@@ -17,6 +17,12 @@ const issuanceOptions = [
     icon: UserRoundCheck,
     title: "Individual issuance",
   },
+  {
+    description: "Set the cadence issued credentials renew on automatically, or turn auto-renewal off.",
+    href: "/credentials/issuance/renewals",
+    icon: RefreshCw,
+    title: "Renewal settings",
+  },
 ];
 
 export default async function IssuancePage() {
@@ -25,7 +31,7 @@ export default async function IssuancePage() {
   return (
     <div className="space-y-6">
       <SectionHeader title="Issue Credentials" description="Choose a batch or individual issuance workflow." />
-      <section className="grid gap-4 md:grid-cols-2">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {issuanceOptions.map((option) => {
           const Icon = option.icon;
 

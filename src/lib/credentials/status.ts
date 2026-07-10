@@ -21,6 +21,7 @@ import {
   mapCredoStateToCredentialStatus,
   type CredentialStateChangedWebhookPayload,
 } from "@/lib/credentials/statusMapping";
+import { getUniversityProfile } from "@/lib/university/profile";
 
 export { derivedCredentialEventId, mapCredoStateToCredentialStatus };
 
@@ -101,11 +102,20 @@ export async function overlayCredentialStatuses(students: StudentRecord[]): Prom
   );
 }
 
-export async function overlayCredentialStatusForStudent(student: StudentRecord): Promise<StudentRecord> {
-  const issuance = await prisma.credentialIssuance.findFirst({
+/**
+ * Finds the most recent `CredentialIssuance` for a student, looking up by
+ * both `studentNumber` and `profile.id` since either may have been used when
+ * the issuance was created.
+ */
+export async function findLatestCredentialIssuanceForStudent(student: StudentRecord) {
+  return prisma.credentialIssuance.findFirst({
     orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     where: { studentId: { in: [student.credential.studentNumber, student.profile.id] } },
   });
+}
+
+export async function overlayCredentialStatusForStudent(student: StudentRecord): Promise<StudentRecord> {
+  const issuance = await findLatestCredentialIssuanceForStudent(student);
 
   return overlayCredentialStatus(student, issuance ?? undefined);
 }
@@ -145,6 +155,7 @@ export async function createCredentialIssuanceFromOffer(params: {
   email?: string;
   expiresAt?: string;
   failureReason?: string;
+  renewedFromIssuanceId?: string;
   studentId: string;
   wasDelivered: boolean;
 }) {
@@ -158,10 +169,33 @@ export async function createCredentialIssuanceFromOffer(params: {
       deliveryStatus: params.wasDelivered ? CredentialDeliveryStatus.DELIVERED : CredentialDeliveryStatus.FAILED,
       email: params.email,
       failureReason: params.failureReason,
+      renewedFromIssuanceId: params.renewedFromIssuanceId,
       status: params.wasDelivered ? CredentialIssuanceStatus.OFFER_SENT : CredentialIssuanceStatus.FAILED,
       studentId: params.studentId,
     },
   });
+}
+
+function addMonths(date: Date, months: number) {
+  const result = new Date(date);
+  result.setUTCMonth(result.getUTCMonth() + months);
+  return result;
+}
+
+/**
+ * Computes a credential's validity expiry from the university's configured
+ * renewal cadence. Returns `null` if there's no `issuedAt` yet or auto-renewal
+ * is off (`renewalCadenceMonths` unset).
+ *
+ * @param issuedAt - When the credential was actually issued.
+ */
+async function computeCredentialExpiresAt(issuedAt: Date | null): Promise<Date | null> {
+  if (!issuedAt) return null;
+
+  const profile = await getUniversityProfile();
+  if (!profile?.renewalCadenceMonths) return null;
+
+  return addMonths(issuedAt, profile.renewalCadenceMonths);
 }
 
 /**
@@ -217,8 +251,13 @@ export async function reconcileCredentialEventLogs(credentialExchangeId: string)
   }
 
   if (status !== issuance.status || issuedAt?.getTime() !== issuance.issuedAt?.getTime()) {
+    const expiresAt =
+      status === CredentialIssuanceStatus.ISSUED && !issuance.expiresAt
+        ? await computeCredentialExpiresAt(issuedAt)
+        : issuance.expiresAt;
+
     await prisma.credentialIssuance.update({
-      data: { issuedAt, status },
+      data: { expiresAt, issuedAt, status },
       where: { id: issuance.id },
     });
   }
@@ -268,9 +307,16 @@ export async function recordCredentialStateChangedEvent(payload: CredentialState
 
   if (existingIssuance && mappedStatus) {
     if (shouldApplyStatus(mappedStatus, existingIssuance.status)) {
+      const nextIssuedAt = mappedStatus === CredentialIssuanceStatus.ISSUED ? occurredAt : existingIssuance.issuedAt;
+      const expiresAt =
+        mappedStatus === CredentialIssuanceStatus.ISSUED && !existingIssuance.expiresAt
+          ? await computeCredentialExpiresAt(nextIssuedAt)
+          : existingIssuance.expiresAt;
+
       await prisma.credentialIssuance.update({
         data: {
-          issuedAt: mappedStatus === CredentialIssuanceStatus.ISSUED ? occurredAt : existingIssuance.issuedAt,
+          expiresAt,
+          issuedAt: nextIssuedAt,
           status: mappedStatus,
         },
         where: { id: existingIssuance.id },
@@ -305,12 +351,13 @@ export async function getCredentialDeliveryByIssuanceId(issuanceId: string) {
 }
 
 export async function getDashboardCredentialSummary(): Promise<DashboardSummary> {
-  const [pendingIssuance, issuedCredentials, failedCredentials, activeBatchJobs, vendorsPendingApproval] = await Promise.all([
+  const [pendingIssuance, issuedCredentials, failedCredentials, expiredCredentials, activeBatchJobs, vendorsPendingApproval] = await Promise.all([
     prisma.credentialIssuance.count({
       where: { status: { in: [CredentialIssuanceStatus.OFFER_SENT, CredentialIssuanceStatus.ACCEPTED] } },
     }),
     prisma.credentialIssuance.count({ where: { status: CredentialIssuanceStatus.ISSUED } }),
     prisma.credentialIssuance.count({ where: { status: CredentialIssuanceStatus.FAILED } }),
+    prisma.credentialIssuance.count({ where: { status: CredentialIssuanceStatus.EXPIRED } }),
     prisma.batchIssuanceRun.count({
       where: { status: { in: [BatchIssuanceRunStatus.QUEUED, BatchIssuanceRunStatus.PROCESSING] } },
     }),
@@ -320,6 +367,7 @@ export async function getDashboardCredentialSummary(): Promise<DashboardSummary>
   return {
     activeBatchJobs,
     auditEventsToday: 0,
+    expiredCredentials,
     failedCredentials,
     issuedCredentials,
     pendingIssuance,

@@ -12,6 +12,7 @@ const dateTimeFormatter = new Intl.DateTimeFormat("en-ZA", {
 
 const credentialStatusLabels: Record<CredentialLifecycleState, string> = {
   ACCEPTED: "Accepted",
+  EXPIRED: "Expired",
   FAILED: "Failed",
   ISSUED: "Issued",
   NOT_ISSUED: "Not issued",
@@ -49,7 +50,7 @@ export function formatCredentialStatus(value: CredentialLifecycleState) {
 export function credentialStatusTone(value: CredentialLifecycleState) {
   if (value === "ISSUED") return "success";
   if (value === "FAILED" || value === "REVOKED") return "danger";
-  if (value === "OFFER_SENT" || value === "ACCEPTED") return "warning";
+  if (value === "OFFER_SENT" || value === "ACCEPTED" || value === "EXPIRED") return "warning";
   return "neutral";
 }
 

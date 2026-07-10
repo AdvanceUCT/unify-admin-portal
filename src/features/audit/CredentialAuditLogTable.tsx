@@ -14,6 +14,15 @@ type CredentialAuditLogTableProps = {
   totalPages: number;
 };
 
+const actionLabels: Partial<Record<CredentialAuditLogEntry["action"], string>> = {
+  OFFER_SENT: "Offer sent",
+  REISSUE_REQUESTED: "Renewal requested",
+};
+
+function actionLabel(action: CredentialAuditLogEntry["action"]) {
+  return actionLabels[action] ?? action;
+}
+
 function auditPageHref(page: number) {
   return `/audit?credentialPage=${page}`;
 }
@@ -71,13 +80,13 @@ export function CredentialAuditLogTable({ logs, page, pageSize, totalCount, tota
               {logs.length === 0 ? (
                 <tr>
                   <td className="px-5 py-12 text-center text-sm text-zinc-500" colSpan={6}>
-                    No credential offer logs found.
+                    No credential logs found.
                   </td>
                 </tr>
               ) : (
                 logs.map((log) => (
                   <tr key={log.id}>
-                    <td className="px-5 py-4 font-medium text-zinc-950">Offer sent</td>
+                    <td className="px-5 py-4 font-medium text-zinc-950">{actionLabel(log.action)}</td>
                     <td className="px-5 py-4 font-mono text-xs text-zinc-600">{log.actorId ?? "System"}</td>
                     <td className="px-5 py-4 font-medium text-zinc-900">{log.studentId}</td>
                     <td className="px-5 py-4">

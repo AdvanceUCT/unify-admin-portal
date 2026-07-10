@@ -26,6 +26,7 @@ const credentialStatusOptions: Array<{ label: string; value: "" | CredentialLife
   { label: formatCredentialStatus("ISSUED"), value: "ISSUED" },
   { label: formatCredentialStatus("FAILED"), value: "FAILED" },
   { label: formatCredentialStatus("REVOKED"), value: "REVOKED" },
+  { label: formatCredentialStatus("EXPIRED"), value: "EXPIRED" },
 ];
 
 const enrolmentStatusOptions: Array<StudentCredential["enrolmentStatus"]> = [

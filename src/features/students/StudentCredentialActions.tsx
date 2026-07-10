@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, ExternalLink, LoaderCircle, Send } from "lucide-react";
+import { Copy, ExternalLink, LoaderCircle, RefreshCw, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
@@ -13,9 +13,9 @@ type StudentCredentialActionsProps = {
   student: StudentRecord;
 };
 
-async function readErrorMessage(response: Response) {
+async function readErrorMessage(response: Response, fallback: string) {
   const body = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
-  return body?.error?.message ?? `Credential issue request failed with status ${response.status}.`;
+  return body?.error?.message ?? fallback;
 }
 
 export function StudentCredentialActions({ delivery, student }: StudentCredentialActionsProps) {
@@ -24,6 +24,7 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
   const [copyLabel, setCopyLabel] = useState("Copy");
   const [error, setError] = useState<string | null>(null);
   const [isIssuing, setIsIssuing] = useState(false);
+  const [isRenewing, setIsRenewing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const canIssue = useMemo(() => {
@@ -31,20 +32,29 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
     return stateAllowsIssue && currentDelivery?.status !== "Delivered";
   }, [currentDelivery?.status, student.credential.lifecycleState]);
 
-  async function issueCredential() {
+  const canRenew = useMemo(
+    () => ["ISSUED", "EXPIRED"].includes(student.credential.lifecycleState),
+    [student.credential.lifecycleState],
+  );
+
+  async function runIssuanceRequest(
+    endpoint: "issue" | "renew",
+    setLoading: (value: boolean) => void,
+    fallbackErrorMessage: string,
+  ) {
     setCopyLabel("Copy");
     setError(null);
-    setIsIssuing(true);
+    setLoading(true);
     setMessage(null);
 
     try {
-      const response = await fetch(`/api/students/${encodeURIComponent(student.profile.id)}/credentials/issue`, {
+      const response = await fetch(`/api/students/${encodeURIComponent(student.profile.id)}/credentials/${endpoint}`, {
         cache: "no-store",
         method: "POST",
       });
 
       if (!response.ok) {
-        throw new Error(await readErrorMessage(response));
+        throw new Error(await readErrorMessage(response, fallbackErrorMessage));
       }
 
       const result = (await response.json()) as BatchIssuanceResult;
@@ -57,11 +67,19 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
           : `Activation link was created, but email delivery failed${failureReason ? `: ${failureReason}` : "."}`,
       );
       router.refresh();
-    } catch (issueError) {
-      setError(issueError instanceof Error ? issueError.message : "Credential issue request failed.");
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : fallbackErrorMessage);
     } finally {
-      setIsIssuing(false);
+      setLoading(false);
     }
+  }
+
+  async function issueCredential() {
+    await runIssuanceRequest("issue", setIsIssuing, "Credential issue request failed.");
+  }
+
+  async function renewCredential() {
+    await runIssuanceRequest("renew", setIsRenewing, "Credential renewal request failed.");
   }
 
   async function copyActivationLink() {
@@ -91,11 +109,21 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
             {isIssuing ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Send aria-hidden className="size-4" />}
             {isIssuing ? "Issuing..." : "Issue credential"}
           </button>
+        ) : canRenew ? (
+          <button
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-zinc-950 bg-zinc-950 px-3 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:border-zinc-300 disabled:bg-zinc-200 disabled:text-zinc-500"
+            disabled={isRenewing}
+            onClick={renewCredential}
+            type="button"
+          >
+            {isRenewing ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <RefreshCw aria-hidden className="size-4" />}
+            {isRenewing ? "Renewing..." : "Renew"}
+          </button>
         ) : (
           <p className="text-sm text-zinc-600">No credential actions are available for this lifecycle state.</p>
         )}
         <p className="mt-3 text-xs leading-5 text-zinc-500">
-          Suspend, reinstate, revoke, and renew will stay unavailable until the issuer agent exposes matching lifecycle endpoints.
+          Suspend, reinstate, and revoke will stay unavailable until the issuer agent exposes matching lifecycle endpoints.
         </p>
       </div>
 

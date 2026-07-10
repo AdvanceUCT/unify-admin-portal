@@ -128,6 +128,58 @@ describe("StudentCredentialActions", () => {
     expect(screen.getByDisplayValue("http://localhost:3000/activate?token=caleb-token")).toBeInTheDocument();
   });
 
+  it("shows a working renew action for an issued credential and calls the renew endpoint", async () => {
+    if (!caleb) throw new Error("Caleb test record missing.");
+
+    const issuedCaleb = {
+      ...caleb,
+      credential: { ...caleb.credential, lifecycleState: "ISSUED" as const },
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            activationDeliveries: [
+              {
+                activationId: "activation-caleb-renewed",
+                activationUrl: "http://localhost:3000/activate?token=caleb-renewed-token",
+                batchId: "batch-002",
+                channel: "activation-link",
+                credentialId: "credential-demo-100-renewed",
+                deliveredAt: "2026-07-10T10:00:00.000Z",
+                email: "caleb.voskuil@gmail.com",
+                expiresAt: "2027-01-10T10:00:00.000Z",
+                id: "activation-delivery-activation-caleb-renewed",
+                status: "Delivered",
+                studentId: "student-demo-100",
+              },
+            ],
+            batchId: "batch-002",
+            cohortId: "simulated-2026-cohort",
+            issuedCredentialIds: ["credential-demo-100-renewed"],
+            queuedAt: "2026-07-10T10:00:00.000Z",
+            requestedCount: 1,
+            status: "Queued",
+          }),
+          { headers: { "Content-Type": "application/json" }, status: 201 },
+        ),
+      ),
+    );
+
+    render(<StudentCredentialActions student={issuedCaleb} />);
+
+    expect(screen.queryByRole("button", { name: "Issue credential" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Renew" }));
+
+    await screen.findByText("Activation link delivered to caleb.voskuil@gmail.com.");
+    expect(fetch).toHaveBeenCalledWith("/api/students/student-demo-100/credentials/renew", {
+      cache: "no-store",
+      method: "POST",
+    });
+  });
+
   it("copies an existing activation link", async () => {
     if (!caleb) throw new Error("Caleb test record missing.");
 

@@ -1,9 +1,19 @@
 import "server-only";
 
 import { CredentialAuditAction, CredentialDeliveryStatus } from "@/generated/prisma/enums";
+import type { Prisma } from "@/generated/prisma/client";
 import type { CredentialAuditLogModel } from "@/generated/prisma/models";
 import type { CredentialAuditLogEntry } from "@/lib/api/types";
 import { prisma } from "@/lib/db/prisma";
+
+type RecordCredentialReissueRequestedAuditInput = {
+  actorId?: string | null;
+  credentialDefinitionId: string;
+  credentialExchangeId?: string | null;
+  credentialIssuanceId: string;
+  studentId: string;
+  trigger: "AUTO" | "MANUAL";
+};
 
 type RecordCredentialOfferSentAuditInput = {
   actorId?: string | null;
@@ -81,15 +91,49 @@ export async function recordCredentialOfferSentAudit({
 }
 
 /**
- * Returns a paginated list of `OFFER_SENT` audit log entries.
- * The page number is clamped between 1 and the last available page so
- * out-of-range requests always return a valid result.
+ * Writes a `REISSUE_REQUESTED` audit log entry for a credential renewal.
+ * Accepts an optional transaction client so it can be written atomically
+ * alongside the status flip that expires the old issuance.
+ */
+export async function recordCredentialReissueRequestedAudit(
+  {
+    actorId,
+    credentialDefinitionId,
+    credentialExchangeId,
+    credentialIssuanceId,
+    studentId,
+    trigger,
+  }: RecordCredentialReissueRequestedAuditInput,
+  database: Pick<Prisma.TransactionClient, "credentialAuditLog"> = prisma,
+) {
+  await database.credentialAuditLog.create({
+    data: {
+      action: CredentialAuditAction.REISSUE_REQUESTED,
+      actorId,
+      credentialDefinitionId,
+      credentialExchangeId,
+      credentialIssuanceId,
+      message:
+        trigger === "AUTO"
+          ? "Credential renewal triggered automatically by the configured cadence."
+          : "Credential renewal triggered manually by an administrator.",
+      metadata: { trigger },
+      studentId,
+    },
+  });
+}
+
+/**
+ * Returns a paginated list of `OFFER_SENT` and `REISSUE_REQUESTED` audit log
+ * entries (issuance and renewal activity). The page number is clamped between
+ * 1 and the last available page so out-of-range requests always return a
+ * valid result.
  *
  * @param page - The requested page number (1-indexed).
  * @param pageSize - How many entries to return per page.
  * @returns Logs for the clamped page along with total count and page metadata.
  */
-export async function getPaginatedCredentialOfferSentAuditLogs({
+export async function getPaginatedCredentialAuditLogs({
   page,
   pageSize,
 }: {
@@ -98,7 +142,9 @@ export async function getPaginatedCredentialOfferSentAuditLogs({
 }): Promise<{ logs: CredentialAuditLogEntry[]; page: number; pageSize: number; totalCount: number; totalPages: number }> {
   const currentPage = Math.max(1, page);
   const take = Math.max(1, pageSize);
-  const where = { action: CredentialAuditAction.OFFER_SENT };
+  const where = {
+    action: { in: [CredentialAuditAction.OFFER_SENT, CredentialAuditAction.REISSUE_REQUESTED] },
+  };
   const totalCount = await prisma.credentialAuditLog.count({ where });
   const totalPages = Math.max(1, Math.ceil(totalCount / take));
   const clampedPage = Math.min(currentPage, totalPages);

@@ -22,6 +22,7 @@ export default async function AdminOverviewPage() {
         <Metric label="Issued credentials" value={summary.issuedCredentials} detail="stored by students" />
         <Metric label="Pending issuance" value={summary.pendingIssuance} detail="sent or accepted" />
         <Metric label="Failed credentials" value={summary.failedCredentials} detail="ready to retry" />
+        <Metric label="Expired credentials" value={summary.expiredCredentials} detail="awaiting renewal" />
         <Metric label="Active batches" value={summary.activeBatchJobs} detail="queued or processing" />
       </section>
 

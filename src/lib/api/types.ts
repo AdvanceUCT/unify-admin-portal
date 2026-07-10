@@ -12,7 +12,8 @@ export type CredentialLifecycleState =
   | "ACCEPTED"
   | "ISSUED"
   | "FAILED"
-  | "REVOKED";
+  | "REVOKED"
+  | "EXPIRED";
 
 export type StoredCredentialLifecycleState = Exclude<CredentialLifecycleState, "NOT_ISSUED">;
 
@@ -154,6 +155,7 @@ export type EligibilityRule = {
 
 export type DashboardSummary = {
   activeBatchJobs: number;
+  expiredCredentials: number;
   failedCredentials: number;
   issuedCredentials: number;
   pendingIssuance: number;

@@ -189,17 +189,18 @@ enum VendorVerificationStatus {
 }
 
 model UniversityProfile {
-  id                 String             @id @default(cuid())
-  name               String
-  abbreviation       String
-  logoUrl            String?
-  contactEmail       String
-  issuerDid          String?
-  setupStatus        SetupStatus        @default(PENDING)
-  setupCompletedAt   DateTime?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  credentialSchemas  CredentialSchema[]
+  id                   String             @id @default(cuid())
+  name                 String
+  abbreviation         String
+  logoUrl              String?
+  contactEmail         String
+  issuerDid            String?
+  setupStatus          SetupStatus        @default(PENDING)
+  setupCompletedAt     DateTime?
+  renewalCadenceMonths Int?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  credentialSchemas    CredentialSchema[]
 
   @@map("university_profile")
 }
@@ -232,12 +233,16 @@ model CredentialIssuance {
   activationId           String?
   activationUrl          String?
   activationExpiresAt    DateTime?
+  expiresAt              DateTime?
   email                  String?
   deliveryStatus         CredentialDeliveryStatus   @default(PENDING)
   status                 CredentialIssuanceStatus
   failureReason          String?
   issuedAt               DateTime?
   revokedAt              DateTime?
+  renewedFromIssuanceId  String?                    @unique
+  renewedFromIssuance    CredentialIssuance?        @relation("CredentialRenewal", fields: [renewedFromIssuanceId], references: [id])
+  renewedIntoIssuance    CredentialIssuance?        @relation("CredentialRenewal")
   createdAt              DateTime                   @default(now())
   updatedAt              DateTime                   @updatedAt
   batchItem              BatchIssuanceItem?
@@ -245,6 +250,7 @@ model CredentialIssuance {
   @@index([studentId])
   @@index([credentialDefinitionId])
   @@index([status])
+  @@index([status, expiresAt])
   @@index([createdAt])
   @@map("credential_issuance")
 }
@@ -369,6 +375,7 @@ enum CredentialIssuanceStatus {
   ISSUED
   FAILED
   REVOKED
+  EXPIRED
 }
 
 enum CredentialDeliveryStatus {
@@ -442,4 +449,5 @@ enum AuditAction {
   VENDOR_APPLICATION_REVOKED
   SCHEMA_VERSION_CREATED
   SCHEMA_PUBLISHED
+  RENEWAL_CADENCE_UPDATED
 }
