@@ -6,6 +6,7 @@ import {
   isRelevantCredentialStateChangedPayload,
   mapCredoStateToCredentialStatus,
 } from "@/lib/credentials/statusMapping";
+import { toPublicCredentialStatus } from "@/lib/credentials/lifecycle";
 
 describe("credential status mapping", () => {
   it("maps Credo credential exchange states to portal statuses", () => {
@@ -48,4 +49,26 @@ describe("credential status mapping", () => {
 
     expect(derivedCredentialEventId(payload)).toBe(derivedCredentialEventId(payload));
   });
+
+  it("maps issued credentials without revocation handles to the legacy lifecycle state", () => {
+    expect(
+      toPublicCredentialStatus({
+        credentialExpiresAt: null,
+        credentialRevocationId: null,
+        lifecycleStatus: null,
+        revocationRegistryDefinitionId: null,
+        status: CredentialIssuanceStatus.ISSUED,
+      }),
+    ).toBe("LEGACY_NON_REVOCABLE");
+    expect(
+      toPublicCredentialStatus({
+        credentialExpiresAt: null,
+        credentialRevocationId: "1",
+        lifecycleStatus: null,
+        revocationRegistryDefinitionId: "rev-reg-1",
+        status: CredentialIssuanceStatus.ISSUED,
+      }),
+    ).toBe("ACTIVE");
+  });
+
 });

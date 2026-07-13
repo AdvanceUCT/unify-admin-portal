@@ -23,7 +23,11 @@ export function IssuanceSetupStep({
     setError(null);
     setIsWorking(true);
     try {
-      await runIssuanceSetupAction();
+      const result = await runIssuanceSetupAction();
+      if (!result.ok) {
+        setError(result.error ?? "Issuance setup failed.");
+        return;
+      }
       onComplete();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Issuance setup failed.");

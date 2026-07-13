@@ -10,7 +10,10 @@ export type CredentialLifecycleState =
   | "NOT_ISSUED"
   | "OFFER_SENT"
   | "ACCEPTED"
-  | "ISSUED"
+  | "ACTIVE"
+  | "SUSPENDED"
+  | "EXPIRED"
+  | "LEGACY_NON_REVOCABLE"
   | "FAILED"
   | "REVOKED";
 
@@ -23,6 +26,7 @@ export type StudentCredential = {
   faculty?: string;
   programme: string;
   lifecycleState: CredentialLifecycleState;
+  isRevocable?: boolean;
   studentNumber: string;
   validFrom: string;
   expiresAt: string;
@@ -172,7 +176,18 @@ export type CredentialActivityEvent = {
 };
 
 export type CredentialAuditLogEntry = {
-  action: "OFFER_SENT" | "OFFER_DELIVERY_FAILED" | "REISSUE_REQUESTED" | "REVOCATION_REQUESTED" | "REVOCATION_COMPLETED";
+  action:
+    | "OFFER_SENT"
+    | "OFFER_DELIVERY_FAILED"
+    | "REISSUE_REQUESTED"
+    | "REVOCATION_REQUESTED"
+    | "REVOCATION_COMPLETED"
+    | "CREDENTIAL_LIFECYCLE_ACTIVATED"
+    | "CREDENTIAL_SUSPENDED"
+    | "CREDENTIAL_REACTIVATED"
+    | "CREDENTIAL_REVOKED"
+    | "CREDENTIAL_EXPIRED"
+    | "CREDENTIAL_RENEWAL_REQUESTED";
   actorId?: string | null;
   batchId?: string | null;
   batchItemId?: string | null;

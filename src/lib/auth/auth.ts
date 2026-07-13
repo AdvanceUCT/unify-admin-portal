@@ -11,6 +11,34 @@ import { sendPasswordResetEmail } from "@/lib/email/password-reset";
 
 const passwordResetTokenExpiresIn = 60 * 60;
 
+function toHttpsOrigin(value: string | undefined) {
+  if (!value) {
+    return undefined;
+  }
+
+  return value.startsWith("http://") || value.startsWith("https://")
+    ? value
+    : `https://${value}`;
+}
+
+const vercelDeploymentOrigin = toHttpsOrigin(process.env.VERCEL_URL);
+const vercelBranchOrigin = toHttpsOrigin(process.env.VERCEL_BRANCH_URL);
+const authBaseURL =
+  process.env.VERCEL_ENV === "preview" && vercelDeploymentOrigin
+    ? vercelDeploymentOrigin
+    : env.BETTER_AUTH_URL;
+const trustedOrigins = Array.from(
+  new Set(
+    [
+      env.APP_URL,
+      env.BETTER_AUTH_URL,
+      authBaseURL,
+      vercelDeploymentOrigin,
+      vercelBranchOrigin,
+    ].filter((origin): origin is string => Boolean(origin)),
+  ),
+);
+
 /**
  * BetterAuth instance shared by the admin portal and the vendor portal.
  *
@@ -32,8 +60,8 @@ export const auth = betterAuth({
     provider: "postgresql",
   }),
   secret: env.BETTER_AUTH_SECRET,
-  baseURL: env.BETTER_AUTH_URL,
-  trustedOrigins: [env.APP_URL],
+  baseURL: authBaseURL,
+  trustedOrigins,
   user: {
     additionalFields: {
       userType: {

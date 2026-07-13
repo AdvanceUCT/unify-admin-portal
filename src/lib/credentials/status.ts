@@ -5,15 +5,12 @@ import {
   CredentialDeliveryStatus,
   CredentialEventType,
   CredentialIssuanceStatus,
+  CredentialLifecycleStatus,
   VendorApplicationStatus,
 } from "@/generated/prisma/enums";
 import type { CredentialEventLog, CredentialIssuance } from "@/generated/prisma/client";
-import type {
-  CredentialActivityEvent,
-  CredentialLifecycleState,
-  DashboardSummary,
-  StudentRecord,
-} from "@/lib/api/types";
+import type { CredentialActivityEvent, DashboardSummary, StudentRecord } from "@/lib/api/types";
+import { toPublicCredentialStatus, type CredentialLifecycleSource } from "@/lib/credentials/lifecycle";
 import { prisma } from "@/lib/db/prisma";
 import {
   derivedCredentialEventId,
@@ -30,12 +27,8 @@ export const ACTIVE_CREDENTIAL_STATUSES = [
   CredentialIssuanceStatus.ISSUED,
 ] as const;
 
-function isCredentialIssuanceStatus(value: string): value is CredentialIssuanceStatus {
-  return Object.values(CredentialIssuanceStatus).includes(value as CredentialIssuanceStatus);
-}
-
-export function toPublicCredentialStatus(status?: CredentialIssuanceStatus | null): CredentialLifecycleState {
-  return status && isCredentialIssuanceStatus(status) ? status : "NOT_ISSUED";
+function hasRevocationHandle(issuance?: Pick<CredentialLifecycleSource, "credentialRevocationId" | "revocationRegistryDefinitionId"> | null) {
+  return Boolean(issuance?.revocationRegistryDefinitionId && issuance.credentialRevocationId);
 }
 
 /**
@@ -59,14 +52,15 @@ function latestIssuanceByStudent(issuances: CredentialIssuance[]) {
 
 export function overlayCredentialStatus(
   student: StudentRecord,
-  issuance?: Pick<CredentialIssuance, "id" | "status" | "credentialDefinitionId" | "credentialExchangeId">,
+  issuance?: CredentialLifecycleSource & Pick<CredentialIssuance, "credentialDefinitionId" | "credentialExchangeId" | "id">,
 ): StudentRecord {
   return {
     ...student,
     credential: {
       ...student.credential,
       id: issuance?.id ?? student.credential.id,
-      lifecycleState: toPublicCredentialStatus(issuance?.status),
+      isRevocable: hasRevocationHandle(issuance),
+      lifecycleState: toPublicCredentialStatus(issuance),
     },
   };
 }
@@ -142,9 +136,11 @@ export async function createCredentialIssuanceFromOffer(params: {
   activationUrl?: string;
   credentialDefinitionId: string;
   credentialExchangeId: string;
+  credentialRevocationId?: string;
   email?: string;
   expiresAt?: string;
   failureReason?: string;
+  revocationRegistryDefinitionId?: string;
   studentId: string;
   wasDelivered: boolean;
 }) {
@@ -155,9 +151,11 @@ export async function createCredentialIssuanceFromOffer(params: {
       activationUrl: params.activationUrl,
       credentialDefinitionId: params.credentialDefinitionId,
       credentialExchangeId: params.credentialExchangeId,
+      credentialRevocationId: params.credentialRevocationId,
       deliveryStatus: params.wasDelivered ? CredentialDeliveryStatus.DELIVERED : CredentialDeliveryStatus.FAILED,
       email: params.email,
       failureReason: params.failureReason,
+      revocationRegistryDefinitionId: params.revocationRegistryDefinitionId,
       status: params.wasDelivered ? CredentialIssuanceStatus.OFFER_SENT : CredentialIssuanceStatus.FAILED,
       studentId: params.studentId,
     },
@@ -204,21 +202,46 @@ export async function reconcileCredentialEventLogs(credentialExchangeId: string)
     orderBy: { occurredAt: "asc" },
     where: { credentialExchangeId },
   });
+  let credentialRevocationId = issuance.credentialRevocationId;
+  let lifecycleStatus = issuance.lifecycleStatus;
+  let lifecycleStatusUpdatedAt = issuance.lifecycleStatusUpdatedAt;
+  let revocationRegistryDefinitionId = issuance.revocationRegistryDefinitionId;
   let status = issuance.status;
   let issuedAt = issuance.issuedAt;
 
   for (const event of events) {
     const mapped = mapCredoStateToCredentialStatus(event.state, status);
     if (!mapped || !shouldApplyStatus(mapped, status)) continue;
+    const payload = event.payload as CredentialStateChangedWebhookPayload;
     status = mapped;
     if (mapped === CredentialIssuanceStatus.ISSUED) {
       issuedAt = event.occurredAt;
+      credentialRevocationId = payload.credentialRevocationId ?? credentialRevocationId;
+      revocationRegistryDefinitionId = payload.revocationRegistryDefinitionId ?? revocationRegistryDefinitionId;
+      if (credentialRevocationId && revocationRegistryDefinitionId) {
+        lifecycleStatus = CredentialLifecycleStatus.ACTIVE;
+        lifecycleStatusUpdatedAt = event.occurredAt;
+      }
     }
   }
 
-  if (status !== issuance.status || issuedAt?.getTime() !== issuance.issuedAt?.getTime()) {
+  if (
+    status !== issuance.status ||
+    issuedAt?.getTime() !== issuance.issuedAt?.getTime() ||
+    credentialRevocationId !== issuance.credentialRevocationId ||
+    revocationRegistryDefinitionId !== issuance.revocationRegistryDefinitionId ||
+    lifecycleStatus !== issuance.lifecycleStatus ||
+    lifecycleStatusUpdatedAt?.getTime() !== issuance.lifecycleStatusUpdatedAt?.getTime()
+  ) {
     await prisma.credentialIssuance.update({
-      data: { issuedAt, status },
+      data: {
+        credentialRevocationId,
+        issuedAt,
+        lifecycleStatus,
+        lifecycleStatusUpdatedAt,
+        revocationRegistryDefinitionId,
+        status,
+      },
       where: { id: issuance.id },
     });
   }
@@ -268,9 +291,21 @@ export async function recordCredentialStateChangedEvent(payload: CredentialState
 
   if (existingIssuance && mappedStatus) {
     if (shouldApplyStatus(mappedStatus, existingIssuance.status)) {
+      const hasRevocationMetadata = Boolean(payload.credentialRevocationId && payload.revocationRegistryDefinitionId);
       await prisma.credentialIssuance.update({
         data: {
+          credentialRevocationId: payload.credentialRevocationId ?? existingIssuance.credentialRevocationId,
           issuedAt: mappedStatus === CredentialIssuanceStatus.ISSUED ? occurredAt : existingIssuance.issuedAt,
+          lifecycleStatus:
+            mappedStatus === CredentialIssuanceStatus.ISSUED && hasRevocationMetadata
+              ? CredentialLifecycleStatus.ACTIVE
+              : existingIssuance.lifecycleStatus,
+          lifecycleStatusUpdatedAt:
+            mappedStatus === CredentialIssuanceStatus.ISSUED && hasRevocationMetadata
+              ? occurredAt
+              : existingIssuance.lifecycleStatusUpdatedAt,
+          revocationRegistryDefinitionId:
+            payload.revocationRegistryDefinitionId ?? existingIssuance.revocationRegistryDefinitionId,
           status: mappedStatus,
         },
         where: { id: existingIssuance.id },
@@ -356,13 +391,28 @@ export async function getRecentCredentialActivityEvents(limit = 10): Promise<Cre
       .map((issuance) => [issuance.credentialExchangeId, issuance]),
   );
 
-  return events.map((event: CredentialEventLog) => ({
-    credentialExchangeId: event.credentialExchangeId,
-    id: event.id,
-    occurredAt: event.occurredAt.toISOString(),
-    previousState: event.previousState ?? undefined,
-    state: event.state,
-    status: event.status ?? undefined,
-    studentId: issuanceByCredentialExchangeId.get(event.credentialExchangeId)?.studentId,
-  }));
+  return events.map((event: CredentialEventLog) => {
+    const issuance = issuanceByCredentialExchangeId.get(event.credentialExchangeId);
+    const status = issuance
+      ? toPublicCredentialStatus(issuance)
+      : event.status
+        ? toPublicCredentialStatus({
+            credentialExpiresAt: null,
+            credentialRevocationId: null,
+            lifecycleStatus: null,
+            revocationRegistryDefinitionId: null,
+            status: event.status,
+          })
+        : undefined;
+
+    return {
+      credentialExchangeId: event.credentialExchangeId,
+      id: event.id,
+      occurredAt: event.occurredAt.toISOString(),
+      previousState: event.previousState ?? undefined,
+      state: event.state,
+      status: status === "NOT_ISSUED" ? undefined : status,
+      studentId: issuance?.studentId,
+    };
+  });
 }

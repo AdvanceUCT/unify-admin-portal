@@ -63,7 +63,9 @@ function activationIdForToken(token: string) {
 }
 
 function dashboardSummary(state: MockActivationState): DashboardSummary {
-  const issuedCredentials = state.students.filter((student) => student.credential.lifecycleState === "ISSUED").length;
+  const issuedCredentials = state.students.filter((student) =>
+    ["ACTIVE", "LEGACY_NON_REVOCABLE"].includes(student.credential.lifecycleState),
+  ).length;
   const failedCredentials = state.students.filter((student) => student.credential.lifecycleState === "FAILED").length;
   const pendingIssuance = state.students.filter((student) =>
     ["OFFER_SENT", "ACCEPTED"].includes(student.credential.lifecycleState),

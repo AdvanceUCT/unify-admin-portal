@@ -6,11 +6,26 @@ export type CredentialStateChangedWebhookPayload = {
   connectionId?: string;
   credentialDefinitionId?: string;
   credentialExchangeId: string;
+  credentialRevocationId?: string;
   eventId?: string;
   previousState?: string | null;
+  revocationRegistryDefinitionId?: string;
   state: string;
   timestamp: string;
   type: "credential.stateChanged";
+};
+
+export type CredentialLifecycleChangedWebhookPayload = {
+  credentialExchangeId: string;
+  credentialRevocationId: string;
+  eventId: string;
+  previousStatus: "ACTIVE" | "SUSPENDED" | "REVOKED";
+  reason?: string;
+  revocationRegistryDefinitionId: string;
+  status: "ACTIVE" | "SUSPENDED" | "REVOKED";
+  statusListTimestamp?: number;
+  timestamp: string;
+  type: "credential.lifecycleChanged";
 };
 
 const failedCredoStates = new Set([

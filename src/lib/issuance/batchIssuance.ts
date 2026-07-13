@@ -33,11 +33,14 @@ const DEFAULT_YEAR = "2026";
 const MAX_BATCH_ISSUANCE_LIMIT = 100_000;
 const credentialStatuses = new Set<CredentialLifecycleState>([
   "ACCEPTED",
+  "ACTIVE",
+  "EXPIRED",
   "FAILED",
-  "ISSUED",
+  "LEGACY_NON_REVOCABLE",
   "NOT_ISSUED",
   "OFFER_SENT",
   "REVOKED",
+  "SUSPENDED",
 ]);
 
 /**
@@ -221,6 +224,7 @@ export async function getActiveCredentialDefinition() {
 
   return {
     credentialDefinitionId: activeSchema.credentialDefinitionId,
+    revocationRegistryDefinitionId: activeSchema.revocationRegistryDefinitionId ?? undefined,
     schemaAttributes: activeSchema.schemaAttributes,
   };
 }
@@ -273,6 +277,9 @@ async function issueStudentActivationLinks(
 
   const agentResult = await createBatchActivationLinks({
     credentialDefinitionId: activeSchema.credentialDefinitionId,
+    ...(activeSchema.revocationRegistryDefinitionId
+      ? { revocationRegistryDefinitionId: activeSchema.revocationRegistryDefinitionId }
+      : {}),
     students: studentsForIssuance.map((student) => ({
       attributes: attributesForStudent(student, activeSchema.schemaAttributes),
       email: student.profile.email,
@@ -293,9 +300,11 @@ async function issueStudentActivationLinks(
       activationUrl: publicActivationUrl,
       credentialDefinitionId: activeSchema.credentialDefinitionId,
       credentialExchangeId: offer.credentialExchangeId,
+      credentialRevocationId: offer.credentialRevocationId,
       email: offer.email,
       expiresAt: offer.expiresAt,
       failureReason: emailDelivery.status === "Failed" ? emailDelivery.failureReason : undefined,
+      revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId,
       studentId: persistedStudentId,
       wasDelivered: emailDelivery.status === "Delivered",
     });

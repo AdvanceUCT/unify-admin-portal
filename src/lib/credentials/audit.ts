@@ -58,6 +58,7 @@ export async function recordCredentialOfferSentAudit({
 }: RecordCredentialOfferSentAuditInput) {
   await prisma.credentialAuditLog.createMany({
     data: {
+      eventId: `offer:${credentialExchangeId}`,
       action: CredentialAuditAction.OFFER_SENT,
       actorId,
       batchId,
@@ -81,7 +82,7 @@ export async function recordCredentialOfferSentAudit({
 }
 
 /**
- * Returns a paginated list of `OFFER_SENT` audit log entries.
+ * Returns a paginated list of credential audit log entries.
  * The page number is clamped between 1 and the last available page so
  * out-of-range requests always return a valid result.
  *
@@ -98,15 +99,13 @@ export async function getPaginatedCredentialOfferSentAuditLogs({
 }): Promise<{ logs: CredentialAuditLogEntry[]; page: number; pageSize: number; totalCount: number; totalPages: number }> {
   const currentPage = Math.max(1, page);
   const take = Math.max(1, pageSize);
-  const where = { action: CredentialAuditAction.OFFER_SENT };
-  const totalCount = await prisma.credentialAuditLog.count({ where });
+  const totalCount = await prisma.credentialAuditLog.count();
   const totalPages = Math.max(1, Math.ceil(totalCount / take));
   const clampedPage = Math.min(currentPage, totalPages);
   const logs = await prisma.credentialAuditLog.findMany({
     orderBy: { occurredAt: "desc" },
     skip: (clampedPage - 1) * take,
     take,
-    where,
   });
 
   return {

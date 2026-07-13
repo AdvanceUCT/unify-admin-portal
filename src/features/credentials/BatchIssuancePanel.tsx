@@ -21,7 +21,10 @@ const credentialStatusOptions: Array<{ label: string; value: "" | CredentialLife
   { label: formatCredentialStatus("NOT_ISSUED"), value: "NOT_ISSUED" },
   { label: formatCredentialStatus("OFFER_SENT"), value: "OFFER_SENT" },
   { label: formatCredentialStatus("ACCEPTED"), value: "ACCEPTED" },
-  { label: formatCredentialStatus("ISSUED"), value: "ISSUED" },
+  { label: formatCredentialStatus("ACTIVE"), value: "ACTIVE" },
+  { label: formatCredentialStatus("SUSPENDED"), value: "SUSPENDED" },
+  { label: formatCredentialStatus("EXPIRED"), value: "EXPIRED" },
+  { label: formatCredentialStatus("LEGACY_NON_REVOCABLE"), value: "LEGACY_NON_REVOCABLE" },
   { label: formatCredentialStatus("FAILED"), value: "FAILED" },
   { label: formatCredentialStatus("REVOKED"), value: "REVOKED" },
 ];
