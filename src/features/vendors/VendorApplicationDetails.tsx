@@ -223,10 +223,11 @@ export function VendorApplicationDetails({
                     {signedUrl ? (
                       <a
                         className="text-zinc-700 underline underline-offset-2 hover:text-zinc-950"
-                        download
                         href={signedUrl}
+                        rel="noopener noreferrer"
+                        target="_blank"
                       >
-                        Download
+                        Open
                       </a>
                     ) : (
                       <span className="text-emerald-600">Uploaded</span>
