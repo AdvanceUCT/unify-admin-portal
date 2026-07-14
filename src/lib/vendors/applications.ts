@@ -50,14 +50,6 @@ const step2Schema = z.object({
 
 const step3Schema = z.object({
   justification: z.string().trim().min(1, "Purpose for verification is required"),
-  description: z
-    .string()
-    .trim()
-    .min(1, "Intended use is required")
-    .refine(
-      (v) => v.split(/\s+/).filter(Boolean).length <= 200,
-      "Description must be 200 words or fewer",
-    ),
   additionalInfo: z.string().trim().optional(),
 });
 
@@ -171,7 +163,6 @@ export async function createVendorApplication({
           snapshotContactEmail: data.contactEmail,
           snapshotContactPersonName: data.contactPersonName,
           snapshotWebsite: data.website || null,
-          snapshotDescription: data.description,
         },
       });
 
@@ -427,8 +418,6 @@ export async function reviewVendorApplication({
               application.snapshotContactPersonName ??
               application.vendorProfile.contactPersonName,
             website: application.snapshotWebsite,
-            description:
-              application.snapshotDescription ?? application.vendorProfile.description,
           },
         });
 
@@ -648,7 +637,6 @@ export async function saveDraftApplication(
       where: { id: applicationId },
       data: {
         justification: d.justification,
-        snapshotDescription: d.description,
         additionalInfo: d.additionalInfo || null,
       },
     });
@@ -714,7 +702,6 @@ export async function submitDraftApplication(applicationId: string, userId: stri
     if (!app.contactPhone) missing.push("phone number");
     if (!app.preferredContactMethod) missing.push("preferred contact method");
     if (!app.justification) missing.push("purpose for verification");
-    if (!app.snapshotDescription) missing.push("intended use");
     if (!app.docRegistrationCertificate) missing.push("registration certificate");
     if (!app.docProofOfAddress) missing.push("proof of address");
     if (!app.docRepresentativeId) missing.push("representative ID");

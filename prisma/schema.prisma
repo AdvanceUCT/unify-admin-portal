@@ -139,7 +139,6 @@ model VendorApplication {
   snapshotContactEmail      String?
   snapshotContactPersonName String?
   snapshotWebsite           String?
-  snapshotDescription       String?
   // Step 1 — Organisation Information
   tradingName               String?
   organisationType          String?

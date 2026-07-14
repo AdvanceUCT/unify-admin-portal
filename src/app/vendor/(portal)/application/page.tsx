@@ -37,7 +37,6 @@ export default async function VendorApplicationPage() {
       contactEmployeeNumber: application?.contactEmployeeNumber ?? "",
       preferredContactMethod: application?.preferredContactMethod ?? "",
       justification: application?.justification ?? "",
-      description: application?.snapshotDescription ?? "",
       additionalInfo: application?.additionalInfo ?? "",
 
       docRegistrationCertificate: application?.docRegistrationCertificate ?? null,

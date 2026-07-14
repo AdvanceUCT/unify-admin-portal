@@ -86,7 +86,6 @@ export function StepReview({
 
         <ReviewSection title="Verification requirements">
           <ReviewRow label="Purpose" value={initialData.justification} />
-          <ReviewRow label="Intended use" value={initialData.description} />
           <ReviewRow label="Additional info" value={initialData.additionalInfo} />
         </ReviewSection>
 

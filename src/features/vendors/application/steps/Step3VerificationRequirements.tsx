@@ -70,21 +70,6 @@ export function Step3VerificationRequirements({
         </div>
 
         <div>
-          <label className={LABEL} htmlFor="description">
-            Intended use of credential verification <span className="text-red-500">*</span>
-          </label>
-          <textarea
-            className={TEXTAREA}
-            defaultValue={initialData.description}
-            id="description"
-            name="description"
-            placeholder="Describe how verified credentials will be used in your service or process."
-            required
-          />
-          <p className="mt-1 text-xs text-zinc-500">200 words or fewer.</p>
-        </div>
-
-        <div>
           <label className={LABEL} htmlFor="additionalInfo">
             Additional information <span className={OPTIONAL}>(optional)</span>
           </label>

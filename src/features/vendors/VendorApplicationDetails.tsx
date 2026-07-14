@@ -27,7 +27,6 @@ type VendorApplicationDetailsProps = {
     snapshotContactEmail: string | null;
     snapshotContactPersonName: string | null;
     snapshotWebsite: string | null;
-    snapshotDescription: string | null;
     tradingName: string | null;
     organisationType: string | null;
     physicalAddress: string | null;
@@ -180,22 +179,12 @@ export function VendorApplicationDetails({
       )}
 
       {/* Verification requirements */}
-      {(application.justification || application.snapshotDescription) && (
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div className="rounded-lg border border-zinc-200 bg-white p-4">
-            <h3 className="mb-2 text-sm font-semibold text-zinc-800">Purpose for verification</h3>
-            <p className="text-sm text-zinc-600 whitespace-pre-line">
-              {application.justification ?? "Not provided"}
-            </p>
-          </div>
-          <div className="rounded-lg border border-zinc-200 bg-white p-4">
-            <h3 className="mb-2 text-sm font-semibold text-zinc-800">Intended use</h3>
-            <p className="text-sm text-zinc-600 whitespace-pre-line">
-              {application.snapshotDescription ??
-                application.vendorProfile.description ??
-                "Not provided"}
-            </p>
-          </div>
+      {application.justification && (
+        <div className="rounded-lg border border-zinc-200 bg-white p-4">
+          <h3 className="mb-2 text-sm font-semibold text-zinc-800">Purpose for verification</h3>
+          <p className="text-sm text-zinc-600 whitespace-pre-line">
+            {application.justification}
+          </p>
         </div>
       )}
 

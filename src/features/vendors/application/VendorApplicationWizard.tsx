@@ -25,7 +25,6 @@ export type DraftApplicationData = {
   contactEmployeeNumber: string;
   preferredContactMethod: string;
   justification: string;
-  description: string;
   additionalInfo: string;
 
   docRegistrationCertificate: string | null;
