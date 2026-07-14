@@ -121,8 +121,8 @@ model VendorApplication {
   id               String                  @id @default(cuid())
   vendorProfileId  String
   vendorProfile    VendorProfile           @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
-  status           VendorApplicationStatus @default(PENDING)
-  justification    String
+  status           VendorApplicationStatus @default(DRAFT)
+  justification    String?
   requestedScopes  String[]                @default([])
   companyRegistrationNumber String?
   // Original review decision fields — immutable after approval/rejection
@@ -141,16 +141,39 @@ model VendorApplication {
   snapshotContactPersonName String?
   snapshotWebsite           String?
   snapshotDescription       String?
+  // Step 1 — Organisation Information
+  tradingName               String?
+  organisationType          String?
+  physicalAddress           String?
+  postalAddress             String?
+  // Step 2 — Authorised Representative
+  contactJobTitle           String?
+  contactPhone              String?
+  contactEmployeeNumber     String?
+  preferredContactMethod    String?
+  // Step 3 — Verification Requirements
+  additionalInfo            String?
+  // Step 4 — Supporting Documents (Supabase Storage paths)
+  docRegistrationCertificate String?
+  docProofOfAddress          String?
+  docRepresentativeId        String?
+  docLetterOfAuthorisation   String?
+  docTaxCompliance           String?
+  docBusinessLicence         String?
+  // Step 5 — Declaration
+  declarationAccepted       Boolean?
+  declarationAcceptedAt     DateTime?
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
 
   @@index([vendorProfileId])
   @@index([status])
-  @@unique([vendorProfileId], map: "vendor_application_one_active_per_profile", where: raw("\"status\" IN ('PENDING', 'APPROVED')"))
+  @@unique([vendorProfileId], map: "vendor_application_one_active_per_profile", where: raw("\"status\" IN ('DRAFT', 'PENDING', 'APPROVED')"))
   @@map("vendor_application")
 }
 
 enum VendorApplicationStatus {
+  DRAFT
   PENDING
   APPROVED
   REJECTED

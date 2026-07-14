@@ -13,9 +13,64 @@ import { writeAuditLog } from "@/lib/audit/audit";
 import { prisma } from "@/lib/db/prisma";
 
 const ACTIVE_APPLICATION_STATUSES = [
+  VendorApplicationStatus.DRAFT,
   VendorApplicationStatus.PENDING,
   VendorApplicationStatus.APPROVED,
 ] as const;
+
+const VALID_SCOPES = ["studentNumber", "faculty", "year"] as const;
+
+const DOCUMENT_FIELDS = [
+  "docRegistrationCertificate",
+  "docProofOfAddress",
+  "docRepresentativeId",
+  "docLetterOfAuthorisation",
+  "docTaxCompliance",
+  "docBusinessLicence",
+] as const;
+type DocumentField = (typeof DOCUMENT_FIELDS)[number];
+
+const step1Schema = z.object({
+  companyName: z.string().trim().min(1, "Company name is required"),
+  companyRegistrationNumber: z.string().trim().min(1, "Registration number is required"),
+  serviceCategory: z.string().trim().min(1, "Service category is required"),
+  website: z.string().trim().url("Website must be a valid URL").optional().or(z.literal("")),
+  tradingName: z.string().trim().optional(),
+  organisationType: z.string().trim().min(1, "Organisation type is required"),
+  physicalAddress: z.string().trim().min(1, "Physical address is required"),
+  postalAddress: z.string().trim().optional(),
+});
+
+const step2Schema = z.object({
+  contactPersonName: z.string().trim().min(1, "Contact person name is required"),
+  contactEmail: z.string().trim().email("Contact email must be valid"),
+  contactJobTitle: z.string().trim().min(1, "Job title is required"),
+  contactPhone: z.string().trim().min(1, "Phone number is required"),
+  contactEmployeeNumber: z.string().trim().optional(),
+  preferredContactMethod: z.enum(["email", "phone"]),
+});
+
+const step3Schema = z.object({
+  justification: z.string().trim().min(1, "Purpose for verification is required"),
+  description: z
+    .string()
+    .trim()
+    .min(1, "Intended use is required")
+    .refine(
+      (v) => v.split(/\s+/).filter(Boolean).length <= 200,
+      "Description must be 200 words or fewer",
+    ),
+  additionalInfo: z.string().trim().optional(),
+  requestedScopes: z
+    .array(z.enum(VALID_SCOPES))
+    .min(1, "Select at least one verification scope"),
+});
+
+const step5Schema = z.object({
+  declarationAccepted: z.literal(true, {
+    error: "You must accept the declaration to proceed",
+  }),
+});
 
 const createApplicationSchema = z.object({
   companyName: z.string().trim().min(1, "Company name is required"),
@@ -493,4 +548,224 @@ export async function markApplicationViewed({
       viewedByAdminAt: new Date(),
     },
   });
+}
+
+// ─── Draft Application Wizard ─────────────────────────────────────────────────
+
+/** Finds the vendor's existing DRAFT or creates one; throws if PENDING/APPROVED exists. */
+export async function getOrCreateDraftApplication(userId: string) {
+  try {
+    return await runSerializableTransaction(async (transaction) => {
+      const vendorProfile = await transaction.vendorProfile.findUnique({
+        where: { userId },
+      });
+
+      if (!vendorProfile) {
+        throw new Error("No vendor profile found for this account.");
+      }
+
+      const existingActive = await transaction.vendorApplication.findFirst({
+        where: {
+          vendorProfileId: vendorProfile.id,
+          status: { in: [VendorApplicationStatus.PENDING, VendorApplicationStatus.APPROVED] },
+        },
+        select: { status: true },
+      });
+
+      if (existingActive) {
+        throw activeApplicationError(existingActive.status);
+      }
+
+      const existingDraft = await transaction.vendorApplication.findFirst({
+        where: {
+          vendorProfileId: vendorProfile.id,
+          status: VendorApplicationStatus.DRAFT,
+        },
+      });
+
+      if (existingDraft) {
+        return existingDraft;
+      }
+
+      return transaction.vendorApplication.create({
+        data: { vendorProfileId: vendorProfile.id, status: VendorApplicationStatus.DRAFT },
+      });
+    });
+  } catch (error) {
+    if (hasPrismaErrorCode(error, "P2002")) {
+      throw activeApplicationError();
+    }
+    throw error;
+  }
+}
+
+/** Saves step data to the draft. Step-specific validation is applied before writing. */
+export async function saveDraftApplication(
+  applicationId: string,
+  userId: string,
+  step: 1 | 2 | 3 | 5,
+  rawData: Record<string, unknown>,
+) {
+  const application = await prisma.vendorApplication.findFirst({
+    where: { id: applicationId, vendorProfile: { userId }, status: VendorApplicationStatus.DRAFT },
+    select: { id: true },
+  });
+
+  if (!application) {
+    throw new Error("Draft application not found.");
+  }
+
+  if (step === 1) {
+    const d = step1Schema.parse(rawData);
+    return prisma.vendorApplication.update({
+      where: { id: applicationId },
+      data: {
+        snapshotCompanyName: d.companyName,
+        companyRegistrationNumber: d.companyRegistrationNumber,
+        snapshotServiceCategory: d.serviceCategory,
+        snapshotWebsite: d.website || null,
+        tradingName: d.tradingName || null,
+        organisationType: d.organisationType,
+        physicalAddress: d.physicalAddress,
+        postalAddress: d.postalAddress || null,
+      },
+    });
+  }
+
+  if (step === 2) {
+    const d = step2Schema.parse(rawData);
+    return prisma.vendorApplication.update({
+      where: { id: applicationId },
+      data: {
+        snapshotContactPersonName: d.contactPersonName,
+        snapshotContactEmail: d.contactEmail,
+        contactJobTitle: d.contactJobTitle,
+        contactPhone: d.contactPhone,
+        contactEmployeeNumber: d.contactEmployeeNumber || null,
+        preferredContactMethod: d.preferredContactMethod,
+      },
+    });
+  }
+
+  if (step === 3) {
+    const d = step3Schema.parse(rawData);
+    return prisma.vendorApplication.update({
+      where: { id: applicationId },
+      data: {
+        justification: d.justification,
+        snapshotDescription: d.description,
+        additionalInfo: d.additionalInfo || null,
+        requestedScopes: d.requestedScopes,
+      },
+    });
+  }
+
+  // step === 5
+  step5Schema.parse(rawData);
+  return prisma.vendorApplication.update({
+    where: { id: applicationId },
+    data: {
+      declarationAccepted: true,
+      declarationAcceptedAt: new Date(),
+    },
+  });
+}
+
+/** Saves a single document storage path after a successful upload. */
+export async function saveDraftDocumentPath(
+  applicationId: string,
+  userId: string,
+  fieldKey: string,
+  storagePath: string,
+) {
+  if (!(DOCUMENT_FIELDS as readonly string[]).includes(fieldKey)) {
+    throw new Error(`Invalid document field: ${fieldKey}`);
+  }
+
+  const application = await prisma.vendorApplication.findFirst({
+    where: { id: applicationId, vendorProfile: { userId }, status: VendorApplicationStatus.DRAFT },
+    select: { id: true },
+  });
+
+  if (!application) {
+    throw new Error("Draft application not found.");
+  }
+
+  return prisma.vendorApplication.update({
+    where: { id: applicationId },
+    data: { [fieldKey as DocumentField]: storagePath },
+  });
+}
+
+/** Validates completeness then transitions the draft from DRAFT → PENDING. */
+export async function submitDraftApplication(applicationId: string, userId: string) {
+  return runSerializableTransaction(async (transaction) => {
+    const app = await transaction.vendorApplication.findFirst({
+      where: { id: applicationId, vendorProfile: { userId }, status: VendorApplicationStatus.DRAFT },
+    });
+
+    if (!app) {
+      throw new Error("Draft application not found.");
+    }
+
+    const missing: string[] = [];
+    if (!app.snapshotCompanyName) missing.push("company name");
+    if (!app.companyRegistrationNumber) missing.push("registration number");
+    if (!app.snapshotServiceCategory) missing.push("service category");
+    if (!app.organisationType) missing.push("organisation type");
+    if (!app.physicalAddress) missing.push("physical address");
+    if (!app.snapshotContactPersonName) missing.push("contact name");
+    if (!app.snapshotContactEmail) missing.push("contact email");
+    if (!app.contactJobTitle) missing.push("job title");
+    if (!app.contactPhone) missing.push("phone number");
+    if (!app.preferredContactMethod) missing.push("preferred contact method");
+    if (!app.justification) missing.push("purpose for verification");
+    if (!app.snapshotDescription) missing.push("intended use");
+    if (!app.requestedScopes?.length) missing.push("verification scopes");
+    if (!app.docRegistrationCertificate) missing.push("registration certificate");
+    if (!app.docProofOfAddress) missing.push("proof of address");
+    if (!app.docRepresentativeId) missing.push("representative ID");
+    if (!app.docLetterOfAuthorisation) missing.push("letter of authorisation");
+    if (!app.declarationAccepted) missing.push("declaration");
+
+    if (missing.length > 0) {
+      throw new Error(
+        `Please complete all required fields before submitting: ${missing.join(", ")}.`,
+      );
+    }
+
+    const updated = await transaction.vendorApplication.update({
+      where: { id: applicationId },
+      data: { status: VendorApplicationStatus.PENDING },
+    });
+
+    await writeAuditLog(
+      {
+        action: AuditAction.VENDOR_APPLICATION_SUBMITTED,
+        actorId: userId,
+        targetType: "vendor_application",
+        targetId: applicationId,
+        meta: { vendorProfileId: app.vendorProfileId },
+      },
+      transaction,
+    );
+
+    return updated;
+  });
+}
+
+/** Returns the step number the wizard should open at (1–5, or 6 for review). */
+export function computeDraftProgress(application: {
+  snapshotCompanyName: string | null;
+  snapshotContactPersonName: string | null;
+  justification: string | null;
+  docRegistrationCertificate: string | null;
+  declarationAccepted: boolean | null;
+}): number {
+  if (!application.snapshotCompanyName) return 1;
+  if (!application.snapshotContactPersonName) return 2;
+  if (!application.justification) return 3;
+  if (!application.docRegistrationCertificate) return 4;
+  if (!application.declarationAccepted) return 5;
+  return 6;
 }

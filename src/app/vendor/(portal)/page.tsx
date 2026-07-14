@@ -46,18 +46,36 @@ export default async function VendorDashboardPage() {
       <section className="rounded-lg border border-zinc-200 bg-white p-5">
         <div className="flex items-center justify-between">
           <h2 className="font-medium text-zinc-950">Application status</h2>
-          {application ? <Badge tone={application.status === "REJECTED" ? "danger" : "warning"}>{application.status}</Badge> : null}
+          {application ? (
+            <Badge
+              tone={
+                application.status === "PENDING"
+                  ? "warning"
+                  : application.status === "DRAFT"
+                    ? "neutral"
+                    : "danger"
+              }
+            >
+              {application.status}
+            </Badge>
+          ) : null}
         </div>
         <p className="mt-2 text-sm text-zinc-600">
-          {application
-            ? "View your application details."
-            : "You haven't submitted a verifier application yet."}
+          {application?.status === "DRAFT"
+            ? "Your application is saved as a draft. Continue where you left off."
+            : application
+              ? "View your application details."
+              : "You haven't submitted a verifier application yet."}
         </p>
         <Link
           className="mt-4 inline-flex h-9 items-center rounded-md border border-zinc-300 px-3 text-sm font-medium"
           href="/vendor/application"
         >
-          {application ? "View application" : "Apply now"}
+          {application?.status === "DRAFT"
+            ? "Continue application"
+            : application
+              ? "View application"
+              : "Apply now"}
         </Link>
       </section>
     </div>
