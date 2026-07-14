@@ -4,12 +4,6 @@ import { useActionState } from "react";
 import { submitApplicationAction } from "@/app/vendor/(portal)/application/actions";
 import type { DraftApplicationData } from "../VendorApplicationWizard";
 
-const SCOPE_LABELS: Record<string, string> = {
-  studentNumber: "Student number",
-  faculty: "Faculty",
-  year: "Year of study",
-};
-
 function ReviewRow({ label, value }: { label: string; value: string | null | undefined }) {
   if (!value) return null;
   return (
@@ -94,12 +88,6 @@ export function StepReview({
           <ReviewRow label="Purpose" value={initialData.justification} />
           <ReviewRow label="Intended use" value={initialData.description} />
           <ReviewRow label="Additional info" value={initialData.additionalInfo} />
-          <div className="flex gap-4 px-4 py-2.5 text-sm">
-            <span className="w-44 shrink-0 text-zinc-500">Requested scopes</span>
-            <span className="text-zinc-800">
-              {initialData.requestedScopes.map((s) => SCOPE_LABELS[s] ?? s).join(", ")}
-            </span>
-          </div>
         </ReviewSection>
 
         <ReviewSection title="Supporting documents">

@@ -39,7 +39,7 @@ export default async function VendorApplicationPage() {
       justification: application?.justification ?? "",
       description: application?.snapshotDescription ?? "",
       additionalInfo: application?.additionalInfo ?? "",
-      requestedScopes: application?.requestedScopes ?? [],
+
       docRegistrationCertificate: application?.docRegistrationCertificate ?? null,
       docProofOfAddress: application?.docProofOfAddress ?? null,
       docRepresentativeId: application?.docRepresentativeId ?? null,

@@ -9,12 +9,6 @@ const TEXTAREA =
 const LABEL = "block text-sm font-medium text-zinc-700";
 const OPTIONAL = "ml-1 font-normal text-zinc-400";
 
-const SCOPES = [
-  { key: "studentNumber", label: "Student number" },
-  { key: "faculty", label: "Faculty" },
-  { key: "year", label: "Year of study" },
-] as const;
-
 export function Step3VerificationRequirements({
   applicationId,
   initialData,
@@ -102,28 +96,6 @@ export function Step3VerificationRequirements({
             placeholder="Anything else the university should know about your application."
           />
         </div>
-
-        <fieldset>
-          <legend className={`${LABEL} mb-3`}>
-            Verification scopes <span className="text-red-500">*</span>
-          </legend>
-          <p className="mb-3 text-sm text-zinc-500">
-            Select the student credential attributes your organisation needs to verify.
-          </p>
-          <div className="space-y-2">
-            {SCOPES.map(({ key, label }) => (
-              <label key={key} className="flex items-center gap-3 text-sm">
-                <input
-                  defaultChecked={initialData.requestedScopes.includes(key)}
-                  name="requestedScopes"
-                  type="checkbox"
-                  value={key}
-                />
-                <span>{label}</span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
 
         {error && (
           <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">

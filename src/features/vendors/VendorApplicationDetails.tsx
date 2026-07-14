@@ -37,7 +37,6 @@ type VendorApplicationDetailsProps = {
     contactEmployeeNumber: string | null;
     preferredContactMethod: string | null;
     additionalInfo: string | null;
-    requestedScopes: string[];
     docRegistrationCertificate: string | null;
     docProofOfAddress: string | null;
     docRepresentativeId: string | null;
@@ -58,11 +57,6 @@ type VendorApplicationDetailsProps = {
   documentUrls?: DocumentUrls;
 };
 
-const SCOPE_LABELS: Record<string, string> = {
-  studentNumber: "Student number",
-  faculty: "Faculty",
-  year: "Year of study",
-};
 
 const DOCUMENT_FIELDS: { key: keyof DocumentUrls; label: string }[] = [
   { key: "docRegistrationCertificate", label: "Registration certificate" },
@@ -212,21 +206,6 @@ export function VendorApplicationDetails({
         </div>
       )}
 
-      {application.requestedScopes.length > 0 && (
-        <div className="rounded-lg border border-zinc-200 bg-white p-4">
-          <h3 className="mb-2 text-sm font-semibold text-zinc-800">Requested verification scopes</h3>
-          <div className="flex flex-wrap gap-2">
-            {application.requestedScopes.map((scope) => (
-              <span
-                key={scope}
-                className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-700"
-              >
-                {SCOPE_LABELS[scope] ?? scope}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Supporting documents */}
       {DOCUMENT_FIELDS.some((f) => application[f.key]) && (

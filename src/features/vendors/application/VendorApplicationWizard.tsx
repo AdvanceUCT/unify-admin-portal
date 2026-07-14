@@ -27,7 +27,7 @@ export type DraftApplicationData = {
   justification: string;
   description: string;
   additionalInfo: string;
-  requestedScopes: string[];
+
   docRegistrationCertificate: string | null;
   docProofOfAddress: string | null;
   docRepresentativeId: string | null;

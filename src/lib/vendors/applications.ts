@@ -18,8 +18,6 @@ const ACTIVE_APPLICATION_STATUSES = [
   VendorApplicationStatus.APPROVED,
 ] as const;
 
-const VALID_SCOPES = ["studentNumber", "faculty", "year"] as const;
-
 const DOCUMENT_FIELDS = [
   "docRegistrationCertificate",
   "docProofOfAddress",
@@ -61,9 +59,6 @@ const step3Schema = z.object({
       "Description must be 200 words or fewer",
     ),
   additionalInfo: z.string().trim().optional(),
-  requestedScopes: z
-    .array(z.enum(VALID_SCOPES))
-    .min(1, "Select at least one verification scope"),
 });
 
 const step5Schema = z.object({
@@ -655,7 +650,6 @@ export async function saveDraftApplication(
         justification: d.justification,
         snapshotDescription: d.description,
         additionalInfo: d.additionalInfo || null,
-        requestedScopes: d.requestedScopes,
       },
     });
   }
@@ -721,7 +715,6 @@ export async function submitDraftApplication(applicationId: string, userId: stri
     if (!app.preferredContactMethod) missing.push("preferred contact method");
     if (!app.justification) missing.push("purpose for verification");
     if (!app.snapshotDescription) missing.push("intended use");
-    if (!app.requestedScopes?.length) missing.push("verification scopes");
     if (!app.docRegistrationCertificate) missing.push("registration certificate");
     if (!app.docProofOfAddress) missing.push("proof of address");
     if (!app.docRepresentativeId) missing.push("representative ID");

@@ -123,7 +123,6 @@ model VendorApplication {
   vendorProfile    VendorProfile           @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
   status           VendorApplicationStatus @default(DRAFT)
   justification    String?
-  requestedScopes  String[]                @default([])
   companyRegistrationNumber String?
   // Original review decision fields — immutable after approval/rejection
   reviewedByUserId String?
