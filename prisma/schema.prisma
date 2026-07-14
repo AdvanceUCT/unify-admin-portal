@@ -324,6 +324,7 @@ model CredentialIssuance {
   id                             String                     @id @default(cuid())
   studentId                      String
   credentialDefinitionId         String
+  schemaVersion                  String?
   credentialExchangeId           String?                    @unique
   revocationRegistryDefinitionId String?
   credentialRevocationId         String?

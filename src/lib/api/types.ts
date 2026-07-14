@@ -27,6 +27,7 @@ export type StudentCredential = {
   programme: string;
   lifecycleState: CredentialLifecycleState;
   isRevocable?: boolean;
+  schemaVersion?: string;
   studentNumber: string;
   validFrom: string;
   expiresAt: string;
@@ -169,6 +170,7 @@ export type CredentialActivityEvent = {
   id: string;
   credentialExchangeId: string;
   previousState?: string;
+  schemaVersion?: string;
   state: string;
   status?: StoredCredentialLifecycleState;
   studentId?: string;

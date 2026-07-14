@@ -226,6 +226,7 @@ export async function getActiveCredentialDefinition() {
     credentialDefinitionId: activeSchema.credentialDefinitionId,
     revocationRegistryDefinitionId: activeSchema.revocationRegistryDefinitionId ?? undefined,
     schemaAttributes: activeSchema.schemaAttributes,
+    schemaVersion: activeSchema.schemaVersion,
   };
 }
 
@@ -305,6 +306,7 @@ async function issueStudentActivationLinks(
       expiresAt: offer.expiresAt,
       failureReason: emailDelivery.status === "Failed" ? emailDelivery.failureReason : undefined,
       revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId,
+      schemaVersion: activeSchema.schemaVersion,
       studentId: persistedStudentId,
       wasDelivered: emailDelivery.status === "Delivered",
     });
