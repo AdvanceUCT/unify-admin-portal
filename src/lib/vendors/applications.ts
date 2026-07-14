@@ -626,58 +626,65 @@ export async function saveDraftApplication(
     throw new Error("Draft application not found.");
   }
 
-  if (step === 1) {
-    const d = step1Schema.parse(rawData);
-    return prisma.vendorApplication.update({
+  try {
+    if (step === 1) {
+      const d = step1Schema.parse(rawData);
+      return await prisma.vendorApplication.update({
+        where: { id: applicationId },
+        data: {
+          snapshotCompanyName: d.companyName,
+          companyRegistrationNumber: d.companyRegistrationNumber,
+          snapshotServiceCategory: d.serviceCategory,
+          snapshotWebsite: d.website || null,
+          tradingName: d.tradingName || null,
+          organisationType: d.organisationType,
+          physicalAddress: d.physicalAddress,
+          postalAddress: d.postalAddress || null,
+        },
+      });
+    }
+
+    if (step === 2) {
+      const d = step2Schema.parse(rawData);
+      return await prisma.vendorApplication.update({
+        where: { id: applicationId },
+        data: {
+          snapshotContactPersonName: d.contactPersonName,
+          snapshotContactEmail: d.contactEmail,
+          contactJobTitle: d.contactJobTitle,
+          contactPhone: d.contactPhone,
+          contactEmployeeNumber: d.contactEmployeeNumber || null,
+          preferredContactMethod: d.preferredContactMethod,
+        },
+      });
+    }
+
+    if (step === 3) {
+      const d = step3Schema.parse(rawData);
+      return await prisma.vendorApplication.update({
+        where: { id: applicationId },
+        data: {
+          justification: d.justification,
+          additionalInfo: d.additionalInfo || null,
+        },
+      });
+    }
+
+    // step === 5
+    step5Schema.parse(rawData);
+    return await prisma.vendorApplication.update({
       where: { id: applicationId },
       data: {
-        snapshotCompanyName: d.companyName,
-        companyRegistrationNumber: d.companyRegistrationNumber,
-        snapshotServiceCategory: d.serviceCategory,
-        snapshotWebsite: d.website || null,
-        tradingName: d.tradingName || null,
-        organisationType: d.organisationType,
-        physicalAddress: d.physicalAddress,
-        postalAddress: d.postalAddress || null,
+        declarationAccepted: true,
+        declarationAcceptedAt: new Date(),
       },
     });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new Error(error.issues.map((issue) => issue.message).join(" "));
+    }
+    throw error;
   }
-
-  if (step === 2) {
-    const d = step2Schema.parse(rawData);
-    return prisma.vendorApplication.update({
-      where: { id: applicationId },
-      data: {
-        snapshotContactPersonName: d.contactPersonName,
-        snapshotContactEmail: d.contactEmail,
-        contactJobTitle: d.contactJobTitle,
-        contactPhone: d.contactPhone,
-        contactEmployeeNumber: d.contactEmployeeNumber || null,
-        preferredContactMethod: d.preferredContactMethod,
-      },
-    });
-  }
-
-  if (step === 3) {
-    const d = step3Schema.parse(rawData);
-    return prisma.vendorApplication.update({
-      where: { id: applicationId },
-      data: {
-        justification: d.justification,
-        additionalInfo: d.additionalInfo || null,
-      },
-    });
-  }
-
-  // step === 5
-  step5Schema.parse(rawData);
-  return prisma.vendorApplication.update({
-    where: { id: applicationId },
-    data: {
-      declarationAccepted: true,
-      declarationAcceptedAt: new Date(),
-    },
-  });
 }
 
 /** Saves a single document storage path after a successful upload. */
@@ -767,12 +774,22 @@ export function computeDraftProgress(application: {
   snapshotContactPersonName: string | null;
   justification: string | null;
   docRegistrationCertificate: string | null;
+  docProofOfAddress: string | null;
+  docRepresentativeId: string | null;
+  docLetterOfAuthorisation: string | null;
   declarationAccepted: boolean | null;
 }): number {
   if (!application.snapshotCompanyName) return 1;
   if (!application.snapshotContactPersonName) return 2;
   if (!application.justification) return 3;
-  if (!application.docRegistrationCertificate) return 4;
+  if (
+    !application.docRegistrationCertificate ||
+    !application.docProofOfAddress ||
+    !application.docRepresentativeId ||
+    !application.docLetterOfAuthorisation
+  ) {
+    return 4;
+  }
   if (!application.declarationAccepted) return 5;
   return 6;
 }

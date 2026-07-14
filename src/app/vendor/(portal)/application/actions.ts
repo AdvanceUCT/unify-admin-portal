@@ -104,15 +104,21 @@ export async function uploadDocumentAction(formData: FormData): Promise<UploadAc
   }
 
   if (!(file instanceof File) || file.size === 0) {
-    return { ok: false, error: "No file provided." };
+    return { ok: false, error: "No file was provided. Please choose a file to upload." };
   }
 
   if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-    return { ok: false, error: "Only PDF, JPEG, and PNG files are accepted." };
+    return {
+      ok: false,
+      error: "That file type isn't accepted. Please upload a PDF, Word, Excel, JPEG, or PNG file.",
+    };
   }
 
   if (file.size > MAX_FILE_BYTES) {
-    return { ok: false, error: "File must be 10 MB or smaller." };
+    return {
+      ok: false,
+      error: "This file is too large. Please upload a file that's 10 MB or smaller.",
+    };
   }
 
   try {
@@ -121,8 +127,11 @@ export async function uploadDocumentAction(formData: FormData): Promise<UploadAc
 
     for (const path of REVALIDATE_PATHS) revalidatePath(path);
     return { ok: true, path, filename: file.name };
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "Upload failed." };
+  } catch {
+    return {
+      ok: false,
+      error: "Something went wrong while uploading. Please check the file and try again.",
+    };
   }
 }
 

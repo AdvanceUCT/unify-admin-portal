@@ -61,11 +61,13 @@ const DOCUMENT_FIELDS: {
 export function Step4Documents({
   applicationId,
   initialData,
+  initialFilenames,
   onComplete,
   onBack,
 }: {
   applicationId: string;
   initialData: DraftApplicationData;
+  initialFilenames?: Record<string, string>;
   onComplete: () => void;
   onBack: () => void;
 }) {
@@ -76,7 +78,7 @@ export function Step4Documents({
     }
     return initial;
   });
-  const [filenames, setFilenames] = useState<Record<string, string>>({});
+  const [filenames, setFilenames] = useState<Record<string, string>>(() => initialFilenames ?? {});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const requiredDone = DOCUMENT_FIELDS.filter((f) => f.required).every(
@@ -98,14 +100,25 @@ export function Step4Documents({
     formData.append("fieldKey", fieldKey);
     formData.append("file", file);
 
-    const result = await uploadDocumentAction(formData);
+    try {
+      const result = await uploadDocumentAction(formData);
 
-    if (result.ok) {
-      setStatuses((prev) => ({ ...prev, [fieldKey]: "done" }));
-      setFilenames((prev) => ({ ...prev, [fieldKey]: result.filename ?? file.name }));
-    } else {
+      if (result.ok) {
+        setStatuses((prev) => ({ ...prev, [fieldKey]: "done" }));
+        setFilenames((prev) => ({ ...prev, [fieldKey]: result.filename ?? file.name }));
+      } else {
+        setStatuses((prev) => ({ ...prev, [fieldKey]: "error" }));
+        setErrors((prev) => ({
+          ...prev,
+          [fieldKey]: result.error ?? "Upload failed. Please try again with a valid file.",
+        }));
+      }
+    } catch {
       setStatuses((prev) => ({ ...prev, [fieldKey]: "error" }));
-      setErrors((prev) => ({ ...prev, [fieldKey]: result.error ?? "Upload failed." }));
+      setErrors((prev) => ({
+        ...prev,
+        [fieldKey]: "Something went wrong while uploading. Please try again.",
+      }));
     }
 
     event.target.value = "";

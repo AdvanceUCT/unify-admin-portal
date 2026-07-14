@@ -18,8 +18,8 @@ export async function uploadVendorDocument(
   fieldKey: string,
 ): Promise<{ path: string }> {
   const supabase = getClient();
-  const ext = file.name.split(".").pop() ?? "bin";
-  const path = `${applicationId}/${fieldKey}/${Date.now()}.${ext}`;
+  const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_").replace(/^\.+/, "");
+  const path = `${applicationId}/${fieldKey}/${Date.now()}-${safeName || "file"}`;
 
   const { error } = await supabase.storage
     .from(BUCKET)
@@ -27,6 +27,12 @@ export async function uploadVendorDocument(
 
   if (error) throw new Error(`Upload failed: ${error.message}`);
   return { path };
+}
+
+/** Recovers the original filename embedded in a storage path saved by `uploadVendorDocument`. */
+export function filenameFromStoragePath(path: string): string {
+  const segment = path.split("/").pop() ?? path;
+  return segment.replace(/^\d+-/, "");
 }
 
 export async function getDocumentSignedUrl(

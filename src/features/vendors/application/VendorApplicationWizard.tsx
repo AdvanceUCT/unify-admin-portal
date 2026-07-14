@@ -45,27 +45,36 @@ const STEP_LABELS = [
   "Review",
 ] as const;
 
+export const TOTAL_STEPS = STEP_LABELS.length;
+
 export function VendorApplicationWizard({
   initialStep,
   initialApplicationId,
   initialData,
+  initialFilenames,
 }: {
   initialStep: number;
   initialApplicationId: string | null;
   initialData: DraftApplicationData;
+  initialFilenames?: Record<string, string>;
 }) {
   const [currentStep, setCurrentStep] = useState(initialStep);
   const [applicationId, setApplicationId] = useState(initialApplicationId);
   const router = useRouter();
 
+  function goToStep(step: number) {
+    setCurrentStep(step);
+    router.replace(`/vendor/application?step=${step}`, { scroll: false });
+  }
+
   function handleNext(newApplicationId?: string) {
     if (newApplicationId) setApplicationId(newApplicationId);
-    setCurrentStep((s) => Math.min(s + 1, STEP_LABELS.length));
+    goToStep(Math.min(currentStep + 1, STEP_LABELS.length));
     router.refresh();
   }
 
   function handleBack() {
-    setCurrentStep((s) => Math.max(s - 1, 1));
+    goToStep(Math.max(currentStep - 1, 1));
   }
 
   return (
@@ -133,6 +142,7 @@ export function VendorApplicationWizard({
           <Step4Documents
             applicationId={applicationId}
             initialData={initialData}
+            initialFilenames={initialFilenames}
             onComplete={() => handleNext()}
             onBack={handleBack}
           />
