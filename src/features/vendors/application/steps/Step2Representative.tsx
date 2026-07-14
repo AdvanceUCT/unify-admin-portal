@@ -64,6 +64,7 @@ export function Step2Representative({
               className={INPUT}
               defaultValue={initialData.contactPersonName}
               id="contactPersonName"
+              maxLength={200}
               name="contactPersonName"
               required
               type="text"
@@ -77,6 +78,7 @@ export function Step2Representative({
               className={INPUT}
               defaultValue={initialData.contactEmail}
               id="contactEmail"
+              maxLength={254}
               name="contactEmail"
               required
               type="email"
@@ -90,6 +92,7 @@ export function Step2Representative({
               className={INPUT}
               defaultValue={initialData.contactJobTitle}
               id="contactJobTitle"
+              maxLength={150}
               name="contactJobTitle"
               required
               type="text"
@@ -103,8 +106,16 @@ export function Step2Representative({
               className={INPUT}
               defaultValue={initialData.contactPhone}
               id="contactPhone"
+              inputMode="numeric"
+              maxLength={10}
               name="contactPhone"
+              onInput={(event) => {
+                event.currentTarget.value = event.currentTarget.value.replace(/\D/g, "").slice(0, 10);
+              }}
+              pattern="0[0-9]{9}"
+              placeholder="0821234567"
               required
+              title="Enter a valid South African cell number: 10 digits, starting with 0"
               type="tel"
             />
           </div>
@@ -116,6 +127,7 @@ export function Step2Representative({
               className={INPUT}
               defaultValue={initialData.contactEmployeeNumber}
               id="contactEmployeeNumber"
+              maxLength={50}
               name="contactEmployeeNumber"
               type="text"
             />

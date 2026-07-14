@@ -63,6 +63,7 @@ export function Step3VerificationRequirements({
             className={TEXTAREA}
             defaultValue={initialData.justification}
             id="justification"
+            maxLength={2000}
             name="justification"
             placeholder="Describe why your organisation needs to verify student credentials."
             required
@@ -77,6 +78,7 @@ export function Step3VerificationRequirements({
             className="mt-2 min-h-20 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none transition focus:border-zinc-950"
             defaultValue={initialData.additionalInfo}
             id="additionalInfo"
+            maxLength={2000}
             name="additionalInfo"
             placeholder="Anything else the university should know about your application."
           />

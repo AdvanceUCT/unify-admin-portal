@@ -82,6 +82,7 @@ export function Step1OrgInfo({
               className={INPUT}
               defaultValue={initialData.companyName}
               id="companyName"
+              maxLength={200}
               name="companyName"
               required
               type="text"
@@ -95,6 +96,7 @@ export function Step1OrgInfo({
               className={INPUT}
               defaultValue={initialData.tradingName}
               id="tradingName"
+              maxLength={200}
               name="tradingName"
               type="text"
             />
@@ -107,6 +109,7 @@ export function Step1OrgInfo({
               className={INPUT}
               defaultValue={initialData.companyRegistrationNumber}
               id="companyRegistrationNumber"
+              maxLength={50}
               name="companyRegistrationNumber"
               required
               type="text"
@@ -171,6 +174,7 @@ export function Step1OrgInfo({
               className={TEXTAREA}
               defaultValue={initialData.physicalAddress}
               id="physicalAddress"
+              maxLength={500}
               name="physicalAddress"
               required
             />
@@ -183,6 +187,7 @@ export function Step1OrgInfo({
               className={TEXTAREA}
               defaultValue={initialData.postalAddress}
               id="postalAddress"
+              maxLength={500}
               name="postalAddress"
             />
           </div>

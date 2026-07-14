@@ -116,7 +116,8 @@ export function Step4Documents({
       <div>
         <h2 className="text-lg font-semibold">Supporting documents</h2>
         <p className="mt-1 text-sm text-zinc-600">
-          Upload the required documents. Accepted formats: PDF, JPEG, PNG (max 10 MB each).
+          Upload the required documents. Accepted formats: PDF, Word, Excel, JPEG, PNG (max 10 MB
+          each).
         </p>
       </div>
 
@@ -164,7 +165,7 @@ export function Step4Documents({
                           ? "Retry"
                           : "Upload"}
                     <input
-                      accept=".pdf,.jpg,.jpeg,.png"
+                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
                       className="sr-only"
                       disabled={status === "uploading"}
                       onChange={(e) => handleFileChange(e, key)}

@@ -17,7 +17,15 @@ export type UploadActionResult = { ok: boolean; path?: string; filename?: string
 
 const REVALIDATE_PATHS = ["/vendor/application", "/vendor"];
 
-const ALLOWED_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png"];
+const ALLOWED_MIME_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+];
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 /** Step 1: creates or resumes a draft, then saves step 1 data. */

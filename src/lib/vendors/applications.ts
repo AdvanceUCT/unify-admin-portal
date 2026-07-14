@@ -29,28 +29,55 @@ const DOCUMENT_FIELDS = [
 type DocumentField = (typeof DOCUMENT_FIELDS)[number];
 
 const step1Schema = z.object({
-  companyName: z.string().trim().min(1, "Company name is required"),
-  companyRegistrationNumber: z.string().trim().min(1, "Registration number is required"),
+  companyName: z.string().trim().min(1, "Company name is required").max(200, "Company name must be 200 characters or fewer"),
+  companyRegistrationNumber: z
+    .string()
+    .trim()
+    .min(1, "Registration number is required")
+    .max(50, "Registration number must be 50 characters or fewer"),
   serviceCategory: z.string().trim().min(1, "Service category is required"),
   website: z.string().trim().url("Website must be a valid URL").optional().or(z.literal("")),
-  tradingName: z.string().trim().optional(),
+  tradingName: z.string().trim().max(200, "Trading name must be 200 characters or fewer").optional(),
   organisationType: z.string().trim().min(1, "Organisation type is required"),
-  physicalAddress: z.string().trim().min(1, "Physical address is required"),
-  postalAddress: z.string().trim().optional(),
+  physicalAddress: z
+    .string()
+    .trim()
+    .min(1, "Physical address is required")
+    .max(500, "Physical address must be 500 characters or fewer"),
+  postalAddress: z.string().trim().max(500, "Postal address must be 500 characters or fewer").optional(),
 });
 
 const step2Schema = z.object({
-  contactPersonName: z.string().trim().min(1, "Contact person name is required"),
-  contactEmail: z.string().trim().email("Contact email must be valid"),
-  contactJobTitle: z.string().trim().min(1, "Job title is required"),
-  contactPhone: z.string().trim().min(1, "Phone number is required"),
-  contactEmployeeNumber: z.string().trim().optional(),
+  contactPersonName: z
+    .string()
+    .trim()
+    .min(1, "Contact person name is required")
+    .max(200, "Contact person name must be 200 characters or fewer"),
+  contactEmail: z.string().trim().email("Contact email must be valid").max(254, "Contact email must be 254 characters or fewer"),
+  contactJobTitle: z
+    .string()
+    .trim()
+    .min(1, "Job title is required")
+    .max(150, "Job title must be 150 characters or fewer"),
+  contactPhone: z
+    .string()
+    .trim()
+    .regex(/^0\d{9}$/, "Enter a valid South African cell number (10 digits, starting with 0)"),
+  contactEmployeeNumber: z
+    .string()
+    .trim()
+    .max(50, "Employee number must be 50 characters or fewer")
+    .optional(),
   preferredContactMethod: z.enum(["email", "phone"]),
 });
 
 const step3Schema = z.object({
-  justification: z.string().trim().min(1, "Purpose for verification is required"),
-  additionalInfo: z.string().trim().optional(),
+  justification: z
+    .string()
+    .trim()
+    .min(1, "Purpose for verification is required")
+    .max(2000, "Purpose must be 2000 characters or fewer"),
+  additionalInfo: z.string().trim().max(2000, "Additional information must be 2000 characters or fewer").optional(),
 });
 
 const step5Schema = z.object({
