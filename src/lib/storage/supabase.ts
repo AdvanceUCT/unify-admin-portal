@@ -29,6 +29,14 @@ export async function uploadVendorDocument(
   return { path };
 }
 
+/** Deletes a previously uploaded vendor document, e.g. after it's been replaced. */
+export async function deleteVendorDocument(path: string): Promise<void> {
+  const supabase = getClient();
+  const { error } = await supabase.storage.from(BUCKET).remove([path]);
+
+  if (error) throw new Error(`Delete failed: ${error.message}`);
+}
+
 /** Recovers the original filename embedded in a storage path saved by `uploadVendorDocument`. */
 export function filenameFromStoragePath(path: string): string {
   const segment = path.split("/").pop() ?? path;

@@ -687,30 +687,65 @@ export async function saveDraftApplication(
   }
 }
 
-/** Saves a single document storage path after a successful upload. */
+/** Saves a single document storage path after a successful upload. Returns the path it replaced, if any. */
 export async function saveDraftDocumentPath(
   applicationId: string,
   userId: string,
   fieldKey: string,
   storagePath: string,
-) {
+): Promise<{ previousPath: string | null }> {
   if (!(DOCUMENT_FIELDS as readonly string[]).includes(fieldKey)) {
     throw new Error(`Invalid document field: ${fieldKey}`);
   }
 
   const application = await prisma.vendorApplication.findFirst({
     where: { id: applicationId, vendorProfile: { userId }, status: VendorApplicationStatus.DRAFT },
-    select: { id: true },
+    select: { id: true, [fieldKey as DocumentField]: true },
   });
 
   if (!application) {
     throw new Error("Draft application not found.");
   }
 
-  return prisma.vendorApplication.update({
+  await prisma.vendorApplication.update({
     where: { id: applicationId },
     data: { [fieldKey as DocumentField]: storagePath },
   });
+
+  const previousPath = application[fieldKey as DocumentField] as string | null;
+  return { previousPath };
+}
+
+/** Clears a document field on the draft. Returns the path that was removed, if any. */
+export async function clearDraftDocumentPath(
+  applicationId: string,
+  userId: string,
+  fieldKey: string,
+): Promise<{ removedPath: string | null }> {
+  if (!(DOCUMENT_FIELDS as readonly string[]).includes(fieldKey)) {
+    throw new Error(`Invalid document field: ${fieldKey}`);
+  }
+
+  const application = await prisma.vendorApplication.findFirst({
+    where: { id: applicationId, vendorProfile: { userId }, status: VendorApplicationStatus.DRAFT },
+    select: { id: true, [fieldKey as DocumentField]: true },
+  });
+
+  if (!application) {
+    throw new Error("Draft application not found.");
+  }
+
+  const removedPath = application[fieldKey as DocumentField] as string | null;
+  if (!removedPath) {
+    return { removedPath: null };
+  }
+
+  await prisma.vendorApplication.update({
+    where: { id: applicationId },
+    data: { [fieldKey as DocumentField]: null },
+  });
+
+  return { removedPath };
 }
 
 /** Validates completeness then transitions the draft from DRAFT → PENDING. */

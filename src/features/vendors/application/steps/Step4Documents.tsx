@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { uploadDocumentAction } from "@/app/vendor/(portal)/application/actions";
+import { deleteDocumentAction, uploadDocumentAction } from "@/app/vendor/(portal)/application/actions";
 import type { DraftApplicationData } from "../VendorApplicationWizard";
 
-type UploadStatus = "idle" | "uploading" | "done" | "error";
+type UploadStatus = "idle" | "uploading" | "done" | "error" | "removing";
 
 const DOCUMENT_FIELDS: {
   key: keyof Pick<
@@ -124,6 +124,44 @@ export function Step4Documents({
     event.target.value = "";
   }
 
+  async function handleRemove(fieldKey: string, label: string) {
+    if (!window.confirm(`Remove ${label}? You'll need to upload it again before submitting.`)) {
+      return;
+    }
+
+    setStatuses((prev) => ({ ...prev, [fieldKey]: "removing" }));
+    setErrors((prev) => ({ ...prev, [fieldKey]: "" }));
+
+    const formData = new FormData();
+    formData.append("applicationId", applicationId);
+    formData.append("fieldKey", fieldKey);
+
+    try {
+      const result = await deleteDocumentAction(formData);
+
+      if (result.ok) {
+        setStatuses((prev) => ({ ...prev, [fieldKey]: "idle" }));
+        setFilenames((prev) => {
+          const next = { ...prev };
+          delete next[fieldKey];
+          return next;
+        });
+      } else {
+        setStatuses((prev) => ({ ...prev, [fieldKey]: "done" }));
+        setErrors((prev) => ({
+          ...prev,
+          [fieldKey]: result.error ?? "Could not remove the file. Please try again.",
+        }));
+      }
+    } catch {
+      setStatuses((prev) => ({ ...prev, [fieldKey]: "done" }));
+      setErrors((prev) => ({
+        ...prev,
+        [fieldKey]: "Something went wrong while removing the file. Please try again.",
+      }));
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -149,21 +187,25 @@ export function Step4Documents({
                     {required && <span className="ml-1 text-red-500">*</span>}
                   </p>
                   <p className="mt-0.5 text-xs text-zinc-500">{hint}</p>
-                  {status === "done" && (
+                  {(status === "done" || status === "removing") && (
                     <p className="mt-1 text-xs text-emerald-600">
-                      {filename ? `Uploaded: ${filename}` : "Uploaded"}
+                      {status === "removing"
+                        ? "Removing..."
+                        : filename
+                          ? `Uploaded: ${filename}`
+                          : "Uploaded"}
                     </p>
                   )}
                   {fieldError && (
                     <p className="mt-1 text-xs text-red-600">{fieldError}</p>
                   )}
                 </div>
-                <div className="shrink-0">
+                <div className="flex shrink-0 items-center gap-2">
                   <label
                     className={`inline-flex h-9 cursor-pointer items-center rounded-md border px-3 text-xs font-medium transition ${
                       status === "done"
                         ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                        : status === "uploading"
+                        : status === "uploading" || status === "removing"
                           ? "cursor-not-allowed border-zinc-200 bg-zinc-50 text-zinc-400"
                           : status === "error"
                             ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
@@ -172,7 +214,7 @@ export function Step4Documents({
                   >
                     {status === "uploading"
                       ? "Uploading..."
-                      : status === "done"
+                      : status === "done" || status === "removing"
                         ? "Replace"
                         : status === "error"
                           ? "Retry"
@@ -180,11 +222,21 @@ export function Step4Documents({
                     <input
                       accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
                       className="sr-only"
-                      disabled={status === "uploading"}
+                      disabled={status === "uploading" || status === "removing"}
                       onChange={(e) => handleFileChange(e, key)}
                       type="file"
                     />
                   </label>
+                  {(status === "done" || status === "removing") && (
+                    <button
+                      className="inline-flex h-9 items-center rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={status === "removing"}
+                      onClick={() => handleRemove(key, label)}
+                      type="button"
+                    >
+                      {status === "removing" ? "Removing..." : "Remove"}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

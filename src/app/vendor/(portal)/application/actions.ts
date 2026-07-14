@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 
 import { requireVendorSession } from "@/lib/auth/session";
-import { uploadVendorDocument } from "@/lib/storage/supabase";
+import { deleteVendorDocument, uploadVendorDocument } from "@/lib/storage/supabase";
 import {
+  clearDraftDocumentPath,
   getOrCreateDraftApplication,
   saveDraftApplication,
   saveDraftDocumentPath,
@@ -123,7 +124,18 @@ export async function uploadDocumentAction(formData: FormData): Promise<UploadAc
 
   try {
     const { path } = await uploadVendorDocument(file, applicationId, fieldKey);
-    await saveDraftDocumentPath(applicationId, session.user.id, fieldKey, path);
+    const { previousPath } = await saveDraftDocumentPath(applicationId, session.user.id, fieldKey, path);
+
+    if (previousPath && previousPath !== path) {
+      try {
+        await deleteVendorDocument(previousPath);
+      } catch (error) {
+        console.error(
+          `[vendor-documents] Failed to delete replaced file ${previousPath}:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
 
     for (const path of REVALIDATE_PATHS) revalidatePath(path);
     return { ok: true, path, filename: file.name };
@@ -131,6 +143,40 @@ export async function uploadDocumentAction(formData: FormData): Promise<UploadAc
     return {
       ok: false,
       error: "Something went wrong while uploading. Please check the file and try again.",
+    };
+  }
+}
+
+/** Step 4: removes a previously uploaded document from the draft. */
+export async function deleteDocumentAction(formData: FormData): Promise<StepActionResult> {
+  const session = await requireVendorSession();
+  const applicationId = String(formData.get("applicationId") ?? "");
+  const fieldKey = String(formData.get("fieldKey") ?? "");
+
+  if (!applicationId || !fieldKey) {
+    return { ok: false, error: "Missing application ID or field key." };
+  }
+
+  try {
+    const { removedPath } = await clearDraftDocumentPath(applicationId, session.user.id, fieldKey);
+
+    if (removedPath) {
+      try {
+        await deleteVendorDocument(removedPath);
+      } catch (error) {
+        console.error(
+          `[vendor-documents] Failed to delete removed file ${removedPath}:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
+    for (const path of REVALIDATE_PATHS) revalidatePath(path);
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Could not remove the file. Please try again.",
     };
   }
 }
