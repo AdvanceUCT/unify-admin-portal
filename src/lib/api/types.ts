@@ -201,6 +201,19 @@ export type CredentialAuditLogEntry = {
   studentId: string;
 };
 
+export type StudentImportAuditLogEntry = {
+  id: string;
+  actorId: string | null;
+  actorName: string | null;
+  filename: string | null;
+  newCount: number;
+  updatedCount: number;
+  unchangedCount: number;
+  missingCount: number;
+  errorCount: number;
+  createdAt: string;
+};
+
 export type ActivationDeliveryStatus = "Pending" | "Delivered" | "Failed";
 
 export type ActivationDelivery = {
