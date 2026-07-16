@@ -158,6 +158,8 @@ Key variables to configure:
 | `WEBHOOK_SIGNING_SECRET` | Shared HMAC secret between the portal and the agent (must match both sides) |
 | `RESEND_API_KEY` | Resend API key for production email delivery |
 | `CREDENTIAL_EMAIL_DELIVERY_MODE` | `"resend"` for real emails, `"log"` to print to console |
+| `SUPABASE_URL` | Supabase project URL — used for vendor document storage (optional if not using vendor applications) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key — used server-side to upload and sign vendor documents |
 
 ### Step 3 — Apply Database Migrations
 
@@ -166,6 +168,25 @@ Run Prisma migrations to create all required tables:
 ```bash
 npx prisma migrate dev
 ```
+
+### Step 3b — Set Up Supabase Storage (Vendor Document Uploads)
+
+The vendor application wizard uploads supporting documents to a private Supabase Storage bucket. Skip this step if you are not using the vendor application feature.
+
+**Prerequisites:** You need a Supabase project. The `DATABASE_URL` and `DIRECT_URL` already point to it.
+
+1. **Create the bucket** — In the Supabase Dashboard, go to **Storage** and click **New bucket**.
+   - Name: `vendor-documents`
+   - Toggle **Private** on (documents must not be publicly accessible)
+   - Click **Save**
+
+2. **Get your API credentials** — Go to **Project Settings → API**:
+   - Copy the **Project URL** → `SUPABASE_URL` in `.env.local`
+   - Under **Project API keys**, copy the **service_role** key → `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`
+
+   > The service role key bypasses Row Level Security and has full storage access. Keep it server-side only and never commit it to version control.
+
+3. **Verify** — Start the dev server and complete a vendor application through to Step 4. Files should upload and show "Uploaded" with the filename. On the admin side, document links should open a signed URL in a new tab.
 
 ### Step 4 — Seed the Database
 
