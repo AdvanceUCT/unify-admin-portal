@@ -144,7 +144,6 @@ describe("createVendorApplication", () => {
         snapshotContactEmail: "jane@example.com",
         snapshotContactPersonName: "Jane Doe",
         snapshotWebsite: "https://example.com",
-        snapshotDescription: validInput.description,
       },
     });
     expect(writeAuditLogMock).toHaveBeenCalledWith(
@@ -177,7 +176,6 @@ describe("reviewVendorApplication", () => {
     snapshotContactEmail: "jane@example.com",
     snapshotContactPersonName: "Jane Doe",
     snapshotWebsite: "https://example.com",
-    snapshotDescription: validInput.description,
     vendorProfile,
   };
 
@@ -236,7 +234,6 @@ describe("reviewVendorApplication", () => {
         contactEmail: "jane@example.com",
         contactPersonName: "Jane Doe",
         website: "https://example.com",
-        description: validInput.description,
       },
     });
     expect(agentClient.createVerificationServicePoint).toHaveBeenCalledWith({
