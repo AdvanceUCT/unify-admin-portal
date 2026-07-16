@@ -27,6 +27,7 @@ export type StudentCredential = {
   programme: string;
   lifecycleState: CredentialLifecycleState;
   isRevocable?: boolean;
+  schemaVersion?: string;
   studentNumber: string;
   validFrom: string;
   expiresAt: string;
@@ -169,6 +170,7 @@ export type CredentialActivityEvent = {
   id: string;
   credentialExchangeId: string;
   previousState?: string;
+  schemaVersion?: string;
   state: string;
   status?: StoredCredentialLifecycleState;
   studentId?: string;
@@ -199,6 +201,19 @@ export type CredentialAuditLogEntry = {
   message?: string | null;
   occurredAt: string;
   studentId: string;
+};
+
+export type StudentImportAuditLogEntry = {
+  id: string;
+  actorId: string | null;
+  actorName: string | null;
+  filename: string | null;
+  newCount: number;
+  updatedCount: number;
+  unchangedCount: number;
+  missingCount: number;
+  errorCount: number;
+  createdAt: string;
 };
 
 export type ActivationDeliveryStatus = "Pending" | "Delivered" | "Failed";

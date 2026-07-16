@@ -425,6 +425,7 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
       expiresAt: offer.expiresAt,
       failureReason: delivery.failureReason,
       revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId,
+      schemaVersion: activeSchema.schemaVersion,
       studentId: item.studentId,
       wasDelivered: delivery.status === "Delivered",
     });
