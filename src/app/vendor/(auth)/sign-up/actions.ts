@@ -41,6 +41,7 @@ export async function createVendorProfileAction(
         userId: session.user.id,
         companyName: data.companyName,
         serviceCategory: data.serviceCategory,
+        contactPersonName: session.user.name,
         contactEmail: session.user.email,
       },
     });

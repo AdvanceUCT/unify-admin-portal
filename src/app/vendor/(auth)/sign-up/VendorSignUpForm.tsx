@@ -45,7 +45,6 @@ export function VendorSignUpForm() {
     }
 
     router.push("/vendor");
-    router.refresh();
   }
 
   return (
