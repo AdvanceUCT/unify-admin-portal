@@ -1,6 +1,5 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { AuditAction } from "@/generated/prisma/enums";
@@ -15,28 +14,23 @@ const createVendorProfileSchema = z.object({
 
 export type CreateVendorProfileInput = z.input<typeof createVendorProfileSchema>;
 
-export type CreateVendorProfileResult = {
-  status: "error";
-  message: string;
-};
+export type CreateVendorProfileResult =
+  | { status: "success" }
+  | { status: "error"; message: string };
 
 /**
- * Creates the vendor profile row right after a vendor signs up, then redirects
- * to the vendor dashboard. The signup form only collects auth fields (name,
- * email, password) plus these two profile fields, so this runs as a follow-up
- * server action rather than a Better Auth `user.create.after` hook, which has
- * no access to the form data.
+ * Creates the vendor profile row right after a vendor signs up. The signup
+ * form only collects auth fields (name, email, password) plus these two
+ * profile fields, so this runs as a follow-up server action rather than a
+ * Better Auth `user.create.after` hook, which has no access to the form data.
  *
- * `redirect()` throws internally, so per Next.js's own guidance it must stay
- * outside any try/catch — wrapping it (as the caller previously did to also
- * catch real failures) swallowed the redirect signal and left the page stuck
- * on a pending submit until a manual refresh. Real failures are caught here
- * and returned as data instead of thrown, so the caller never needs to
- * distinguish a redirect-in-disguise from an actual error.
+ * Navigation after signup (showing the success message, then redirecting to
+ * the dashboard) is handled by the caller, not here — this only reports
+ * whether the profile row was saved.
  */
 export async function createVendorProfileAction(
   input: CreateVendorProfileInput,
-): Promise<CreateVendorProfileResult | undefined> {
+): Promise<CreateVendorProfileResult> {
   const session = await requireVendorSession();
 
   try {
@@ -68,5 +62,5 @@ export async function createVendorProfileAction(
     };
   }
 
-  redirect("/vendor");
+  return { status: "success" };
 }
