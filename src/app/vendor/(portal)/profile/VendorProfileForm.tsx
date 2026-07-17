@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState } from "react";
 
 import { SERVICE_CATEGORIES } from "@/lib/vendors/constants";
 
@@ -28,13 +28,15 @@ export function VendorProfileForm({ initialProfile }: VendorProfileFormProps) {
   );
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [profile, setProfile] = useState(initialProfile);
+  const [handledState, setHandledState] = useState(state);
 
-  useEffect(() => {
+  if (state !== handledState) {
+    setHandledState(state);
     if (state.status === "success" && state.profile) {
       setProfile(state.profile);
       setMode("view");
     }
-  }, [state]);
+  }
 
   if (mode === "view") {
     return (
