@@ -5,6 +5,7 @@ import {
   CredentialDeliveryStatus,
   CredentialEventType,
   CredentialIssuanceStatus,
+  CredentialRenewalStatus,
   CredentialLifecycleStatus,
   VendorApplicationStatus,
 } from "@/generated/prisma/enums";
@@ -52,7 +53,8 @@ function latestIssuanceByStudent(issuances: CredentialIssuance[]) {
 
 export function overlayCredentialStatus(
   student: StudentRecord,
-  issuance?: CredentialLifecycleSource & Pick<CredentialIssuance, "credentialDefinitionId" | "credentialExchangeId" | "id">,
+  issuance?: CredentialLifecycleSource &
+    Pick<CredentialIssuance, "credentialDefinitionId" | "credentialExchangeId" | "id" | "schemaVersion">,
 ): StudentRecord {
   return {
     ...student,
@@ -61,6 +63,7 @@ export function overlayCredentialStatus(
       id: issuance?.id ?? student.credential.id,
       isRevocable: hasRevocationHandle(issuance),
       lifecycleState: toPublicCredentialStatus(issuance),
+      schemaVersion: issuance?.schemaVersion ?? student.credential.schemaVersion,
     },
   };
 }
@@ -141,7 +144,9 @@ export async function createCredentialIssuanceFromOffer(params: {
   expiresAt?: string;
   failureReason?: string;
   revocationRegistryDefinitionId?: string;
+  schemaVersion?: string;
   studentId: string;
+  renewedFromIssuanceId?: string;
   wasDelivered: boolean;
 }) {
   return prisma.credentialIssuance.create({
@@ -156,8 +161,12 @@ export async function createCredentialIssuanceFromOffer(params: {
       email: params.email,
       failureReason: params.failureReason,
       revocationRegistryDefinitionId: params.revocationRegistryDefinitionId,
+      schemaVersion: params.schemaVersion,
       status: params.wasDelivered ? CredentialIssuanceStatus.OFFER_SENT : CredentialIssuanceStatus.FAILED,
       studentId: params.studentId,
+      renewedFromIssuanceId: params.renewedFromIssuanceId,
+      renewalStatus: params.renewedFromIssuanceId ? CredentialRenewalStatus.PENDING : CredentialRenewalStatus.NONE,
+      renewalRequestedAt: params.renewedFromIssuanceId ? new Date() : undefined,
     },
   });
 }
@@ -410,6 +419,7 @@ export async function getRecentCredentialActivityEvents(limit = 10): Promise<Cre
       id: event.id,
       occurredAt: event.occurredAt.toISOString(),
       previousState: event.previousState ?? undefined,
+      schemaVersion: issuance?.schemaVersion ?? undefined,
       state: event.state,
       status: status === "NOT_ISSUED" ? undefined : status,
       studentId: issuance?.studentId,

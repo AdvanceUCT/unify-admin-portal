@@ -19,7 +19,12 @@ export function StudentCredentialIssueView({
   return (
     <section className="grid gap-4 lg:grid-cols-2">
       <div className="rounded-lg border border-zinc-200 bg-white p-5">
-        <h2 className="mb-4 text-base font-semibold text-zinc-950">Credential</h2>
+        <div className="mb-4 flex items-center gap-2">
+          <h2 className="text-base font-semibold text-zinc-950">Credential</h2>
+          {student.credential.schemaVersion ? (
+            <Badge tone="version">v{student.credential.schemaVersion}</Badge>
+          ) : null}
+        </div>
         <dl className="space-y-3 text-sm">
           <div className="flex items-center justify-between gap-4">
             <dt className="text-zinc-500">Lifecycle</dt>

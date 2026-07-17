@@ -3,11 +3,14 @@ import Link from "next/link";
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { CredentialAuditLogTable } from "@/features/audit/CredentialAuditLogTable";
+import { StudentImportAuditLogTable } from "@/features/audit/StudentImportAuditLogTable";
 import { requireRole } from "@/lib/auth/session";
 import { getPaginatedCredentialOfferSentAuditLogs } from "@/lib/credentials/audit";
+import { getPaginatedStudentImportAuditLogs } from "@/lib/imports/audit";
 import { listDecidedVendorApplications } from "@/lib/vendors/applications";
 
 const CREDENTIAL_AUDIT_PAGE_SIZE = 25;
+const STUDENT_IMPORT_AUDIT_PAGE_SIZE = 25;
 
 function parsePage(value: string | string[] | undefined) {
   const rawValue = Array.isArray(value) ? value[0] : value;
@@ -18,19 +21,24 @@ function parsePage(value: string | string[] | undefined) {
 export default async function AuditPage({
   searchParams,
 }: {
-  searchParams: Promise<{ credentialPage?: string | string[]; tab?: string }>;
+  searchParams: Promise<{ credentialPage?: string | string[]; importPage?: string | string[]; tab?: string }>;
 }) {
   await requireRole(["SUPER_ADMIN", "ADMIN", "VIEWER"]);
 
   const params = await searchParams;
-  const activeTab = params.tab === "vendors" ? "vendors" : "credentials";
+  const activeTab =
+    params.tab === "vendors" ? "vendors" : params.tab === "imports" ? "imports" : "credentials";
 
-  const [credentialLogs, decidedVendorApplications] = await Promise.all([
+  const [credentialLogs, decidedVendorApplications, studentImportLogs] = await Promise.all([
     getPaginatedCredentialOfferSentAuditLogs({
       page: parsePage(params.credentialPage),
       pageSize: CREDENTIAL_AUDIT_PAGE_SIZE,
     }),
     listDecidedVendorApplications(),
+    getPaginatedStudentImportAuditLogs({
+      page: parsePage(params.importPage),
+      pageSize: STUDENT_IMPORT_AUDIT_PAGE_SIZE,
+    }),
   ]);
 
   return (
@@ -63,6 +71,16 @@ export default async function AuditPage({
                 {decidedVendorApplications.length}
               </span>
             )}
+          </Link>
+          <Link
+            href="/audit?tab=imports"
+            className={`border-b-2 px-1 pb-3 text-sm font-medium transition-colors ${
+              activeTab === "imports"
+                ? "border-zinc-950 text-zinc-950"
+                : "border-transparent text-zinc-500 hover:border-zinc-300 hover:text-zinc-700"
+            }`}
+          >
+            Import logs
           </Link>
         </nav>
       </div>
@@ -165,6 +183,16 @@ export default async function AuditPage({
             </table>
           </div>
         </section>
+      )}
+
+      {activeTab === "imports" && (
+        <StudentImportAuditLogTable
+          logs={studentImportLogs.logs}
+          page={studentImportLogs.page}
+          pageSize={studentImportLogs.pageSize}
+          totalCount={studentImportLogs.totalCount}
+          totalPages={studentImportLogs.totalPages}
+        />
       )}
     </div>
   );

@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
+import { CredentialSchemaStatus } from "@/generated/prisma/enums";
 import {
   getUniversityProfile,
   upsertUniversityProfile,
@@ -169,6 +170,7 @@ export async function runIssuanceSetupAction() {
 
     await createCredentialSchema({
       activatedAt: new Date(),
+      publishedAt: new Date(),
       universityProfileId: profile.id,
       schemaName: STUDENT_SCHEMA.name,
       schemaVersion: STUDENT_SCHEMA.version,
@@ -176,6 +178,7 @@ export async function runIssuanceSetupAction() {
       schemaId,
       credentialDefinitionId,
       revocationRegistryDefinitionId,
+      status: CredentialSchemaStatus.ACTIVE,
     });
 
     await prisma.universityProfile.update({

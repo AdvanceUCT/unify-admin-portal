@@ -1,6 +1,6 @@
 import "server-only";
 
-import { CredentialDeliveryStatus } from "@/generated/prisma/enums";
+import { CredentialAuditAction, CredentialDeliveryStatus, CredentialRenewalStatus } from "@/generated/prisma/enums";
 import { mockBatchIssuancePreview } from "@/lib/api/mockData";
 import { recordBatchIssuanceResult } from "@/lib/api/mockActivationStore";
 import { toPublicWalletActivationLink } from "@/lib/api/activationLinks";
@@ -23,6 +23,7 @@ import { getAllStudents, getStudentById } from "@/lib/students/repository";
 import { sendCredentialActivationEmail } from "@/lib/email/credential-activation";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfile } from "@/lib/university/profile";
+import { prisma } from "@/lib/db/prisma";
 import {
   isStudentRecordEligibleForCredentialIssuance,
   selectStudentRecordsForCredentialIssuance,
@@ -226,6 +227,7 @@ export async function getActiveCredentialDefinition() {
     credentialDefinitionId: activeSchema.credentialDefinitionId,
     revocationRegistryDefinitionId: activeSchema.revocationRegistryDefinitionId ?? undefined,
     schemaAttributes: activeSchema.schemaAttributes,
+    schemaVersion: activeSchema.schemaVersion,
   };
 }
 
@@ -255,24 +257,30 @@ async function issueStudentActivationLinks(
   selection: BatchIssuanceSelection = {},
   actorId?: string | null,
   includeBatchIdInAudit = false,
+  options: {
+    renewedFromIssuanceId?: string;
+    skipActiveIssuanceCheck?: boolean;
+  } = {},
 ): Promise<BatchIssuanceResult> {
   const activeSchema = await getActiveCredentialDefinition();
   const batchId = batchIdFrom(now);
 
-  try {
-    await Promise.all(
-      studentsForIssuance.map((student) =>
-      assertCredentialIssuanceAllowed({
-        credentialDefinitionId: activeSchema.credentialDefinitionId,
-        studentId: student.credential.studentNumber,
-      }),
-      ),
-    );
-  } catch (error) {
-    throw new StudentIssuanceError(
-      error instanceof Error ? error.message : "Student already has an active credential issuance.",
-      409,
-    );
+  if (!options.skipActiveIssuanceCheck) {
+    try {
+      await Promise.all(
+        studentsForIssuance.map((student) =>
+          assertCredentialIssuanceAllowed({
+            credentialDefinitionId: activeSchema.credentialDefinitionId,
+            studentId: student.credential.studentNumber,
+          }),
+        ),
+      );
+    } catch (error) {
+      throw new StudentIssuanceError(
+        error instanceof Error ? error.message : "Student already has an active credential issuance.",
+        409,
+      );
+    }
   }
 
   const agentResult = await createBatchActivationLinks({
@@ -305,7 +313,9 @@ async function issueStudentActivationLinks(
       expiresAt: offer.expiresAt,
       failureReason: emailDelivery.status === "Failed" ? emailDelivery.failureReason : undefined,
       revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId,
+      schemaVersion: activeSchema.schemaVersion,
       studentId: persistedStudentId,
+      renewedFromIssuanceId: options.renewedFromIssuanceId,
       wasDelivered: emailDelivery.status === "Delivered",
     });
     await reconcileCredentialEventLogs(offer.credentialExchangeId);
@@ -423,4 +433,106 @@ export async function queueRealStudentIssuance(
   }
 
   return issueStudentActivationLinks([studentWithCredentialStatus], now, 1, {}, actorId, false);
+}
+
+export async function queueRealStudentRenewal(
+  studentId: string,
+  now = new Date(),
+  actorId?: string | null,
+): Promise<BatchIssuanceResult> {
+  const student = await getStudentById(studentId);
+
+  if (!student) {
+    throw new StudentIssuanceError("Student record was not found.", 404);
+  }
+
+  const existing = await prisma.credentialIssuance.findFirst({
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+    where: { studentId: { in: [student.credential.studentNumber, student.profile.id] } },
+  });
+  const studentWithCredentialStatus = await overlayCredentialStatusForStudent(student);
+  const status = studentWithCredentialStatus.credential.lifecycleState;
+
+  if (!existing) {
+    throw new StudentIssuanceError("No credential exists to renew for this student.", 404);
+  }
+  if (status === "REVOKED" || status === "SUSPENDED" || status === "LEGACY_NON_REVOCABLE") {
+    throw new StudentIssuanceError(`Credential cannot be renewed while its status is ${status}.`, 409);
+  }
+  if (!["ACTIVE", "EXPIRED", "ACCEPTED", "OFFER_SENT"].includes(status)) {
+    throw new StudentIssuanceError("Credential is not ready for renewal in its current lifecycle state.", 409);
+  }
+
+  await prisma.credentialIssuance.update({
+    data: {
+      renewalFailureReason: null,
+      renewalRequestedAt: now,
+      renewalStatus: CredentialRenewalStatus.PENDING,
+    },
+    where: { id: existing.id },
+  });
+
+  try {
+    const result = await issueStudentActivationLinks(
+      [studentWithCredentialStatus],
+      now,
+      1,
+      { cohortId: "renewal" },
+      actorId,
+      false,
+      { renewedFromIssuanceId: existing.id, skipActiveIssuanceCheck: true },
+    );
+    const replacementId = result.activationDeliveries[0]?.credentialId;
+
+    await prisma.$transaction(async (transaction) => {
+      await transaction.credentialIssuance.update({
+        data: {
+          renewedIntoIssuanceId: replacementId,
+          renewalCompletedAt: now,
+          renewalStatus: CredentialRenewalStatus.COMPLETED,
+        },
+        where: { id: existing.id },
+      });
+
+      await transaction.credentialAuditLog.create({
+        data: {
+          action: CredentialAuditAction.CREDENTIAL_RENEWAL_OFFER_CREATED,
+          actorId,
+          credentialDefinitionId: existing.credentialDefinitionId,
+          credentialExchangeId: existing.credentialExchangeId,
+          credentialIssuanceId: existing.id,
+          message: "Credential renewal offer created.",
+          metadata: { replacementIssuanceId: replacementId ?? null },
+          studentId: existing.studentId,
+        },
+      });
+    });
+
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Credential renewal failed.";
+    await prisma.$transaction(async (transaction) => {
+      await transaction.credentialIssuance.update({
+        data: {
+          renewalFailureReason: message,
+          renewalStatus: CredentialRenewalStatus.FAILED,
+        },
+        where: { id: existing.id },
+      });
+
+      await transaction.credentialAuditLog.create({
+        data: {
+          action: CredentialAuditAction.CREDENTIAL_RENEWAL_FAILED,
+          actorId,
+          credentialDefinitionId: existing.credentialDefinitionId,
+          credentialExchangeId: existing.credentialExchangeId,
+          credentialIssuanceId: existing.id,
+          message,
+          studentId: existing.studentId,
+        },
+      });
+    });
+
+    throw error;
+  }
 }

@@ -39,6 +39,7 @@ export default async function AdminOverviewPage() {
               <tr>
                 <th className="px-5 py-3 font-medium">Student ID</th>
                 <th className="px-5 py-3 font-medium">Status</th>
+                <th className="px-5 py-3 font-medium">Schema version</th>
                 <th className="px-5 py-3 font-medium">Time</th>
               </tr>
             </thead>
@@ -51,6 +52,7 @@ export default async function AdminOverviewPage() {
                       <Badge tone={credentialStatusTone(event.status)}>{formatCredentialStatus(event.status)}</Badge>
                     ) : null}
                   </td>
+                  <td className="px-5 py-4 text-zinc-600">{event.schemaVersion ?? "—"}</td>
                   <td className="px-5 py-4 text-zinc-600">{formatDateTime(event.occurredAt)}</td>
                 </tr>
               ))}

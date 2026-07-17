@@ -170,9 +170,14 @@ export function StudentSearch({ initial }: { initial: StudentRecord[] }) {
                     <td className="px-5 py-4 text-zinc-600">{student.credential.faculty}</td>
                     <td className="px-5 py-4 text-zinc-600">{student.credential.programme}</td>
                     <td className="px-5 py-4">
-                      <Badge tone={credentialStatusTone(student.credential.lifecycleState)}>
-                        {formatCredentialStatus(student.credential.lifecycleState)}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge tone={credentialStatusTone(student.credential.lifecycleState)}>
+                          {formatCredentialStatus(student.credential.lifecycleState)}
+                        </Badge>
+                        {student.credential.lifecycleState !== "NOT_ISSUED" && student.credential.schemaVersion ? (
+                          <Badge tone="version">v{student.credential.schemaVersion}</Badge>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))

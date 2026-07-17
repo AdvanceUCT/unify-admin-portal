@@ -237,6 +237,8 @@ model UniversityProfile {
   issuerDid          String?
   setupStatus        SetupStatus        @default(PENDING)
   setupCompletedAt   DateTime?
+  defaultCredentialValidityDays Int      @default(365)
+  renewalCadenceMonths          Int      @default(12)
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
   credentialSchemas       CredentialSchema[]
@@ -329,8 +331,10 @@ model CredentialSchema {
   schemaId                       String?
   credentialDefinitionId         String?
   revocationRegistryDefinitionId String?
+  status                         CredentialSchemaStatus @default(ACTIVE)
   isActive                       Boolean           @default(true)
   activatedAt                    DateTime?
+  publishedAt                    DateTime?
   retiredAt                      DateTime?
   createdAt                      DateTime          @default(now())
   updatedAt                      DateTime          @updatedAt
@@ -338,6 +342,7 @@ model CredentialSchema {
   @@unique([universityProfileId, schemaName, schemaVersion])
   @@index([universityProfileId])
   @@index([universityProfileId, isActive])
+  @@index([universityProfileId, status])
   @@map("credential_schema")
 }
 
@@ -345,6 +350,7 @@ model CredentialIssuance {
   id                             String                     @id @default(cuid())
   studentId                      String
   credentialDefinitionId         String
+  schemaVersion                  String?
   credentialExchangeId           String?                    @unique
   revocationRegistryDefinitionId String?
   credentialRevocationId         String?
@@ -357,6 +363,12 @@ model CredentialIssuance {
   lifecycleStatus                CredentialLifecycleStatus?
   lifecycleStatusUpdatedAt       DateTime?
   lifecycleReason                String?
+  renewalStatus                  CredentialRenewalStatus @default(NONE)
+  renewalRequestedAt             DateTime?
+  renewalCompletedAt             DateTime?
+  renewalFailureReason           String?
+  renewedFromIssuanceId          String?
+  renewedIntoIssuanceId          String?
   failureReason                  String?
   issuedAt                       DateTime?
   revokedAt                      DateTime?
@@ -373,6 +385,9 @@ model CredentialIssuance {
   @@index([revocationRegistryDefinitionId])
   @@index([status])
   @@index([lifecycleStatus])
+  @@index([renewalStatus])
+  @@index([renewedFromIssuanceId])
+  @@index([renewedIntoIssuanceId])
   @@index([createdAt])
   @@map("credential_issuance")
 }
@@ -507,6 +522,20 @@ enum CredentialLifecycleStatus {
   EXPIRED
 }
 
+enum CredentialSchemaStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
+enum CredentialRenewalStatus {
+  NONE
+  PENDING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
 enum CredentialDeliveryStatus {
   PENDING
   DELIVERED
@@ -529,6 +558,8 @@ enum CredentialAuditAction {
   CREDENTIAL_REVOKED
   CREDENTIAL_EXPIRED
   CREDENTIAL_RENEWAL_REQUESTED
+  CREDENTIAL_RENEWAL_OFFER_CREATED
+  CREDENTIAL_RENEWAL_FAILED
 }
 
 enum SetupStatus {
@@ -577,4 +608,7 @@ enum AuditAction {
   VENDOR_APPLICATION_REJECTED
   VENDOR_APPLICATION_REVOKED
   STUDENT_IMPORT_COMMITTED
+  SCHEMA_VERSION_CREATED
+  SCHEMA_PUBLISHED
+  RENEWAL_SETTINGS_UPDATED
 }
