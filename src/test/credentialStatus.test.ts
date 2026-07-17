@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { CredentialIssuanceStatus } from "@/generated/prisma/enums";
+import { CredentialIssuanceStatus, CredentialLifecycleStatus } from "@/generated/prisma/enums";
 import {
   derivedCredentialEventId,
   isRelevantCredentialStateChangedPayload,
@@ -69,6 +69,36 @@ describe("credential status mapping", () => {
         status: CredentialIssuanceStatus.ISSUED,
       }),
     ).toBe("ACTIVE");
+  });
+
+  it("treats active credentials as expired after their stored expiry date", () => {
+    expect(
+      toPublicCredentialStatus(
+        {
+          credentialExpiresAt: new Date("2026-05-01T00:00:00.000Z"),
+          credentialRevocationId: "1",
+          lifecycleStatus: CredentialLifecycleStatus.ACTIVE,
+          revocationRegistryDefinitionId: "rev-reg-1",
+          status: CredentialIssuanceStatus.ISSUED,
+        },
+        new Date("2026-05-02T00:00:00.000Z"),
+      ),
+    ).toBe("EXPIRED");
+  });
+
+  it("keeps suspension stronger than expiry", () => {
+    expect(
+      toPublicCredentialStatus(
+        {
+          credentialExpiresAt: new Date("2026-05-01T00:00:00.000Z"),
+          credentialRevocationId: "1",
+          lifecycleStatus: CredentialLifecycleStatus.SUSPENDED,
+          revocationRegistryDefinitionId: "rev-reg-1",
+          status: CredentialIssuanceStatus.ISSUED,
+        },
+        new Date("2026-05-02T00:00:00.000Z"),
+      ),
+    ).toBe("SUSPENDED");
   });
 
 });

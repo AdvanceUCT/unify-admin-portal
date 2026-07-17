@@ -139,6 +139,7 @@ export async function createCredentialIssuanceFromOffer(params: {
   activationUrl?: string;
   credentialDefinitionId: string;
   credentialExchangeId: string;
+  credentialExpiresAt?: Date;
   credentialRevocationId?: string;
   email?: string;
   expiresAt?: string;
@@ -156,6 +157,7 @@ export async function createCredentialIssuanceFromOffer(params: {
       activationUrl: params.activationUrl,
       credentialDefinitionId: params.credentialDefinitionId,
       credentialExchangeId: params.credentialExchangeId,
+      credentialExpiresAt: params.credentialExpiresAt,
       credentialRevocationId: params.credentialRevocationId,
       deliveryStatus: params.wasDelivered ? CredentialDeliveryStatus.DELIVERED : CredentialDeliveryStatus.FAILED,
       email: params.email,
