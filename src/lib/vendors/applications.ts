@@ -28,6 +28,14 @@ const DOCUMENT_FIELDS = [
 ] as const;
 type DocumentField = (typeof DOCUMENT_FIELDS)[number];
 
+function assertDocumentField(fieldKey: string): DocumentField {
+  if (!(DOCUMENT_FIELDS as readonly string[]).includes(fieldKey)) {
+    throw new Error(`Invalid document field: ${fieldKey}`);
+  }
+
+  return fieldKey as DocumentField;
+}
+
 const step1Schema = z.object({
   companyName: z.string().trim().min(1, "Company name is required").max(200, "Company name must be 200 characters or fewer"),
   companyRegistrationNumber: z
@@ -694,13 +702,11 @@ export async function saveDraftDocumentPath(
   fieldKey: string,
   storagePath: string,
 ): Promise<{ previousPath: string | null }> {
-  if (!(DOCUMENT_FIELDS as readonly string[]).includes(fieldKey)) {
-    throw new Error(`Invalid document field: ${fieldKey}`);
-  }
+  const documentField = assertDocumentField(fieldKey);
 
   const application = await prisma.vendorApplication.findFirst({
     where: { id: applicationId, vendorProfile: { userId }, status: VendorApplicationStatus.DRAFT },
-    select: { id: true, [fieldKey as DocumentField]: true },
+    select: { id: true, [documentField]: true },
   });
 
   if (!application) {
@@ -709,11 +715,29 @@ export async function saveDraftDocumentPath(
 
   await prisma.vendorApplication.update({
     where: { id: applicationId },
-    data: { [fieldKey as DocumentField]: storagePath },
+    data: { [documentField]: storagePath },
   });
 
-  const previousPath = application[fieldKey as DocumentField] as string | null;
+  const previousPath = application[documentField] as string | null;
   return { previousPath };
+}
+
+/** Verifies a draft document target before storage upload uses the application ID in its object path. */
+export async function assertDraftDocumentUploadAllowed(
+  applicationId: string,
+  userId: string,
+  fieldKey: string,
+): Promise<void> {
+  assertDocumentField(fieldKey);
+
+  const application = await prisma.vendorApplication.findFirst({
+    where: { id: applicationId, vendorProfile: { userId }, status: VendorApplicationStatus.DRAFT },
+    select: { id: true },
+  });
+
+  if (!application) {
+    throw new Error("Draft application not found.");
+  }
 }
 
 /** Clears a document field on the draft. Returns the path that was removed, if any. */
@@ -722,27 +746,25 @@ export async function clearDraftDocumentPath(
   userId: string,
   fieldKey: string,
 ): Promise<{ removedPath: string | null }> {
-  if (!(DOCUMENT_FIELDS as readonly string[]).includes(fieldKey)) {
-    throw new Error(`Invalid document field: ${fieldKey}`);
-  }
+  const documentField = assertDocumentField(fieldKey);
 
   const application = await prisma.vendorApplication.findFirst({
     where: { id: applicationId, vendorProfile: { userId }, status: VendorApplicationStatus.DRAFT },
-    select: { id: true, [fieldKey as DocumentField]: true },
+    select: { id: true, [documentField]: true },
   });
 
   if (!application) {
     throw new Error("Draft application not found.");
   }
 
-  const removedPath = application[fieldKey as DocumentField] as string | null;
+  const removedPath = application[documentField] as string | null;
   if (!removedPath) {
     return { removedPath: null };
   }
 
   await prisma.vendorApplication.update({
     where: { id: applicationId },
-    data: { [fieldKey as DocumentField]: null },
+    data: { [documentField]: null },
   });
 
   return { removedPath };

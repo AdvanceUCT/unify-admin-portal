@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuditAction, VendorApplicationStatus } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit/audit";
 import {
+  assertDraftDocumentUploadAllowed,
   createVendorApplication,
   ensureVendorVerificationServicePoint,
   listDecidedVendorApplications,
@@ -163,6 +164,33 @@ describe("createVendorApplication", () => {
     await expect(
       createVendorApplication({ userId: "user_1", input: validInput }),
     ).rejects.toThrow("already have an application under review");
+  });
+});
+
+describe("assertDraftDocumentUploadAllowed", () => {
+  it("rejects unsupported document fields before storage upload", async () => {
+    await expect(
+      assertDraftDocumentUploadAllowed("app_1", "user_1", "docPassport"),
+    ).rejects.toThrow("Invalid document field: docPassport");
+
+    expect(database.transaction.vendorApplication.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("rejects applications that do not belong to the signed-in vendor", async () => {
+    database.transaction.vendorApplication.findFirst.mockResolvedValueOnce(null);
+
+    await expect(
+      assertDraftDocumentUploadAllowed("app_2", "user_1", "docProofOfAddress"),
+    ).rejects.toThrow("Draft application not found.");
+
+    expect(database.transaction.vendorApplication.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: "app_2",
+        vendorProfile: { userId: "user_1" },
+        status: VendorApplicationStatus.DRAFT,
+      },
+      select: { id: true },
+    });
   });
 });
 

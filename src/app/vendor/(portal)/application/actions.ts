@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireVendorSession } from "@/lib/auth/session";
 import { deleteVendorDocument, uploadVendorDocument } from "@/lib/storage/supabase";
 import {
+  assertDraftDocumentUploadAllowed,
   clearDraftDocumentPath,
   getOrCreateDraftApplication,
   saveDraftApplication,
@@ -122,8 +123,12 @@ export async function uploadDocumentAction(formData: FormData): Promise<UploadAc
     };
   }
 
+  let uploadedPath: string | undefined;
+
   try {
+    await assertDraftDocumentUploadAllowed(applicationId, session.user.id, fieldKey);
     const { path } = await uploadVendorDocument(file, applicationId, fieldKey);
+    uploadedPath = path;
     const { previousPath } = await saveDraftDocumentPath(applicationId, session.user.id, fieldKey, path);
 
     if (previousPath && previousPath !== path) {
@@ -140,6 +145,17 @@ export async function uploadDocumentAction(formData: FormData): Promise<UploadAc
     for (const path of REVALIDATE_PATHS) revalidatePath(path);
     return { ok: true, path, filename: file.name };
   } catch {
+    if (uploadedPath) {
+      try {
+        await deleteVendorDocument(uploadedPath);
+      } catch (error) {
+        console.error(
+          `[vendor-documents] Failed to delete orphaned upload ${uploadedPath}:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
     return {
       ok: false,
       error: "Something went wrong while uploading. Please check the file and try again.",
