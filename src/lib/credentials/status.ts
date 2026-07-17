@@ -5,6 +5,7 @@ import {
   CredentialDeliveryStatus,
   CredentialEventType,
   CredentialIssuanceStatus,
+  CredentialRenewalStatus,
   CredentialLifecycleStatus,
   VendorApplicationStatus,
 } from "@/generated/prisma/enums";
@@ -145,6 +146,7 @@ export async function createCredentialIssuanceFromOffer(params: {
   revocationRegistryDefinitionId?: string;
   schemaVersion?: string;
   studentId: string;
+  renewedFromIssuanceId?: string;
   wasDelivered: boolean;
 }) {
   return prisma.credentialIssuance.create({
@@ -162,6 +164,9 @@ export async function createCredentialIssuanceFromOffer(params: {
       schemaVersion: params.schemaVersion,
       status: params.wasDelivered ? CredentialIssuanceStatus.OFFER_SENT : CredentialIssuanceStatus.FAILED,
       studentId: params.studentId,
+      renewedFromIssuanceId: params.renewedFromIssuanceId,
+      renewalStatus: params.renewedFromIssuanceId ? CredentialRenewalStatus.PENDING : CredentialRenewalStatus.NONE,
+      renewalRequestedAt: params.renewedFromIssuanceId ? new Date() : undefined,
     },
   });
 }

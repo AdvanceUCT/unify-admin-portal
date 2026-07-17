@@ -5,8 +5,6 @@ import type { StudentRecord } from "@/lib/api/types";
 import { prisma } from "@/lib/db/prisma";
 import { getUniversityProfile } from "@/lib/university/profile";
 
-const DEFAULT_CREDENTIAL_VALIDITY_DAYS = 365;
-
 function attributesRecord(attributes: Student["attributes"]): Record<string, string | undefined> {
   if (!attributes || typeof attributes !== "object" || Array.isArray(attributes)) {
     return {};
@@ -20,13 +18,13 @@ function attributesRecord(attributes: Student["attributes"]): Record<string, str
   );
 }
 
-function expiresAtFrom(createdAt: Date) {
+function expiresAtFrom(createdAt: Date, validityDays: number) {
   const expiresAt = new Date(createdAt);
-  expiresAt.setDate(expiresAt.getDate() + DEFAULT_CREDENTIAL_VALIDITY_DAYS);
+  expiresAt.setDate(expiresAt.getDate() + validityDays);
   return expiresAt.toISOString();
 }
 
-function toStudentRecord(student: Student, institution: string): StudentRecord {
+function toStudentRecord(student: Student, institution: string, validityDays: number): StudentRecord {
   const attributes = attributesRecord(student.attributes);
 
   return {
@@ -46,31 +44,34 @@ function toStudentRecord(student: Student, institution: string): StudentRecord {
       lifecycleState: "NOT_ISSUED",
       studentNumber: student.studentNumber,
       validFrom: student.createdAt.toISOString(),
-      expiresAt: expiresAtFrom(student.createdAt),
+      expiresAt: expiresAtFrom(student.createdAt, validityDays),
       attributes,
     },
   };
 }
 
-async function institutionName(): Promise<string> {
+async function institutionSettings(): Promise<{ name: string; validityDays: number }> {
   const profile = await getUniversityProfile();
-  return profile?.name ?? "";
+  return {
+    name: profile?.name ?? "",
+    validityDays: profile?.defaultCredentialValidityDays ?? 365,
+  };
 }
 
 export async function getAllStudents(): Promise<StudentRecord[]> {
-  const [students, institution] = await Promise.all([
+  const [students, settings] = await Promise.all([
     prisma.student.findMany({ orderBy: { lastName: "asc" } }),
-    institutionName(),
+    institutionSettings(),
   ]);
-  return students.map((student) => toStudentRecord(student, institution));
+  return students.map((student) => toStudentRecord(student, settings.name, settings.validityDays));
 }
 
 export async function getStudentById(id: string): Promise<StudentRecord | undefined> {
-  const [student, institution] = await Promise.all([
+  const [student, settings] = await Promise.all([
     prisma.student.findUnique({ where: { id } }),
-    institutionName(),
+    institutionSettings(),
   ]);
-  return student ? toStudentRecord(student, institution) : undefined;
+  return student ? toStudentRecord(student, settings.name, settings.validityDays) : undefined;
 }
 
 function matchesQuery(student: Student, normalizedQuery: string) {
@@ -87,11 +88,11 @@ export async function searchStudents(query: string): Promise<StudentRecord[]> {
     return getAllStudents();
   }
 
-  const [students, institution] = await Promise.all([
+  const [students, settings] = await Promise.all([
     prisma.student.findMany({ orderBy: { lastName: "asc" } }),
-    institutionName(),
+    institutionSettings(),
   ]);
   return students
     .filter((student) => matchesQuery(student, normalizedQuery))
-    .map((student) => toStudentRecord(student, institution));
+    .map((student) => toStudentRecord(student, settings.name, settings.validityDays));
 }

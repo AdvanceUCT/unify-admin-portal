@@ -3,8 +3,15 @@ import { createBatchActivationLinks } from "@/lib/agentClient";
 import { sendCredentialActivationEmail } from "@/lib/email/credential-activation";
 import { resetMockActivationStore } from "@/lib/api/mockActivationStore";
 import { recordCredentialOfferSentAudit } from "@/lib/credentials/audit";
-import { queueRealBatchIssuance, queueRealStudentIssuance, StudentIssuanceError } from "@/lib/issuance/batchIssuance";
-import { assertCredentialIssuanceAllowed } from "@/lib/credentials/status";
+import { queueRealBatchIssuance, queueRealStudentIssuance, queueRealStudentRenewal, StudentIssuanceError } from "@/lib/issuance/batchIssuance";
+import { assertCredentialIssuanceAllowed, overlayCredentialStatusForStudent } from "@/lib/credentials/status";
+
+const prismaMocks = vi.hoisted(() => ({
+  auditCreate: vi.fn(),
+  issuanceFindFirst: vi.fn(),
+  issuanceUpdate: vi.fn(),
+  transaction: vi.fn(),
+}));
 
 vi.mock("@/lib/agentClient", () => ({
   createBatchActivationLinks: vi.fn(),
@@ -20,13 +27,40 @@ vi.mock("@/lib/credentials/audit", () => ({
 
 vi.mock("@/lib/credentials/status", () => ({
   assertCredentialIssuanceAllowed: vi.fn(async () => undefined),
-  createCredentialIssuanceFromOffer: vi.fn(async (params: { studentId: string }) => ({
-    id: params.studentId === "WOOJOS100" ? "credential-demo-100" : "credential-demo-001",
+  createCredentialIssuanceFromOffer: vi.fn(async (params: { renewedFromIssuanceId?: string; studentId: string }) => ({
+    id: params.renewedFromIssuanceId
+      ? "credential-renewal-100"
+      : params.studentId === "WOOJOS100"
+        ? "credential-demo-100"
+        : "credential-demo-001",
   })),
   overlayCredentialStatuses: vi.fn(async (students) => students),
   overlayCredentialStatusForStudent: vi.fn(async (student) => student),
   reconcileCredentialEventLogs: vi.fn(async () => undefined),
 }));
+
+vi.mock("@/lib/db/prisma", () => {
+  const transaction = {
+    credentialAuditLog: {
+      create: prismaMocks.auditCreate,
+    },
+    credentialIssuance: {
+      update: prismaMocks.issuanceUpdate,
+    },
+  };
+
+  return {
+    prisma: {
+      $transaction: prismaMocks.transaction.mockImplementation((operation: (client: typeof transaction) => unknown) =>
+        operation(transaction),
+      ),
+      credentialIssuance: {
+        findFirst: prismaMocks.issuanceFindFirst,
+        update: prismaMocks.issuanceUpdate,
+      },
+    },
+  };
+});
 
 vi.mock("@/lib/university/profile", () => ({
   getUniversityProfile: vi.fn(async () => ({ id: "profile-001" })),
@@ -58,6 +92,18 @@ describe("real batch issuance orchestration", () => {
     vi.mocked(recordCredentialOfferSentAudit).mockResolvedValue(undefined);
     vi.mocked(assertCredentialIssuanceAllowed).mockReset();
     vi.mocked(assertCredentialIssuanceAllowed).mockResolvedValue(undefined);
+    vi.mocked(overlayCredentialStatusForStudent).mockReset();
+    vi.mocked(overlayCredentialStatusForStudent).mockImplementation(async (student) => student);
+    prismaMocks.auditCreate.mockReset();
+    prismaMocks.issuanceFindFirst.mockReset();
+    prismaMocks.issuanceUpdate.mockReset();
+    prismaMocks.transaction.mockClear();
+    prismaMocks.transaction.mockImplementation((operation) =>
+      operation({
+        credentialAuditLog: { create: prismaMocks.auditCreate },
+        credentialIssuance: { update: prismaMocks.issuanceUpdate },
+      }),
+    );
   });
 
   it("issues Joshua's simulated student credential through the agent service and sends email", async () => {
@@ -197,5 +243,53 @@ describe("real batch issuance orchestration", () => {
       status: 409,
     } satisfies Partial<StudentIssuanceError>);
     expect(createBatchActivationLinks).not.toHaveBeenCalled();
+  });
+
+  it("creates a replacement offer for renewal without blocking on the existing active issuance", async () => {
+    prismaMocks.issuanceFindFirst.mockResolvedValue({
+      credentialDefinitionId: "cred-def-id",
+      credentialExchangeId: "credential-exchange-old",
+      id: "issuance-old",
+      studentId: "WOOJOS100",
+    });
+    vi.mocked(overlayCredentialStatusForStudent).mockImplementationOnce(async (student) => ({
+      ...student,
+      credential: { ...student.credential, lifecycleState: "ACTIVE" },
+    }));
+    vi.mocked(createBatchActivationLinks).mockResolvedValue({
+      failures: [],
+      offers: [
+        {
+          activationId: "activation-renewal",
+          activationUrl: "unifywallet://activate?token=renewal-token",
+          credentialExchangeId: "credential-exchange-renewal",
+          email: "joshuawood.dc@gmail.com",
+          expiresAt: "2026-04-28T10:00:00.000Z",
+          externalId: "student-demo-100",
+        },
+      ],
+    });
+
+    const result = await queueRealStudentRenewal("student-demo-100", new Date("2026-04-27T10:00:00Z"), "admin-1");
+
+    expect(assertCredentialIssuanceAllowed).not.toHaveBeenCalled();
+    expect(result.activationDeliveries[0]).toMatchObject({
+      credentialId: "credential-renewal-100",
+      status: "Delivered",
+    });
+    expect(prismaMocks.issuanceUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ renewalStatus: "COMPLETED", renewedIntoIssuanceId: "credential-renewal-100" }),
+        where: { id: "issuance-old" },
+      }),
+    );
+    expect(prismaMocks.auditCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "CREDENTIAL_RENEWAL_OFFER_CREATED",
+          actorId: "admin-1",
+        }),
+      }),
+    );
   });
 });

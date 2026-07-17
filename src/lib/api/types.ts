@@ -189,7 +189,9 @@ export type CredentialAuditLogEntry = {
     | "CREDENTIAL_REACTIVATED"
     | "CREDENTIAL_REVOKED"
     | "CREDENTIAL_EXPIRED"
-    | "CREDENTIAL_RENEWAL_REQUESTED";
+    | "CREDENTIAL_RENEWAL_REQUESTED"
+    | "CREDENTIAL_RENEWAL_OFFER_CREATED"
+    | "CREDENTIAL_RENEWAL_FAILED";
   actorId?: string | null;
   batchId?: string | null;
   batchItemId?: string | null;
