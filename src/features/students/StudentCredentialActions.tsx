@@ -26,6 +26,7 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
   const [copyLabel, setCopyLabel] = useState("Copy");
   const [error, setError] = useState<string | null>(null);
   const [isIssuing, setIsIssuing] = useState(false);
+  const [isRenewing, setIsRenewing] = useState(false);
   const [isChangingLifecycle, setIsChangingLifecycle] = useState(false);
   const [lifecycleAction, setLifecycleAction] = useState<LifecycleAction | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -37,6 +38,7 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
   }, [currentDelivery?.status, student.credential.lifecycleState]);
   const canSuspend = student.credential.lifecycleState === "ACTIVE";
   const canReactivate = student.credential.lifecycleState === "SUSPENDED";
+  const canRenew = ["ACTIVE", "EXPIRED"].includes(student.credential.lifecycleState);
   const canRevoke =
     canSuspend ||
     canReactivate ||
@@ -97,6 +99,39 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
     }
   }
 
+  async function renewCredential() {
+    setCopyLabel("Copy");
+    setError(null);
+    setIsRenewing(true);
+    setMessage(null);
+
+    try {
+      const response = await fetch(`/api/students/${encodeURIComponent(student.profile.id)}/credentials/renew`, {
+        cache: "no-store",
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+
+      const result = (await response.json()) as BatchIssuanceResult;
+      const nextDelivery = result.activationDeliveries[0];
+      const failureReason = nextDelivery?.failureReason ?? result.failures?.[0]?.message;
+      setCurrentDelivery(nextDelivery);
+      setMessage(
+        nextDelivery?.status === "Delivered"
+          ? `Renewal activation link delivered to ${nextDelivery.email ?? student.profile.email}.`
+          : `Renewal link was created, but email delivery failed${failureReason ? `: ${failureReason}` : "."}`,
+      );
+      router.refresh();
+    } catch (renewalError) {
+      setError(renewalError instanceof Error ? renewalError.message : "Credential renewal request failed.");
+    } finally {
+      setIsRenewing(false);
+    }
+  }
+
   async function copyActivationLink() {
     if (!currentDelivery?.activationUrl) {
       return;
@@ -151,7 +186,7 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
       <div>
         <h2 className="mb-4 text-base font-semibold text-zinc-950">Available actions</h2>
         {canIssue ? (
-          <div>
+          <div className="flex flex-wrap gap-2">
             <button
               className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-zinc-950 bg-zinc-950 px-3 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:border-zinc-300 disabled:bg-zinc-200 disabled:text-zinc-500"
               disabled={isIssuing}
@@ -161,7 +196,28 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
               {isIssuing ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Send aria-hidden className="size-4" />}
               {isIssuing ? "Issuing..." : "Issue credential"}
             </button>
+            {canRenew ? (
+              <button
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-800 transition hover:border-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={isRenewing}
+                onClick={renewCredential}
+                type="button"
+              >
+                {isRenewing ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <RotateCcw aria-hidden className="size-4" />}
+                {isRenewing ? "Renewing..." : "Renew credential"}
+              </button>
+            ) : null}
           </div>
+        ) : canRenew ? (
+          <button
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-800 transition hover:border-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isRenewing}
+            onClick={renewCredential}
+            type="button"
+          >
+            {isRenewing ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <RotateCcw aria-hidden className="size-4" />}
+            {isRenewing ? "Renewing..." : "Renew credential"}
+          </button>
         ) : null}
 
         <div className="mt-4 space-y-2">
