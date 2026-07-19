@@ -20,6 +20,10 @@ const JOSHUA_DEMO_INDEX = 100;
 const JOSHUA_EMAIL = "joshuawood.dc@gmail.com";
 const CALEB_DEMO_INDEX = 99;
 const CALEB_EMAIL = "caleb.voskuil@gmail.com";
+const CHARI_DEMO_INDEX = 98;
+const CHARI_EMAIL = "charikumbirai2003@gmail.com";
+const RENEWAL_DEMO_INDEX = 97;
+const RENEWAL_DEMO_EMAIL = "caleb.voskuil13@gmail.com";
 
 const firstNames = [
   "Sipho",
@@ -92,6 +96,14 @@ function emailForStudent(firstName: string, lastName: string, index: number) {
     return CALEB_EMAIL;
   }
 
+  if (index === CHARI_DEMO_INDEX) {
+    return CHARI_EMAIL;
+  }
+
+  if (index === RENEWAL_DEMO_INDEX) {
+    return RENEWAL_DEMO_EMAIL;
+  }
+
   const safeName = `${firstName}.${lastName}`.replace(/[^a-z0-9.]/gi, "").toLowerCase();
   return `${safeName}.${padded(index)}@students.uct.ac.za`;
 }
@@ -110,13 +122,21 @@ function buildStudentRecord(index: number): StudentRecord {
       ? "Joshua"
       : index === CALEB_DEMO_INDEX
         ? "Caleb"
-        : firstNames[(index - 1) % firstNames.length];
+        : index === CHARI_DEMO_INDEX
+          ? "Chari"
+          : index === RENEWAL_DEMO_INDEX
+            ? "Renewal"
+            : firstNames[(index - 1) % firstNames.length];
   const lastName =
     index === JOSHUA_DEMO_INDEX
       ? "Wood"
       : index === CALEB_DEMO_INDEX
         ? "Voskuil"
-        : lastNames[(index * 7 - 7) % lastNames.length];
+        : index === CHARI_DEMO_INDEX
+          ? "Kumbirai"
+          : index === RENEWAL_DEMO_INDEX
+            ? "Demo"
+            : lastNames[(index * 7 - 7) % lastNames.length];
   const idSuffix = padded(index);
   const studentNumber = studentNumberFor(firstName, lastName, index);
 

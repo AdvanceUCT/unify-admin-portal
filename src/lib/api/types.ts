@@ -155,7 +155,8 @@ export type EligibilityRule = {
 
 export type DashboardSummary = {
   activeBatchJobs: number;
-  expiredCredentials: number;
+  /** Currently `ISSUED` but past `expiresAt` — the same population the renewal preview calls "due for renewal". */
+  dueForRenewalCredentials: number;
   failedCredentials: number;
   issuedCredentials: number;
   pendingIssuance: number;

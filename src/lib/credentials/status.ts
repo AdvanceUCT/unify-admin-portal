@@ -60,7 +60,10 @@ function latestIssuanceByStudent(issuances: CredentialIssuance[]) {
 
 export function overlayCredentialStatus(
   student: StudentRecord,
-  issuance?: Pick<CredentialIssuance, "id" | "status" | "credentialDefinitionId" | "credentialExchangeId">,
+  issuance?: Pick<
+    CredentialIssuance,
+    "id" | "status" | "credentialDefinitionId" | "credentialExchangeId" | "issuedAt" | "expiresAt"
+  >,
 ): StudentRecord {
   return {
     ...student,
@@ -68,6 +71,11 @@ export function overlayCredentialStatus(
       ...student.credential,
       id: issuance?.id ?? student.credential.id,
       lifecycleState: toPublicCredentialStatus(issuance?.status),
+      // `validFrom`/`expiresAt` on the simulated record are placeholder dates.
+      // Once a real issuance has actually been granted, its real timestamps —
+      // driven by the configured renewal cadence — are what's true.
+      validFrom: issuance?.issuedAt?.toISOString() ?? student.credential.validFrom,
+      expiresAt: issuance?.expiresAt?.toISOString() ?? student.credential.expiresAt,
     },
   };
 }
@@ -351,23 +359,31 @@ export async function getCredentialDeliveryByIssuanceId(issuanceId: string) {
 }
 
 export async function getDashboardCredentialSummary(): Promise<DashboardSummary> {
-  const [pendingIssuance, issuedCredentials, failedCredentials, expiredCredentials, activeBatchJobs, vendorsPendingApproval] = await Promise.all([
-    prisma.credentialIssuance.count({
-      where: { status: { in: [CredentialIssuanceStatus.OFFER_SENT, CredentialIssuanceStatus.ACCEPTED] } },
-    }),
-    prisma.credentialIssuance.count({ where: { status: CredentialIssuanceStatus.ISSUED } }),
-    prisma.credentialIssuance.count({ where: { status: CredentialIssuanceStatus.FAILED } }),
-    prisma.credentialIssuance.count({ where: { status: CredentialIssuanceStatus.EXPIRED } }),
-    prisma.batchIssuanceRun.count({
-      where: { status: { in: [BatchIssuanceRunStatus.QUEUED, BatchIssuanceRunStatus.PROCESSING] } },
-    }),
-    prisma.vendorApplication.count({ where: { status: VendorApplicationStatus.PENDING } }),
-  ]);
+  const [pendingIssuance, issuedCredentials, failedCredentials, dueForRenewalCredentials, activeBatchJobs, vendorsPendingApproval] =
+    await Promise.all([
+      prisma.credentialIssuance.count({
+        where: { status: { in: [CredentialIssuanceStatus.OFFER_SENT, CredentialIssuanceStatus.ACCEPTED] } },
+      }),
+      prisma.credentialIssuance.count({ where: { status: CredentialIssuanceStatus.ISSUED } }),
+      prisma.credentialIssuance.count({ where: { status: CredentialIssuanceStatus.FAILED } }),
+      // Deliberately the same definition `previewDueRenewals`/the cron job use
+      // (`ISSUED` + `expiresAt` past) rather than counting literal `EXPIRED`
+      // rows, which are only a brief transient state a renewal passes through
+      // — otherwise this number silently diverges from what the renewal
+      // preview page shows for the same thing.
+      prisma.credentialIssuance.count({
+        where: { status: CredentialIssuanceStatus.ISSUED, expiresAt: { lte: new Date() } },
+      }),
+      prisma.batchIssuanceRun.count({
+        where: { status: { in: [BatchIssuanceRunStatus.QUEUED, BatchIssuanceRunStatus.PROCESSING] } },
+      }),
+      prisma.vendorApplication.count({ where: { status: VendorApplicationStatus.PENDING } }),
+    ]);
 
   return {
     activeBatchJobs,
     auditEventsToday: 0,
-    expiredCredentials,
+    dueForRenewalCredentials,
     failedCredentials,
     issuedCredentials,
     pendingIssuance,

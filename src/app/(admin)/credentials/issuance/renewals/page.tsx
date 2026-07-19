@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { requireRole } from "@/lib/auth/session";
 import { getUniversityProfile } from "@/lib/university/profile";
@@ -12,10 +14,18 @@ export default async function RenewalSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <SectionHeader
-        title="Renewal settings"
-        description="Choose how often issued credentials renew automatically. Individual credentials can still be renewed on demand from a student's page."
-      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <SectionHeader
+          title="Renewal settings"
+          description="Choose how often issued credentials renew automatically. Individual credentials can still be renewed on demand from a student's page."
+        />
+        <Link
+          className="inline-flex h-10 shrink-0 items-center justify-center rounded-md border border-zinc-950 bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800"
+          href="/credentials/issuance/renewals/preview"
+        >
+          Preview next batch
+        </Link>
+      </div>
       <section className="max-w-md rounded-lg border border-zinc-200 bg-white p-5">
         <form action={updateRenewalCadenceAction} className="space-y-4">
           <div>
@@ -23,6 +33,7 @@ export default async function RenewalSettingsPage() {
               Renewal cadence
             </label>
             <select
+              key={String(currentMonths)}
               className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-800 focus:border-zinc-500 focus:outline-none disabled:bg-zinc-100 disabled:text-zinc-500"
               defaultValue={String(currentMonths)}
               disabled={!canWrite}

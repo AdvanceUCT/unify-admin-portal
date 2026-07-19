@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { Metric } from "@/components/ui/Metric";
@@ -12,21 +14,20 @@ export default async function AdminOverviewPage() {
   const [summary, credentialEvents] = await Promise.all([getDashboardSummary(), getRecentCredentialEvents()]);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <SectionHeader
         title="Operational overview"
         description="Simulated credential lifecycle, vendor onboarding, and audit activity."
       />
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <Metric label="Issued credentials" value={summary.issuedCredentials} detail="stored by students" />
         <Metric label="Pending issuance" value={summary.pendingIssuance} detail="sent or accepted" />
         <Metric label="Failed credentials" value={summary.failedCredentials} detail="ready to retry" />
-        <Metric label="Expired credentials" value={summary.expiredCredentials} detail="awaiting renewal" />
+        <Link className="rounded-lg transition hover:opacity-80" href="/credentials/issuance/renewals/preview">
+          <Metric label="Due for renewal" value={summary.dueForRenewalCredentials} detail="past expiry, needs action" />
+        </Link>
         <Metric label="Active batches" value={summary.activeBatchJobs} detail="queued or processing" />
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Metric label="Vendor applications" value={summary.vendorsPendingApproval} detail="awaiting review" />
       </section>
 

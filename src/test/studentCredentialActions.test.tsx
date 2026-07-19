@@ -136,6 +136,9 @@ describe("StudentCredentialActions", () => {
       credential: { ...caleb.credential, lifecycleState: "ISSUED" as const },
     };
 
+    const confirmSpy = vi.fn().mockReturnValue(true);
+    vi.stubGlobal("confirm", confirmSpy);
+
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -174,10 +177,29 @@ describe("StudentCredentialActions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Renew" }));
 
     await screen.findByText("Activation link delivered to caleb.voskuil@gmail.com.");
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledWith("/api/students/student-demo-100/credentials/renew", {
       cache: "no-store",
       method: "POST",
     });
+  });
+
+  it("does not call the renew endpoint if the early-renewal confirmation is dismissed", () => {
+    if (!caleb) throw new Error("Caleb test record missing.");
+
+    const issuedCaleb = {
+      ...caleb,
+      credential: { ...caleb.credential, lifecycleState: "ISSUED" as const },
+    };
+
+    vi.stubGlobal("confirm", vi.fn().mockReturnValue(false));
+    vi.stubGlobal("fetch", vi.fn());
+
+    render(<StudentCredentialActions student={issuedCaleb} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Renew" }));
+
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("copies an existing activation link", async () => {

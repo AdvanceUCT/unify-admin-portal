@@ -37,6 +37,11 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
     [student.credential.lifecycleState],
   );
 
+  const isRenewingBeforeExpiry = useMemo(
+    () => student.credential.lifecycleState === "ISSUED" && new Date(student.credential.expiresAt) > new Date(),
+    [student.credential.expiresAt, student.credential.lifecycleState],
+  );
+
   async function runIssuanceRequest(
     endpoint: "issue" | "renew",
     setLoading: (value: boolean) => void,
@@ -79,6 +84,13 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
   }
 
   async function renewCredential() {
+    if (isRenewingBeforeExpiry) {
+      const confirmed = window.confirm(
+        `This credential is still valid until ${formatDateTime(student.credential.expiresAt)}. Renewing now will immediately invalidate it and issue a new one. Continue?`,
+      );
+      if (!confirmed) return;
+    }
+
     await runIssuanceRequest("renew", setIsRenewing, "Credential renewal request failed.");
   }
 

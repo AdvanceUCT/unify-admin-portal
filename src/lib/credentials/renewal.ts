@@ -3,11 +3,15 @@ import "server-only";
 import { CredentialIssuanceStatus } from "@/generated/prisma/enums";
 import type { BatchIssuanceResult, StudentRecord } from "@/lib/api/types";
 import { recordCredentialReissueRequestedAudit } from "@/lib/credentials/audit";
-import { overlayCredentialStatusForStudent } from "@/lib/credentials/status";
+import { findActiveCredentialIssuance, overlayCredentialStatusForStudent } from "@/lib/credentials/status";
 import { getAllStudents, getStudentById } from "@/lib/db/store";
 import { prisma } from "@/lib/db/prisma";
 import { runSerializableTransaction } from "@/lib/db/transaction";
-import { issueSingleStudentActivationLink, StudentIssuanceError } from "@/lib/issuance/batchIssuance";
+import {
+  getActiveCredentialDefinition,
+  issueSingleStudentActivationLink,
+  StudentIssuanceError,
+} from "@/lib/issuance/batchIssuance";
 
 export { RENEWAL_CADENCE_PRESETS, type RenewalCadenceMonths } from "@/lib/credentials/renewalCadence";
 
@@ -40,7 +44,7 @@ export async function findIssuancesDueForRenewal(now = new Date(), limit = 200) 
  * was created (see `overlayCredentialStatusForStudent`). Try a direct lookup
  * first, then fall back to matching by student number.
  */
-async function findStudentForIssuanceStudentId(issuanceStudentId: string): Promise<StudentRecord | undefined> {
+export async function findStudentForIssuanceStudentId(issuanceStudentId: string): Promise<StudentRecord | undefined> {
   const direct = await getStudentById(issuanceStudentId);
   if (direct) return direct;
 
@@ -114,20 +118,24 @@ export async function renewCredentialIssuance({
 }
 
 /**
- * Batch driver for the renewal cron job: finds every `ISSUED` credential past
- * its expiry and renews it. Per-issuance failures are collected rather than
- * stopping the run, and two overlapping runs are naturally idempotent since
- * the status-guarded `updateMany` in `renewCredentialIssuance` means a second
- * run simply finds nothing left to claim for issuances already renewed.
+ * Batch driver that finds every `ISSUED` credential past its expiry and
+ * renews it — used by both the nightly cron job (`trigger: "AUTO"`) and an
+ * admin manually triggering a run from the renewal preview page after
+ * reviewing it (`trigger: "MANUAL"`). Per-issuance failures are collected
+ * rather than stopping the run, and two overlapping runs are naturally
+ * idempotent since the status-guarded `updateMany` in `renewCredentialIssuance`
+ * means a second run simply finds nothing left to claim for issuances already
+ * renewed.
  */
 export async function renewAllDueCredentials(
   now = new Date(),
   actorId: string | null = null,
+  trigger: RenewalTrigger = "AUTO",
 ): Promise<RenewAllDueCredentialsSummary> {
   const due = await findIssuancesDueForRenewal(now);
 
   const results = await Promise.allSettled(
-    due.map((issuance) => renewCredentialIssuance({ actorId, issuanceId: issuance.id, trigger: "AUTO" })),
+    due.map((issuance) => renewCredentialIssuance({ actorId, issuanceId: issuance.id, trigger })),
   );
 
   const failed: { issuanceId: string; message: string }[] = [];
@@ -145,4 +153,124 @@ export async function renewAllDueCredentials(
   });
 
   return { attempted: due.length, failed, renewed };
+}
+
+export type RenewalPreviewOutcome = "WILL_RENEW" | "FLAGGED" | "SKIPPED_LIMIT";
+
+export type RenewalPreviewItem = {
+  email: string | null;
+  expiresAt: Date | null;
+  issuanceId: string;
+  outcome: RenewalPreviewOutcome;
+  /** The student's `profile.id`, if the student record could be resolved — usable as a route param. */
+  profileId: string | null;
+  reason?: string;
+  studentId: string;
+};
+
+export type RenewalPreviewSummary = {
+  batchLimit: number;
+  flaggedCount: number;
+  generatedAt: Date;
+  items: RenewalPreviewItem[];
+  skippedByLimitCount: number;
+  systemWarning?: string;
+  totalDue: number;
+  willRenewCount: number;
+};
+
+/**
+ * Read-only dry run of what `renewAllDueCredentials` would do right now,
+ * without flipping any statuses, calling the agent, or sending email. Lets an
+ * admin catch problems (duplicate active issuances, missing student records,
+ * missing delivery emails, or a due count that exceeds the batch's per-run
+ * limit) before the real job — cron or manual — touches anything.
+ */
+export async function previewDueRenewals(now = new Date(), limit = 200): Promise<RenewalPreviewSummary> {
+  const allDue = await prisma.credentialIssuance.findMany({
+    orderBy: { expiresAt: "asc" },
+    where: {
+      expiresAt: { lte: now },
+      status: CredentialIssuanceStatus.ISSUED,
+    },
+  });
+
+  const withinLimit = allDue.slice(0, limit);
+  const beyondLimit = allDue.slice(limit);
+
+  let activeCredentialDefinitionId: string | null = null;
+  let systemWarning: string | undefined;
+  try {
+    activeCredentialDefinitionId = (await getActiveCredentialDefinition()).credentialDefinitionId;
+  } catch (error) {
+    systemWarning =
+      error instanceof Error
+        ? `${error.message} Every renewal below would fail until this is resolved.`
+        : "No active credential schema is configured. Every renewal below would fail until this is resolved.";
+  }
+
+  const items: RenewalPreviewItem[] = [];
+
+  for (const issuance of withinLimit) {
+    const student = await findStudentForIssuanceStudentId(issuance.studentId);
+    const base = {
+      email: issuance.email,
+      expiresAt: issuance.expiresAt,
+      issuanceId: issuance.id,
+      profileId: student?.profile.id ?? null,
+      studentId: issuance.studentId,
+    };
+
+    if (!student) {
+      items.push({ ...base, outcome: "FLAGGED", reason: "Student record was not found." });
+      continue;
+    }
+
+    if (!issuance.email) {
+      items.push({ ...base, outcome: "FLAGGED", reason: "No email on file to deliver the renewed activation link to." });
+      continue;
+    }
+
+    if (activeCredentialDefinitionId) {
+      const conflict = await findActiveCredentialIssuance({
+        credentialDefinitionId: activeCredentialDefinitionId,
+        studentId: student.credential.studentNumber,
+      });
+
+      if (conflict && conflict.id !== issuance.id) {
+        items.push({
+          ...base,
+          outcome: "FLAGGED",
+          reason: `Student already has another active credential issuance (status ${conflict.status}) that would block this renewal.`,
+        });
+        continue;
+      }
+    }
+
+    items.push({ ...base, outcome: "WILL_RENEW" });
+  }
+
+  for (const issuance of beyondLimit) {
+    const student = await findStudentForIssuanceStudentId(issuance.studentId);
+    items.push({
+      email: issuance.email,
+      expiresAt: issuance.expiresAt,
+      issuanceId: issuance.id,
+      outcome: "SKIPPED_LIMIT",
+      profileId: student?.profile.id ?? null,
+      reason: `Exceeds this run's batch limit of ${limit}; will be picked up automatically in a later run.`,
+      studentId: issuance.studentId,
+    });
+  }
+
+  return {
+    batchLimit: limit,
+    flaggedCount: items.filter((item) => item.outcome === "FLAGGED").length,
+    generatedAt: now,
+    items,
+    skippedByLimitCount: beyondLimit.length,
+    systemWarning,
+    totalDue: allDue.length,
+    willRenewCount: items.filter((item) => item.outcome === "WILL_RENEW").length,
+  };
 }
