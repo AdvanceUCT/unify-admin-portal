@@ -1,8 +1,9 @@
 import "server-only";
 
-import { CredentialIssuanceStatus } from "@/generated/prisma/enums";
+import { AgentServiceError, revokeCredential } from "@/lib/agentClient";
+import { CredentialAuditAction, CredentialIssuanceStatus } from "@/generated/prisma/enums";
 import type { BatchIssuanceResult, StudentRecord } from "@/lib/api/types";
-import { recordCredentialReissueRequestedAudit } from "@/lib/credentials/audit";
+import { recordCredentialReissueRequestedAudit, recordCredentialRevocationAudit } from "@/lib/credentials/audit";
 import { findActiveCredentialIssuance, overlayCredentialStatusForStudent } from "@/lib/credentials/status";
 import { getAllStudents, getStudentById } from "@/lib/db/store";
 import { prisma } from "@/lib/db/prisma";
@@ -58,13 +59,19 @@ export async function findStudentForIssuanceStudentId(issuanceStudentId: string)
  * First, inside a transaction, flips the issuance from `ISSUED` to `EXPIRED`
  * (guarded by a status-checked `updateMany` so a concurrent renewal or
  * revocation can't double-process the same issuance) and writes a
- * `REISSUE_REQUESTED` audit entry. Once that's committed, reissues through
- * the normal single-student issuance pipeline, linked back via
- * `renewedFromIssuanceId` — the agent HTTP call can't run inside the
- * transaction, so it happens only after the expiry is durably recorded.
+ * `REISSUE_REQUESTED` audit entry. Once that's committed, the old credential
+ * is revoked with the issuer agent — the agent HTTP call can't run inside the
+ * transaction, so it happens only after the expiry is durably recorded. Only
+ * once the agent confirms the old credential is actually revoked does this
+ * reissue through the normal single-student issuance pipeline, linked back
+ * via `renewedFromIssuanceId`. If revocation fails, the reissue is skipped —
+ * proceeding anyway would leave the holder with both the "expired" credential
+ * (still valid everywhere it's checked, since the agent was never told to
+ * revoke it) and a new one.
  *
  * @throws {StudentIssuanceError} If the issuance isn't found (404), isn't
- *   currently `ISSUED` (409), or the underlying student can't be found (404).
+ *   currently `ISSUED` (409), revocation with the issuer agent fails (502),
+ *   or the underlying student can't be found (404).
  */
 export async function renewCredentialIssuance({
   actorId,
@@ -104,6 +111,36 @@ export async function renewCredentialIssuance({
 
     return current;
   });
+
+  if (expiredIssuance.credentialExchangeId) {
+    const auditFields = {
+      actorId,
+      credentialDefinitionId: expiredIssuance.credentialDefinitionId,
+      credentialExchangeId: expiredIssuance.credentialExchangeId,
+      credentialIssuanceId: expiredIssuance.id,
+      studentId: expiredIssuance.studentId,
+    };
+
+    await recordCredentialRevocationAudit({ ...auditFields, action: CredentialAuditAction.REVOCATION_REQUESTED });
+
+    try {
+      await revokeCredential({ credentialExchangeId: expiredIssuance.credentialExchangeId });
+    } catch (error) {
+      throw new StudentIssuanceError(
+        error instanceof AgentServiceError
+          ? `Could not revoke the previous credential with the issuer agent: ${error.message}`
+          : "Could not revoke the previous credential with the issuer agent.",
+        502,
+      );
+    }
+
+    await prisma.credentialIssuance.update({
+      data: { revokedAt: new Date() },
+      where: { id: expiredIssuance.id },
+    });
+
+    await recordCredentialRevocationAudit({ ...auditFields, action: CredentialAuditAction.REVOCATION_COMPLETED });
+  }
 
   const student = await findStudentForIssuanceStudentId(expiredIssuance.studentId);
   if (!student) {

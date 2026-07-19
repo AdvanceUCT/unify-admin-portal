@@ -15,6 +15,15 @@ type RecordCredentialReissueRequestedAuditInput = {
   trigger: "AUTO" | "MANUAL";
 };
 
+type RecordCredentialRevocationAuditInput = {
+  action: typeof CredentialAuditAction.REVOCATION_REQUESTED | typeof CredentialAuditAction.REVOCATION_COMPLETED;
+  actorId?: string | null;
+  credentialDefinitionId: string;
+  credentialExchangeId: string;
+  credentialIssuanceId: string;
+  studentId: string;
+};
+
 type RecordCredentialOfferSentAuditInput = {
   actorId?: string | null;
   batchId?: string | null;
@@ -118,6 +127,34 @@ export async function recordCredentialReissueRequestedAudit(
           ? "Credential renewal triggered automatically by the configured cadence."
           : "Credential renewal triggered manually by an administrator.",
       metadata: { trigger },
+      studentId,
+    },
+  });
+}
+
+/**
+ * Writes a `REVOCATION_REQUESTED` or `REVOCATION_COMPLETED` audit log entry
+ * for the previous credential being retired as part of a renewal.
+ */
+export async function recordCredentialRevocationAudit({
+  action,
+  actorId,
+  credentialDefinitionId,
+  credentialExchangeId,
+  credentialIssuanceId,
+  studentId,
+}: RecordCredentialRevocationAuditInput) {
+  await prisma.credentialAuditLog.create({
+    data: {
+      action,
+      actorId,
+      credentialDefinitionId,
+      credentialExchangeId,
+      credentialIssuanceId,
+      message:
+        action === CredentialAuditAction.REVOCATION_REQUESTED
+          ? "Credential revocation requested from the issuer agent as part of a renewal."
+          : "Credential revoked with the issuer agent.",
       studentId,
     },
   });

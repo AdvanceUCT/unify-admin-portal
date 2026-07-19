@@ -15,6 +15,7 @@ const database = vi.hoisted(() => {
     runTransaction: vi.fn(),
     credentialIssuance: {
       findMany: vi.fn(),
+      update: vi.fn(),
     },
   };
 });
@@ -30,6 +31,20 @@ vi.mock("@/lib/db/prisma", () => ({
 
 vi.mock("@/lib/credentials/audit", () => ({
   recordCredentialReissueRequestedAudit: vi.fn(),
+  recordCredentialRevocationAudit: vi.fn(),
+}));
+
+vi.mock("@/lib/agentClient", () => ({
+  AgentServiceError: class AgentServiceError extends Error {
+    status: number;
+
+    constructor(message: string, status: number) {
+      super(message);
+      this.name = "AgentServiceError";
+      this.status = status;
+    }
+  },
+  revokeCredential: vi.fn(),
 }));
 
 vi.mock("@/lib/credentials/status", () => ({
@@ -54,7 +69,8 @@ vi.mock("@/lib/issuance/batchIssuance", () => ({
   issueSingleStudentActivationLink: vi.fn(),
 }));
 
-import { recordCredentialReissueRequestedAudit } from "@/lib/credentials/audit";
+import { AgentServiceError, revokeCredential } from "@/lib/agentClient";
+import { recordCredentialReissueRequestedAudit, recordCredentialRevocationAudit } from "@/lib/credentials/audit";
 import {
   findIssuancesDueForRenewal,
   renewAllDueCredentials,
@@ -75,6 +91,8 @@ beforeEach(() => {
   database.runTransaction.mockImplementation(async (operation: (tx: unknown) => unknown) =>
     operation(database.transaction),
   );
+  vi.mocked(revokeCredential).mockResolvedValue(undefined);
+  database.credentialIssuance.update.mockResolvedValue({});
 });
 
 describe("findIssuancesDueForRenewal", () => {
@@ -121,7 +139,7 @@ describe("renewCredentialIssuance", () => {
     expect(issueSingleStudentActivationLink).not.toHaveBeenCalled();
   });
 
-  it("expires the old issuance, audits it, and reissues to the student", async () => {
+  it("expires the old issuance, revokes it with the agent, audits both, and reissues to the student", async () => {
     database.transaction.credentialIssuance.findUnique.mockResolvedValueOnce(issuance);
     database.transaction.credentialIssuance.updateMany.mockResolvedValueOnce({ count: 1 });
     vi.mocked(getStudentById).mockResolvedValueOnce(studentFixture("student-number-1") as never);
@@ -145,10 +163,49 @@ describe("renewCredentialIssuance", () => {
       }),
       database.transaction,
     );
+    expect(revokeCredential).toHaveBeenCalledWith({ credentialExchangeId: "exchange_1" });
+    expect(database.credentialIssuance.update).toHaveBeenCalledWith({
+      data: { revokedAt: expect.any(Date) },
+      where: { id: "issuance_1" },
+    });
+    expect(recordCredentialRevocationAudit).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ action: "REVOCATION_REQUESTED", credentialExchangeId: "exchange_1" }),
+    );
+    expect(recordCredentialRevocationAudit).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ action: "REVOCATION_COMPLETED", credentialExchangeId: "exchange_1" }),
+    );
     expect(issueSingleStudentActivationLink).toHaveBeenCalledWith(expect.anything(), expect.any(Date), "admin_1", {
       renewedFromIssuanceId: "issuance_1",
     });
     expect(result).toEqual({ status: "Queued" });
+  });
+
+  it("throws and does not reissue when the agent fails to revoke the old credential", async () => {
+    database.transaction.credentialIssuance.findUnique.mockResolvedValueOnce(issuance);
+    database.transaction.credentialIssuance.updateMany.mockResolvedValueOnce({ count: 1 });
+    vi.mocked(revokeCredential).mockRejectedValueOnce(new AgentServiceError("Not implemented: RevocationService.revoke", 500));
+
+    await expect(renewCredentialIssuance({ issuanceId: "issuance_1", trigger: "MANUAL" })).rejects.toThrow(
+      "Could not revoke the previous credential with the issuer agent: Not implemented: RevocationService.revoke",
+    );
+
+    expect(database.credentialIssuance.update).not.toHaveBeenCalled();
+    expect(getStudentById).not.toHaveBeenCalled();
+    expect(issueSingleStudentActivationLink).not.toHaveBeenCalled();
+  });
+
+  it("skips revocation when the old issuance has no credentialExchangeId", async () => {
+    database.transaction.credentialIssuance.findUnique.mockResolvedValueOnce({ ...issuance, credentialExchangeId: null });
+    database.transaction.credentialIssuance.updateMany.mockResolvedValueOnce({ count: 1 });
+    vi.mocked(getStudentById).mockResolvedValueOnce(studentFixture("student-number-1") as never);
+    vi.mocked(issueSingleStudentActivationLink).mockResolvedValueOnce({ status: "Queued" } as never);
+
+    await renewCredentialIssuance({ issuanceId: "issuance_1", trigger: "MANUAL" });
+
+    expect(revokeCredential).not.toHaveBeenCalled();
+    expect(recordCredentialRevocationAudit).not.toHaveBeenCalled();
   });
 
   it("throws when the student behind the expired issuance can't be found", async () => {

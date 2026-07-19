@@ -51,6 +51,35 @@ function extractErrorDetails(errorBody: unknown) {
 }
 
 /**
+ * Pulls the most specific error message out of a failed agent response body.
+ * Checks `body.message` then `body.error.message`, mirroring `extractErrorDetails`,
+ * since the agent's own error envelope nests the message under `error`.
+ *
+ * @param errorBody - The parsed JSON body of a failed agent response.
+ * @returns The message string, or `undefined` if neither field is present.
+ */
+function extractErrorMessage(errorBody: unknown): string | undefined {
+  if (!errorBody || typeof errorBody !== "object") {
+    return undefined;
+  }
+
+  const record = errorBody as Record<string, unknown>;
+  if (typeof record.message === "string") {
+    return record.message;
+  }
+
+  const nestedError = record.error;
+  if (nestedError && typeof nestedError === "object") {
+    const nestedRecord = nestedError as Record<string, unknown>;
+    if (typeof nestedRecord.message === "string") {
+      return nestedRecord.message;
+    }
+  }
+
+  return undefined;
+}
+
+/**
  * Internal fetch wrapper for the Identity Agent Service. Prepends the base URL,
  * injects auth headers, and throws an `AgentServiceError` for any non-2xx response.
  *
@@ -91,13 +120,7 @@ async function agentFetch(
     }
 
     const errorDetails = extractErrorDetails(errorBody);
-    const message =
-      errorBody &&
-      typeof errorBody === "object" &&
-      "message" in errorBody &&
-      typeof (errorBody as Record<string, unknown>).message === "string"
-        ? String((errorBody as Record<string, unknown>).message)
-        : `Agent service request failed: ${response.statusText}`;
+    const message = extractErrorMessage(errorBody) ?? `Agent service request failed: ${response.statusText}`;
 
     throw new AgentServiceError(message, response.status, errorDetails);
   }
@@ -197,6 +220,21 @@ export async function createBatchActivationLinks(payload: {
     body: JSON.stringify(payload),
   });
   return response.json();
+}
+
+/**
+ * Revokes a previously issued credential with the issuer agent, invalidating
+ * it against the ledger's revocation registry so verifiers checking it later
+ * will see it as no longer valid. Used by credential renewal to retire the
+ * old credential before issuing its replacement.
+ *
+ * @param payload.credentialExchangeId - The exchange ID of the credential to revoke.
+ * @throws {AgentServiceError} If the agent rejects the revocation request.
+ */
+export async function revokeCredential(payload: { credentialExchangeId: string }): Promise<void> {
+  await agentFetch(`/api/credentials/${encodeURIComponent(payload.credentialExchangeId)}/revoke`, {
+    method: "POST",
+  });
 }
 
 /**
