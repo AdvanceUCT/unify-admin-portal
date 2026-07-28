@@ -10,7 +10,12 @@ import {
   listVerificationServicePoints,
 } from "@/lib/agentClient";
 import { writeAuditLog } from "@/lib/audit/audit";
+import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
+import { sendVendorApplicationApprovedEmail } from "@/lib/email/vendor-application-approved";
+import { sendVendorApplicationRejectedEmail } from "@/lib/email/vendor-application-rejected";
+import { sendVendorApplicationRevokedEmail } from "@/lib/email/vendor-application-revoked";
+import { sendVendorApplicationSubmittedEmail } from "@/lib/email/vendor-application-submitted";
 
 const ACTIVE_APPLICATION_STATUSES = [
   VendorApplicationStatus.DRAFT,
@@ -362,7 +367,16 @@ export async function revokeVendorApplication(input: {
 }) {
   const data = revokeApplicationSchema.parse(input);
 
-  return runSerializableTransaction(async (transaction) => {
+  const application = await runSerializableTransaction(async (transaction) => {
+    const existing = await transaction.vendorApplication.findUnique({
+      where: { id: data.applicationId },
+      include: { vendorProfile: true },
+    });
+
+    if (!existing || existing.status !== VendorApplicationStatus.APPROVED) {
+      throw new Error("This vendor is not currently approved.");
+    }
+
     const result = await transaction.vendorApplication.updateMany({
       where: {
         id: data.applicationId,
@@ -390,7 +404,24 @@ export async function revokeVendorApplication(input: {
       },
       transaction,
     );
+
+    return existing;
   });
+
+  try {
+    await sendVendorApplicationRevokedEmail({
+      to: application.snapshotContactEmail ?? application.vendorProfile.contactEmail,
+      contactName:
+        application.snapshotContactPersonName ?? application.vendorProfile.contactPersonName ?? "",
+      companyName: application.snapshotCompanyName ?? application.vendorProfile.companyName,
+      reason: data.notes,
+    });
+  } catch (error) {
+    console.error(
+      `[vendor-application] Failed to send revocation email for ${data.applicationId}:`,
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 }
 
 /** Approves or rejects a pending application and records the decision atomically. */
@@ -411,6 +442,7 @@ export async function reviewVendorApplication({
   }
 
   let approvedVendor: { vendorProfileId: string; companyName: string } | undefined;
+  let notifyContact: { to: string; contactName: string; companyName: string } | undefined;
 
   try {
     const result = await runSerializableTransaction(async (transaction) => {
@@ -422,6 +454,13 @@ export async function reviewVendorApplication({
       if (!application || application.status !== VendorApplicationStatus.PENDING) {
         throw new Error("This application is not pending review.");
       }
+
+      notifyContact = {
+        to: application.snapshotContactEmail ?? application.vendorProfile.contactEmail,
+        contactName:
+          application.snapshotContactPersonName ?? application.vendorProfile.contactPersonName ?? "",
+        companyName: application.snapshotCompanyName ?? application.vendorProfile.companyName,
+      };
 
       const updateResult = await transaction.vendorApplication.updateMany({
         where: { id: applicationId, status: VendorApplicationStatus.PENDING },
@@ -484,6 +523,32 @@ export async function reviewVendorApplication({
       } catch (error) {
         console.error(
           `[verification] Failed to create service point for vendor ${approvedVendor.vendorProfileId}:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
+    if (notifyContact) {
+      try {
+        if (decision === VendorApplicationStatus.APPROVED) {
+          await sendVendorApplicationApprovedEmail({
+            to: notifyContact.to,
+            contactName: notifyContact.contactName,
+            companyName: notifyContact.companyName,
+            portalUrl: `${env.APP_URL}/vendor`,
+          });
+        } else {
+          await sendVendorApplicationRejectedEmail({
+            to: notifyContact.to,
+            contactName: notifyContact.contactName,
+            companyName: notifyContact.companyName,
+            reason: normalizedNotes ?? "",
+            applicationUrl: `${env.APP_URL}/vendor/application`,
+          });
+        }
+      } catch (error) {
+        console.error(
+          `[vendor-application] Failed to send review decision email for ${applicationId}:`,
           error instanceof Error ? error.message : String(error),
         );
       }
@@ -792,7 +857,7 @@ export async function clearDraftDocumentPath(
 
 /** Validates completeness then transitions the draft from DRAFT → PENDING. */
 export async function submitDraftApplication(applicationId: string, userId: string) {
-  return runSerializableTransaction(async (transaction) => {
+  const updated = await runSerializableTransaction(async (transaction) => {
     const app = await transaction.vendorApplication.findFirst({
       where: { id: applicationId, vendorProfile: { userId }, status: VendorApplicationStatus.DRAFT },
     });
@@ -825,7 +890,7 @@ export async function submitDraftApplication(applicationId: string, userId: stri
       );
     }
 
-    const updated = await transaction.vendorApplication.update({
+    const updatedApplication = await transaction.vendorApplication.update({
       where: { id: applicationId },
       data: { status: VendorApplicationStatus.PENDING },
     });
@@ -841,8 +906,28 @@ export async function submitDraftApplication(applicationId: string, userId: stri
       transaction,
     );
 
-    return updated;
+    return {
+      application: updatedApplication,
+      contactEmail: app.snapshotContactEmail!,
+      contactName: app.snapshotContactPersonName!,
+      companyName: app.snapshotCompanyName!,
+    };
   });
+
+  try {
+    await sendVendorApplicationSubmittedEmail({
+      to: updated.contactEmail,
+      contactName: updated.contactName,
+      companyName: updated.companyName,
+    });
+  } catch (error) {
+    console.error(
+      `[vendor-application] Failed to send submission confirmation email for ${applicationId}:`,
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+
+  return updated.application;
 }
 
 /** Returns the step number the wizard should open at (1–5, or 6 for review). */

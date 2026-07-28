@@ -70,6 +70,28 @@ vi.mock("@/lib/audit/audit", () => ({
   writeAuditLog: vi.fn(),
 }));
 
+vi.mock("@/lib/config/env", () => ({
+  env: {
+    APP_URL: "http://localhost:3000",
+  },
+}));
+
+vi.mock("@/lib/email/vendor-application-submitted", () => ({
+  sendVendorApplicationSubmittedEmail: vi.fn(),
+}));
+
+vi.mock("@/lib/email/vendor-application-approved", () => ({
+  sendVendorApplicationApprovedEmail: vi.fn(),
+}));
+
+vi.mock("@/lib/email/vendor-application-rejected", () => ({
+  sendVendorApplicationRejectedEmail: vi.fn(),
+}));
+
+vi.mock("@/lib/email/vendor-application-revoked", () => ({
+  sendVendorApplicationRevokedEmail: vi.fn(),
+}));
+
 const writeAuditLogMock = vi.mocked(writeAuditLog);
 
 const validInput = {
@@ -373,6 +395,14 @@ describe("revokeVendorApplication", () => {
   });
 
   it("records revocation metadata without overwriting the approval decision", async () => {
+    database.transaction.vendorApplication.findUnique.mockResolvedValueOnce({
+      id: "app_1",
+      status: VendorApplicationStatus.APPROVED,
+      snapshotCompanyName: "Acme Corp",
+      snapshotContactEmail: "jane@example.com",
+      snapshotContactPersonName: "Jane Doe",
+      vendorProfile,
+    });
     database.transaction.vendorApplication.updateMany.mockResolvedValueOnce({ count: 1 });
 
     await revokeVendorApplication({
