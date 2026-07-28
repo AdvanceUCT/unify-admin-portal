@@ -6,7 +6,7 @@ import { VendorApplicationDetails } from "@/features/vendors/VendorApplicationDe
 import { TOTAL_STEPS, VendorApplicationWizard } from "@/features/vendors/application/VendorApplicationWizard";
 import type { DraftApplicationData } from "@/features/vendors/application/VendorApplicationWizard";
 import { requireVendorSession } from "@/lib/auth/session";
-import { filenameFromStoragePath } from "@/lib/storage/supabase";
+import { filenameFromStoragePath, getDocumentSignedUrl } from "@/lib/storage/supabase";
 import {
   computeDraftProgress,
   getVendorApplicationForUser,
@@ -129,13 +129,23 @@ export default async function VendorApplicationPage({
     );
   }
 
+  const documentUrls: Record<string, string> = {};
+  await Promise.all(
+    DOCUMENT_FIELD_KEYS.map(async (key) => {
+      const path = application[key];
+      if (!path) return;
+      const url = await getDocumentSignedUrl(path);
+      if (url) documentUrls[key] = url;
+    }),
+  );
+
   return (
     <div className="space-y-6">
       <SectionHeader
         title="Verifier application"
         description="Apply to become an approved credential verifier."
       />
-      <VendorApplicationDetails application={application} />
+      <VendorApplicationDetails application={application} documentUrls={documentUrls} />
     </div>
   );
 }

@@ -3,11 +3,12 @@
 import { revalidatePath } from "next/cache";
 
 import { requireVendorSession } from "@/lib/auth/session";
-import { deleteVendorDocument, uploadVendorDocument } from "@/lib/storage/supabase";
+import { deleteVendorDocument, getDocumentSignedUrl, uploadVendorDocument } from "@/lib/storage/supabase";
 import {
   assertDraftDocumentUploadAllowed,
   clearDraftDocumentPath,
   getOrCreateDraftApplication,
+  getOwnedDocumentPath,
   saveDraftApplication,
   saveDraftDocumentPath,
   submitDraftApplication,
@@ -16,6 +17,7 @@ import {
 export type StepActionResult = { ok: boolean; error?: string };
 export type Step1ActionResult = { ok: boolean; applicationId?: string; error?: string };
 export type UploadActionResult = { ok: boolean; path?: string; filename?: string; error?: string };
+export type ViewUrlActionResult = { ok: boolean; url?: string; error?: string };
 
 const REVALIDATE_PATHS = ["/vendor/application", "/vendor"];
 
@@ -159,6 +161,33 @@ export async function uploadDocumentAction(formData: FormData): Promise<UploadAc
     return {
       ok: false,
       error: "Something went wrong while uploading. Please check the file and try again.",
+    };
+  }
+}
+
+/** Step 4: generates a temporary signed URL so the vendor can view a document they've uploaded. */
+export async function getDocumentViewUrlAction(
+  applicationId: string,
+  fieldKey: string,
+): Promise<ViewUrlActionResult> {
+  const session = await requireVendorSession();
+
+  try {
+    const path = await getOwnedDocumentPath(applicationId, session.user.id, fieldKey);
+    if (!path) {
+      return { ok: false, error: "No file has been uploaded for this document yet." };
+    }
+
+    const url = await getDocumentSignedUrl(path);
+    if (!url) {
+      return { ok: false, error: "Could not open the file. Please try again." };
+    }
+
+    return { ok: true, url };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Could not open the file. Please try again.",
     };
   }
 }

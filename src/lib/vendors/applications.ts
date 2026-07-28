@@ -695,6 +695,26 @@ export async function saveDraftApplication(
   }
 }
 
+/** Returns the storage path for a document field, if the application belongs to the given user. */
+export async function getOwnedDocumentPath(
+  applicationId: string,
+  userId: string,
+  fieldKey: string,
+): Promise<string | null> {
+  const documentField = assertDocumentField(fieldKey);
+
+  const application = await prisma.vendorApplication.findFirst({
+    where: { id: applicationId, vendorProfile: { userId } },
+    select: { [documentField]: true },
+  });
+
+  if (!application) {
+    throw new Error("Application not found.");
+  }
+
+  return application[documentField] as string | null;
+}
+
 /** Saves a single document storage path after a successful upload. Returns the path it replaced, if any. */
 export async function saveDraftDocumentPath(
   applicationId: string,

@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { deleteDocumentAction, uploadDocumentAction } from "@/app/vendor/(portal)/application/actions";
+import {
+  deleteDocumentAction,
+  getDocumentViewUrlAction,
+  uploadDocumentAction,
+} from "@/app/vendor/(portal)/application/actions";
 import type { DraftApplicationData } from "../VendorApplicationWizard";
 
 type UploadStatus = "idle" | "uploading" | "done" | "error" | "removing";
@@ -80,10 +84,42 @@ export function Step4Documents({
   });
   const [filenames, setFilenames] = useState<Record<string, string>>(() => initialFilenames ?? {});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [viewingKey, setViewingKey] = useState<string | null>(null);
 
   const requiredDone = DOCUMENT_FIELDS.filter((f) => f.required).every(
     (f) => statuses[f.key] === "done",
   );
+
+  async function handleView(fieldKey: string) {
+    setViewingKey(fieldKey);
+    setErrors((prev) => ({ ...prev, [fieldKey]: "" }));
+
+    // Open the tab synchronously so the browser doesn't block it as a popup,
+    // then redirect it once the signed URL comes back.
+    const tab = window.open("", "_blank");
+
+    try {
+      const result = await getDocumentViewUrlAction(applicationId, fieldKey);
+
+      if (result.ok && result.url) {
+        if (tab) tab.location.href = result.url;
+      } else {
+        tab?.close();
+        setErrors((prev) => ({
+          ...prev,
+          [fieldKey]: result.error ?? "Could not open the file. Please try again.",
+        }));
+      }
+    } catch {
+      tab?.close();
+      setErrors((prev) => ({
+        ...prev,
+        [fieldKey]: "Something went wrong while opening the file. Please try again.",
+      }));
+    } finally {
+      setViewingKey(null);
+    }
+  }
 
   async function handleFileChange(
     event: React.ChangeEvent<HTMLInputElement>,
@@ -201,6 +237,16 @@ export function Step4Documents({
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
+                  {(status === "done" || status === "removing") && (
+                    <button
+                      className="inline-flex h-9 items-center rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={viewingKey === key || status === "removing"}
+                      onClick={() => handleView(key)}
+                      type="button"
+                    >
+                      {viewingKey === key ? "Opening..." : "View"}
+                    </button>
+                  )}
                   <label
                     className={`inline-flex h-9 cursor-pointer items-center rounded-md border px-3 text-xs font-medium transition ${
                       status === "done"

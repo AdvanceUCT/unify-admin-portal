@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/Badge";
 import { formatDateTime } from "@/lib/formatters";
+import { filenameFromStoragePath } from "@/lib/storage/supabase";
 
 type DocumentUrls = Partial<Record<
   | "docRegistrationCertificate"
@@ -205,6 +206,7 @@ export function VendorApplicationDetails({
               const path = application[key];
               if (!path) return null;
               const signedUrl = documentUrls?.[key];
+              const filename = filenameFromStoragePath(path);
               return (
                 <div key={key}>
                   <dt className="font-medium text-zinc-900">{label}</dt>
@@ -216,10 +218,10 @@ export function VendorApplicationDetails({
                         rel="noopener noreferrer"
                         target="_blank"
                       >
-                        Open
+                        {filename}
                       </a>
                     ) : (
-                      <span className="text-emerald-600">Uploaded</span>
+                      <span className="text-emerald-600">{filename || "Uploaded"}</span>
                     )}
                   </dd>
                 </div>
