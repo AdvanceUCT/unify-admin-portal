@@ -194,6 +194,7 @@ model UniversityProfile {
   abbreviation       String
   logoUrl            String?
   contactEmail       String
+  websiteUrl         String?
   issuerDid          String?
   setupStatus        SetupStatus        @default(PENDING)
   setupCompletedAt   DateTime?
@@ -432,4 +433,5 @@ enum AuditAction {
   VENDOR_APPLICATION_APPROVED
   VENDOR_APPLICATION_REJECTED
   VENDOR_APPLICATION_REVOKED
+  SETTINGS_UPDATED
 }
