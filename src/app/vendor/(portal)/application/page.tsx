@@ -3,13 +3,14 @@ import { ClipboardList } from "lucide-react";
 
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { VendorApplicationDetails } from "@/features/vendors/VendorApplicationDetails";
+import { VendorApplicationHistory } from "@/features/vendors/VendorApplicationHistory";
 import { TOTAL_STEPS, VendorApplicationWizard } from "@/features/vendors/application/VendorApplicationWizard";
 import type { DraftApplicationData } from "@/features/vendors/application/VendorApplicationWizard";
 import { requireVendorSession } from "@/lib/auth/session";
 import { filenameFromStoragePath } from "@/lib/storage/supabase";
 import {
   computeDraftProgress,
-  getVendorApplicationForUser,
+  listVendorApplicationsForUser,
 } from "@/lib/vendors/applications";
 
 const DOCUMENT_FIELD_KEYS = [
@@ -28,7 +29,9 @@ export default async function VendorApplicationPage({
 }) {
   const { start, step } = await searchParams;
   const session = await requireVendorSession();
-  const application = await getVendorApplicationForUser(session.user.id);
+  const applications = await listVendorApplicationsForUser(session.user.id);
+  const application = applications[0] ?? null;
+  const history = applications.slice(1);
 
   if (!application && start !== "1") {
     return (
@@ -125,6 +128,7 @@ export default async function VendorApplicationPage({
           initialData={initialData}
           initialFilenames={initialFilenames}
         />
+        <VendorApplicationHistory applications={history} />
       </div>
     );
   }
@@ -136,6 +140,7 @@ export default async function VendorApplicationPage({
         description="Apply to become an approved credential verifier."
       />
       <VendorApplicationDetails application={application} />
+      <VendorApplicationHistory applications={history} />
     </div>
   );
 }

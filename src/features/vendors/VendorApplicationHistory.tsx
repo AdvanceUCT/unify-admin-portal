@@ -1,0 +1,66 @@
+import Link from "next/link";
+
+import { Badge } from "@/components/ui/Badge";
+import { formatDateTime } from "@/lib/formatters";
+
+type HistoryApplication = {
+  id: string;
+  status: "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "REVOKED";
+  createdAt: Date;
+  reviewedAt: Date | null;
+  revokedAt: Date | null;
+  snapshotCompanyName: string | null;
+  vendorProfile: { companyName: string };
+};
+
+function statusTone(status: HistoryApplication["status"]) {
+  if (status === "APPROVED") return "success" as const;
+  if (status === "PENDING") return "warning" as const;
+  if (status === "DRAFT") return "neutral" as const;
+  return "danger" as const;
+}
+
+export function VendorApplicationHistory({ applications }: { applications: HistoryApplication[] }) {
+  if (applications.length === 0) return null;
+
+  return (
+    <section className="rounded-lg border border-zinc-200 bg-white">
+      <div className="border-b border-zinc-200 px-5 py-4">
+        <h2 className="text-base font-semibold text-zinc-950">Previous applications</h2>
+        <p className="mt-0.5 text-sm text-zinc-500">
+          A record of your past verifier application submissions.
+        </p>
+      </div>
+      <div className="divide-y divide-zinc-100">
+        {applications.map((application) => {
+          const decidedAt = application.revokedAt ?? application.reviewedAt;
+          return (
+            <div
+              key={application.id}
+              className="flex flex-col gap-2 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div>
+                <p className="text-sm font-medium text-zinc-900">
+                  {application.snapshotCompanyName ?? application.vendorProfile.companyName}
+                </p>
+                <p className="mt-0.5 text-xs text-zinc-500">
+                  Submitted {formatDateTime(application.createdAt.toISOString())}
+                  {decidedAt ? ` · Decided ${formatDateTime(decidedAt.toISOString())}` : ""}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Badge tone={statusTone(application.status)}>{application.status}</Badge>
+                <Link
+                  className="text-sm text-zinc-600 underline underline-offset-2 hover:text-zinc-950"
+                  href={`/vendor/application/history/${application.id}`}
+                >
+                  View
+                </Link>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}

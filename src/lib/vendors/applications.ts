@@ -239,6 +239,31 @@ export async function getVendorApplicationForUser(userId: string) {
   });
 }
 
+/** All applications a vendor has ever submitted, most recent first. */
+export async function listVendorApplicationsForUser(userId: string) {
+  const vendorProfile = await prisma.vendorProfile.findUnique({
+    where: { userId },
+  });
+
+  if (!vendorProfile) {
+    return [];
+  }
+
+  return prisma.vendorApplication.findMany({
+    where: { vendorProfileId: vendorProfile.id },
+    include: { vendorProfile: true },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+/** Fetches a single application, scoped to the requesting vendor so one vendor can't view another's by ID. */
+export async function getVendorApplicationByIdForUser(applicationId: string, userId: string) {
+  return prisma.vendorApplication.findFirst({
+    where: { id: applicationId, vendorProfile: { userId } },
+    include: { vendorProfile: true },
+  });
+}
+
 export async function getVendorApplicationById(applicationId: string) {
   return prisma.vendorApplication.findUnique({
     where: { id: applicationId },
