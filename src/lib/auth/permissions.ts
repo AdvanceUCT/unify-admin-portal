@@ -54,6 +54,7 @@ export const ROLE_ROUTE_MAP: readonly RoleRoute[] = [
 export const ADMIN_ACTIONS = [
   "credential:read",
   "credential:write",
+  "credential:schema:manage",
   "student:read",
   "student:write",
   "vendor:read",
@@ -73,6 +74,7 @@ export type AdminAction = (typeof ADMIN_ACTIONS)[number];
 const ACTION_ROLE_MAP: Record<AdminAction, readonly AdminRole[]> = {
   "credential:read": ["SUPER_ADMIN", "ADMIN", "ISSUER", "VIEWER"],
   "credential:write": ["SUPER_ADMIN", "ADMIN", "ISSUER"],
+  "credential:schema:manage": ["SUPER_ADMIN", "ADMIN"],
   "student:read": ["SUPER_ADMIN", "ADMIN", "ISSUER", "VIEWER"],
   "student:write": ["SUPER_ADMIN", "ADMIN", "ISSUER"],
   "vendor:read": ["SUPER_ADMIN", "ADMIN", "VIEWER"],

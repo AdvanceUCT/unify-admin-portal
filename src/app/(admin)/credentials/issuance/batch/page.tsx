@@ -2,13 +2,29 @@ import Link from "next/link";
 
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { BatchIssuancePanel } from "@/features/credentials/BatchIssuancePanel";
-import { getBatchIssuancePreview } from "@/lib/api/client";
+import { getBatchIssuancePreview, getStudents } from "@/lib/api/client";
 import { requireRole } from "@/lib/auth/session";
+
+function programmesByFacultyFrom(students: Awaited<ReturnType<typeof getStudents>>) {
+  const programmesByFaculty: Record<string, string[]> = {};
+
+  for (const student of students) {
+    const { faculty, programme } = student.credential;
+    if (!faculty || !programme) continue;
+    const programmes = (programmesByFaculty[faculty] ??= []);
+    if (!programmes.includes(programme)) {
+      programmes.push(programme);
+    }
+  }
+
+  return programmesByFaculty;
+}
 
 export default async function BatchIssuePage() {
   await requireRole(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
 
-  const preview = await getBatchIssuancePreview();
+  const [preview, students] = await Promise.all([getBatchIssuancePreview(), getStudents()]);
+  const programmesByFaculty = programmesByFacultyFrom(students);
 
   return (
     <div className="space-y-6">
@@ -21,7 +37,7 @@ export default async function BatchIssuePage() {
           Back to issuance
         </Link>
       </div>
-      <BatchIssuancePanel preview={preview} />
+      <BatchIssuancePanel preview={preview} programmesByFaculty={programmesByFaculty} />
     </div>
   );
 }

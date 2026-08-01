@@ -9,16 +9,16 @@ datasource db {
 }
 
 model User {
-  id            String        @id
+  id            String         @id
   name          String
   email         String
-  emailVerified Boolean       @default(false)
+  emailVerified Boolean        @default(false)
   image         String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   role          String?
-  userType      String        @default("ADMIN")
-  banned        Boolean?      @default(false)
+  userType      String         @default("ADMIN")
+  banned        Boolean?       @default(false)
   banReason     String?
   banExpires    DateTime?
   sessions      Session[]
@@ -108,6 +108,7 @@ model VendorProfile {
   contactEmail              String
   website                   String?
   description               String?
+  verificationUrl           String?
   createdAt                 DateTime            @default(now())
   updatedAt                 DateTime            @updatedAt
   applications              VendorApplication[]
@@ -120,9 +121,8 @@ model VendorApplication {
   id               String                  @id @default(cuid())
   vendorProfileId  String
   vendorProfile    VendorProfile           @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
-  status           VendorApplicationStatus @default(PENDING)
-  justification    String
-  requestedScopes  String[]                @default([])
+  status           VendorApplicationStatus @default(DRAFT)
+  justification    String?
   companyRegistrationNumber String?
   // Original review decision fields — immutable after approval/rejection
   reviewedByUserId String?
@@ -139,17 +139,39 @@ model VendorApplication {
   snapshotContactEmail      String?
   snapshotContactPersonName String?
   snapshotWebsite           String?
-  snapshotDescription       String?
+  // Step 1 — Organisation Information
+  tradingName               String?
+  organisationType          String?
+  physicalAddress           String?
+  postalAddress             String?
+  // Step 2 — Authorised Representative
+  contactJobTitle           String?
+  contactPhone              String?
+  contactEmployeeNumber     String?
+  preferredContactMethod    String?
+  // Step 3 — Verification Requirements
+  additionalInfo            String?
+  // Step 4 — Supporting Documents (Supabase Storage paths)
+  docRegistrationCertificate String?
+  docProofOfAddress          String?
+  docRepresentativeId        String?
+  docLetterOfAuthorisation   String?
+  docTaxCompliance           String?
+  docBusinessLicence         String?
+  // Step 5 — Declaration
+  declarationAccepted       Boolean?
+  declarationAcceptedAt     DateTime?
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
 
   @@index([vendorProfileId])
   @@index([status])
-  @@unique([vendorProfileId], map: "vendor_application_one_active_per_profile", where: raw("\"status\" IN ('PENDING', 'APPROVED')"))
+  @@unique([vendorProfileId], map: "vendor_application_one_active_per_profile", where: raw("\"status\" IN ('DRAFT', 'PENDING', 'APPROVED')"))
   @@map("vendor_application")
 }
 
 enum VendorApplicationStatus {
+  DRAFT
   PENDING
   APPROVED
   REJECTED
@@ -188,6 +210,24 @@ enum VendorVerificationStatus {
   FAILED
 }
 
+model Student {
+  id            String   @id @default(cuid())
+  studentNumber String   @unique
+  email         String
+  firstName     String
+  lastName      String
+  faculty       String?
+  programme     String?
+  attributes    Json     @default("{}")
+  source        String   @default("csv")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([faculty])
+  @@index([programme])
+  @@map("student")
+}
+
 model UniversityProfile {
   id                 String             @id @default(cuid())
   name               String
@@ -198,11 +238,88 @@ model UniversityProfile {
   issuerDid          String?
   setupStatus        SetupStatus        @default(PENDING)
   setupCompletedAt   DateTime?
+  defaultCredentialValidityDays Int      @default(365)
+  renewalCadenceMonths          Int      @default(12)
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
-  credentialSchemas  CredentialSchema[]
+  credentialSchemas       CredentialSchema[]
+  importMapping           ImportMapping?
+  importRuns              ImportRun[]
+  customFieldDefinitions  CustomFieldDefinition[]
 
   @@map("university_profile")
+}
+
+model ImportMapping {
+  id                  String            @id @default(cuid())
+  universityProfileId String            @unique
+  universityProfile   UniversityProfile @relation(fields: [universityProfileId], references: [id])
+  columnMap           Json
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@map("import_mapping")
+}
+
+/// Admin-defined per-university custom fields available as CSV import mapping
+/// targets, independent of `CredentialSchema.schemaAttributes`. Soft-deleted
+/// (`removedAt`) rather than hard-deleted on removal — historical `Student.attributes`
+/// data under a removed field's key is never touched, only future imports stop
+/// offering/populating it. Re-adding a previously removed key reactivates the
+/// same row rather than creating an ambiguous duplicate.
+model CustomFieldDefinition {
+  id                   String            @id @default(cuid())
+  universityProfileId  String
+  universityProfile    UniversityProfile @relation(fields: [universityProfileId], references: [id])
+  key                  String
+  label                String
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  removedAt            DateTime?
+
+  @@unique([universityProfileId, key], map: "custom_field_definition_active_key", where: raw("\"removedAt\" IS NULL"))
+  @@index([universityProfileId])
+  @@map("custom_field_definition")
+}
+
+/// Pending CSV import previews for a university. A commit must name the exact
+/// run to apply, so concurrent admins cannot overwrite each other's previews.
+model ImportRun {
+  id                  String            @id @default(cuid())
+  universityProfileId String
+  universityProfile   UniversityProfile @relation(fields: [universityProfileId], references: [id])
+  filename            String
+  mappingSnapshot     Json
+  createdAt           DateTime          @default(now())
+  rows                ImportRow[]
+
+  @@index([universityProfileId])
+  @@map("import_run")
+}
+
+model ImportRow {
+  id            String          @id @default(cuid())
+  importRunId   String
+  importRun     ImportRun       @relation(fields: [importRunId], references: [id], onDelete: Cascade)
+  rowNumber     Int?
+  studentNumber String?
+  status        ImportRowStatus
+  mappedData    Json?
+  errors        Json?
+  diff          Json?
+  createdAt     DateTime        @default(now())
+
+  @@index([importRunId])
+  @@index([status])
+  @@map("import_row")
+}
+
+enum ImportRowStatus {
+  NEW
+  UPDATED
+  UNCHANGED
+  MISSING
+  ERROR
 }
 
 model CredentialSchema {
@@ -215,35 +332,63 @@ model CredentialSchema {
   schemaId                       String?
   credentialDefinitionId         String?
   revocationRegistryDefinitionId String?
+  status                         CredentialSchemaStatus @default(ACTIVE)
   isActive                       Boolean           @default(true)
+  activatedAt                    DateTime?
+  publishedAt                    DateTime?
+  retiredAt                      DateTime?
   createdAt                      DateTime          @default(now())
   updatedAt                      DateTime          @updatedAt
 
+  @@unique([universityProfileId, schemaName, schemaVersion])
   @@index([universityProfileId])
+  @@index([universityProfileId, isActive])
+  @@index([universityProfileId, status])
   @@map("credential_schema")
 }
 
 model CredentialIssuance {
-  id                     String                     @id @default(cuid())
-  studentId              String
-  credentialDefinitionId String
-  credentialExchangeId   String?                    @unique
-  activationId           String?
-  activationUrl          String?
-  activationExpiresAt    DateTime?
-  email                  String?
-  deliveryStatus         CredentialDeliveryStatus   @default(PENDING)
-  status                 CredentialIssuanceStatus
-  failureReason          String?
-  issuedAt               DateTime?
-  revokedAt              DateTime?
-  createdAt              DateTime                   @default(now())
-  updatedAt              DateTime                   @updatedAt
-  batchItem              BatchIssuanceItem?
+  id                             String                     @id @default(cuid())
+  studentId                      String
+  credentialDefinitionId         String
+  schemaVersion                  String?
+  credentialExchangeId           String?                    @unique
+  revocationRegistryDefinitionId String?
+  credentialRevocationId         String?
+  activationId                   String?
+  activationUrl                  String?
+  activationExpiresAt            DateTime?
+  email                          String?
+  deliveryStatus                 CredentialDeliveryStatus   @default(PENDING)
+  status                         CredentialIssuanceStatus
+  lifecycleStatus                CredentialLifecycleStatus?
+  lifecycleStatusUpdatedAt       DateTime?
+  lifecycleReason                String?
+  renewalStatus                  CredentialRenewalStatus @default(NONE)
+  renewalRequestedAt             DateTime?
+  renewalCompletedAt             DateTime?
+  renewalFailureReason           String?
+  renewedFromIssuanceId          String?
+  renewedIntoIssuanceId          String?
+  failureReason                  String?
+  issuedAt                       DateTime?
+  revokedAt                      DateTime?
+  suspendedAt                    DateTime?
+  reactivatedAt                  DateTime?
+  credentialExpiresAt            DateTime?
+  createdAt                      DateTime                   @default(now())
+  updatedAt                      DateTime                   @updatedAt
+  batchItem                      BatchIssuanceItem?
 
+  @@unique([revocationRegistryDefinitionId, credentialRevocationId])
   @@index([studentId])
   @@index([credentialDefinitionId])
+  @@index([revocationRegistryDefinitionId])
   @@index([status])
+  @@index([lifecycleStatus])
+  @@index([renewalStatus])
+  @@index([renewedFromIssuanceId])
+  @@index([renewedIntoIssuanceId])
   @@index([createdAt])
   @@map("credential_issuance")
 }
@@ -270,6 +415,7 @@ model CredentialEventLog {
 
 model CredentialAuditLog {
   id                     String                    @id @default(cuid())
+  eventId                String?                   @unique
   action                 CredentialAuditAction
   actorId                String?
   studentId              String
@@ -284,35 +430,35 @@ model CredentialAuditLog {
   occurredAt             DateTime                  @default(now())
   createdAt              DateTime                  @default(now())
 
-  @@unique([action, credentialExchangeId])
   @@index([actorId])
   @@index([studentId])
   @@index([credentialDefinitionId])
   @@index([credentialExchangeId])
   @@index([credentialIssuanceId])
   @@index([action])
+  @@index([action, credentialExchangeId])
   @@index([occurredAt])
   @@map("credential_audit_log")
 }
 
 model BatchIssuanceRun {
-  id             String                  @id @default(cuid())
-  batchId        String                  @unique
+  id             String                 @id @default(cuid())
+  batchId        String                 @unique
   actorId        String?
   cohortId       String
   filters        Json
-  status         BatchIssuanceRunStatus  @default(PREVIEWED)
-  requestedCount Int                     @default(0)
-  eligibleCount  Int                     @default(0)
-  skippedCount   Int                     @default(0)
-  issuedCount    Int                     @default(0)
-  failedCount    Int                     @default(0)
-  activatedCount Int                     @default(0)
+  status         BatchIssuanceRunStatus @default(PREVIEWED)
+  requestedCount Int                    @default(0)
+  eligibleCount  Int                    @default(0)
+  skippedCount   Int                    @default(0)
+  issuedCount    Int                    @default(0)
+  failedCount    Int                    @default(0)
+  activatedCount Int                    @default(0)
   queuedAt       DateTime?
   startedAt      DateTime?
   completedAt    DateTime?
-  createdAt      DateTime                @default(now())
-  updatedAt      DateTime                @updatedAt
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
   items          BatchIssuanceItem[]
 
   @@index([actorId])
@@ -322,17 +468,17 @@ model BatchIssuanceRun {
 }
 
 model BatchIssuanceItem {
-  id                   String                     @id @default(cuid())
+  id                   String                  @id @default(cuid())
   batchRunId           String
-  batchRun             BatchIssuanceRun           @relation(fields: [batchRunId], references: [id], onDelete: Cascade)
+  batchRun             BatchIssuanceRun        @relation(fields: [batchRunId], references: [id], onDelete: Cascade)
   studentId            String
-  status               BatchIssuanceItemStatus    @default(PENDING)
+  status               BatchIssuanceItemStatus @default(PENDING)
   skipReason           String?
   failureReason        String?
-  credentialIssuanceId String?                    @unique
-  credentialIssuance   CredentialIssuance?        @relation(fields: [credentialIssuanceId], references: [id], onDelete: SetNull)
-  createdAt            DateTime                   @default(now())
-  updatedAt            DateTime                   @updatedAt
+  credentialIssuanceId String?                 @unique
+  credentialIssuance   CredentialIssuance?     @relation(fields: [credentialIssuanceId], references: [id], onDelete: SetNull)
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
 
   @@unique([batchRunId, studentId])
   @@index([studentId])
@@ -370,6 +516,27 @@ enum CredentialIssuanceStatus {
   REVOKED
 }
 
+enum CredentialLifecycleStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+  EXPIRED
+}
+
+enum CredentialSchemaStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
+enum CredentialRenewalStatus {
+  NONE
+  PENDING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
 enum CredentialDeliveryStatus {
   PENDING
   DELIVERED
@@ -386,6 +553,14 @@ enum CredentialAuditAction {
   REISSUE_REQUESTED
   REVOCATION_REQUESTED
   REVOCATION_COMPLETED
+  CREDENTIAL_LIFECYCLE_ACTIVATED
+  CREDENTIAL_SUSPENDED
+  CREDENTIAL_REACTIVATED
+  CREDENTIAL_REVOKED
+  CREDENTIAL_EXPIRED
+  CREDENTIAL_RENEWAL_REQUESTED
+  CREDENTIAL_RENEWAL_OFFER_CREATED
+  CREDENTIAL_RENEWAL_FAILED
 }
 
 enum SetupStatus {
@@ -434,4 +609,8 @@ enum AuditAction {
   VENDOR_APPLICATION_REJECTED
   VENDOR_APPLICATION_REVOKED
   SETTINGS_UPDATED
+  STUDENT_IMPORT_COMMITTED
+  SCHEMA_VERSION_CREATED
+  SCHEMA_PUBLISHED
+  RENEWAL_SETTINGS_UPDATED
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { overlayCredentialStatusForStudent } from "@/lib/credentials/status";
-import { getStudentById } from "@/lib/db/store";
+import { getStudentById } from "@/lib/students/repository";
 
 export async function GET(
   req: Request,

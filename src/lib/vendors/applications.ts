@@ -4,13 +4,95 @@ import { z } from "zod";
 
 import type { Prisma } from "@/generated/prisma/client";
 import { AuditAction, VendorApplicationStatus } from "@/generated/prisma/enums";
+import {
+  AgentServiceError,
+  createVerificationServicePoint,
+  listVerificationServicePoints,
+} from "@/lib/agentClient";
 import { writeAuditLog } from "@/lib/audit/audit";
 import { prisma } from "@/lib/db/prisma";
 
 const ACTIVE_APPLICATION_STATUSES = [
+  VendorApplicationStatus.DRAFT,
   VendorApplicationStatus.PENDING,
   VendorApplicationStatus.APPROVED,
 ] as const;
+
+const DOCUMENT_FIELDS = [
+  "docRegistrationCertificate",
+  "docProofOfAddress",
+  "docRepresentativeId",
+  "docLetterOfAuthorisation",
+  "docTaxCompliance",
+  "docBusinessLicence",
+] as const;
+type DocumentField = (typeof DOCUMENT_FIELDS)[number];
+
+function assertDocumentField(fieldKey: string): DocumentField {
+  if (!(DOCUMENT_FIELDS as readonly string[]).includes(fieldKey)) {
+    throw new Error(`Invalid document field: ${fieldKey}`);
+  }
+
+  return fieldKey as DocumentField;
+}
+
+const step1Schema = z.object({
+  companyName: z.string().trim().min(1, "Company name is required").max(200, "Company name must be 200 characters or fewer"),
+  companyRegistrationNumber: z
+    .string()
+    .trim()
+    .min(1, "Registration number is required")
+    .max(50, "Registration number must be 50 characters or fewer"),
+  serviceCategory: z.string().trim().min(1, "Service category is required"),
+  website: z.string().trim().url("Website must be a valid URL").optional().or(z.literal("")),
+  tradingName: z.string().trim().max(200, "Trading name must be 200 characters or fewer").optional(),
+  organisationType: z.string().trim().min(1, "Organisation type is required"),
+  physicalAddress: z
+    .string()
+    .trim()
+    .min(1, "Physical address is required")
+    .max(500, "Physical address must be 500 characters or fewer"),
+  postalAddress: z.string().trim().max(500, "Postal address must be 500 characters or fewer").optional(),
+});
+
+const step2Schema = z.object({
+  contactPersonName: z
+    .string()
+    .trim()
+    .min(1, "Contact person name is required")
+    .max(200, "Contact person name must be 200 characters or fewer"),
+  contactEmail: z.string().trim().email("Contact email must be valid").max(254, "Contact email must be 254 characters or fewer"),
+  contactJobTitle: z
+    .string()
+    .trim()
+    .min(1, "Job title is required")
+    .max(150, "Job title must be 150 characters or fewer"),
+  contactPhone: z
+    .string()
+    .trim()
+    .regex(/^0\d{9}$/, "Enter a valid South African cell number (10 digits, starting with 0)"),
+  contactEmployeeNumber: z
+    .string()
+    .trim()
+    .max(50, "Employee number must be 50 characters or fewer")
+    .optional(),
+  preferredContactMethod: z.enum(["email", "phone"]),
+});
+
+const step3Schema = z.object({
+  justification: z
+    .string()
+    .trim()
+    .min(1, "Purpose for verification is required")
+    .max(2000, "Purpose must be 2000 characters or fewer"),
+  additionalInfo: z.string().trim().max(2000, "Additional information must be 2000 characters or fewer").optional(),
+});
+
+const step5Schema = z.object({
+  declarationAccepted: z.literal(true, {
+    error: "You must accept the declaration to proceed",
+  }),
+});
 
 const createApplicationSchema = z.object({
   companyName: z.string().trim().min(1, "Company name is required"),
@@ -116,7 +198,6 @@ export async function createVendorApplication({
           snapshotContactEmail: data.contactEmail,
           snapshotContactPersonName: data.contactPersonName,
           snapshotWebsite: data.website || null,
-          snapshotDescription: data.description,
         },
       });
 
@@ -170,6 +251,7 @@ export async function getVendorApplicationById(applicationId: string) {
           description: true,
           contactPersonName: true,
           contactEmail: true,
+          verificationUrl: true,
         },
       },
     },
@@ -198,6 +280,7 @@ export async function listVendorApplications({
           contactPersonName: true,
           website: true,
           description: true,
+          verificationUrl: true,
         },
       },
     },
@@ -327,8 +410,10 @@ export async function reviewVendorApplication({
     throw new Error("A rejection reason is required.");
   }
 
+  let approvedVendor: { vendorProfileId: string; companyName: string } | undefined;
+
   try {
-    return await runSerializableTransaction(async (transaction) => {
+    const result = await runSerializableTransaction(async (transaction) => {
       const application = await transaction.vendorApplication.findUnique({
         where: { id: applicationId },
         include: { vendorProfile: true },
@@ -338,7 +423,7 @@ export async function reviewVendorApplication({
         throw new Error("This application is not pending review.");
       }
 
-      const result = await transaction.vendorApplication.updateMany({
+      const updateResult = await transaction.vendorApplication.updateMany({
         where: { id: applicationId, status: VendorApplicationStatus.PENDING },
         data: {
           status: decision,
@@ -348,16 +433,18 @@ export async function reviewVendorApplication({
         },
       });
 
-      if (result.count !== 1) {
+      if (updateResult.count !== 1) {
         throw new Error("This application is not pending review.");
       }
 
       if (decision === VendorApplicationStatus.APPROVED) {
+        const companyName =
+          application.snapshotCompanyName ?? application.vendorProfile.companyName;
+
         await transaction.vendorProfile.update({
           where: { id: application.vendorProfileId },
           data: {
-            companyName:
-              application.snapshotCompanyName ?? application.vendorProfile.companyName,
+            companyName,
             serviceCategory:
               application.snapshotServiceCategory ?? application.vendorProfile.serviceCategory,
             contactEmail:
@@ -366,10 +453,10 @@ export async function reviewVendorApplication({
               application.snapshotContactPersonName ??
               application.vendorProfile.contactPersonName,
             website: application.snapshotWebsite,
-            description:
-              application.snapshotDescription ?? application.vendorProfile.description,
           },
         });
+
+        approvedVendor = { vendorProfileId: application.vendorProfileId, companyName };
       }
 
       await writeAuditLog(
@@ -390,9 +477,76 @@ export async function reviewVendorApplication({
         where: { id: applicationId },
       });
     });
+
+    if (approvedVendor) {
+      try {
+        await ensureVendorVerificationServicePoint(approvedVendor.vendorProfileId);
+      } catch (error) {
+        console.error(
+          `[verification] Failed to create service point for vendor ${approvedVendor.vendorProfileId}:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
+    return result;
   } catch (error) {
     if (hasPrismaErrorCode(error, "P2002")) {
       throw new Error("This vendor already has an active verifier application.");
+    }
+
+    throw error;
+  }
+}
+
+export async function ensureVendorVerificationServicePoint(vendorProfileId: string) {
+  const vendorProfile = await prisma.vendorProfile.findUnique({
+    where: { id: vendorProfileId },
+    select: {
+      id: true,
+      companyName: true,
+      verificationUrl: true,
+    },
+  });
+
+  if (!vendorProfile) {
+    throw new Error("Vendor profile not found.");
+  }
+
+  if (vendorProfile.verificationUrl) {
+    return vendorProfile.verificationUrl;
+  }
+
+  try {
+    const { verificationUrl } = await createVerificationServicePoint({
+      vendorId: vendorProfile.id,
+      vendorName: vendorProfile.companyName,
+      externalId: vendorProfile.id,
+      name: `${vendorProfile.companyName} Verification Point`,
+    });
+
+    await prisma.vendorProfile.update({
+      where: { id: vendorProfile.id },
+      data: { verificationUrl },
+    });
+
+    return verificationUrl;
+  } catch (error) {
+    if (error instanceof AgentServiceError && error.status === 409) {
+      const existingServicePoint = (await listVerificationServicePoints()).find(
+        (servicePoint) =>
+          servicePoint.vendorId === vendorProfile.id &&
+          servicePoint.externalId === vendorProfile.id,
+      );
+
+      if (existingServicePoint) {
+        await prisma.vendorProfile.update({
+          where: { id: vendorProfile.id },
+          data: { verificationUrl: existingServicePoint.verificationUrl },
+        });
+
+        return existingServicePoint.verificationUrl;
+      }
     }
 
     throw error;
@@ -413,4 +567,286 @@ export async function markApplicationViewed({
       viewedByAdminAt: new Date(),
     },
   });
+}
+
+// ─── Draft Application Wizard ─────────────────────────────────────────────────
+
+/** Finds the vendor's existing DRAFT or creates one; throws if PENDING/APPROVED exists. */
+export async function getOrCreateDraftApplication(userId: string) {
+  try {
+    return await runSerializableTransaction(async (transaction) => {
+      const vendorProfile = await transaction.vendorProfile.findUnique({
+        where: { userId },
+      });
+
+      if (!vendorProfile) {
+        throw new Error("No vendor profile found for this account.");
+      }
+
+      const existingActive = await transaction.vendorApplication.findFirst({
+        where: {
+          vendorProfileId: vendorProfile.id,
+          status: { in: [VendorApplicationStatus.PENDING, VendorApplicationStatus.APPROVED] },
+        },
+        select: { status: true },
+      });
+
+      if (existingActive) {
+        throw activeApplicationError(existingActive.status);
+      }
+
+      const existingDraft = await transaction.vendorApplication.findFirst({
+        where: {
+          vendorProfileId: vendorProfile.id,
+          status: VendorApplicationStatus.DRAFT,
+        },
+      });
+
+      if (existingDraft) {
+        return existingDraft;
+      }
+
+      return transaction.vendorApplication.create({
+        data: { vendorProfileId: vendorProfile.id, status: VendorApplicationStatus.DRAFT },
+      });
+    });
+  } catch (error) {
+    if (hasPrismaErrorCode(error, "P2002")) {
+      throw activeApplicationError();
+    }
+    throw error;
+  }
+}
+
+/** Saves step data to the draft. Step-specific validation is applied before writing. */
+export async function saveDraftApplication(
+  applicationId: string,
+  userId: string,
+  step: 1 | 2 | 3 | 5,
+  rawData: Record<string, unknown>,
+) {
+  const application = await prisma.vendorApplication.findFirst({
+    where: { id: applicationId, vendorProfile: { userId }, status: VendorApplicationStatus.DRAFT },
+    select: { id: true },
+  });
+
+  if (!application) {
+    throw new Error("Draft application not found.");
+  }
+
+  try {
+    if (step === 1) {
+      const d = step1Schema.parse(rawData);
+      return await prisma.vendorApplication.update({
+        where: { id: applicationId },
+        data: {
+          snapshotCompanyName: d.companyName,
+          companyRegistrationNumber: d.companyRegistrationNumber,
+          snapshotServiceCategory: d.serviceCategory,
+          snapshotWebsite: d.website || null,
+          tradingName: d.tradingName || null,
+          organisationType: d.organisationType,
+          physicalAddress: d.physicalAddress,
+          postalAddress: d.postalAddress || null,
+        },
+      });
+    }
+
+    if (step === 2) {
+      const d = step2Schema.parse(rawData);
+      return await prisma.vendorApplication.update({
+        where: { id: applicationId },
+        data: {
+          snapshotContactPersonName: d.contactPersonName,
+          snapshotContactEmail: d.contactEmail,
+          contactJobTitle: d.contactJobTitle,
+          contactPhone: d.contactPhone,
+          contactEmployeeNumber: d.contactEmployeeNumber || null,
+          preferredContactMethod: d.preferredContactMethod,
+        },
+      });
+    }
+
+    if (step === 3) {
+      const d = step3Schema.parse(rawData);
+      return await prisma.vendorApplication.update({
+        where: { id: applicationId },
+        data: {
+          justification: d.justification,
+          additionalInfo: d.additionalInfo || null,
+        },
+      });
+    }
+
+    // step === 5
+    step5Schema.parse(rawData);
+    return await prisma.vendorApplication.update({
+      where: { id: applicationId },
+      data: {
+        declarationAccepted: true,
+        declarationAcceptedAt: new Date(),
+      },
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new Error(error.issues.map((issue) => issue.message).join(" "));
+    }
+    throw error;
+  }
+}
+
+/** Saves a single document storage path after a successful upload. Returns the path it replaced, if any. */
+export async function saveDraftDocumentPath(
+  applicationId: string,
+  userId: string,
+  fieldKey: string,
+  storagePath: string,
+): Promise<{ previousPath: string | null }> {
+  const documentField = assertDocumentField(fieldKey);
+
+  const application = await prisma.vendorApplication.findFirst({
+    where: { id: applicationId, vendorProfile: { userId }, status: VendorApplicationStatus.DRAFT },
+    select: { id: true, [documentField]: true },
+  });
+
+  if (!application) {
+    throw new Error("Draft application not found.");
+  }
+
+  await prisma.vendorApplication.update({
+    where: { id: applicationId },
+    data: { [documentField]: storagePath },
+  });
+
+  const previousPath = application[documentField] as string | null;
+  return { previousPath };
+}
+
+/** Verifies a draft document target before storage upload uses the application ID in its object path. */
+export async function assertDraftDocumentUploadAllowed(
+  applicationId: string,
+  userId: string,
+  fieldKey: string,
+): Promise<void> {
+  assertDocumentField(fieldKey);
+
+  const application = await prisma.vendorApplication.findFirst({
+    where: { id: applicationId, vendorProfile: { userId }, status: VendorApplicationStatus.DRAFT },
+    select: { id: true },
+  });
+
+  if (!application) {
+    throw new Error("Draft application not found.");
+  }
+}
+
+/** Clears a document field on the draft. Returns the path that was removed, if any. */
+export async function clearDraftDocumentPath(
+  applicationId: string,
+  userId: string,
+  fieldKey: string,
+): Promise<{ removedPath: string | null }> {
+  const documentField = assertDocumentField(fieldKey);
+
+  const application = await prisma.vendorApplication.findFirst({
+    where: { id: applicationId, vendorProfile: { userId }, status: VendorApplicationStatus.DRAFT },
+    select: { id: true, [documentField]: true },
+  });
+
+  if (!application) {
+    throw new Error("Draft application not found.");
+  }
+
+  const removedPath = application[documentField] as string | null;
+  if (!removedPath) {
+    return { removedPath: null };
+  }
+
+  await prisma.vendorApplication.update({
+    where: { id: applicationId },
+    data: { [documentField]: null },
+  });
+
+  return { removedPath };
+}
+
+/** Validates completeness then transitions the draft from DRAFT → PENDING. */
+export async function submitDraftApplication(applicationId: string, userId: string) {
+  return runSerializableTransaction(async (transaction) => {
+    const app = await transaction.vendorApplication.findFirst({
+      where: { id: applicationId, vendorProfile: { userId }, status: VendorApplicationStatus.DRAFT },
+    });
+
+    if (!app) {
+      throw new Error("Draft application not found.");
+    }
+
+    const missing: string[] = [];
+    if (!app.snapshotCompanyName) missing.push("company name");
+    if (!app.companyRegistrationNumber) missing.push("registration number");
+    if (!app.snapshotServiceCategory) missing.push("service category");
+    if (!app.organisationType) missing.push("organisation type");
+    if (!app.physicalAddress) missing.push("physical address");
+    if (!app.snapshotContactPersonName) missing.push("contact name");
+    if (!app.snapshotContactEmail) missing.push("contact email");
+    if (!app.contactJobTitle) missing.push("job title");
+    if (!app.contactPhone) missing.push("phone number");
+    if (!app.preferredContactMethod) missing.push("preferred contact method");
+    if (!app.justification) missing.push("purpose for verification");
+    if (!app.docRegistrationCertificate) missing.push("registration certificate");
+    if (!app.docProofOfAddress) missing.push("proof of address");
+    if (!app.docRepresentativeId) missing.push("representative ID");
+    if (!app.docLetterOfAuthorisation) missing.push("letter of authorisation");
+    if (!app.declarationAccepted) missing.push("declaration");
+
+    if (missing.length > 0) {
+      throw new Error(
+        `Please complete all required fields before submitting: ${missing.join(", ")}.`,
+      );
+    }
+
+    const updated = await transaction.vendorApplication.update({
+      where: { id: applicationId },
+      data: { status: VendorApplicationStatus.PENDING },
+    });
+
+    await writeAuditLog(
+      {
+        action: AuditAction.VENDOR_APPLICATION_SUBMITTED,
+        actorId: userId,
+        targetType: "vendor_application",
+        targetId: applicationId,
+        meta: { vendorProfileId: app.vendorProfileId },
+      },
+      transaction,
+    );
+
+    return updated;
+  });
+}
+
+/** Returns the step number the wizard should open at (1–5, or 6 for review). */
+export function computeDraftProgress(application: {
+  snapshotCompanyName: string | null;
+  snapshotContactPersonName: string | null;
+  justification: string | null;
+  docRegistrationCertificate: string | null;
+  docProofOfAddress: string | null;
+  docRepresentativeId: string | null;
+  docLetterOfAuthorisation: string | null;
+  declarationAccepted: boolean | null;
+}): number {
+  if (!application.snapshotCompanyName) return 1;
+  if (!application.snapshotContactPersonName) return 2;
+  if (!application.justification) return 3;
+  if (
+    !application.docRegistrationCertificate ||
+    !application.docProofOfAddress ||
+    !application.docRepresentativeId ||
+    !application.docLetterOfAuthorisation
+  ) {
+    return 4;
+  }
+  if (!application.declarationAccepted) return 5;
+  return 6;
 }

@@ -10,6 +10,7 @@ import {
 } from "@/lib/vendors/applications";
 import {
   approveVendorApplicationAction,
+  createVendorVerificationQrAction,
   rejectVendorApplicationAction,
   revokeVendorApplicationAction,
 } from "./actions";
@@ -115,6 +116,20 @@ export default async function VendorsPage({
                     <p className="mt-3 text-xs text-zinc-500">
                       Verification requests include all attributes in the active student credential schema.
                     </p>
+                    {application.vendorProfile.verificationUrl ? (
+                      <a
+                        className="mt-2 block truncate text-xs font-medium text-blue-600 hover:underline"
+                        href={application.vendorProfile.verificationUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {application.vendorProfile.verificationUrl}
+                      </a>
+                    ) : (
+                      <p className="mt-2 text-xs font-medium text-amber-700">
+                        Verification QR setup pending.
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex shrink-0 flex-col items-end gap-2">
@@ -133,6 +148,21 @@ export default async function VendorsPage({
                       companyName={application.vendorProfile.companyName}
                       action={revokeVendorApplicationAction}
                     />
+                    {!application.vendorProfile.verificationUrl && (
+                      <form action={createVendorVerificationQrAction}>
+                        <input
+                          type="hidden"
+                          name="vendorProfileId"
+                          value={application.vendorProfileId}
+                        />
+                        <button
+                          className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                          type="submit"
+                        >
+                          Create verification QR
+                        </button>
+                      </form>
+                    )}
                   </div>
                 </div>
               </div>

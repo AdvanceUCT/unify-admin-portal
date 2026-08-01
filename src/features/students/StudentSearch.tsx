@@ -148,14 +148,13 @@ export function StudentSearch({ initial }: { initial: StudentRecord[] }) {
                 <th className="px-5 py-3 font-medium">Student</th>
                 <th className="px-5 py-3 font-medium">Faculty</th>
                 <th className="px-5 py-3 font-medium">Programme</th>
-                <th className="px-5 py-3 font-medium">Status</th>
                 <th className="px-5 py-3 font-medium">Credential</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
               {filtered.length === 0 ? (
                 <tr>
-                  <td className="px-5 py-12 text-center text-sm text-zinc-500" colSpan={5}>
+                  <td className="px-5 py-12 text-center text-sm text-zinc-500" colSpan={4}>
                     No students found{query ? ` for "${query}"` : ""}.
                   </td>
                 </tr>
@@ -170,11 +169,15 @@ export function StudentSearch({ initial }: { initial: StudentRecord[] }) {
                     </td>
                     <td className="px-5 py-4 text-zinc-600">{student.credential.faculty}</td>
                     <td className="px-5 py-4 text-zinc-600">{student.credential.programme}</td>
-                    <td className="px-5 py-4 text-zinc-600">{student.credential.enrolmentStatus}</td>
                     <td className="px-5 py-4">
-                      <Badge tone={credentialStatusTone(student.credential.lifecycleState)}>
-                        {formatCredentialStatus(student.credential.lifecycleState)}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge tone={credentialStatusTone(student.credential.lifecycleState)}>
+                          {formatCredentialStatus(student.credential.lifecycleState)}
+                        </Badge>
+                        {student.credential.lifecycleState !== "NOT_ISSUED" && student.credential.schemaVersion ? (
+                          <Badge tone="version">v{student.credential.schemaVersion}</Badge>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))

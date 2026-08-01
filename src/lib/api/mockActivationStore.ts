@@ -63,7 +63,9 @@ function activationIdForToken(token: string) {
 }
 
 function dashboardSummary(state: MockActivationState): DashboardSummary {
-  const issuedCredentials = state.students.filter((student) => student.credential.lifecycleState === "ISSUED").length;
+  const issuedCredentials = state.students.filter((student) =>
+    ["ACTIVE", "LEGACY_NON_REVOCABLE"].includes(student.credential.lifecycleState),
+  ).length;
   const failedCredentials = state.students.filter((student) => student.credential.lifecycleState === "FAILED").length;
   const pendingIssuance = state.students.filter((student) =>
     ["OFFER_SENT", "ACCEPTED"].includes(student.credential.lifecycleState),
@@ -116,7 +118,6 @@ function normalizeMockSelection(selection: BatchIssuanceSelection = {}): BatchIs
   return {
     cohortId: selection.cohortId || mockBatchIssuancePreview.cohortId,
     credentialStatus: selection.credentialStatus || undefined,
-    enrolmentStatus: selection.enrolmentStatus || undefined,
     faculty: selection.faculty || undefined,
     limit:
       typeof selection.limit === "number" && Number.isInteger(selection.limit) && selection.limit > 0
@@ -134,16 +135,12 @@ function matchesSelection(student: StudentRecord, selection: BatchIssuanceSelect
   return (
     (!selection.faculty || student.credential.faculty === selection.faculty) &&
     (!selection.programme || student.credential.programme === selection.programme) &&
-    (!selection.enrolmentStatus || student.credential.enrolmentStatus === selection.enrolmentStatus) &&
     (!selection.credentialStatus || student.credential.lifecycleState === selection.credentialStatus)
   );
 }
 
 function isEligible(student: StudentRecord) {
-  return (
-    ["NOT_ISSUED", "FAILED", "REVOKED"].includes(student.credential.lifecycleState) &&
-    student.credential.enrolmentStatus === "Registered"
-  );
+  return ["NOT_ISSUED", "FAILED", "REVOKED"].includes(student.credential.lifecycleState);
 }
 
 function mockPreviewItem(student: StudentRecord, status: "Eligible" | "Skipped"): BatchIssuancePreviewItem {

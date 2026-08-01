@@ -10,7 +10,10 @@ export type CredentialLifecycleState =
   | "NOT_ISSUED"
   | "OFFER_SENT"
   | "ACCEPTED"
-  | "ISSUED"
+  | "ACTIVE"
+  | "SUSPENDED"
+  | "EXPIRED"
+  | "LEGACY_NON_REVOCABLE"
   | "FAILED"
   | "REVOKED";
 
@@ -22,17 +25,19 @@ export type StudentCredential = {
   issuer: string;
   faculty?: string;
   programme: string;
-  enrolmentStatus: "Registered" | "Suspended" | "Withdrawn" | "Graduated";
   lifecycleState: CredentialLifecycleState;
+  isRevocable?: boolean;
+  schemaVersion?: string;
   studentNumber: string;
   validFrom: string;
   expiresAt: string;
+  /** Raw schema-attribute values sourced from the student's stored `attributes` bag, used as a fallback when resolving credential attributes that aren't one of the fixed platform fields. */
+  attributes?: Record<string, string | undefined>;
 };
 
 export type BatchIssuanceSelection = {
   cohortId?: string;
   credentialStatus?: CredentialLifecycleState;
-  enrolmentStatus?: StudentCredential["enrolmentStatus"];
   faculty?: string;
   limit?: number;
   programme?: string;
@@ -165,6 +170,7 @@ export type CredentialActivityEvent = {
   id: string;
   credentialExchangeId: string;
   previousState?: string;
+  schemaVersion?: string;
   state: string;
   status?: StoredCredentialLifecycleState;
   studentId?: string;
@@ -172,7 +178,20 @@ export type CredentialActivityEvent = {
 };
 
 export type CredentialAuditLogEntry = {
-  action: "OFFER_SENT" | "OFFER_DELIVERY_FAILED" | "REISSUE_REQUESTED" | "REVOCATION_REQUESTED" | "REVOCATION_COMPLETED";
+  action:
+    | "OFFER_SENT"
+    | "OFFER_DELIVERY_FAILED"
+    | "REISSUE_REQUESTED"
+    | "REVOCATION_REQUESTED"
+    | "REVOCATION_COMPLETED"
+    | "CREDENTIAL_LIFECYCLE_ACTIVATED"
+    | "CREDENTIAL_SUSPENDED"
+    | "CREDENTIAL_REACTIVATED"
+    | "CREDENTIAL_REVOKED"
+    | "CREDENTIAL_EXPIRED"
+    | "CREDENTIAL_RENEWAL_REQUESTED"
+    | "CREDENTIAL_RENEWAL_OFFER_CREATED"
+    | "CREDENTIAL_RENEWAL_FAILED";
   actorId?: string | null;
   batchId?: string | null;
   batchItemId?: string | null;
@@ -184,6 +203,19 @@ export type CredentialAuditLogEntry = {
   message?: string | null;
   occurredAt: string;
   studentId: string;
+};
+
+export type StudentImportAuditLogEntry = {
+  id: string;
+  actorId: string | null;
+  actorName: string | null;
+  filename: string | null;
+  newCount: number;
+  updatedCount: number;
+  unchangedCount: number;
+  missingCount: number;
+  errorCount: number;
+  createdAt: string;
 };
 
 export type ActivationDeliveryStatus = "Pending" | "Delivered" | "Failed";

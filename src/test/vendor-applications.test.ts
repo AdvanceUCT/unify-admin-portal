@@ -3,11 +3,28 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuditAction, VendorApplicationStatus } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit/audit";
 import {
+  assertDraftDocumentUploadAllowed,
   createVendorApplication,
+  ensureVendorVerificationServicePoint,
   listDecidedVendorApplications,
   reviewVendorApplication,
   revokeVendorApplication,
 } from "@/lib/vendors/applications";
+
+const agentClient = vi.hoisted(() => ({
+  AgentServiceError: class AgentServiceError extends Error {
+    constructor(
+      message: string,
+      public status: number,
+      public details?: unknown,
+    ) {
+      super(message);
+      this.name = "AgentServiceError";
+    }
+  },
+  createVerificationServicePoint: vi.fn(),
+  listVerificationServicePoints: vi.fn(),
+}));
 
 const database = vi.hoisted(() => {
   const transaction = {
@@ -35,6 +52,12 @@ const database = vi.hoisted(() => {
 });
 
 vi.mock("server-only", () => ({}));
+
+vi.mock("@/lib/agentClient", () => ({
+  AgentServiceError: agentClient.AgentServiceError,
+  createVerificationServicePoint: agentClient.createVerificationServicePoint,
+  listVerificationServicePoints: agentClient.listVerificationServicePoints,
+}));
 
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
@@ -76,6 +99,11 @@ beforeEach(() => {
   database.runTransaction.mockImplementation(async (operation) =>
     operation(database.transaction),
   );
+  agentClient.createVerificationServicePoint.mockResolvedValue({
+    id: "sp_1",
+    verificationUrl: "https://verify.example.com/verify/sp-public-1",
+  });
+  agentClient.listVerificationServicePoints.mockResolvedValue([]);
 });
 
 describe("createVendorApplication", () => {
@@ -117,7 +145,6 @@ describe("createVendorApplication", () => {
         snapshotContactEmail: "jane@example.com",
         snapshotContactPersonName: "Jane Doe",
         snapshotWebsite: "https://example.com",
-        snapshotDescription: validInput.description,
       },
     });
     expect(writeAuditLogMock).toHaveBeenCalledWith(
@@ -140,6 +167,33 @@ describe("createVendorApplication", () => {
   });
 });
 
+describe("assertDraftDocumentUploadAllowed", () => {
+  it("rejects unsupported document fields before storage upload", async () => {
+    await expect(
+      assertDraftDocumentUploadAllowed("app_1", "user_1", "docPassport"),
+    ).rejects.toThrow("Invalid document field: docPassport");
+
+    expect(database.transaction.vendorApplication.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("rejects applications that do not belong to the signed-in vendor", async () => {
+    database.transaction.vendorApplication.findFirst.mockResolvedValueOnce(null);
+
+    await expect(
+      assertDraftDocumentUploadAllowed("app_2", "user_1", "docProofOfAddress"),
+    ).rejects.toThrow("Draft application not found.");
+
+    expect(database.transaction.vendorApplication.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: "app_2",
+        vendorProfile: { userId: "user_1" },
+        status: VendorApplicationStatus.DRAFT,
+      },
+      select: { id: true },
+    });
+  });
+});
+
 describe("reviewVendorApplication", () => {
   const pendingApplication = {
     id: "app_1",
@@ -150,7 +204,6 @@ describe("reviewVendorApplication", () => {
     snapshotContactEmail: "jane@example.com",
     snapshotContactPersonName: "Jane Doe",
     snapshotWebsite: "https://example.com",
-    snapshotDescription: validInput.description,
     vendorProfile,
   };
 
@@ -189,6 +242,11 @@ describe("reviewVendorApplication", () => {
       id: "app_1",
       status: VendorApplicationStatus.APPROVED,
     });
+    database.transaction.vendorProfile.findUnique.mockResolvedValueOnce({
+      ...vendorProfile,
+      companyName: "Acme Corp",
+      verificationUrl: null,
+    });
 
     await reviewVendorApplication({
       applicationId: "app_1",
@@ -204,8 +262,17 @@ describe("reviewVendorApplication", () => {
         contactEmail: "jane@example.com",
         contactPersonName: "Jane Doe",
         website: "https://example.com",
-        description: validInput.description,
       },
+    });
+    expect(agentClient.createVerificationServicePoint).toHaveBeenCalledWith({
+      vendorId: "profile_1",
+      vendorName: "Acme Corp",
+      externalId: "profile_1",
+      name: "Acme Corp Verification Point",
+    });
+    expect(database.transaction.vendorProfile.update).toHaveBeenCalledWith({
+      where: { id: "profile_1" },
+      data: { verificationUrl: "https://verify.example.com/verify/sp-public-1" },
     });
     expect(writeAuditLogMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -248,6 +315,49 @@ describe("reviewVendorApplication", () => {
       }),
       database.transaction,
     );
+  });
+});
+
+describe("ensureVendorVerificationServicePoint", () => {
+  it("returns the existing URL without recreating the service point", async () => {
+    database.transaction.vendorProfile.findUnique.mockResolvedValueOnce({
+      ...vendorProfile,
+      verificationUrl: "https://verify.example.com/verify/existing",
+    });
+
+    await expect(ensureVendorVerificationServicePoint("profile_1")).resolves.toBe(
+      "https://verify.example.com/verify/existing",
+    );
+    expect(agentClient.createVerificationServicePoint).not.toHaveBeenCalled();
+  });
+
+  it("recovers the URL when the agent reports a duplicate service point", async () => {
+    database.transaction.vendorProfile.findUnique.mockResolvedValueOnce({
+      ...vendorProfile,
+      verificationUrl: null,
+    });
+    agentClient.createVerificationServicePoint.mockRejectedValueOnce(
+      new agentClient.AgentServiceError("Duplicate service point", 409),
+    );
+    agentClient.listVerificationServicePoints.mockResolvedValueOnce([
+      {
+        id: "sp_1",
+        vendorId: "profile_1",
+        vendorName: "Existing Company",
+        externalId: "profile_1",
+        name: "Existing Company Verification Point",
+        active: true,
+        verificationUrl: "https://verify.example.com/verify/recovered",
+      },
+    ]);
+
+    await expect(ensureVendorVerificationServicePoint("profile_1")).resolves.toBe(
+      "https://verify.example.com/verify/recovered",
+    );
+    expect(database.transaction.vendorProfile.update).toHaveBeenCalledWith({
+      where: { id: "profile_1" },
+      data: { verificationUrl: "https://verify.example.com/verify/recovered" },
+    });
   });
 });
 

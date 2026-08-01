@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
+import { CredentialSchemaStatus } from "@/generated/prisma/enums";
 import {
   getUniversityProfile,
   upsertUniversityProfile,
@@ -135,7 +136,11 @@ const ISSUANCE_PAYLOAD = {
   schema: STUDENT_SCHEMA,
   credentialDefinition: {
     tag: "default",
-    supportRevocation: false,
+    supportRevocation: true,
+  },
+  revocation: {
+    tag: "default-revocation",
+    maximumCredentialNumber: 10000,
   },
 };
 
@@ -148,10 +153,10 @@ const ISSUANCE_PAYLOAD = {
 export async function runIssuanceSetupAction() {
   const profile = await getUniversityProfile();
   if (!profile) {
-    throw new Error("University profile not found.");
+    return { ok: false, error: "University profile not found." };
   }
   if (!profile.issuerDid) {
-    throw new Error("Issuer DID not found. Create the DID first.");
+    return { ok: false, error: "Issuer DID not found. Create the DID first." };
   }
 
   try {
@@ -161,7 +166,11 @@ export async function runIssuanceSetupAction() {
         ...ISSUANCE_PAYLOAD,
       });
 
+    await agentClient.registerTrustedCredentialDefinition(credentialDefinitionId, true);
+
     await createCredentialSchema({
+      activatedAt: new Date(),
+      publishedAt: new Date(),
       universityProfileId: profile.id,
       schemaName: STUDENT_SCHEMA.name,
       schemaVersion: STUDENT_SCHEMA.version,
@@ -169,6 +178,7 @@ export async function runIssuanceSetupAction() {
       schemaId,
       credentialDefinitionId,
       revocationRegistryDefinitionId,
+      status: CredentialSchemaStatus.ACTIVE,
     });
 
     await prisma.universityProfile.update({
@@ -185,12 +195,18 @@ export async function runIssuanceSetupAction() {
         message: error.message,
         details: error.details,
       });
-      throw new Error(
-        `${error.message} (status ${error.status}) — details: ${JSON.stringify(error.details)}`,
-      );
+      return {
+        ok: false,
+        error: `${error.message} (status ${error.status})`,
+      };
     }
-    throw error;
+    console.error("issuanceSetup failed", error);
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Issuance setup failed.",
+    };
   }
   revalidatePath("/setup");
+  return { ok: true };
 }
 

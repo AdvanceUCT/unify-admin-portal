@@ -2,6 +2,7 @@ import {
   ClipboardList,
   Gauge,
   Landmark,
+  Layers3,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -25,6 +26,12 @@ const navItems = [
   { href: "/", label: "Overview", icon: Gauge },
   { href: "/students", label: "Students", icon: Users },
   { href: "/credentials/issuance", label: "Issue Credentials", icon: ClipboardList },
+  {
+    href: "/credentials/schemas",
+    label: "Credential Schemas",
+    icon: Layers3,
+    allowedRoles: ["SUPER_ADMIN", "ADMIN"] as const,
+  },
   { href: "/vendors", label: "Vendors", icon: Landmark },
   { href: "/rules", label: "Rules", icon: SlidersHorizontal },
   { href: "/audit", label: "Audit", icon: ScrollText },
@@ -52,8 +59,10 @@ export default async function AdminLayout({
   }
 
   const role = session.user.role as AdminRole;
-  const visibleNavItems = navItems.filter((item) =>
-    canAccessRoute(role, item.href),
+  const visibleNavItems = navItems.filter(
+    (item) =>
+      canAccessRoute(role, item.href) &&
+      (item.allowedRoles?.some((allowedRole) => allowedRole === role) ?? true),
   );
 
   return (

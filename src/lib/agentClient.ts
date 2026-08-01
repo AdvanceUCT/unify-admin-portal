@@ -50,6 +50,17 @@ function extractErrorDetails(errorBody: unknown) {
   return errorBody;
 }
 
+function extractErrorMessage(errorBody: unknown, fallback: string) {
+  if (!errorBody || typeof errorBody !== "object") return fallback;
+  const record = errorBody as Record<string, unknown>;
+  if (typeof record.message === "string") return record.message;
+  const nested = record.error;
+  if (nested && typeof nested === "object" && typeof (nested as Record<string, unknown>).message === "string") {
+    return String((nested as Record<string, unknown>).message);
+  }
+  return fallback;
+}
+
 /**
  * Internal fetch wrapper for the Identity Agent Service. Prepends the base URL,
  * injects auth headers, and throws an `AgentServiceError` for any non-2xx response.
@@ -91,13 +102,7 @@ async function agentFetch(
     }
 
     const errorDetails = extractErrorDetails(errorBody);
-    const message =
-      errorBody &&
-      typeof errorBody === "object" &&
-      "message" in errorBody &&
-      typeof (errorBody as Record<string, unknown>).message === "string"
-        ? String((errorBody as Record<string, unknown>).message)
-        : `Agent service request failed: ${response.statusText}`;
+    const message = extractErrorMessage(errorBody, `Agent service request failed: ${response.statusText}`);
 
     throw new AgentServiceError(message, response.status, errorDetails);
   }
@@ -176,6 +181,7 @@ export async function issuanceSetup(payload: {
  */
 export async function createBatchActivationLinks(payload: {
   credentialDefinitionId: string;
+  revocationRegistryDefinitionId?: string;
   students: Array<{
     attributes: Array<{ name: string; value: string }>;
     email?: string;
@@ -187,9 +193,11 @@ export async function createBatchActivationLinks(payload: {
     activationId: string;
     activationUrl: string;
     credentialExchangeId: string;
+    credentialRevocationId?: string;
     email?: string;
     expiresAt: string;
     externalId?: string;
+    revocationRegistryDefinitionId?: string;
   }>;
 }> {
   const response = await agentFetch("/api/credentials/activation-links/batch", {
@@ -225,5 +233,85 @@ export async function resolveActivation(payload: {
     method: "POST",
     body: JSON.stringify(payload),
   });
+  return response.json();
+}
+
+export type AgentCredentialLifecycleResult = {
+  credentialExchangeId: string;
+  credentialRevocationId: string;
+  eventId?: string;
+  reason?: string;
+  reactivatedAt?: string;
+  revocationRegistryDefinitionId: string;
+  revokedAt?: string;
+  status: "ACTIVE" | "SUSPENDED" | "REVOKED";
+  statusListTimestamp?: number;
+  suspendedAt?: string;
+  updatedAt: string;
+};
+
+export async function changeCredentialLifecycle(
+  credentialExchangeId: string,
+  action: "reactivate" | "revoke" | "suspend",
+  reason?: string,
+): Promise<AgentCredentialLifecycleResult> {
+  const response = await agentFetch(
+    `/api/credentials/${encodeURIComponent(credentialExchangeId)}/${action}`,
+    {
+      body: JSON.stringify({ reason }),
+      method: "POST",
+    },
+  );
+  return response.json();
+}
+
+export type TrustedCredentialDefinition = {
+  active: boolean;
+  attributes: string[];
+  createdAt: string;
+  credentialDefinitionId: string;
+  isDefault: boolean;
+  schemaId: string;
+  schemaName: string;
+  schemaVersion: string;
+  updatedAt: string;
+};
+
+export async function registerTrustedCredentialDefinition(
+  credentialDefinitionId: string,
+  makeDefault = false,
+): Promise<TrustedCredentialDefinition> {
+  const response = await agentFetch("/api/verifier/credential-definitions", {
+    body: JSON.stringify({ credentialDefinitionId, makeDefault }),
+    method: "POST",
+  });
+  return response.json();
+}
+
+export async function createVerificationServicePoint(payload: {
+  vendorId: string;
+  vendorName: string;
+  externalId: string;
+  name: string;
+}): Promise<{ id: string; verificationUrl: string }> {
+  const response = await agentFetch("/api/verifier/service-points", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return response.json();
+}
+
+export async function listVerificationServicePoints(): Promise<
+  Array<{
+    id: string;
+    vendorId: string;
+    vendorName: string;
+    externalId: string;
+    name: string;
+    active: boolean;
+    verificationUrl: string;
+  }>
+> {
+  const response = await agentFetch("/api/verifier/service-points");
   return response.json();
 }

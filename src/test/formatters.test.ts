@@ -12,7 +12,8 @@ describe("formatters", () => {
   });
 
   it("formats credential statuses", () => {
-    expect(formatCredentialStatus("ISSUED")).toBe("Issued");
+    expect(formatCredentialStatus("ACTIVE")).toBe("Active");
+    expect(formatCredentialStatus("LEGACY_NON_REVOCABLE")).toBe("Legacy non-revocable");
     expect(formatCredentialStatus("NOT_ISSUED")).toBe("Not issued");
   });
 

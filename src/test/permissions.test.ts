@@ -106,6 +106,8 @@ describe("permissions", () => {
 
   it("enforces action-level permissions", () => {
     expect(assertCan("credential:write", session("ISSUER"))).toEqual(session("ISSUER"));
+    expect(assertCan("credential:schema:manage", session("ADMIN"))).toEqual(session("ADMIN"));
+    expect(() => assertCan("credential:schema:manage", session("ISSUER"))).toThrow(PermissionError);
     expect(() => assertCan("session:revoke", session("ADMIN"))).toThrow(PermissionError);
   });
 });

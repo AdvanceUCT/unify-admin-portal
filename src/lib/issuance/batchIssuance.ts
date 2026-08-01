@@ -1,6 +1,6 @@
 import "server-only";
 
-import { CredentialDeliveryStatus } from "@/generated/prisma/enums";
+import { CredentialAuditAction, CredentialDeliveryStatus, CredentialRenewalStatus } from "@/generated/prisma/enums";
 import { mockBatchIssuancePreview } from "@/lib/api/mockData";
 import { recordBatchIssuanceResult } from "@/lib/api/mockActivationStore";
 import { toPublicWalletActivationLink } from "@/lib/api/activationLinks";
@@ -9,7 +9,6 @@ import type {
   BatchIssuanceResult,
   BatchIssuanceSelection,
   CredentialLifecycleState,
-  StudentCredential,
   StudentRecord,
 } from "@/lib/api/types";
 import { createBatchActivationLinks } from "@/lib/agentClient";
@@ -20,32 +19,35 @@ import {
   overlayCredentialStatusForStudent,
   reconcileCredentialEventLogs,
 } from "@/lib/credentials/status";
-import { getAllStudents, getStudentById } from "@/lib/db/store";
+import { getAllStudents, getStudentById } from "@/lib/students/repository";
 import { sendCredentialActivationEmail } from "@/lib/email/credential-activation";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfile } from "@/lib/university/profile";
+import { prisma } from "@/lib/db/prisma";
 import {
   isStudentRecordEligibleForCredentialIssuance,
   selectStudentRecordsForCredentialIssuance,
   SIMULATED_STUDENT_COHORT_ID,
-  SIMULATED_STUDENT_RECORD_COUNT,
 } from "@/lib/student-records/simulatedUniversityRecords";
 
 const DEFAULT_YEAR = "2026";
+const MAX_BATCH_ISSUANCE_LIMIT = 100_000;
 const credentialStatuses = new Set<CredentialLifecycleState>([
   "ACCEPTED",
+  "ACTIVE",
+  "EXPIRED",
   "FAILED",
-  "ISSUED",
+  "LEGACY_NON_REVOCABLE",
   "NOT_ISSUED",
   "OFFER_SENT",
   "REVOKED",
+  "SUSPENDED",
 ]);
-const enrolmentStatuses = new Set<StudentCredential["enrolmentStatus"]>([
-  "Graduated",
-  "Registered",
-  "Suspended",
-  "Withdrawn",
-]);
+
+export type CredentialValidityWindow = {
+  expiresAt: Date;
+  validFrom: Date;
+};
 
 /**
  * Custom error for failed student issuance requests.
@@ -63,44 +65,56 @@ export class StudentIssuanceError extends Error {
 
 /**
  * Looks up the value for a credential attribute by name from the student's data.
- * Throws if the attribute name doesn't match any known field, so schema mismatches
- * are caught early instead of silently producing empty credentials.
+ * Fixed platform/simulated fields are checked first; anything else falls back to
+ * the student's stored `attributes` bag (schema fields sourced from CSV import),
+ * so per-university custom schema attributes resolve without code changes.
+ * Throws if no value is found anywhere, so schema mismatches are caught early
+ * instead of silently producing empty credentials.
  *
  * @param student - The student to read data from.
  * @param attributeName - The schema attribute name to look up.
  * @returns The string value for that attribute.
  * @throws If no value exists for the given attribute name.
  */
-function attributeValue(student: StudentRecord, attributeName: string): string {
+export function credentialValidityWindowFrom(validFrom: Date, validityDays: number): CredentialValidityWindow {
+  const expiresAt = new Date(validFrom);
+  expiresAt.setDate(expiresAt.getDate() + validityDays);
+  return { expiresAt, validFrom };
+}
+
+function attributeValue(student: StudentRecord, attributeName: string, validityWindow: CredentialValidityWindow): string {
   const values: Record<string, string | undefined> = {
     email: student.profile.email,
-    enrolmentStatus: student.credential.enrolmentStatus,
-    expiresAt: student.credential.expiresAt,
+    expiresAt: validityWindow.expiresAt.toISOString(),
     faculty: student.credential.faculty,
     firstName: student.profile.firstName,
     fullName: student.credential.holderName,
     institution: student.profile.institution,
-    issuedAt: new Date().toISOString(),
+    issuedAt: validityWindow.validFrom.toISOString(),
     lastName: student.profile.lastName,
     programme: student.credential.programme,
     studentId: student.credential.studentNumber,
     studentNumber: student.credential.studentNumber,
-    validFrom: student.credential.validFrom,
+    validFrom: validityWindow.validFrom.toISOString(),
     year: DEFAULT_YEAR,
   };
-  const value = values[attributeName];
+  const value = values[attributeName] ?? student.credential.attributes?.[attributeName];
 
   if (!value) {
-    throw new Error(`No simulated student value is available for schema attribute "${attributeName}".`);
+    throw new Error(`No student value is available for schema attribute "${attributeName}".`);
   }
 
   return value;
 }
 
-export function attributesForStudent(student: StudentRecord, schemaAttributes: string[]) {
+export function attributesForStudent(
+  student: StudentRecord,
+  schemaAttributes: string[],
+  validityWindow: CredentialValidityWindow,
+) {
   return schemaAttributes.map((name) => ({
     name,
-    value: attributeValue(student, name),
+    value: attributeValue(student, name, validityWindow),
   }));
 }
 
@@ -143,20 +157,15 @@ export function parseBatchIssuanceSelection(value: unknown): BatchIssuanceSelect
   const faculty = optionalTrimmedString(record.faculty);
   const programme = optionalTrimmedString(record.programme);
   const credentialStatus = optionalTrimmedString(record.credentialStatus);
-  const enrolmentStatus = optionalTrimmedString(record.enrolmentStatus);
   const limit = record.limit === undefined || record.limit === "" ? undefined : Number(record.limit);
 
   if (credentialStatus && !credentialStatuses.has(credentialStatus as CredentialLifecycleState)) {
     throw new StudentIssuanceError("Credential status filter is not valid.", 400);
   }
 
-  if (enrolmentStatus && !enrolmentStatuses.has(enrolmentStatus as StudentCredential["enrolmentStatus"])) {
-    throw new StudentIssuanceError("Enrolment status filter is not valid.", 400);
-  }
-
-  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > SIMULATED_STUDENT_RECORD_COUNT)) {
+  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > MAX_BATCH_ISSUANCE_LIMIT)) {
     throw new StudentIssuanceError(
-      `Batch issuance limit must be an integer between 1 and ${SIMULATED_STUDENT_RECORD_COUNT}.`,
+      `Batch issuance limit must be an integer between 1 and ${MAX_BATCH_ISSUANCE_LIMIT}.`,
       400,
     );
   }
@@ -164,7 +173,6 @@ export function parseBatchIssuanceSelection(value: unknown): BatchIssuanceSelect
   return {
     cohortId,
     credentialStatus: credentialStatus as CredentialLifecycleState | undefined,
-    enrolmentStatus: enrolmentStatus as StudentCredential["enrolmentStatus"] | undefined,
     faculty,
     limit,
     programme,
@@ -232,7 +240,10 @@ export async function getActiveCredentialDefinition() {
 
   return {
     credentialDefinitionId: activeSchema.credentialDefinitionId,
+    credentialValidityDays: profile.defaultCredentialValidityDays ?? 365,
+    revocationRegistryDefinitionId: activeSchema.revocationRegistryDefinitionId ?? undefined,
     schemaAttributes: activeSchema.schemaAttributes,
+    schemaVersion: activeSchema.schemaVersion,
   };
 }
 
@@ -262,30 +273,40 @@ async function issueStudentActivationLinks(
   selection: BatchIssuanceSelection = {},
   actorId?: string | null,
   includeBatchIdInAudit = false,
+  options: {
+    renewedFromIssuanceId?: string;
+    skipActiveIssuanceCheck?: boolean;
+  } = {},
 ): Promise<BatchIssuanceResult> {
   const activeSchema = await getActiveCredentialDefinition();
   const batchId = batchIdFrom(now);
+  const validityWindow = credentialValidityWindowFrom(now, activeSchema.credentialValidityDays);
 
-  try {
-    await Promise.all(
-      studentsForIssuance.map((student) =>
-      assertCredentialIssuanceAllowed({
-        credentialDefinitionId: activeSchema.credentialDefinitionId,
-        studentId: student.credential.studentNumber,
-      }),
-      ),
-    );
-  } catch (error) {
-    throw new StudentIssuanceError(
-      error instanceof Error ? error.message : "Student already has an active credential issuance.",
-      409,
-    );
+  if (!options.skipActiveIssuanceCheck) {
+    try {
+      await Promise.all(
+        studentsForIssuance.map((student) =>
+          assertCredentialIssuanceAllowed({
+            credentialDefinitionId: activeSchema.credentialDefinitionId,
+            studentId: student.credential.studentNumber,
+          }),
+        ),
+      );
+    } catch (error) {
+      throw new StudentIssuanceError(
+        error instanceof Error ? error.message : "Student already has an active credential issuance.",
+        409,
+      );
+    }
   }
 
   const agentResult = await createBatchActivationLinks({
     credentialDefinitionId: activeSchema.credentialDefinitionId,
+    ...(activeSchema.revocationRegistryDefinitionId
+      ? { revocationRegistryDefinitionId: activeSchema.revocationRegistryDefinitionId }
+      : {}),
     students: studentsForIssuance.map((student) => ({
-      attributes: attributesForStudent(student, activeSchema.schemaAttributes),
+      attributes: attributesForStudent(student, activeSchema.schemaAttributes, validityWindow),
       email: student.profile.email,
       externalId: student.profile.id,
     })),
@@ -304,10 +325,15 @@ async function issueStudentActivationLinks(
       activationUrl: publicActivationUrl,
       credentialDefinitionId: activeSchema.credentialDefinitionId,
       credentialExchangeId: offer.credentialExchangeId,
+      credentialExpiresAt: validityWindow.expiresAt,
+      credentialRevocationId: offer.credentialRevocationId,
       email: offer.email,
       expiresAt: offer.expiresAt,
       failureReason: emailDelivery.status === "Failed" ? emailDelivery.failureReason : undefined,
+      revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId,
+      schemaVersion: activeSchema.schemaVersion,
       studentId: persistedStudentId,
+      renewedFromIssuanceId: options.renewedFromIssuanceId,
       wasDelivered: emailDelivery.status === "Delivered",
     });
     await reconcileCredentialEventLogs(offer.credentialExchangeId);
@@ -387,7 +413,7 @@ export async function queueRealBatchIssuance(
   const selection = selectionInputOrNow instanceof Date ? {} : parseBatchIssuanceSelection(selectionInputOrNow);
   const studentsForIssuance = selectStudentRecordsForCredentialIssuance(await getAllStudents(), {
     ...selection,
-    limit: selection.limit ?? mockBatchIssuancePreview.requestedCount,
+    limit: selection.limit ?? MAX_BATCH_ISSUANCE_LIMIT,
   });
 
   return issueStudentActivationLinks(studentsForIssuance, now, studentsForIssuance.length, selection, actorId, true);
@@ -425,4 +451,106 @@ export async function queueRealStudentIssuance(
   }
 
   return issueStudentActivationLinks([studentWithCredentialStatus], now, 1, {}, actorId, false);
+}
+
+export async function queueRealStudentRenewal(
+  studentId: string,
+  now = new Date(),
+  actorId?: string | null,
+): Promise<BatchIssuanceResult> {
+  const student = await getStudentById(studentId);
+
+  if (!student) {
+    throw new StudentIssuanceError("Student record was not found.", 404);
+  }
+
+  const existing = await prisma.credentialIssuance.findFirst({
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+    where: { studentId: { in: [student.credential.studentNumber, student.profile.id] } },
+  });
+  const studentWithCredentialStatus = await overlayCredentialStatusForStudent(student);
+  const status = studentWithCredentialStatus.credential.lifecycleState;
+
+  if (!existing) {
+    throw new StudentIssuanceError("No credential exists to renew for this student.", 404);
+  }
+  if (status === "REVOKED" || status === "SUSPENDED" || status === "LEGACY_NON_REVOCABLE") {
+    throw new StudentIssuanceError(`Credential cannot be renewed while its status is ${status}.`, 409);
+  }
+  if (!["ACTIVE", "EXPIRED", "ACCEPTED", "OFFER_SENT"].includes(status)) {
+    throw new StudentIssuanceError("Credential is not ready for renewal in its current lifecycle state.", 409);
+  }
+
+  await prisma.credentialIssuance.update({
+    data: {
+      renewalFailureReason: null,
+      renewalRequestedAt: now,
+      renewalStatus: CredentialRenewalStatus.PENDING,
+    },
+    where: { id: existing.id },
+  });
+
+  try {
+    const result = await issueStudentActivationLinks(
+      [studentWithCredentialStatus],
+      now,
+      1,
+      { cohortId: "renewal" },
+      actorId,
+      false,
+      { renewedFromIssuanceId: existing.id, skipActiveIssuanceCheck: true },
+    );
+    const replacementId = result.activationDeliveries[0]?.credentialId;
+
+    await prisma.$transaction(async (transaction) => {
+      await transaction.credentialIssuance.update({
+        data: {
+          renewedIntoIssuanceId: replacementId,
+          renewalCompletedAt: now,
+          renewalStatus: CredentialRenewalStatus.COMPLETED,
+        },
+        where: { id: existing.id },
+      });
+
+      await transaction.credentialAuditLog.create({
+        data: {
+          action: CredentialAuditAction.CREDENTIAL_RENEWAL_OFFER_CREATED,
+          actorId,
+          credentialDefinitionId: existing.credentialDefinitionId,
+          credentialExchangeId: existing.credentialExchangeId,
+          credentialIssuanceId: existing.id,
+          message: "Credential renewal offer created.",
+          metadata: { replacementIssuanceId: replacementId ?? null },
+          studentId: existing.studentId,
+        },
+      });
+    });
+
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Credential renewal failed.";
+    await prisma.$transaction(async (transaction) => {
+      await transaction.credentialIssuance.update({
+        data: {
+          renewalFailureReason: message,
+          renewalStatus: CredentialRenewalStatus.FAILED,
+        },
+        where: { id: existing.id },
+      });
+
+      await transaction.credentialAuditLog.create({
+        data: {
+          action: CredentialAuditAction.CREDENTIAL_RENEWAL_FAILED,
+          actorId,
+          credentialDefinitionId: existing.credentialDefinitionId,
+          credentialExchangeId: existing.credentialExchangeId,
+          credentialIssuanceId: existing.id,
+          message,
+          studentId: existing.studentId,
+        },
+      });
+    });
+
+    throw error;
+  }
 }

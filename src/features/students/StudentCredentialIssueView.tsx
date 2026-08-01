@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/Badge";
 import type { ActivationDelivery, StudentRecord } from "@/lib/api/types";
 import { credentialStatusTone, formatCredentialStatus, formatDateTime } from "@/lib/formatters";
 import { StudentCredentialActions } from "@/features/students/StudentCredentialActions";
+import { humanizeFieldName } from "@/lib/imports/mapping";
 
 export function StudentCredentialIssueView({
   delivery,
@@ -10,10 +11,20 @@ export function StudentCredentialIssueView({
   delivery?: ActivationDelivery;
   student: StudentRecord;
 }) {
+  const isLegacyNonRevocable = student.credential.lifecycleState === "LEGACY_NON_REVOCABLE";
+  const customAttributes = Object.entries(student.credential.attributes ?? {}).filter(
+    (entry): entry is [string, string] => entry[1] != null,
+  );
+
   return (
     <section className="grid gap-4 lg:grid-cols-2">
       <div className="rounded-lg border border-zinc-200 bg-white p-5">
-        <h2 className="mb-4 text-base font-semibold text-zinc-950">Credential</h2>
+        <div className="mb-4 flex items-center gap-2">
+          <h2 className="text-base font-semibold text-zinc-950">Credential</h2>
+          {student.credential.schemaVersion ? (
+            <Badge tone="version">v{student.credential.schemaVersion}</Badge>
+          ) : null}
+        </div>
         <dl className="space-y-3 text-sm">
           <div className="flex items-center justify-between gap-4">
             <dt className="text-zinc-500">Lifecycle</dt>
@@ -23,6 +34,11 @@ export function StudentCredentialIssueView({
               </Badge>
             </dd>
           </div>
+          {isLegacyNonRevocable ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+              This credential does not have revocation metadata. Reissue it after revocation-enabled setup before using suspend or revoke actions.
+            </div>
+          ) : null}
           <div className="flex justify-between gap-4">
             <dt className="text-zinc-500">Faculty</dt>
             <dd className="text-right text-zinc-900">{student.credential.faculty}</dd>
@@ -30,10 +46,6 @@ export function StudentCredentialIssueView({
           <div className="flex justify-between gap-4">
             <dt className="text-zinc-500">Programme</dt>
             <dd className="text-right text-zinc-900">{student.credential.programme}</dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-zinc-500">Enrolment status</dt>
-            <dd className="text-zinc-900">{student.credential.enrolmentStatus}</dd>
           </div>
           <div className="flex justify-between gap-4">
             <dt className="text-zinc-500">Student number</dt>
@@ -52,6 +64,19 @@ export function StudentCredentialIssueView({
       <div className="rounded-lg border border-zinc-200 bg-white p-5">
         <StudentCredentialActions delivery={delivery} student={student} />
       </div>
+      {customAttributes.length > 0 ? (
+        <div className="rounded-lg border border-zinc-200 bg-white p-5 lg:col-span-2">
+          <h2 className="mb-4 text-base font-semibold text-zinc-950">Additional information</h2>
+          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+            {customAttributes.map(([key, value]) => (
+              <div className="flex justify-between gap-4" key={key}>
+                <dt className="text-zinc-500">{humanizeFieldName(key)}</dt>
+                <dd className="text-right text-zinc-900">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      ) : null}
     </section>
   );
 }
