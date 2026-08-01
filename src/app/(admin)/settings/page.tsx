@@ -1,22 +1,21 @@
 import {
+  Activity,
   Building,
   Clock,
   FileText,
   Link as LinkIcon,
-  Mail,
-  Plug,
   UserPlus,
   Webhook,
 } from "lucide-react";
 
 import { SectionHeader } from "@/components/layout/SectionHeader";
+import { checkAgentHealth } from "@/lib/agentClient";
 import { ADMIN_ROLES, ROLE_LABELS, type AdminRole } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
 import { env } from "@/lib/config/env";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfile } from "@/lib/university/profile";
-import { AgentConnectionCard } from "./AgentConnectionCard";
-import { SendTestEmailButton } from "./SendTestEmailButton";
+import { AgentServiceHealthCard } from "./AgentServiceHealthCard";
 import { SettingsCard, SettingsField } from "./SettingsCard";
 import { UniversityProfileForm } from "./UniversityProfileForm";
 
@@ -37,6 +36,7 @@ export default async function SettingsPage() {
 
   const profile = await getUniversityProfile();
   const activeSchema = profile ? await getActiveCredentialSchema(profile.id) : null;
+  const agentHealth = await checkAgentHealth();
 
   return (
     <div className="space-y-6">
@@ -80,12 +80,13 @@ export default async function SettingsPage() {
       </SettingsCard>
 
       <SettingsCard
-        description="Connection used to reach the Identity Agent Service for issuance and verification."
-        icon={Plug}
-        title="Agent connection"
+        description="Live reachability of the Identity Agent Service used for issuance and verification."
+        icon={Activity}
+        title="Agent service health"
       >
-        <AgentConnectionCard
+        <AgentServiceHealthCard
           apiKeyStatus={configuredStatus(env.AGENT_API_KEY)}
+          initialHealth={agentHealth}
           serviceUrlDisplay={truncate(env.AGENT_SERVICE_URL, 20)}
         />
       </SettingsCard>
@@ -112,26 +113,6 @@ export default async function SettingsPage() {
         ) : (
           <p className="text-sm text-zinc-500">No active credential schema yet.</p>
         )}
-      </SettingsCard>
-
-      <SettingsCard
-        description="Sender addresses and delivery mode for credential and account emails. Read only."
-        icon={Mail}
-        title="Email delivery"
-      >
-        <div className="divide-y divide-zinc-100">
-          <SettingsField label="Resend API key" value={configuredStatus(env.RESEND_API_KEY)} />
-          <SettingsField
-            label="Credential email from"
-            value={env.CREDENTIAL_EMAIL_FROM ?? "Not set"}
-          />
-          <SettingsField label="Auth email from" value={env.AUTH_EMAIL_FROM} />
-          <SettingsField
-            label="Delivery mode"
-            value={env.CREDENTIAL_EMAIL_DELIVERY_MODE}
-          />
-        </div>
-        <SendTestEmailButton />
       </SettingsCard>
 
       <SettingsCard

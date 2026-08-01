@@ -1,6 +1,9 @@
+import { AlertTriangle } from "lucide-react";
+
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { Metric } from "@/components/ui/Metric";
+import { checkAgentHealth } from "@/lib/agentClient";
 import { getDashboardSummary, getRecentCredentialEvents } from "@/lib/api/server";
 import { ADMIN_ROLES } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
@@ -9,7 +12,11 @@ import { credentialStatusTone, formatCredentialStatus, formatDateTime } from "@/
 export default async function AdminOverviewPage() {
   await requireRole(ADMIN_ROLES);
 
-  const [summary, credentialEvents] = await Promise.all([getDashboardSummary(), getRecentCredentialEvents()]);
+  const [summary, credentialEvents, agentHealth] = await Promise.all([
+    getDashboardSummary(),
+    getRecentCredentialEvents(),
+    checkAgentHealth(),
+  ]);
 
   return (
     <div className="space-y-8">
@@ -17,6 +24,22 @@ export default async function AdminOverviewPage() {
         title="Operational overview"
         description="Simulated credential lifecycle, vendor onboarding, and audit activity."
       />
+
+      {!agentHealth.ok ? (
+        <div className="flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <div>
+            <p className="font-medium">Identity Agent Service is unreachable</p>
+            <p className="mt-0.5 text-rose-700">
+              {agentHealth.error} Credential issuance and verification may be affected. See{" "}
+              <a className="underline underline-offset-2" href="/settings">
+                Settings → Agent service health
+              </a>{" "}
+              for details.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Metric label="Issued credentials" value={summary.issuedCredentials} detail="stored by students" />

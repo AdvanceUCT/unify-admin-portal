@@ -3,12 +3,10 @@
 import { revalidatePath } from "next/cache";
 
 import { AuditAction } from "@/generated/prisma/enums";
-import { getStatus } from "@/lib/agentClient";
+import { checkAgentHealth } from "@/lib/agentClient";
 import { writeAuditLog } from "@/lib/audit/audit";
 import { ADMIN_ROLES } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
-import { env } from "@/lib/config/env";
-import { sendCredentialActivationEmail } from "@/lib/email/credential-activation";
 import { getUniversityProfile, updateUniversityProfile } from "@/lib/university/profile";
 
 export async function updateUniversityProfileAction(formData: FormData) {
@@ -46,42 +44,8 @@ export async function updateUniversityProfileAction(formData: FormData) {
   revalidatePath("/settings");
 }
 
-export async function testAgentConnectionAction() {
+export async function checkAgentHealthAction() {
   await requireRole(ADMIN_ROLES);
 
-  const checkedAt = new Date().toISOString();
-
-  try {
-    const result = await getStatus();
-    return {
-      checkedAt,
-      ok: true as const,
-      reachable: result.ledger.reachable,
-      status: result.status,
-    };
-  } catch (error) {
-    return {
-      checkedAt,
-      error: error instanceof Error ? error.message : "Connection failed.",
-      ok: false as const,
-    };
-  }
-}
-
-export async function sendTestEmailAction() {
-  const session = await requireRole(ADMIN_ROLES);
-
-  const to = session.user.email;
-  if (!to) {
-    throw new Error("Your account has no email address on file.");
-  }
-
-  const result = await sendCredentialActivationEmail({
-    activationUrl: `${env.ACTIVATION_PUBLIC_BASE_URL ?? env.APP_URL}/activate/settings-test`,
-    expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-    studentName: "Test Student",
-    to,
-  });
-
-  return { provider: result.provider, to };
+  return checkAgentHealth();
 }
