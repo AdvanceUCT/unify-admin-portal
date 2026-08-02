@@ -26,7 +26,12 @@ import { prisma } from "@/lib/db/prisma";
 import { getAllStudents } from "@/lib/students/repository";
 import { sendCredentialActivationEmail } from "@/lib/email/credential-activation";
 import { formatCredentialStatus } from "@/lib/formatters";
-import { parseBatchIssuanceSelection, attributesForStudent, getActiveCredentialDefinition } from "@/lib/issuance/batchIssuance";
+import {
+  parseBatchIssuanceSelection,
+  attributesForStudent,
+  credentialValidityWindowFrom,
+  getActiveCredentialDefinition,
+} from "@/lib/issuance/batchIssuance";
 import {
   selectStudentRecordsForCredentialIssuance,
   SIMULATED_STUDENT_COHORT_ID,
@@ -313,8 +318,9 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
 
   const pendingItems = run.items.filter((item) => retryableItemStatuses.has(item.status));
 
+  const offerCreatedAt = new Date();
   await prisma.batchIssuanceRun.update({
-    data: { startedAt: new Date(), status: BatchIssuanceRunStatus.PROCESSING },
+    data: { startedAt: offerCreatedAt, status: BatchIssuanceRunStatus.PROCESSING },
     where: { batchId },
   });
 
@@ -323,13 +329,14 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
   }
 
   const students = await getAllStudents();
+  const activeSchema = await getActiveCredentialDefinition();
+  const validityWindow = credentialValidityWindowFrom(offerCreatedAt, activeSchema.credentialValidityDays);
   const studentsById = new Map(
     students.flatMap((student) => [
       [student.credential.studentNumber, student] as const,
       [student.profile.id, student] as const,
     ]),
   );
-  const activeSchema = await getActiveCredentialDefinition();
   const blockedItems = new Set<string>();
 
   await Promise.all(
@@ -366,7 +373,7 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
             .map((item) => studentsById.get(item.studentId))
             .filter((student): student is StudentRecord => Boolean(student))
             .map((student) => ({
-              attributes: attributesForStudent(student, activeSchema.schemaAttributes),
+              attributes: attributesForStudent(student, activeSchema.schemaAttributes, validityWindow),
               email: student.profile.email,
               externalId: student.credential.studentNumber,
             })),
@@ -420,6 +427,7 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
       activationUrl: publicActivationUrl,
       credentialDefinitionId: activeSchema.credentialDefinitionId,
       credentialExchangeId: offer.credentialExchangeId,
+      credentialExpiresAt: validityWindow.expiresAt,
       credentialRevocationId: offer.credentialRevocationId,
       email: offer.email,
       expiresAt: offer.expiresAt,

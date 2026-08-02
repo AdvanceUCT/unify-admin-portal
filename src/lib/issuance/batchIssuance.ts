@@ -44,6 +44,11 @@ const credentialStatuses = new Set<CredentialLifecycleState>([
   "SUSPENDED",
 ]);
 
+export type CredentialValidityWindow = {
+  expiresAt: Date;
+  validFrom: Date;
+};
+
 /**
  * Custom error for failed student issuance requests.
  * Includes an HTTP status code alongside the message.
@@ -71,20 +76,26 @@ export class StudentIssuanceError extends Error {
  * @returns The string value for that attribute.
  * @throws If no value exists for the given attribute name.
  */
-function attributeValue(student: StudentRecord, attributeName: string): string {
+export function credentialValidityWindowFrom(validFrom: Date, validityDays: number): CredentialValidityWindow {
+  const expiresAt = new Date(validFrom);
+  expiresAt.setDate(expiresAt.getDate() + validityDays);
+  return { expiresAt, validFrom };
+}
+
+function attributeValue(student: StudentRecord, attributeName: string, validityWindow: CredentialValidityWindow): string {
   const values: Record<string, string | undefined> = {
     email: student.profile.email,
-    expiresAt: student.credential.expiresAt,
+    expiresAt: validityWindow.expiresAt.toISOString(),
     faculty: student.credential.faculty,
     firstName: student.profile.firstName,
     fullName: student.credential.holderName,
     institution: student.profile.institution,
-    issuedAt: new Date().toISOString(),
+    issuedAt: validityWindow.validFrom.toISOString(),
     lastName: student.profile.lastName,
     programme: student.credential.programme,
     studentId: student.credential.studentNumber,
     studentNumber: student.credential.studentNumber,
-    validFrom: student.credential.validFrom,
+    validFrom: validityWindow.validFrom.toISOString(),
     year: DEFAULT_YEAR,
   };
   const value = values[attributeName] ?? student.credential.attributes?.[attributeName];
@@ -96,10 +107,14 @@ function attributeValue(student: StudentRecord, attributeName: string): string {
   return value;
 }
 
-export function attributesForStudent(student: StudentRecord, schemaAttributes: string[]) {
+export function attributesForStudent(
+  student: StudentRecord,
+  schemaAttributes: string[],
+  validityWindow: CredentialValidityWindow,
+) {
   return schemaAttributes.map((name) => ({
     name,
-    value: attributeValue(student, name),
+    value: attributeValue(student, name, validityWindow),
   }));
 }
 
@@ -225,6 +240,7 @@ export async function getActiveCredentialDefinition() {
 
   return {
     credentialDefinitionId: activeSchema.credentialDefinitionId,
+    credentialValidityDays: profile.defaultCredentialValidityDays ?? 365,
     revocationRegistryDefinitionId: activeSchema.revocationRegistryDefinitionId ?? undefined,
     schemaAttributes: activeSchema.schemaAttributes,
     schemaVersion: activeSchema.schemaVersion,
@@ -264,6 +280,7 @@ async function issueStudentActivationLinks(
 ): Promise<BatchIssuanceResult> {
   const activeSchema = await getActiveCredentialDefinition();
   const batchId = batchIdFrom(now);
+  const validityWindow = credentialValidityWindowFrom(now, activeSchema.credentialValidityDays);
 
   if (!options.skipActiveIssuanceCheck) {
     try {
@@ -289,7 +306,7 @@ async function issueStudentActivationLinks(
       ? { revocationRegistryDefinitionId: activeSchema.revocationRegistryDefinitionId }
       : {}),
     students: studentsForIssuance.map((student) => ({
-      attributes: attributesForStudent(student, activeSchema.schemaAttributes),
+      attributes: attributesForStudent(student, activeSchema.schemaAttributes, validityWindow),
       email: student.profile.email,
       externalId: student.profile.id,
     })),
@@ -308,6 +325,7 @@ async function issueStudentActivationLinks(
       activationUrl: publicActivationUrl,
       credentialDefinitionId: activeSchema.credentialDefinitionId,
       credentialExchangeId: offer.credentialExchangeId,
+      credentialExpiresAt: validityWindow.expiresAt,
       credentialRevocationId: offer.credentialRevocationId,
       email: offer.email,
       expiresAt: offer.expiresAt,

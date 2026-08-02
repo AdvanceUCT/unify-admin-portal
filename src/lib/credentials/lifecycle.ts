@@ -26,8 +26,14 @@ export function toPublicCredentialStatus(issuance?: CredentialLifecycleSource | 
   if (issuance.status === CredentialIssuanceStatus.ACCEPTED) return "ACCEPTED";
   if (issuance.status === CredentialIssuanceStatus.FAILED) return "FAILED";
   if (issuance.status === CredentialIssuanceStatus.REVOKED) return "REVOKED";
-  if (issuance.lifecycleStatus) return lifecycleStatusToPublic(issuance.lifecycleStatus);
+  if (
+    issuance.lifecycleStatus === CredentialLifecycleStatus.REVOKED ||
+    issuance.lifecycleStatus === CredentialLifecycleStatus.SUSPENDED
+  ) {
+    return lifecycleStatusToPublic(issuance.lifecycleStatus);
+  }
   if (issuance.credentialExpiresAt && issuance.credentialExpiresAt <= now) return "EXPIRED";
+  if (issuance.lifecycleStatus) return lifecycleStatusToPublic(issuance.lifecycleStatus);
   if (hasRevocationHandle(issuance)) return "ACTIVE";
   return "LEGACY_NON_REVOCABLE";
 }

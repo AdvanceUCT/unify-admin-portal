@@ -1,14 +1,10 @@
 "use client";
 
 import { useActionState } from "react";
-
 import { SERVICE_CATEGORIES } from "@/lib/vendors/constants";
+import { submitApplicationAction } from "./actions";
 
-import { submitApplicationAction, type SubmitApplicationState } from "./actions";
-
-const initialState: SubmitApplicationState = {
-  status: "idle",
-};
+const initialState = { ok: false as boolean, error: undefined as string | undefined };
 
 export function VendorApplicationForm() {
   const [state, formAction, isPending] = useActionState(
@@ -136,15 +132,9 @@ export function VendorApplicationForm() {
         Verification requests include all attributes in the university&apos;s active student credential schema.
       </div>
 
-      {state.message ? (
-        <p
-          className={
-            state.status === "error"
-              ? "rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-              : "rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
-          }
-        >
-          {state.message}
+      {state.error ? (
+        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {state.error}
         </p>
       ) : null}
 
