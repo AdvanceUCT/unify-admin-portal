@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ClipboardList } from "lucide-react";
+import { AlertTriangle, ClipboardList } from "lucide-react";
 
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { VendorApplicationDetails } from "@/features/vendors/VendorApplicationDetails";
@@ -7,6 +7,7 @@ import { VendorApplicationHistory } from "@/features/vendors/VendorApplicationHi
 import { TOTAL_STEPS, VendorApplicationWizard } from "@/features/vendors/application/VendorApplicationWizard";
 import type { DraftApplicationData } from "@/features/vendors/application/VendorApplicationWizard";
 import { requireVendorSession } from "@/lib/auth/session";
+import { formatDateTime } from "@/lib/formatters";
 import { filenameFromStoragePath } from "@/lib/storage/supabase";
 import {
   computeDraftProgress,
@@ -32,6 +33,8 @@ export default async function VendorApplicationPage({
   const applications = await listVendorApplicationsForUser(session.user.id);
   const application = applications[0] ?? null;
   const history = applications.slice(1);
+  const previousDecision =
+    applications.find((a) => a.status === "REJECTED" || a.status === "REVOKED") ?? null;
 
   if (!application && start !== "1") {
     return (
@@ -122,6 +125,34 @@ export default async function VendorApplicationPage({
           title="Verifier application"
           description="Complete all steps to apply for credential verification access."
         />
+        {previousDecision ? (
+          <div className="flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <div>
+              <p className="font-medium">
+                {previousDecision.status === "REJECTED"
+                  ? "Your previous application was rejected"
+                  : "Your verifier access was revoked"}
+              </p>
+              <p className="mt-0.5 text-rose-700">
+                {(previousDecision.status === "REJECTED"
+                  ? previousDecision.reviewNotes
+                  : previousDecision.revokedNotes) ?? "No reason was provided."}
+              </p>
+              <p className="mt-1 text-xs text-rose-600">
+                {formatDateTime(
+                  (
+                    (previousDecision.status === "REJECTED"
+                      ? previousDecision.reviewedAt
+                      : previousDecision.revokedAt) ?? previousDecision.updatedAt
+                  ).toISOString(),
+                )}
+                {" · "}Your previous details, including uploaded documents, have been carried over
+                below — update anything that needs to change before resubmitting.
+              </p>
+            </div>
+          </div>
+        ) : null}
         <VendorApplicationWizard
           initialStep={initialStep}
           initialApplicationId={application?.id ?? null}

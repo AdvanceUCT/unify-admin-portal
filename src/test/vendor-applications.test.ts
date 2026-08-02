@@ -6,6 +6,7 @@ import {
   assertDraftDocumentUploadAllowed,
   createVendorApplication,
   ensureVendorVerificationServicePoint,
+  getOrCreateDraftApplication,
   listDecidedVendorApplications,
   reviewVendorApplication,
   revokeVendorApplication,
@@ -397,6 +398,95 @@ describe("revokeVendorApplication", () => {
       }),
       database.transaction,
     );
+  });
+});
+
+describe("getOrCreateDraftApplication", () => {
+  it("creates a blank draft when there is no prior decision to carry forward", async () => {
+    database.transaction.vendorProfile.findUnique.mockResolvedValueOnce(vendorProfile);
+    database.transaction.vendorApplication.findFirst
+      .mockResolvedValueOnce(null) // existingActive
+      .mockResolvedValueOnce(null) // existingDraft
+      .mockResolvedValueOnce(null); // previousDecision
+    database.transaction.vendorApplication.create.mockResolvedValueOnce({ id: "draft_1" });
+
+    await getOrCreateDraftApplication("user_1");
+
+    expect(database.transaction.vendorApplication.create).toHaveBeenCalledWith({
+      data: { vendorProfileId: "profile_1", status: VendorApplicationStatus.DRAFT },
+    });
+  });
+
+  it("carries forward details from the most recent rejection, but not the declaration", async () => {
+    const rejectedApplication = {
+      id: "rejected_1",
+      justification: "Need to verify students",
+      companyRegistrationNumber: "12345",
+      snapshotCompanyName: "Acme Corp",
+      snapshotServiceCategory: "Healthcare",
+      snapshotContactEmail: "jane@example.com",
+      snapshotContactPersonName: "Jane Doe",
+      snapshotWebsite: "https://example.com",
+      tradingName: "Acme",
+      organisationType: "Private company",
+      physicalAddress: "1 Main Street",
+      postalAddress: null,
+      contactJobTitle: "Ops Manager",
+      contactPhone: "0821234567",
+      contactEmployeeNumber: null,
+      preferredContactMethod: "email",
+      additionalInfo: null,
+      docRegistrationCertificate: "app/rejected_1/docRegistrationCertificate/cert.pdf",
+      docProofOfAddress: "app/rejected_1/docProofOfAddress/proof.pdf",
+      docRepresentativeId: "app/rejected_1/docRepresentativeId/id.pdf",
+      docLetterOfAuthorisation: "app/rejected_1/docLetterOfAuthorisation/letter.pdf",
+      docTaxCompliance: null,
+      docBusinessLicence: null,
+      declarationAccepted: true,
+      declarationAcceptedAt: new Date("2026-05-01T00:00:00.000Z"),
+    };
+
+    database.transaction.vendorProfile.findUnique.mockResolvedValueOnce(vendorProfile);
+    database.transaction.vendorApplication.findFirst
+      .mockResolvedValueOnce(null) // existingActive
+      .mockResolvedValueOnce(null) // existingDraft
+      .mockResolvedValueOnce(rejectedApplication); // previousDecision
+    database.transaction.vendorApplication.create.mockResolvedValueOnce({ id: "draft_2" });
+
+    await getOrCreateDraftApplication("user_1");
+
+    expect(database.transaction.vendorApplication.create).toHaveBeenCalledWith({
+      data: {
+        vendorProfileId: "profile_1",
+        status: VendorApplicationStatus.DRAFT,
+        justification: rejectedApplication.justification,
+        companyRegistrationNumber: rejectedApplication.companyRegistrationNumber,
+        snapshotCompanyName: rejectedApplication.snapshotCompanyName,
+        snapshotServiceCategory: rejectedApplication.snapshotServiceCategory,
+        snapshotContactEmail: rejectedApplication.snapshotContactEmail,
+        snapshotContactPersonName: rejectedApplication.snapshotContactPersonName,
+        snapshotWebsite: rejectedApplication.snapshotWebsite,
+        tradingName: rejectedApplication.tradingName,
+        organisationType: rejectedApplication.organisationType,
+        physicalAddress: rejectedApplication.physicalAddress,
+        postalAddress: rejectedApplication.postalAddress,
+        contactJobTitle: rejectedApplication.contactJobTitle,
+        contactPhone: rejectedApplication.contactPhone,
+        contactEmployeeNumber: rejectedApplication.contactEmployeeNumber,
+        preferredContactMethod: rejectedApplication.preferredContactMethod,
+        additionalInfo: rejectedApplication.additionalInfo,
+        docRegistrationCertificate: rejectedApplication.docRegistrationCertificate,
+        docProofOfAddress: rejectedApplication.docProofOfAddress,
+        docRepresentativeId: rejectedApplication.docRepresentativeId,
+        docLetterOfAuthorisation: rejectedApplication.docLetterOfAuthorisation,
+        docTaxCompliance: rejectedApplication.docTaxCompliance,
+        docBusinessLicence: rejectedApplication.docBusinessLicence,
+      },
+    });
+
+    const createCallData = database.transaction.vendorApplication.create.mock.calls[0][0].data;
+    expect(createCallData).not.toHaveProperty("declarationAccepted");
+    expect(createCallData).not.toHaveProperty("declarationAcceptedAt");
   });
 });
 

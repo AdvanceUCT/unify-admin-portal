@@ -631,8 +631,49 @@ export async function getOrCreateDraftApplication(userId: string) {
         return existingDraft;
       }
 
+      // Resubmitting after a rejection/revocation: carry the previous submission
+      // forward so the vendor only has to fix what the university flagged, instead
+      // of starting over (including re-uploading documents that are still valid).
+      const previousDecision = await transaction.vendorApplication.findFirst({
+        where: {
+          vendorProfileId: vendorProfile.id,
+          status: { in: [VendorApplicationStatus.REJECTED, VendorApplicationStatus.REVOKED] },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
       return transaction.vendorApplication.create({
-        data: { vendorProfileId: vendorProfile.id, status: VendorApplicationStatus.DRAFT },
+        data: {
+          vendorProfileId: vendorProfile.id,
+          status: VendorApplicationStatus.DRAFT,
+          ...(previousDecision
+            ? {
+                justification: previousDecision.justification,
+                companyRegistrationNumber: previousDecision.companyRegistrationNumber,
+                snapshotCompanyName: previousDecision.snapshotCompanyName,
+                snapshotServiceCategory: previousDecision.snapshotServiceCategory,
+                snapshotContactEmail: previousDecision.snapshotContactEmail,
+                snapshotContactPersonName: previousDecision.snapshotContactPersonName,
+                snapshotWebsite: previousDecision.snapshotWebsite,
+                tradingName: previousDecision.tradingName,
+                organisationType: previousDecision.organisationType,
+                physicalAddress: previousDecision.physicalAddress,
+                postalAddress: previousDecision.postalAddress,
+                contactJobTitle: previousDecision.contactJobTitle,
+                contactPhone: previousDecision.contactPhone,
+                contactEmployeeNumber: previousDecision.contactEmployeeNumber,
+                preferredContactMethod: previousDecision.preferredContactMethod,
+                additionalInfo: previousDecision.additionalInfo,
+                docRegistrationCertificate: previousDecision.docRegistrationCertificate,
+                docProofOfAddress: previousDecision.docProofOfAddress,
+                docRepresentativeId: previousDecision.docRepresentativeId,
+                docLetterOfAuthorisation: previousDecision.docLetterOfAuthorisation,
+                docTaxCompliance: previousDecision.docTaxCompliance,
+                docBusinessLicence: previousDecision.docBusinessLicence,
+                // Declaration must be re-affirmed for each new submission.
+              }
+            : {}),
+        },
       });
     });
   } catch (error) {
