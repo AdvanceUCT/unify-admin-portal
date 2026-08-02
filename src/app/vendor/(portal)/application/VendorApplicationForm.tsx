@@ -1,21 +1,10 @@
 "use client";
 
 import { useActionState } from "react";
-
+import { SERVICE_CATEGORIES } from "@/lib/vendors/constants";
 import { submitApplicationAction } from "./actions";
 
 const initialState = { ok: false as boolean, error: undefined as string | undefined };
-
-const serviceCategories = [
-  "Food",
-  "Retail",
-  "Transport",
-  "Healthcare",
-  "Education",
-  "Finance",
-  "Logistics",
-  "Professional services",
-];
 
 export function VendorApplicationForm() {
   const [state, formAction, isPending] = useActionState(
@@ -63,7 +52,7 @@ export function VendorApplicationForm() {
             required
           >
             <option value="">Select a category</option>
-            {serviceCategories.map((category) => (
+            {SERVICE_CATEGORIES.map((category) => (
               <option key={category} value={category}>
                 {category}
               </option>
