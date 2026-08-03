@@ -8,7 +8,7 @@ describe("VendorVerificationOverview", () => {
     cleanup();
   });
 
-  it("shows exact dynamic attributes and the configured support address", async () => {
+  it("shows a minimal result without attributes and the configured support address", async () => {
     render(
       await VendorVerificationOverview({
         companyName: "Demo Vendor",
@@ -20,6 +20,8 @@ describe("VendorVerificationOverview", () => {
             id: "verification_1",
             vendorProfileId: "vendor_1",
             verificationRequestId: "request_1",
+            checkoutId: "cart_1",
+            eventId: "event_1",
             servicePointId: "service_point_1",
             servicePointName: "Main Counter",
             status: "APPROVED",
@@ -35,15 +37,15 @@ describe("VendorVerificationOverview", () => {
             updatedAt: new Date("2026-07-03T10:01:00.000Z"),
             completedAt: new Date("2026-07-03T10:01:00.000Z"),
             expiresAt: null,
+            deliveries: [],
           },
         ],
       }),
     );
 
-    expect(screen.getByText("studentNumber")).toBeInTheDocument();
-    expect(screen.getByText("VSKCAL001")).toBeInTheDocument();
-    expect(screen.getByText("programme")).toBeInTheDocument();
-    expect(screen.getByText("Computer Science")).toBeInTheDocument();
+    expect(screen.getByText("Checkout cart_1")).toBeInTheDocument();
+    expect(screen.queryByText("studentNumber")).not.toBeInTheDocument();
+    expect(screen.queryByText("VSKCAL001")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "admin@voskuils.com" })).toHaveAttribute(
       "href",
       "mailto:admin@voskuils.com",

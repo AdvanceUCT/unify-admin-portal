@@ -506,6 +506,7 @@ export async function ensureVendorVerificationServicePoint(vendorProfileId: stri
       id: true,
       companyName: true,
       verificationUrl: true,
+      agentServicePointId: true,
     },
   });
 
@@ -513,12 +514,12 @@ export async function ensureVendorVerificationServicePoint(vendorProfileId: stri
     throw new Error("Vendor profile not found.");
   }
 
-  if (vendorProfile.verificationUrl) {
+  if (vendorProfile.verificationUrl && vendorProfile.agentServicePointId) {
     return vendorProfile.verificationUrl;
   }
 
   try {
-    const { verificationUrl } = await createVerificationServicePoint({
+    const { id: agentServicePointId, verificationUrl } = await createVerificationServicePoint({
       vendorId: vendorProfile.id,
       vendorName: vendorProfile.companyName,
       externalId: vendorProfile.id,
@@ -527,7 +528,7 @@ export async function ensureVendorVerificationServicePoint(vendorProfileId: stri
 
     await prisma.vendorProfile.update({
       where: { id: vendorProfile.id },
-      data: { verificationUrl },
+      data: { verificationUrl, agentServicePointId },
     });
 
     return verificationUrl;
@@ -542,7 +543,10 @@ export async function ensureVendorVerificationServicePoint(vendorProfileId: stri
       if (existingServicePoint) {
         await prisma.vendorProfile.update({
           where: { id: vendorProfile.id },
-          data: { verificationUrl: existingServicePoint.verificationUrl },
+          data: {
+            verificationUrl: existingServicePoint.verificationUrl,
+            agentServicePointId: existingServicePoint.id,
+          },
         });
 
         return existingServicePoint.verificationUrl;

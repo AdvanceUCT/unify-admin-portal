@@ -1,4 +1,4 @@
-import { ClipboardList, Gauge, Landmark, UserCog } from "lucide-react";
+import { ClipboardList, Gauge, KeyRound, Landmark, UserCog } from "lucide-react";
 
 import { PortalShell } from "@/components/layout/PortalShell";
 import { requireVendorSession } from "@/lib/auth/session";
@@ -7,6 +7,7 @@ const navItems = [
   { href: "/vendor", label: "Overview", icon: Gauge },
   { href: "/vendor/application", label: "Application", icon: ClipboardList },
   { href: "/vendor/profile", label: "Profile", icon: UserCog },
+  { href: "/vendor/integrations", label: "Integrations", icon: KeyRound },
 ];
 
 export default async function VendorPortalLayout({

@@ -106,13 +106,13 @@ describe("agent client timeouts", () => {
     const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(responseJson({ details: { code: "AGENT_ERROR" }, message: "Agent rejected it." }, { status: 500, statusText: "Internal Server Error" })),
+      vi.fn().mockResolvedValue(responseJson({ details: { code: "AGENT_ERROR" }, message: "Agent rejected it." }, { status: 400, statusText: "Bad Request" })),
     );
 
     await expect(getIssuerDid()).rejects.toMatchObject({
       details: { code: "AGENT_ERROR" },
       message: "Agent rejected it.",
-      status: 500,
+      status: 400,
     });
     expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
   });
@@ -196,5 +196,53 @@ describe("agent client timeouts", () => {
     await expect(getStatus()).rejects.toThrow(
       "AGENT_SERVICE_URL and AGENT_API_KEY must be set in the environment.",
     );
+  });
+
+  it("retries transient reads with the same correlation ID", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(responseJson({ error: { message: "busy" } }, { status: 503 }))
+      .mockResolvedValueOnce(responseJson({ error: { message: "busy" } }, { status: 503 }))
+      .mockResolvedValueOnce(responseJson({ ledger: { reachable: true }, status: "ok" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const resultPromise = getStatus();
+    await vi.runAllTimersAsync();
+
+    await expect(resultPromise).resolves.toEqual({ ledger: { reachable: true }, status: "ok" });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const requestIds = fetchMock.mock.calls.map(([, init]) =>
+      (init?.headers as Record<string, string>)["X-Request-ID"],
+    );
+    expect(new Set(requestIds).size).toBe(1);
+    expect(requestIds[0]).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("does not retry mutations", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(responseJson({ error: { message: "busy" } }, { status: 503 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(createIssuerDid("UNIFY")).rejects.toMatchObject({ status: 503 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("exposes the agent response correlation ID on terminal errors", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        responseJson(
+          { error: { message: "not found" } },
+          { status: 404, headers: { "X-Request-ID": "agent-request-404" } },
+        ),
+      ),
+    );
+
+    const error = await getStatus().catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(AgentServiceError);
+    expect(error).toMatchObject({ requestId: "agent-request-404", status: 404 });
   });
 });

@@ -246,6 +246,7 @@ describe("reviewVendorApplication", () => {
       ...vendorProfile,
       companyName: "Acme Corp",
       verificationUrl: null,
+      agentServicePointId: null,
     });
 
     await reviewVendorApplication({
@@ -272,7 +273,10 @@ describe("reviewVendorApplication", () => {
     });
     expect(database.transaction.vendorProfile.update).toHaveBeenCalledWith({
       where: { id: "profile_1" },
-      data: { verificationUrl: "https://verify.example.com/verify/sp-public-1" },
+      data: {
+        verificationUrl: "https://verify.example.com/verify/sp-public-1",
+        agentServicePointId: "sp_1",
+      },
     });
     expect(writeAuditLogMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -323,6 +327,7 @@ describe("ensureVendorVerificationServicePoint", () => {
     database.transaction.vendorProfile.findUnique.mockResolvedValueOnce({
       ...vendorProfile,
       verificationUrl: "https://verify.example.com/verify/existing",
+      agentServicePointId: "sp_existing",
     });
 
     await expect(ensureVendorVerificationServicePoint("profile_1")).resolves.toBe(
@@ -335,6 +340,7 @@ describe("ensureVendorVerificationServicePoint", () => {
     database.transaction.vendorProfile.findUnique.mockResolvedValueOnce({
       ...vendorProfile,
       verificationUrl: null,
+      agentServicePointId: null,
     });
     agentClient.createVerificationServicePoint.mockRejectedValueOnce(
       new agentClient.AgentServiceError("Duplicate service point", 409),
@@ -356,7 +362,10 @@ describe("ensureVendorVerificationServicePoint", () => {
     );
     expect(database.transaction.vendorProfile.update).toHaveBeenCalledWith({
       where: { id: "profile_1" },
-      data: { verificationUrl: "https://verify.example.com/verify/recovered" },
+      data: {
+        verificationUrl: "https://verify.example.com/verify/recovered",
+        agentServicePointId: "sp_1",
+      },
     });
   });
 

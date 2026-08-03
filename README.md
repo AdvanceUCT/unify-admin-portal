@@ -159,6 +159,8 @@ Key variables to configure:
 | `AGENT_STANDARD_TIMEOUT_MS` | Standard agent request timeout in milliseconds; defaults to `15000` |
 | `AGENT_LONG_TIMEOUT_MS` | Long-running agent request timeout in milliseconds; defaults to `60000` |
 | `WEBHOOK_SIGNING_SECRET` | Shared HMAC secret between the portal and the agent (must match both sides) |
+| `VENDOR_API_KEY_PEPPER` | Random secret of at least 32 characters used to hash vendor API keys |
+| `VENDOR_WEBHOOK_ENCRYPTION_KEY` | Base64-encoded 32-byte key used to encrypt vendor webhook signing secrets |
 | `RESEND_API_KEY` | Resend API key for production email delivery |
 | `CREDENTIAL_EMAIL_DELIVERY_MODE` | `"resend"` for real emails, `"log"` to print to console |
 | `SUPABASE_URL` | Supabase project URL — used for vendor document storage (optional if not using vendor applications) |
@@ -171,6 +173,19 @@ Run Prisma migrations to create all required tables:
 ```bash
 npx prisma migrate dev
 ```
+
+### Vendor Checkout Verification
+
+Approved vendors configure API keys and an HTTPS result webhook under
+`/vendor/integrations`. A checkout server creates a verification session with
+`POST /api/vendor/v1/verification-sessions` and polls
+`GET /api/vendor/v1/verification-sessions/:verificationRequestId` using its
+`Authorization: Bearer unify_vk_...` credential.
+
+Final results contain only the checkout ID, status, failure code, and timing
+metadata. The portal makes one immediate signed webhook attempt using the
+`X-Unify-Signature: sha256=...` header. Failed callbacks can be retried manually;
+vendor polling is the fallback, so no scheduled or cron job is required.
 
 ### Step 3b — Set Up Supabase Storage (Vendor Document Uploads)
 
