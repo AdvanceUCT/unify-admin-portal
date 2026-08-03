@@ -146,6 +146,36 @@ describe("credential schema versions", () => {
     });
   });
 
+  it("does not activate a schema when agent setup times out", async () => {
+    mocks.issuanceSetup.mockRejectedValueOnce(
+      new Error("Agent service request timed out after 60000ms."),
+    );
+
+    await expect(
+      publishCredentialSchemaVersion({ actorId: "admin-1", schemaId: "schema-row-2" }),
+    ).rejects.toThrow("Agent service request timed out after 60000ms.");
+
+    expect(mocks.registerTrustedCredentialDefinition).not.toHaveBeenCalled();
+    expect(mocks.updateMany).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.auditCreate).not.toHaveBeenCalled();
+  });
+
+  it("does not activate a schema when trusted definition registration times out", async () => {
+    mocks.registerTrustedCredentialDefinition.mockRejectedValueOnce(
+      new Error("Agent service request timed out after 15000ms."),
+    );
+
+    await expect(
+      publishCredentialSchemaVersion({ actorId: "admin-1", schemaId: "schema-row-2" }),
+    ).rejects.toThrow("Agent service request timed out after 15000ms.");
+
+    expect(mocks.issuanceSetup).toHaveBeenCalled();
+    expect(mocks.updateMany).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.auditCreate).not.toHaveBeenCalled();
+  });
+
   it("rejects a duplicate draft before writing anything", async () => {
     mocks.findFirst.mockResolvedValue({ id: "existing" });
 

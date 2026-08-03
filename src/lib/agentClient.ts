@@ -5,6 +5,14 @@
 import "server-only";
 import { env } from "@/lib/config/env";
 
+const timeoutDetailsCode = "AGENT_SERVICE_TIMEOUT";
+
+type AgentFetchOptions = Omit<RequestInit, "signal"> & {
+  timeoutMs: number;
+};
+
+type AgentApiPath = `/api/${string}`;
+
 /**
  * Custom error for failed Identity Agent Service requests.
  * Includes the HTTP status code and any structured error details from the response body.
@@ -61,6 +69,34 @@ function extractErrorMessage(errorBody: unknown, fallback: string) {
   return fallback;
 }
 
+function isAbortError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    error.name === "AbortError"
+  );
+}
+
+function buildAgentServiceUrl(baseUrl: string, path: AgentApiPath) {
+  const base = new URL(baseUrl);
+
+  if (base.protocol !== "http:" && base.protocol !== "https:") {
+    throw new Error("AGENT_SERVICE_URL must use http or https.");
+  }
+
+  if (path.includes("\\") || path.includes("\r") || path.includes("\n")) {
+    throw new Error("Agent service path is invalid.");
+  }
+
+  const url = new URL(base.origin);
+  const basePath = base.pathname.replace(/\/+$/, "");
+  const requestPath = path.replace(/^\/+/, "");
+  url.pathname = `${basePath}/${requestPath}`;
+
+  return url;
+}
+
 /**
  * Internal fetch wrapper for the Identity Agent Service. Prepends the base URL,
  * injects auth headers, and throws an `AgentServiceError` for any non-2xx response.
@@ -72,8 +108,8 @@ function extractErrorMessage(errorBody: unknown, fallback: string) {
  * @throws {AgentServiceError} If the agent returns a non-2xx status.
  */
 async function agentFetch(
-  path: string,
-  options: RequestInit = {},
+  path: AgentApiPath,
+  options: AgentFetchOptions,
 ): Promise<Response> {
   const { AGENT_SERVICE_URL, AGENT_API_KEY } = env;
 
@@ -83,15 +119,38 @@ async function agentFetch(
     );
   }
 
-  const url = new URL(path, AGENT_SERVICE_URL);
-  const response = await fetch(url.toString(), {
-    ...options,
-    headers: {
-      ...options.headers,
-      Authorization: `Bearer ${AGENT_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-  });
+  const url = buildAgentServiceUrl(AGENT_SERVICE_URL, path);
+  const { timeoutMs, ...fetchOptions } = options;
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  let response: Response;
+  try {
+    response = await fetch(url.toString(), {
+      ...fetchOptions,
+      signal: controller.signal,
+      headers: {
+        ...fetchOptions.headers,
+        Authorization: `Bearer ${AGENT_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+    });
+  } catch (error) {
+    if (timedOut && isAbortError(error)) {
+      throw new AgentServiceError(
+        `Agent service request timed out after ${timeoutMs}ms.`,
+        504,
+        { code: timeoutDetailsCode, path, timeoutMs },
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     let errorBody: unknown;
@@ -114,12 +173,16 @@ export async function getStatus(): Promise<{
   status: string;
   ledger: { reachable: boolean };
 }> {
-  const response = await agentFetch("/api/status");
+  const response = await agentFetch("/api/status", {
+    timeoutMs: env.AGENT_HEALTH_TIMEOUT_MS,
+  });
   return response.json();
 }
 
 export async function getIssuerDid(): Promise<{ did: string }> {
-  const response = await agentFetch("/api/dids/issuer");
+  const response = await agentFetch("/api/dids/issuer", {
+    timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
+  });
   return response.json();
 }
 
@@ -127,6 +190,7 @@ export async function createIssuerDid(alias: string): Promise<{ did: string }> {
   const response = await agentFetch("/api/dids/issuer", {
     method: "POST",
     body: JSON.stringify({ alias }),
+    timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
   });
   return response.json();
 }
@@ -165,6 +229,7 @@ export async function issuanceSetup(payload: {
   const response = await agentFetch("/api/issuance/setup", {
     method: "POST",
     body: JSON.stringify(payload),
+    timeoutMs: env.AGENT_LONG_TIMEOUT_MS,
   });
   return response.json();
 }
@@ -203,6 +268,7 @@ export async function createBatchActivationLinks(payload: {
   const response = await agentFetch("/api/credentials/activation-links/batch", {
     method: "POST",
     body: JSON.stringify(payload),
+    timeoutMs: env.AGENT_LONG_TIMEOUT_MS,
   });
   return response.json();
 }
@@ -232,6 +298,7 @@ export async function resolveActivation(payload: {
   const response = await agentFetch("/api/wallet/activation/resolve", {
     method: "POST",
     body: JSON.stringify(payload),
+    timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
   });
   return response.json();
 }
@@ -260,6 +327,7 @@ export async function changeCredentialLifecycle(
     {
       body: JSON.stringify({ reason }),
       method: "POST",
+      timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
     },
   );
   return response.json();
@@ -284,6 +352,7 @@ export async function registerTrustedCredentialDefinition(
   const response = await agentFetch("/api/verifier/credential-definitions", {
     body: JSON.stringify({ credentialDefinitionId, makeDefault }),
     method: "POST",
+    timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
   });
   return response.json();
 }
@@ -297,6 +366,7 @@ export async function createVerificationServicePoint(payload: {
   const response = await agentFetch("/api/verifier/service-points", {
     method: "POST",
     body: JSON.stringify(payload),
+    timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
   });
   return response.json();
 }
@@ -312,6 +382,8 @@ export async function listVerificationServicePoints(): Promise<
     verificationUrl: string;
   }>
 > {
-  const response = await agentFetch("/api/verifier/service-points");
+  const response = await agentFetch("/api/verifier/service-points", {
+    timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
+  });
   return response.json();
 }

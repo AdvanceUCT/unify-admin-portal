@@ -58,6 +58,8 @@ export function SchemaVersionManager({ attributeAvailability, versions }: Schema
   const [message, setMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [publishMessage, setPublishMessage] = useState<string | null>(null);
 
   function toggleAttribute(attribute: string) {
     if (attribute === "studentNumber") return;
@@ -73,6 +75,8 @@ export function SchemaVersionManager({ attributeAvailability, versions }: Schema
   async function createDraftVersion() {
     setError(null);
     setMessage(null);
+    setPublishError(null);
+    setPublishMessage(null);
     setIsSubmitting(true);
 
     try {
@@ -96,6 +100,8 @@ export function SchemaVersionManager({ attributeAvailability, versions }: Schema
   async function publishVersion(schemaId: string, version: string) {
     setError(null);
     setMessage(null);
+    setPublishError(null);
+    setPublishMessage(null);
     setPublishingId(schemaId);
 
     try {
@@ -106,10 +112,10 @@ export function SchemaVersionManager({ attributeAvailability, versions }: Schema
       });
       if (!response.ok) throw new Error(await responseError(response));
 
-      setMessage(`Schema version ${version} published and activated.`);
+      setPublishMessage(`Schema version ${version} published and activated.`);
       router.refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Schema publishing failed.");
+      setPublishError(caught instanceof Error ? caught.message : "Schema publishing failed.");
     } finally {
       setPublishingId(null);
     }
@@ -123,6 +129,16 @@ export function SchemaVersionManager({ attributeAvailability, versions }: Schema
           <p className="mt-1 text-sm text-zinc-600">
             Drafts are local. Published versions are registered on the agent and stay available for existing credentials.
           </p>
+          {publishMessage ? (
+            <p className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              {publishMessage}
+            </p>
+          ) : null}
+          {publishError ? (
+            <p className="mt-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {publishError}
+            </p>
+          ) : null}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">

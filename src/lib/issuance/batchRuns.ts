@@ -359,25 +359,41 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
       }
     }),
   );
-  const allowedPendingItems = pendingItems.filter((item) => !blockedItems.has(item.id));
+  let allowedPendingItems = pendingItems.filter((item) => !blockedItems.has(item.id));
 
-  const agentResult =
-    allowedPendingItems.length === 0
-      ? { failures: [], offers: [] }
-      : await createBatchActivationLinks({
-          credentialDefinitionId: activeSchema.credentialDefinitionId,
-          ...(activeSchema.revocationRegistryDefinitionId
-            ? { revocationRegistryDefinitionId: activeSchema.revocationRegistryDefinitionId }
-            : {}),
-          students: allowedPendingItems
-            .map((item) => studentsById.get(item.studentId))
-            .filter((student): student is StudentRecord => Boolean(student))
-            .map((student) => ({
-              attributes: attributesForStudent(student, activeSchema.schemaAttributes, validityWindow),
-              email: student.profile.email,
-              externalId: student.credential.studentNumber,
-            })),
-        });
+  let agentResult: Awaited<ReturnType<typeof createBatchActivationLinks>> = { failures: [], offers: [] };
+  if (allowedPendingItems.length > 0) {
+    try {
+      agentResult = await createBatchActivationLinks({
+        credentialDefinitionId: activeSchema.credentialDefinitionId,
+        ...(activeSchema.revocationRegistryDefinitionId
+          ? { revocationRegistryDefinitionId: activeSchema.revocationRegistryDefinitionId }
+          : {}),
+        students: allowedPendingItems
+          .map((item) => studentsById.get(item.studentId))
+          .filter((student): student is StudentRecord => Boolean(student))
+          .map((student) => ({
+            attributes: attributesForStudent(student, activeSchema.schemaAttributes, validityWindow),
+            email: student.profile.email,
+            externalId: student.credential.studentNumber,
+          })),
+      });
+    } catch (error) {
+      const failureReason = error instanceof Error ? error.message : "Agent service request failed.";
+      await Promise.all(
+        allowedPendingItems.map((item) =>
+          prisma.batchIssuanceItem.update({
+            data: {
+              failureReason,
+              status: BatchIssuanceItemStatus.FAILED,
+            },
+            where: { id: item.id },
+          }),
+        ),
+      );
+      allowedPendingItems = [];
+    }
+  }
   const offerByStudentId = new Map(agentResult.offers.map((offer) => [offer.externalId, offer]));
   const failureByStudentId = new Map(agentResult.failures.map((failure) => [failure.externalId, failure]));
 

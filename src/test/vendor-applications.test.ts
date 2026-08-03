@@ -359,6 +359,25 @@ describe("ensureVendorVerificationServicePoint", () => {
       data: { verificationUrl: "https://verify.example.com/verify/recovered" },
     });
   });
+
+  it("does not save a verification URL when service-point creation times out", async () => {
+    database.transaction.vendorProfile.findUnique.mockResolvedValueOnce({
+      ...vendorProfile,
+      verificationUrl: null,
+    });
+    agentClient.createVerificationServicePoint.mockRejectedValueOnce(
+      new agentClient.AgentServiceError("Agent service request timed out after 15000ms.", 504, {
+        code: "AGENT_SERVICE_TIMEOUT",
+      }),
+    );
+
+    await expect(ensureVendorVerificationServicePoint("profile_1")).rejects.toMatchObject({
+      message: "Agent service request timed out after 15000ms.",
+      status: 504,
+    });
+    expect(agentClient.listVerificationServicePoints).not.toHaveBeenCalled();
+    expect(database.transaction.vendorProfile.update).not.toHaveBeenCalled();
+  });
 });
 
 describe("revokeVendorApplication", () => {
