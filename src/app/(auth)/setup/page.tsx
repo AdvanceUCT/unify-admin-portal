@@ -1,57 +1,21 @@
 import { getUniversityProfile } from "@/lib/university/profile";
-import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { SetupWizard } from "@/features/setup/SetupWizard";
-
-function getInitialStep(
-  profile: Awaited<ReturnType<typeof getUniversityProfile>>,
-): number {
-  if (!profile) {
-    return 0; // Profile step
-  }
-  if (profile.setupStatus === "COMPLETE") {
-    return 4; // Complete step
-  }
-  if (!profile.issuerDid) {
-    return 1; // Agent Check step
-  }
-  if (profile.setupStatus === "DID_CREATED") {
-    return 3; // Issuance Setup step
-  }
-  // Default to the start if something is inconsistent
-  return 0;
-}
 
 export default async function SetupPage() {
   const profile = await getUniversityProfile();
-  const schema = profile ? await getActiveCredentialSchema(profile.id) : null;
 
-  const initialStep = getInitialStep(profile);
-
-  // A bit of a hack to serialize the Decimal type from prisma
   const serializedProfile = profile
     ? {
-        id: profile.id,
-        name: profile.name,
         abbreviation: profile.abbreviation,
-        logoUrl: profile.logoUrl,
         contactEmail: profile.contactEmail,
+        id: profile.id,
         issuerDid: profile.issuerDid,
+        logoUrl: profile.logoUrl,
+        name: profile.name,
+        setupCompletedAt: profile.setupCompletedAt?.toISOString() ?? null,
         setupStatus: profile.setupStatus,
       }
     : null;
-  const serializedSchema = schema
-    ? {
-        schemaId: schema.schemaId,
-        credentialDefinitionId: schema.credentialDefinitionId,
-        revocationRegistryDefinitionId: schema.revocationRegistryDefinitionId,
-      }
-    : null;
 
-  return (
-    <SetupWizard
-      initialStep={initialStep}
-      profile={serializedProfile}
-      schema={serializedSchema}
-    />
-  );
+  return <SetupWizard profile={serializedProfile} />;
 }

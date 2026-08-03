@@ -3,6 +3,8 @@ import { ClipboardList, UserRoundCheck } from "lucide-react";
 
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { requireRole } from "@/lib/auth/session";
+import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
+import { getUniversityProfile } from "@/lib/university/profile";
 
 const issuanceOptions = [
   {
@@ -21,10 +23,21 @@ const issuanceOptions = [
 
 export default async function IssuancePage() {
   await requireRole(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
+  const profile = await getUniversityProfile();
+  const activeSchema = profile ? await getActiveCredentialSchema(profile.id) : null;
 
   return (
     <div className="space-y-6">
       <SectionHeader title="Issue Credentials" description="Choose a batch or individual issuance workflow." />
+      {!activeSchema ? (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Credential issuing requires an active schema.{" "}
+          <Link className="font-medium underline underline-offset-2" href="/credentials/schemas">
+            Configure credential schema
+          </Link>
+          .
+        </div>
+      ) : null}
       <section className="grid gap-4 md:grid-cols-2">
         {issuanceOptions.map((option) => {
           const Icon = option.icon;
