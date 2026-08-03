@@ -11,6 +11,8 @@ type AgentFetchOptions = Omit<RequestInit, "signal"> & {
   timeoutMs: number;
 };
 
+type AgentApiPath = `/api/${string}`;
+
 /**
  * Custom error for failed Identity Agent Service requests.
  * Includes the HTTP status code and any structured error details from the response body.
@@ -76,6 +78,25 @@ function isAbortError(error: unknown) {
   );
 }
 
+function buildAgentServiceUrl(baseUrl: string, path: AgentApiPath) {
+  const base = new URL(baseUrl);
+
+  if (base.protocol !== "http:" && base.protocol !== "https:") {
+    throw new Error("AGENT_SERVICE_URL must use http or https.");
+  }
+
+  if (path.includes("\\") || path.includes("\r") || path.includes("\n")) {
+    throw new Error("Agent service path is invalid.");
+  }
+
+  const url = new URL(base.origin);
+  const basePath = base.pathname.replace(/\/+$/, "");
+  const requestPath = path.replace(/^\/+/, "");
+  url.pathname = `${basePath}/${requestPath}`;
+
+  return url;
+}
+
 /**
  * Internal fetch wrapper for the Identity Agent Service. Prepends the base URL,
  * injects auth headers, and throws an `AgentServiceError` for any non-2xx response.
@@ -87,7 +108,7 @@ function isAbortError(error: unknown) {
  * @throws {AgentServiceError} If the agent returns a non-2xx status.
  */
 async function agentFetch(
-  path: string,
+  path: AgentApiPath,
   options: AgentFetchOptions,
 ): Promise<Response> {
   const { AGENT_SERVICE_URL, AGENT_API_KEY } = env;
@@ -98,7 +119,7 @@ async function agentFetch(
     );
   }
 
-  const url = new URL(path, AGENT_SERVICE_URL);
+  const url = buildAgentServiceUrl(AGENT_SERVICE_URL, path);
   const { timeoutMs, ...fetchOptions } = options;
   const controller = new AbortController();
   let timedOut = false;

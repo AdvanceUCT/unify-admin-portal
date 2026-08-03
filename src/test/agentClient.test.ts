@@ -117,6 +117,37 @@ describe("agent client timeouts", () => {
     expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps dynamic lifecycle identifiers on the configured agent origin", async () => {
+    envMock.AGENT_SERVICE_URL = "https://agent.example/root?ignored=true";
+    const fetchMock = vi.fn().mockResolvedValue(
+      responseJson({
+        credentialExchangeId: "https://evil.example/credentials/1?admin=true#fragment",
+        credentialRevocationId: "7",
+        revocationRegistryDefinitionId: "rev-reg-1",
+        status: "SUSPENDED",
+        updatedAt: "2026-08-04T10:00:00.000Z",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await changeCredentialLifecycle(
+      "https://evil.example/credentials/1?admin=true#fragment",
+      "suspend",
+    );
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://agent.example/root/api/credentials/https%3A%2F%2Fevil.example%2Fcredentials%2F1%3Fadmin%3Dtrue%23fragment/suspend",
+    );
+  });
+
+  it("rejects non-http agent service URLs", async () => {
+    envMock.AGENT_SERVICE_URL = "file:///etc/passwd";
+    vi.stubGlobal("fetch", vi.fn());
+
+    await expect(getStatus()).rejects.toThrow("AGENT_SERVICE_URL must use http or https.");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["getStatus", () => getStatus(), "/api/status", 11],
     ["getIssuerDid", () => getIssuerDid(), "/api/dids/issuer", 22],
