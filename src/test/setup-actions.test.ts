@@ -186,4 +186,37 @@ describe("setup actions", () => {
     expect(result.ledger.reachable).toBe(false);
     expect(result.error).toContain("Service unavailable");
   });
+
+  it("returns offline health details when the health check times out", async () => {
+    mocks.getStatus.mockRejectedValue(
+      new mocks.AgentServiceError("Agent service request timed out after 5000ms.", 504, {
+        code: "AGENT_SERVICE_TIMEOUT",
+        path: "/api/status",
+        timeoutMs: 5_000,
+      }),
+    );
+
+    const result = await checkAgentStatusAction();
+
+    expect(result.agent).toEqual({ reachable: false });
+    expect(result.ledger).toEqual({ reachable: false });
+    expect(result.error).toContain("Agent service request timed out after 5000ms.");
+  });
+
+  it("does not mark setup complete when DID creation times out", async () => {
+    mocks.getUniversityProfile.mockResolvedValue(profile);
+    mocks.getIssuerDid.mockRejectedValue(
+      new mocks.AgentServiceError("Agent service request timed out after 15000ms.", 504, {
+        code: "AGENT_SERVICE_TIMEOUT",
+        path: "/api/dids/issuer",
+        timeoutMs: 15_000,
+      }),
+    );
+
+    await expect(createOrGetDidAction()).rejects.toMatchObject({
+      message: "Agent service request timed out after 15000ms.",
+      status: 504,
+    });
+    expect(mocks.universityProfileUpdate).not.toHaveBeenCalled();
+  });
 });

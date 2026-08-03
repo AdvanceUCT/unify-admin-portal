@@ -155,6 +155,9 @@ Key variables to configure:
 | `BOOTSTRAP_ADMIN_PASSWORD` | Temporary password for the first super-admin |
 | `AGENT_SERVICE_URL` | URL of the Credo Identity Agent Service (optional for basic portal use) |
 | `AGENT_API_KEY` | API key for the agent service |
+| `AGENT_HEALTH_TIMEOUT_MS` | Agent health-check timeout in milliseconds; defaults to `5000` |
+| `AGENT_STANDARD_TIMEOUT_MS` | Standard agent request timeout in milliseconds; defaults to `15000` |
+| `AGENT_LONG_TIMEOUT_MS` | Long-running agent request timeout in milliseconds; defaults to `60000` |
 | `WEBHOOK_SIGNING_SECRET` | Shared HMAC secret between the portal and the agent (must match both sides) |
 | `RESEND_API_KEY` | Resend API key for production email delivery |
 | `CREDENTIAL_EMAIL_DELIVERY_MODE` | `"resend"` for real emails, `"log"` to print to console |

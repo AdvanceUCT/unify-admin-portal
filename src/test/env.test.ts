@@ -15,6 +15,12 @@ const validEnv = {
   NEXT_PUBLIC_API_BASE_URL: "mock://unify-admin",
 };
 
+function stubValidEnv(overrides: Record<string, string> = {}) {
+  for (const [key, value] of Object.entries({ ...validEnv, ...overrides })) {
+    vi.stubEnv(key, value);
+  }
+}
+
 describe("environment configuration", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -43,9 +49,7 @@ describe("environment configuration", () => {
   });
 
   it("accepts configured Supabase connection strings", async () => {
-    for (const [key, value] of Object.entries(validEnv)) {
-      vi.stubEnv(key, value);
-    }
+    stubValidEnv();
 
     await expect(import("@/lib/config/env")).resolves.toMatchObject({
       env: expect.objectContaining({
@@ -53,5 +57,39 @@ describe("environment configuration", () => {
         DIRECT_URL: validEnv.DIRECT_URL,
       }),
     });
+  });
+
+  it("uses default agent timeout values when they are not configured", async () => {
+    stubValidEnv();
+
+    await expect(import("@/lib/config/env")).resolves.toMatchObject({
+      env: expect.objectContaining({
+        AGENT_HEALTH_TIMEOUT_MS: 5_000,
+        AGENT_LONG_TIMEOUT_MS: 60_000,
+        AGENT_STANDARD_TIMEOUT_MS: 15_000,
+      }),
+    });
+  });
+
+  it("accepts configured positive integer agent timeout values", async () => {
+    stubValidEnv({
+      AGENT_HEALTH_TIMEOUT_MS: "2500",
+      AGENT_LONG_TIMEOUT_MS: "120000",
+      AGENT_STANDARD_TIMEOUT_MS: "20000",
+    });
+
+    await expect(import("@/lib/config/env")).resolves.toMatchObject({
+      env: expect.objectContaining({
+        AGENT_HEALTH_TIMEOUT_MS: 2_500,
+        AGENT_LONG_TIMEOUT_MS: 120_000,
+        AGENT_STANDARD_TIMEOUT_MS: 20_000,
+      }),
+    });
+  });
+
+  it("rejects non-positive agent timeout values", async () => {
+    stubValidEnv({ AGENT_STANDARD_TIMEOUT_MS: "0" });
+
+    await expect(import("@/lib/config/env")).rejects.toThrow();
   });
 });
