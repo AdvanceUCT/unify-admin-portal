@@ -115,7 +115,7 @@ describe("SetupWizard", () => {
     fillProfileForm();
     fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
 
-    expect(await screen.findByText("Profile saved. Waiting for the agent and ledger to come online.")).toBeInTheDocument();
+    expect(await screen.findByText("Creating profile")).toBeInTheDocument();
     expect(mocks.createOrGetDidAction).not.toHaveBeenCalled();
   });
 
@@ -127,7 +127,7 @@ describe("SetupWizard", () => {
     await screen.findAllByText("Offline");
     fillProfileForm();
     fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
-    await screen.findByText("Profile saved. Waiting for the agent and ledger to come online.");
+    await screen.findByText("Creating profile");
 
     await waitFor(() => expect(mocks.createOrGetDidAction).toHaveBeenCalled());
     expect(await screen.findByText("University account setup is complete.")).toBeInTheDocument();

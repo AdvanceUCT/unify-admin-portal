@@ -116,11 +116,13 @@ export function SetupWizard({
   }, [router, savedProfile]);
 
   useEffect(() => {
+    if (savedProfile?.issuerDid) return;
+
     // eslint-disable-next-line react-hooks/set-state-in-effect -- health polling starts when the setup page mounts
     void runHealthCheck();
     const interval = window.setInterval(() => void runHealthCheck(), pollIntervalMs);
     return () => window.clearInterval(interval);
-  }, [pollIntervalMs, runHealthCheck]);
+  }, [pollIntervalMs, runHealthCheck, savedProfile?.issuerDid]);
 
   useEffect(() => {
     if (!savedProfile || savedProfile.issuerDid || !connectionReady) return;
@@ -136,7 +138,7 @@ export function SetupWizard({
     if (!connectionReady) return "Profile saved. Waiting for the agent and ledger to come online.";
     if (didStatus === "creating") return "Creating the university issuer DID.";
     if (didStatus === "error") return "DID creation needs attention.";
-    return "Ready to create the university issuer DID.";
+    return "Creating the university issuer DID.";
   }, [connectionReady, didStatus, savedProfile, setupComplete]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -180,14 +182,17 @@ export function SetupWizard({
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <section className="space-y-6">
-            {savedProfile ? (
+            {setupComplete && savedProfile ? (
               <UniversityProfileCard
                 didStatus={didStatus}
-                onRetryDid={createDid}
                 profile={savedProfile}
-                setupComplete={setupComplete}
                 setupMessage={setupMessage}
+              />
+            ) : savedProfile ? (
+              <ProfileCreationStatusCard
                 connectionReady={connectionReady}
+                didStatus={didStatus}
+                onRetryDid={createDid}
               />
             ) : (
               <section className="rounded-lg border border-zinc-200 bg-white">
@@ -322,27 +327,58 @@ function ledgerDetailLabel(status: Reachability) {
   return "checking";
 }
 
-function UniversityProfileCard({
+function ProfileCreationStatusCard({
   connectionReady,
   didStatus,
   onRetryDid,
-  profile,
-  setupComplete,
-  setupMessage,
 }: {
   connectionReady: boolean;
   didStatus: DidStatus;
   onRetryDid: () => Promise<void>;
+}) {
+  const hasError = didStatus === "error";
+
+  return (
+    <section className="rounded-lg border border-zinc-200 bg-white">
+      <div className="flex items-center gap-3 px-5 py-5">
+        <span
+          className={`inline-flex size-9 shrink-0 items-center justify-center rounded-md border ${
+            hasError ? "border-rose-200 bg-rose-50 text-rose-700" : "border-zinc-200 bg-zinc-50 text-zinc-700"
+          }`}
+        >
+          {hasError ? <XCircle aria-hidden className="size-5" /> : <LoaderCircle aria-hidden className="size-5 animate-spin" />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base font-semibold text-zinc-950">Creating profile</h2>
+          {hasError ? (
+            <button
+              className="mt-4 inline-flex h-10 items-center justify-center rounded-md border border-zinc-300 px-4 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={!connectionReady}
+              onClick={() => void onRetryDid()}
+              type="button"
+            >
+              Retry DID creation
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function UniversityProfileCard({
+  didStatus,
+  profile,
+  setupMessage,
+}: {
+  didStatus: DidStatus;
   profile: SetupProfile;
-  setupComplete: boolean;
   setupMessage: string;
 }) {
   return (
     <section className="rounded-lg border border-zinc-200 bg-white">
       <div className="border-b border-zinc-200 px-5 py-4">
-        <h2 className="text-base font-semibold text-zinc-950">
-          {setupComplete ? "University profile complete" : "University profile created"}
-        </h2>
+        <h2 className="text-base font-semibold text-zinc-950">University profile complete</h2>
         <p className="mt-1 text-sm text-zinc-600">{setupMessage}</p>
       </div>
 
@@ -369,34 +405,21 @@ function UniversityProfileCard({
         </div>
       </dl>
 
-      {setupComplete ? (
-        <div className="flex flex-wrap gap-3 border-t border-zinc-200 px-5 py-4">
-          <Link
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800"
-            href="/credentials/schemas"
-          >
-            <ShieldCheck aria-hidden className="size-4" />
-            Configure credential schema
-          </Link>
-          <Link
-            className="inline-flex h-10 items-center justify-center rounded-md border border-zinc-300 px-4 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
-            href="/"
-          >
-            Go to dashboard
-          </Link>
-        </div>
-      ) : didStatus === "error" ? (
-        <div className="border-t border-zinc-200 px-5 py-4">
-          <button
-            className="inline-flex h-10 items-center justify-center rounded-md border border-zinc-300 px-4 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={!connectionReady}
-            onClick={() => void onRetryDid()}
-            type="button"
-          >
-            Retry DID creation
-          </button>
-        </div>
-      ) : null}
+      <div className="flex flex-wrap gap-3 border-t border-zinc-200 px-5 py-4">
+        <Link
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800"
+          href="/credentials/schemas"
+        >
+          <ShieldCheck aria-hidden className="size-4" />
+          Configure credential schema
+        </Link>
+        <Link
+          className="inline-flex h-10 items-center justify-center rounded-md border border-zinc-300 px-4 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+          href="/"
+        >
+          Go to dashboard
+        </Link>
+      </div>
     </section>
   );
 }
