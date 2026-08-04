@@ -8,6 +8,9 @@ import {
   publishCredentialSchemaVersion,
 } from "@/lib/university/credentialSchema";
 
+// Indy ledger registration normally takes longer than Vercel's default Hobby timeout.
+export const maxDuration = 60;
+
 async function requireSchemaManagement() {
   const session = await getCurrentAdminSession();
   try {
