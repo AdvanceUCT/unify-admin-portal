@@ -27,7 +27,7 @@ const authBaseURL =
   process.env.VERCEL_ENV === "preview" && vercelDeploymentOrigin
     ? vercelDeploymentOrigin
     : env.BETTER_AUTH_URL;
-const trustedOrigins = Array.from(
+const configuredTrustedOrigins = Array.from(
   new Set(
     [
       env.APP_URL,
@@ -38,6 +38,22 @@ const trustedOrigins = Array.from(
     ].filter((origin): origin is string => Boolean(origin)),
   ),
 );
+
+function trustedOrigins(request?: Request) {
+  let requestOrigin: string | undefined;
+
+  if (request) {
+    try {
+      requestOrigin = new URL(request.url).origin;
+    } catch {
+      // Better Auth can initialize without a valid request URL in server-side calls.
+    }
+  }
+
+  return Array.from(
+    new Set([...configuredTrustedOrigins, requestOrigin].filter((origin): origin is string => Boolean(origin))),
+  );
+}
 
 /**
  * BetterAuth instance shared by the admin portal and the vendor portal.
