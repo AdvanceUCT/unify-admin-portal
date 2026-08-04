@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getVerificationResult } from "@/lib/agentClient";
+import { getInPersonVerificationDetails } from "@/lib/agentClient";
 import { prisma } from "@/lib/db/prisma";
 import type { ApprovedVendorContext } from "@/lib/vendors/context";
 
@@ -70,7 +70,7 @@ export async function getLiveVerificationEvents(context: ApprovedVendorContext, 
     let identity = { studentName: null as string | null, studentNumber: null as string | null };
     if (verification.verificationRequestId) {
       try {
-        const result = await getVerificationResult(verification.verificationRequestId);
+        const result = await getInPersonVerificationDetails(verification.verificationRequestId);
         if (result.servicePointId === verification.servicePointId || !result.servicePointId) {
           identity = studentIdentity(result.attributes, result.isVerified);
         }

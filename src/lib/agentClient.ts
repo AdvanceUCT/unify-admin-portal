@@ -453,18 +453,18 @@ export async function updateVerificationServicePoint(
 export type AgentVerificationResult = {
   verificationRequestId: string;
   checkoutId?: string;
-  proofRecordId?: string;
-  vendorId?: string;
-  servicePointId?: string;
-  servicePointName?: string;
-  state?: string;
   status: "Pending" | "Approved" | "Declined" | "Expired" | "Failed";
-  isVerified?: boolean;
   failureCode?: string;
-  attributes?: Record<string, string>;
   createdAt: string;
   expiresAt: string;
   completedAt?: string;
+};
+
+export type AgentInPersonVerificationDetails = Omit<AgentVerificationResult, "checkoutId"> & {
+  servicePointId: string;
+  servicePointName: string;
+  isVerified?: boolean;
+  attributes?: Record<string, string>;
 };
 
 export async function createCheckoutVerificationSession(payload: {
@@ -484,6 +484,15 @@ export async function getVerificationResult(verificationRequestId: string): Prom
   const response = await agentFetch(
     `/api/verifier/proof-requests/${encodeURIComponent(verificationRequestId)}`,
     { timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS },
+  );
+  return response.json();
+}
+
+export async function getInPersonVerificationDetails(
+  verificationRequestId: string,
+): Promise<AgentInPersonVerificationDetails> {
+  const response = await agentFetch(
+    `/api/verifier/proof-requests/${encodeURIComponent(verificationRequestId)}/details`,
   );
   return response.json();
 }

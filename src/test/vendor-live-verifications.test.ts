@@ -5,7 +5,7 @@ import {
   getLiveVerificationEvents,
 } from "@/lib/vendors/liveVerifications";
 
-const agent = vi.hoisted(() => ({ getVerificationResult: vi.fn() }));
+const agent = vi.hoisted(() => ({ getInPersonVerificationDetails: vi.fn() }));
 const database = vi.hoisted(() => ({ vendorVerification: { findMany: vi.fn() } }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/agentClient", () => agent);
@@ -44,7 +44,7 @@ describe("live in-person verification feed", () => {
 
   it("returns verified identity without persisting it", async () => {
     database.vendorVerification.findMany.mockResolvedValue([verification]);
-    agent.getVerificationResult.mockResolvedValue({
+    agent.getInPersonVerificationDetails.mockResolvedValue({
       verificationRequestId: "request-1",
       servicePointId: "service-point-1",
       status: "Approved",
@@ -61,7 +61,7 @@ describe("live in-person verification feed", () => {
 
   it("never exposes attributes from an unverified proof", async () => {
     database.vendorVerification.findMany.mockResolvedValue([verification]);
-    agent.getVerificationResult.mockResolvedValue({
+    agent.getInPersonVerificationDetails.mockResolvedValue({
       verificationRequestId: "request-1",
       status: "Declined",
       isVerified: false,
