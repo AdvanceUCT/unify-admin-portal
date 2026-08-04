@@ -102,8 +102,13 @@ model VendorProfile {
   id                        String              @id @default(cuid())
   userId                    String              @unique
   user                      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentVendorProfileId     String?
+  parentVendorProfile       VendorProfile?      @relation("VendorProfileHierarchy", fields: [parentVendorProfileId], references: [id], onDelete: SetNull)
+  subVendorProfiles         VendorProfile[]     @relation("VendorProfileHierarchy")
   companyName               String
   serviceCategory           String
+  locationName              String?
+  locationAddress           String?
   contactPersonName         String?
   contactEmail              String
   website                   String?
@@ -113,8 +118,36 @@ model VendorProfile {
   updatedAt                 DateTime            @updatedAt
   applications              VendorApplication[]
   verifications             VendorVerification[]
+  sentVendorInvites         VendorInvite[]      @relation("VendorInviteParent")
 
+  @@index([parentVendorProfileId])
   @@map("vendor_profile")
+}
+
+model VendorInvite {
+  id                    String         @id @default(cuid())
+  email                 String
+  name                  String
+  locationName          String
+  locationAddress       String?
+  tokenHash             String         @unique
+  expiresAt             DateTime
+  acceptedAt            DateTime?
+  acceptedByUserId      String?
+  revokedAt             DateTime?
+  revokedByUserId       String?
+  parentVendorProfileId String
+  parentVendorProfile   VendorProfile  @relation("VendorInviteParent", fields: [parentVendorProfileId], references: [id], onDelete: Cascade)
+  createdByUserId       String
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  @@index([email])
+  @@index([expiresAt])
+  @@index([parentVendorProfileId])
+  @@index([createdByUserId])
+  @@unique([parentVendorProfileId, email], map: "vendor_invite_one_active_per_parent_email", where: raw("\"acceptedAt\" IS NULL AND \"revokedAt\" IS NULL"))
+  @@map("vendor_invite")
 }
 
 model VendorApplication {
@@ -608,6 +641,12 @@ enum AuditAction {
   VENDOR_APPLICATION_REJECTED
   VENDOR_APPLICATION_REVOKED
   VENDOR_PROFILE_UPDATED
+  VENDOR_INVITE_CREATED
+  VENDOR_INVITE_ACCEPTED
+  VENDOR_INVITE_REVOKED
+  VENDOR_INVITE_EXPIRED
+  SUB_VENDOR_DEACTIVATED
+  SUB_VENDOR_REACTIVATED
   STUDENT_IMPORT_COMMITTED
   SCHEMA_VERSION_CREATED
   SCHEMA_PUBLISHED

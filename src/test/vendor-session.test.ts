@@ -24,6 +24,10 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
+    vendorProfile: {
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+    },
     vendorApplication: {
       findFirst: vi.fn(),
     },
@@ -40,6 +44,7 @@ vi.mock("@/lib/auth/auth", () => ({
 
 const { auth } = await import("@/lib/auth/auth");
 const getSessionMock = vi.mocked(auth.api.getSession);
+const vendorProfile = vi.mocked(prisma.vendorProfile);
 const vendorApplication = vi.mocked(prisma.vendorApplication);
 
 beforeEach(() => {
@@ -94,12 +99,30 @@ describe("requireApprovedVendorSession", () => {
     getSessionMock.mockResolvedValueOnce(
       vendorSession as Awaited<ReturnType<typeof auth.api.getSession>>,
     );
+    vendorProfile.findUnique.mockResolvedValueOnce({
+      id: "profile_1",
+      userId: "vendor_1",
+      parentVendorProfileId: null,
+      companyName: "Demo Vendor",
+      serviceCategory: "Retail",
+      locationName: null,
+      locationAddress: null,
+      contactPersonName: "Vendor User",
+      contactEmail: "vendor@example.com",
+      verificationUrl: null,
+      parentVendorProfile: null,
+    } as never);
     vendorApplication.findFirst.mockResolvedValueOnce({ id: "application_1" } as never);
+    vendorProfile.findMany.mockResolvedValueOnce([]);
 
     await expect(requireApprovedVendorSession()).resolves.toEqual(vendorSession);
+    expect(vendorProfile.findUnique).toHaveBeenCalledWith({
+      where: { userId: "vendor_1" },
+      select: expect.any(Object),
+    });
     expect(vendorApplication.findFirst).toHaveBeenCalledWith({
       where: {
-        vendorProfile: { userId: "vendor_1" },
+        vendorProfileId: "profile_1",
         status: "APPROVED",
       },
       select: { id: true },
@@ -110,8 +133,57 @@ describe("requireApprovedVendorSession", () => {
     getSessionMock.mockResolvedValueOnce(
       vendorSession as Awaited<ReturnType<typeof auth.api.getSession>>,
     );
+    vendorProfile.findUnique.mockResolvedValueOnce({
+      id: "profile_1",
+      userId: "vendor_1",
+      parentVendorProfileId: null,
+      companyName: "Demo Vendor",
+      serviceCategory: "Retail",
+      locationName: null,
+      locationAddress: null,
+      contactPersonName: "Vendor User",
+      contactEmail: "vendor@example.com",
+      verificationUrl: null,
+      parentVendorProfile: null,
+    } as never);
     vendorApplication.findFirst.mockResolvedValueOnce(null);
+    vendorProfile.findMany.mockResolvedValueOnce([]);
 
     await expect(requireApprovedVendorSession()).rejects.toThrow("forbidden");
+  });
+
+  it("allows a sub-vendor when the parent vendor is approved", async () => {
+    getSessionMock.mockResolvedValueOnce(
+      vendorSession as Awaited<ReturnType<typeof auth.api.getSession>>,
+    );
+    vendorProfile.findUnique.mockResolvedValueOnce({
+      id: "location_1",
+      userId: "vendor_1",
+      parentVendorProfileId: "profile_1",
+      companyName: "Demo Vendor",
+      serviceCategory: "Retail",
+      locationName: "Cape Town Branch",
+      locationAddress: null,
+      contactPersonName: "Vendor User",
+      contactEmail: "vendor@example.com",
+      verificationUrl: null,
+      parentVendorProfile: {
+        id: "profile_1",
+        companyName: "Demo Vendor",
+        serviceCategory: "Retail",
+        verificationUrl: null,
+      },
+    } as never);
+    vendorApplication.findFirst.mockResolvedValueOnce({ id: "application_1" } as never);
+
+    await expect(requireApprovedVendorSession()).resolves.toEqual(vendorSession);
+    expect(vendorApplication.findFirst).toHaveBeenCalledWith({
+      where: {
+        vendorProfileId: "profile_1",
+        status: "APPROVED",
+      },
+      select: { id: true },
+    });
+    expect(vendorProfile.findMany).not.toHaveBeenCalled();
   });
 });

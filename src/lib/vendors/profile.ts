@@ -23,6 +23,14 @@ export async function updateVendorProfile({
   input: UpdateVendorProfileInput;
 }) {
   const data = updateProfileSchema.parse(input);
+  const currentProfile = await prisma.vendorProfile.findUnique({
+    where: { userId },
+    select: { parentVendorProfileId: true },
+  });
+
+  if (currentProfile?.parentVendorProfileId) {
+    throw new Error("Sub-vendor accounts cannot update parent business details.");
+  }
 
   const profile = await prisma.vendorProfile.update({
     where: { userId },

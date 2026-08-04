@@ -176,6 +176,10 @@ export async function createVendorApplication({
         throw new Error("No vendor profile found for this account.");
       }
 
+      if (vendorProfile.parentVendorProfileId) {
+        throw new Error("Sub-vendor accounts cannot submit verifier applications.");
+      }
+
       const existingApplication = await transaction.vendorApplication.findFirst({
         where: {
           vendorProfileId: vendorProfile.id,
@@ -232,6 +236,10 @@ export async function getVendorApplicationForUser(userId: string) {
     return null;
   }
 
+  if (vendorProfile.parentVendorProfileId) {
+    return null;
+  }
+
   return prisma.vendorApplication.findFirst({
     where: { vendorProfileId: vendorProfile.id },
     include: { vendorProfile: true },
@@ -281,6 +289,11 @@ export async function listVendorApplications({
           website: true,
           description: true,
           verificationUrl: true,
+          _count: {
+            select: {
+              subVendorProfiles: true,
+            },
+          },
         },
       },
     },
@@ -504,8 +517,16 @@ export async function ensureVendorVerificationServicePoint(vendorProfileId: stri
     where: { id: vendorProfileId },
     select: {
       id: true,
+      parentVendorProfileId: true,
       companyName: true,
+      locationName: true,
       verificationUrl: true,
+      parentVendorProfile: {
+        select: {
+          id: true,
+          companyName: true,
+        },
+      },
     },
   });
 
@@ -518,11 +539,18 @@ export async function ensureVendorVerificationServicePoint(vendorProfileId: stri
   }
 
   try {
+    const parentProfile = vendorProfile.parentVendorProfile;
+    const vendorId = parentProfile?.id ?? vendorProfile.id;
+    const vendorName = parentProfile?.companyName ?? vendorProfile.companyName;
+    const servicePointName = vendorProfile.locationName
+      ? `${vendorProfile.locationName} Verification Point`
+      : `${vendorProfile.companyName} Verification Point`;
+
     const { verificationUrl } = await createVerificationServicePoint({
-      vendorId: vendorProfile.id,
-      vendorName: vendorProfile.companyName,
+      vendorId,
+      vendorName,
       externalId: vendorProfile.id,
-      name: `${vendorProfile.companyName} Verification Point`,
+      name: servicePointName,
     });
 
     await prisma.vendorProfile.update({
@@ -535,7 +563,7 @@ export async function ensureVendorVerificationServicePoint(vendorProfileId: stri
     if (error instanceof AgentServiceError && error.status === 409) {
       const existingServicePoint = (await listVerificationServicePoints()).find(
         (servicePoint) =>
-          servicePoint.vendorId === vendorProfile.id &&
+          servicePoint.vendorId === (vendorProfile.parentVendorProfileId ?? vendorProfile.id) &&
           servicePoint.externalId === vendorProfile.id,
       );
 
@@ -581,6 +609,10 @@ export async function getOrCreateDraftApplication(userId: string) {
 
       if (!vendorProfile) {
         throw new Error("No vendor profile found for this account.");
+      }
+
+      if (vendorProfile.parentVendorProfileId) {
+        throw new Error("Sub-vendor accounts cannot submit verifier applications.");
       }
 
       const existingActive = await transaction.vendorApplication.findFirst({

@@ -115,6 +115,13 @@ export default async function VendorsPage({
 
                     <p className="mt-3 text-xs text-zinc-500">
                       Verification requests include all attributes in the active student credential schema.
+                      {application.vendorProfile._count.subVendorProfiles > 0 ? (
+                        <>
+                          {" "}
+                          {application.vendorProfile._count.subVendorProfiles} sub-vendor location
+                          {application.vendorProfile._count.subVendorProfiles === 1 ? "" : "s"} connected.
+                        </>
+                      ) : null}
                     </p>
                     {application.vendorProfile.verificationUrl ? (
                       <a

@@ -2,7 +2,7 @@ import { getSessionCookie } from "better-auth/cookies";
 import { NextResponse, type NextRequest } from "next/server";
 
 const PUBLIC_ROUTES = ["/sign-in", "/accept-invite", "/forgot-password", "/reset-password", "/activate", "/verify"];
-const VENDOR_PUBLIC_ROUTES = ["/vendor/sign-in", "/vendor/sign-up"];
+const VENDOR_PUBLIC_ROUTES = ["/vendor/sign-in", "/vendor/sign-up", "/vendor/accept-invite"];
 const PUBLIC_FILE = /\.(.*)$/;
 
 function isPublicRoute(pathname: string) {

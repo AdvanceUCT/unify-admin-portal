@@ -3,7 +3,6 @@ import "server-only";
 import { forbidden, redirect } from "next/navigation";
 import { headers } from "next/headers";
 
-import { VendorApplicationStatus } from "@/generated/prisma/enums";
 import { auth } from "@/lib/auth/auth";
 import {
   assertRole,
@@ -11,7 +10,7 @@ import {
   type AdminRole,
   type SessionWithRole,
 } from "@/lib/auth/permissions";
-import { prisma } from "@/lib/db/prisma";
+import { getVendorAccountContext } from "@/lib/vendors/account";
 
 export type AdminSession = NonNullable<
   Awaited<ReturnType<typeof auth.api.getSession>>
@@ -80,16 +79,9 @@ export async function requireVendorSession() {
  */
 export async function requireApprovedVendorSession() {
   const session = await requireVendorSession();
+  const vendorContext = await getVendorAccountContext(session.user.id);
 
-  const approvedApplication = await prisma.vendorApplication.findFirst({
-    where: {
-      vendorProfile: { userId: session.user.id },
-      status: VendorApplicationStatus.APPROVED,
-    },
-    select: { id: true },
-  });
-
-  if (!approvedApplication) {
+  if (!vendorContext?.isApproved) {
     forbidden();
   }
 

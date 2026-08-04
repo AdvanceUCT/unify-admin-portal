@@ -1,10 +1,14 @@
 import "server-only";
 
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
 import { AuditAction } from "@/generated/prisma/enums";
 import { auth } from "@/lib/auth/auth";
+import {
+  createInviteToken,
+  hashInviteToken,
+  isSameTokenHash,
+} from "@/lib/auth/invite-tokens";
 import { writeAuditLog } from "@/lib/audit/audit";
 import {
   INVITABLE_ADMIN_ROLES,
@@ -39,28 +43,7 @@ export type CreateAdminInviteInput = {
 };
 export type AcceptAdminInviteInput = z.input<typeof acceptInviteSchema>;
 
-export function createInviteToken() {
-  return randomBytes(32).toString("base64url");
-}
-
-export function hashInviteToken(token: string) {
-  return createHash("sha256").update(token).digest("hex");
-}
-
-/**
- * Compares two hex token hashes using a constant-time comparison to prevent
- * timing attacks. A regular `===` check would leak information about how many
- * characters match via response time differences.
- */
-function isSameTokenHash(left: string, right: string) {
-  const leftBuffer = Buffer.from(left, "hex");
-  const rightBuffer = Buffer.from(right, "hex");
-
-  return (
-    leftBuffer.length === rightBuffer.length &&
-    timingSafeEqual(leftBuffer, rightBuffer)
-  );
-}
+export { createInviteToken, hashInviteToken };
 
 function buildInviteUrl(token: string) {
   const inviteUrl = new URL("/accept-invite", env.APP_URL);

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { forbidden } from "next/navigation";
 import { ClipboardList } from "lucide-react";
 
 import { SectionHeader } from "@/components/layout/SectionHeader";
@@ -6,6 +7,7 @@ import { VendorApplicationDetails } from "@/features/vendors/VendorApplicationDe
 import { TOTAL_STEPS, VendorApplicationWizard } from "@/features/vendors/application/VendorApplicationWizard";
 import type { DraftApplicationData } from "@/features/vendors/application/VendorApplicationWizard";
 import { requireVendorSession } from "@/lib/auth/session";
+import { getVendorAccountContext } from "@/lib/vendors/account";
 import { filenameFromStoragePath } from "@/lib/storage/supabase";
 import {
   computeDraftProgress,
@@ -28,6 +30,12 @@ export default async function VendorApplicationPage({
 }) {
   const { start, step } = await searchParams;
   const session = await requireVendorSession();
+  const vendorContext = await getVendorAccountContext(session.user.id);
+
+  if (vendorContext?.isSubVendor) {
+    forbidden();
+  }
+
   const application = await getVendorApplicationForUser(session.user.id);
 
   if (!application && start !== "1") {
