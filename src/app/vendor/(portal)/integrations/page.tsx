@@ -1,16 +1,14 @@
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { VendorIntegrationSettings } from "@/features/vendors/VendorIntegrationSettings";
-import { requireApprovedVendorSession } from "@/lib/auth/session";
-import { approvedVendorProfileForUser, getVendorWebhookConfig, listVendorApiCredentials } from "@/lib/vendors/integrations";
+import { requireVendorOwnerContext } from "@/lib/vendors/context";
+import { getVendorWebhookConfig, listVendorApiCredentials } from "@/lib/vendors/integrations";
 
 export default async function VendorIntegrationsPage() {
-  const session = await requireApprovedVendorSession();
-  const vendor = await approvedVendorProfileForUser(session.user.id);
-  if (!vendor) return null;
+  const { context } = await requireVendorOwnerContext();
 
   const [apiKeys, webhook] = await Promise.all([
-    listVendorApiCredentials(vendor.id),
-    getVendorWebhookConfig(vendor.id),
+    listVendorApiCredentials(context.vendorProfileId),
+    getVendorWebhookConfig(context.vendorProfileId),
   ]);
 
   return (

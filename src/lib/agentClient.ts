@@ -429,11 +429,39 @@ export async function listVerificationServicePoints(): Promise<
   return response.json();
 }
 
+export async function updateVerificationServicePoint(
+  servicePointId: string,
+  payload: { name?: string; vendorName?: string; active?: boolean },
+): Promise<{
+  id: string;
+  vendorId: string;
+  externalId: string;
+  name: string;
+  active: boolean;
+  verificationUrl: string;
+}> {
+  const response = await agentFetch(
+    `/api/verifier/service-points/${encodeURIComponent(servicePointId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+  return response.json();
+}
+
 export type AgentVerificationResult = {
   verificationRequestId: string;
   checkoutId?: string;
+  proofRecordId?: string;
+  vendorId?: string;
+  servicePointId?: string;
+  servicePointName?: string;
+  state?: string;
   status: "Pending" | "Approved" | "Declined" | "Expired" | "Failed";
+  isVerified?: boolean;
   failureCode?: string;
+  attributes?: Record<string, string>;
   createdAt: string;
   expiresAt: string;
   completedAt?: string;

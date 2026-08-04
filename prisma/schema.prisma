@@ -24,6 +24,9 @@ model User {
   sessions      Session[]
   accounts      Account[]
   vendorProfile VendorProfile?
+  vendorMemberships VendorMembership[]
+  createdVendorBranches VendorBranch[] @relation("VendorBranchCreator")
+  createdVendorStaffInvites VendorStaffInvite[] @relation("VendorStaffInviteCreator")
 
   @@unique([email])
   @@map("user")
@@ -110,14 +113,119 @@ model VendorProfile {
   description               String?
   verificationUrl           String?
   agentServicePointId       String?
+  defaultBranchId           String?             @unique
+  defaultBranch             VendorBranch?       @relation("VendorDefaultBranch", fields: [defaultBranchId], references: [id], onDelete: SetNull)
   createdAt                 DateTime            @default(now())
   updatedAt                 DateTime            @updatedAt
   applications              VendorApplication[]
   verifications             VendorVerification[]
   apiCredentials            VendorApiCredential[]
   webhookConfig             VendorWebhookConfig?
+  branches                  VendorBranch[]      @relation("VendorBranches")
+  memberships               VendorMembership[]
+  staffInvites              VendorStaffInvite[]
 
   @@map("vendor_profile")
+}
+
+model VendorBranch {
+  id                  String                  @id @default(cuid())
+  vendorProfileId     String
+  vendorProfile       VendorProfile           @relation("VendorBranches", fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  name                String
+  normalizedName      String
+  address             String?
+  agentServicePointId String?                 @unique
+  verificationUrl     String?
+  status              VendorBranchStatus      @default(PROVISIONING)
+  active              Boolean                 @default(true)
+  createdByUserId     String?
+  createdBy           User?                   @relation("VendorBranchCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  defaultFor          VendorProfile?          @relation("VendorDefaultBranch")
+  memberships         VendorBranchMembership[]
+  inviteAssignments   VendorStaffInviteBranch[]
+  verifications       VendorVerification[]
+
+  @@unique([vendorProfileId, normalizedName])
+  @@index([vendorProfileId, active])
+  @@map("vendor_branch")
+}
+
+enum VendorBranchStatus {
+  PROVISIONING
+  ACTIVE
+  DISABLED
+  PROVISIONING_FAILED
+}
+
+model VendorMembership {
+  id              String                   @id @default(cuid())
+  vendorProfileId String
+  vendorProfile   VendorProfile            @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role            VendorMembershipRole
+  active          Boolean                  @default(true)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  branches        VendorBranchMembership[]
+
+  @@unique([vendorProfileId, userId])
+  @@index([userId, active])
+  @@map("vendor_membership")
+}
+
+enum VendorMembershipRole {
+  OWNER
+  STAFF
+}
+
+model VendorBranchMembership {
+  vendorMembershipId String
+  vendorMembership   VendorMembership @relation(fields: [vendorMembershipId], references: [id], onDelete: Cascade)
+  vendorBranchId     String
+  vendorBranch       VendorBranch     @relation(fields: [vendorBranchId], references: [id], onDelete: Cascade)
+  createdAt          DateTime         @default(now())
+
+  @@id([vendorMembershipId, vendorBranchId])
+  @@index([vendorBranchId])
+  @@map("vendor_branch_membership")
+}
+
+model VendorStaffInvite {
+  id               String                    @id @default(cuid())
+  vendorProfileId  String
+  vendorProfile    VendorProfile             @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  email            String
+  name             String
+  tokenHash        String                    @unique
+  expiresAt        DateTime
+  acceptedAt       DateTime?
+  acceptedByUserId String?
+  revokedAt        DateTime?
+  revokedByUserId  String?
+  createdByUserId  String
+  createdBy        User                      @relation("VendorStaffInviteCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+  branches         VendorStaffInviteBranch[]
+
+  @@index([vendorProfileId, email])
+  @@index([expiresAt])
+  @@map("vendor_staff_invite")
+}
+
+model VendorStaffInviteBranch {
+  vendorStaffInviteId String
+  vendorStaffInvite   VendorStaffInvite @relation(fields: [vendorStaffInviteId], references: [id], onDelete: Cascade)
+  vendorBranchId      String
+  vendorBranch        VendorBranch      @relation(fields: [vendorBranchId], references: [id], onDelete: Cascade)
+
+  @@id([vendorStaffInviteId, vendorBranchId])
+  @@index([vendorBranchId])
+  @@map("vendor_staff_invite_branch")
 }
 
 model VendorApplication {
@@ -185,6 +293,8 @@ model VendorVerification {
   id                     String                    @id @default(cuid())
   vendorProfileId        String
   vendorProfile          VendorProfile             @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  branchId                String?
+  branch                  VendorBranch?             @relation(fields: [branchId], references: [id], onDelete: SetNull)
   verificationRequestId  String?                   @unique
   checkoutId             String?
   eventId                String?                  @unique
@@ -204,6 +314,7 @@ model VendorVerification {
 
   @@unique([vendorProfileId, checkoutId])
   @@index([vendorProfileId])
+  @@index([branchId, createdAt])
   @@index([status])
   @@index([createdAt])
   @@map("vendor_verification")

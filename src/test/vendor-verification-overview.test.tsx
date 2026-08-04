@@ -19,6 +19,7 @@ describe("VendorVerificationOverview", () => {
           {
             id: "verification_1",
             vendorProfileId: "vendor_1",
+            branchId: "branch_1",
             verificationRequestId: "request_1",
             checkoutId: "cart_1",
             eventId: "event_1",

@@ -63,22 +63,27 @@ export async function createVendorCheckoutSession(vendorProfileId: string, check
   }
 
   await ensureVendorVerificationServicePoint(vendorProfileId);
-  const vendor = await prisma.vendorProfile.findUnique({ where: { id: vendorProfileId } });
-  if (!vendor?.agentServicePointId) throw new Error("Vendor verification service point is not configured.");
+  const vendor = await prisma.vendorProfile.findUnique({
+    where: { id: vendorProfileId },
+    include: { defaultBranch: true },
+  });
+  const branch = vendor?.defaultBranch;
+  if (!vendor || !branch?.agentServicePointId) throw new Error("Vendor verification service point is not configured.");
 
   const agentResult = await createCheckoutVerificationSession({
     vendorId: vendor.id,
-    servicePointId: vendor.agentServicePointId,
+    servicePointId: branch.agentServicePointId,
     checkoutId: normalizedCheckoutId,
   });
   const verification = await prisma.vendorVerification.upsert({
     where: { vendorProfileId_checkoutId: { vendorProfileId, checkoutId: normalizedCheckoutId } },
     create: {
       vendorProfileId,
+      branchId: branch.id,
       verificationRequestId: agentResult.verificationRequestId,
       checkoutId: normalizedCheckoutId,
-      servicePointId: vendor.agentServicePointId,
-      servicePointName: vendor.companyName,
+      servicePointId: branch.agentServicePointId,
+      servicePointName: branch.name,
       status: mapAgentVerificationDecision(agentResult.status),
       failureCode: agentResult.failureCode ?? null,
       expiresAt: new Date(agentResult.expiresAt),
@@ -90,9 +95,17 @@ export async function createVendorCheckoutSession(vendorProfileId: string, check
   return { ...resultShape(verification), verificationUrl: agentResult.verificationUrl };
 }
 
-export async function getVendorVerificationResult(vendorProfileId: string, verificationRequestId: string) {
+export async function getVendorVerificationResult(
+  vendorProfileId: string,
+  verificationRequestId: string,
+  allowedBranchIds?: string[],
+) {
   let verification = await prisma.vendorVerification.findFirst({
-    where: { vendorProfileId, verificationRequestId },
+    where: {
+      vendorProfileId,
+      verificationRequestId,
+      ...(allowedBranchIds ? { branchId: { in: allowedBranchIds } } : {}),
+    },
   });
   if (!verification) return null;
 
@@ -119,14 +132,22 @@ export async function recordVerificationCompletedEvent(payload: VerificationComp
     throw new Error("Verification event does not match the stored checkout binding.");
   }
 
+  const branch = await prisma.vendorBranch.findFirst({
+    where: { vendorProfileId: payload.vendorId, agentServicePointId: payload.servicePointId },
+    select: { id: true, name: true },
+  });
+  if (!branch) throw new Error("Verification event service point is not registered to this vendor.");
+
   const verification = await prisma.vendorVerification.upsert({
     where: { verificationRequestId: payload.verificationRequestId },
     create: {
       vendorProfileId: payload.vendorId,
+      branchId: branch.id,
       verificationRequestId: payload.verificationRequestId,
       checkoutId: payload.checkoutId,
       eventId: payload.eventId,
       servicePointId: payload.servicePointId,
+      servicePointName: branch.name,
       status: mapAgentVerificationDecision(payload.decision),
       failureCode: payload.failureCode ?? null,
       expiresAt: new Date(payload.expiresAt),
@@ -134,6 +155,8 @@ export async function recordVerificationCompletedEvent(payload: VerificationComp
     },
     update: {
       eventId: payload.eventId,
+      branchId: branch.id,
+      servicePointName: branch.name,
       status: mapAgentVerificationDecision(payload.decision),
       failureCode: payload.failureCode ?? null,
       expiresAt: new Date(payload.expiresAt),
@@ -141,7 +164,7 @@ export async function recordVerificationCompletedEvent(payload: VerificationComp
     },
   });
 
-  await deliverVendorWebhook(verification.id, requestId);
+  if (verification.checkoutId) await deliverVendorWebhook(verification.id, requestId);
   return { duplicate: false, verification };
 }
 
@@ -154,21 +177,37 @@ export async function retryVendorWebhook(vendorProfileId: string, verificationId
   return deliverVendorWebhook(verification.id);
 }
 
-export async function getVendorVerificationStats(vendorProfileId: string) {
+export async function getVendorVerificationStats(
+  vendorProfileId: string,
+  options: { branchIds?: string[]; inPersonOnly?: boolean } = {},
+) {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const where = {
+    vendorProfileId,
+    ...(options.branchIds ? { branchId: { in: options.branchIds } } : {}),
+    ...(options.inPersonOnly ? { checkoutId: null } : {}),
+  };
   const [total, approved, pending, thisMonth] = await Promise.all([
-    prisma.vendorVerification.count({ where: { vendorProfileId } }),
-    prisma.vendorVerification.count({ where: { vendorProfileId, status: "APPROVED" } }),
-    prisma.vendorVerification.count({ where: { vendorProfileId, status: "PENDING" } }),
-    prisma.vendorVerification.count({ where: { vendorProfileId, createdAt: { gte: startOfMonth } } }),
+    prisma.vendorVerification.count({ where }),
+    prisma.vendorVerification.count({ where: { ...where, status: "APPROVED" } }),
+    prisma.vendorVerification.count({ where: { ...where, status: "PENDING" } }),
+    prisma.vendorVerification.count({ where: { ...where, createdAt: { gte: startOfMonth } } }),
   ]);
   return { total, approved, pending, thisMonth };
 }
 
-export async function listRecentVendorVerifications(vendorProfileId: string, limit = 5) {
+export async function listRecentVendorVerifications(
+  vendorProfileId: string,
+  limit = 5,
+  options: { branchIds?: string[]; inPersonOnly?: boolean } = {},
+) {
   return prisma.vendorVerification.findMany({
-    where: { vendorProfileId },
+    where: {
+      vendorProfileId,
+      ...(options.branchIds ? { branchId: { in: options.branchIds } } : {}),
+      ...(options.inPersonOnly ? { checkoutId: null } : {}),
+    },
     include: { deliveries: { orderBy: { attemptNumber: "desc" }, take: 1 } },
     orderBy: { createdAt: "desc" },
     take: limit,

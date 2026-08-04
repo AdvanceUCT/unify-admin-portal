@@ -11,6 +11,7 @@ const agent = vi.hoisted(() => ({
 }));
 const database = vi.hoisted(() => ({
   vendorProfile: { findUnique: vi.fn() },
+  vendorBranch: { findFirst: vi.fn() },
   vendorVerification: {
     findFirst: vi.fn(),
     findUnique: vi.fn(),
@@ -48,7 +49,11 @@ describe("vendor checkout verification", () => {
     database.vendorProfile.findUnique.mockResolvedValue({
       id: "vendor-001",
       companyName: "Library Cafe",
-      agentServicePointId: "service-point-001",
+      defaultBranch: {
+        id: "branch-001",
+        name: "Main Branch",
+        agentServicePointId: "service-point-001",
+      },
     });
     agent.createCheckoutVerificationSession.mockResolvedValue({
       verificationRequestId: "verification-001",
@@ -105,7 +110,8 @@ describe("vendor checkout verification", () => {
         servicePointId: "service-point-001",
         checkoutId: "cart-001",
       });
-    database.vendorVerification.upsert.mockResolvedValue({ id: "stored-verification-001" });
+    database.vendorBranch.findFirst.mockResolvedValue({ id: "branch-001", name: "Main Branch" });
+    database.vendorVerification.upsert.mockResolvedValue({ id: "stored-verification-001", checkoutId: "cart-001" });
     integrations.deliverVendorWebhook.mockResolvedValue({ skipped: false, status: "DELIVERED" });
 
     const result = await recordVerificationCompletedEvent(completedEvent);

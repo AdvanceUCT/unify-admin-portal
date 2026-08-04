@@ -1,0 +1,57 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+
+import { requireVendorOwnerContext } from "@/lib/vendors/context";
+import {
+  createVendorStaffInvite,
+  revokeVendorStaffInvite,
+  setVendorStaffActive,
+  updateVendorStaffBranches,
+} from "@/lib/vendors/staff";
+
+export type StaffInviteState = { error?: string; success?: string };
+
+export async function createStaffInviteAction(
+  _state: StaffInviteState,
+  formData: FormData,
+): Promise<StaffInviteState> {
+  const { session, context } = await requireVendorOwnerContext();
+  try {
+    await createVendorStaffInvite(context.vendorProfileId, session.user.id, {
+      email: String(formData.get("email") ?? ""),
+      name: String(formData.get("name") ?? ""),
+      branchIds: formData.getAll("branchId").map(String),
+    });
+    revalidatePath("/vendor/staff");
+    return { success: "Invite created." };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unable to create invite." };
+  }
+}
+
+export async function updateStaffBranchesAction(formData: FormData) {
+  const { context } = await requireVendorOwnerContext();
+  await updateVendorStaffBranches(
+    context.vendorProfileId,
+    String(formData.get("membershipId") ?? ""),
+    formData.getAll("branchId").map(String),
+  );
+  revalidatePath("/vendor/staff");
+}
+
+export async function setStaffActiveAction(formData: FormData) {
+  const { context } = await requireVendorOwnerContext();
+  await setVendorStaffActive(
+    context.vendorProfileId,
+    String(formData.get("membershipId") ?? ""),
+    formData.get("active") === "true",
+  );
+  revalidatePath("/vendor/staff");
+}
+
+export async function revokeStaffInviteAction(formData: FormData) {
+  const { session, context } = await requireVendorOwnerContext();
+  await revokeVendorStaffInvite(context.vendorProfileId, String(formData.get("inviteId") ?? ""), session.user.id);
+  revalidatePath("/vendor/staff");
+}

@@ -24,11 +24,18 @@ const agentClient = vi.hoisted(() => ({
   },
   createVerificationServicePoint: vi.fn(),
   listVerificationServicePoints: vi.fn(),
+  updateVerificationServicePoint: vi.fn(),
 }));
 
 const database = vi.hoisted(() => {
   const transaction = {
     vendorProfile: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+    },
+    vendorMembership: { upsert: vi.fn() },
+    vendorBranch: {
+      create: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
     },
@@ -57,6 +64,7 @@ vi.mock("@/lib/agentClient", () => ({
   AgentServiceError: agentClient.AgentServiceError,
   createVerificationServicePoint: agentClient.createVerificationServicePoint,
   listVerificationServicePoints: agentClient.listVerificationServicePoints,
+  updateVerificationServicePoint: agentClient.updateVerificationServicePoint,
 }));
 
 vi.mock("@/lib/db/prisma", () => ({
@@ -247,6 +255,27 @@ describe("reviewVendorApplication", () => {
       companyName: "Acme Corp",
       verificationUrl: null,
       agentServicePointId: null,
+      defaultBranchId: null,
+      branches: [],
+    });
+    database.transaction.vendorBranch.create.mockResolvedValueOnce({
+      id: "branch_1",
+      vendorProfileId: "profile_1",
+      agentServicePointId: null,
+      verificationUrl: null,
+    });
+    database.transaction.vendorBranch.findUnique.mockResolvedValueOnce({
+      id: "branch_1",
+      vendorProfileId: "profile_1",
+      name: "Main Branch",
+      agentServicePointId: null,
+      verificationUrl: null,
+      vendorProfile: { companyName: "Acme Corp" },
+    });
+    database.transaction.vendorBranch.update.mockResolvedValueOnce({
+      id: "branch_1",
+      agentServicePointId: "sp_1",
+      verificationUrl: "https://verify.example.com/verify/sp-public-1",
     });
 
     await reviewVendorApplication({
@@ -268,12 +297,13 @@ describe("reviewVendorApplication", () => {
     expect(agentClient.createVerificationServicePoint).toHaveBeenCalledWith({
       vendorId: "profile_1",
       vendorName: "Acme Corp",
-      externalId: "profile_1",
-      name: "Acme Corp Verification Point",
+      externalId: "branch_1",
+      name: "Main Branch",
     });
     expect(database.transaction.vendorProfile.update).toHaveBeenCalledWith({
       where: { id: "profile_1" },
       data: {
+        defaultBranchId: "branch_1",
         verificationUrl: "https://verify.example.com/verify/sp-public-1",
         agentServicePointId: "sp_1",
       },
@@ -328,6 +358,12 @@ describe("ensureVendorVerificationServicePoint", () => {
       ...vendorProfile,
       verificationUrl: "https://verify.example.com/verify/existing",
       agentServicePointId: "sp_existing",
+      defaultBranchId: "branch_1",
+      branches: [{
+        id: "branch_1",
+        agentServicePointId: "sp_existing",
+        verificationUrl: "https://verify.example.com/verify/existing",
+      }],
     });
 
     await expect(ensureVendorVerificationServicePoint("profile_1")).resolves.toBe(
@@ -341,6 +377,22 @@ describe("ensureVendorVerificationServicePoint", () => {
       ...vendorProfile,
       verificationUrl: null,
       agentServicePointId: null,
+      defaultBranchId: null,
+      branches: [],
+    });
+    database.transaction.vendorBranch.create.mockResolvedValueOnce({
+      id: "branch_1",
+      vendorProfileId: "profile_1",
+      agentServicePointId: null,
+      verificationUrl: null,
+    });
+    database.transaction.vendorBranch.findUnique.mockResolvedValueOnce({
+      id: "branch_1",
+      vendorProfileId: "profile_1",
+      name: "Main Branch",
+      agentServicePointId: null,
+      verificationUrl: null,
+      vendorProfile: { companyName: "Existing Company" },
     });
     agentClient.createVerificationServicePoint.mockRejectedValueOnce(
       new agentClient.AgentServiceError("Duplicate service point", 409),
@@ -350,12 +402,17 @@ describe("ensureVendorVerificationServicePoint", () => {
         id: "sp_1",
         vendorId: "profile_1",
         vendorName: "Existing Company",
-        externalId: "profile_1",
-        name: "Existing Company Verification Point",
+        externalId: "branch_1",
+        name: "Main Branch",
         active: true,
         verificationUrl: "https://verify.example.com/verify/recovered",
       },
     ]);
+    database.transaction.vendorBranch.update.mockResolvedValueOnce({
+      id: "branch_1",
+      agentServicePointId: "sp_1",
+      verificationUrl: "https://verify.example.com/verify/recovered",
+    });
 
     await expect(ensureVendorVerificationServicePoint("profile_1")).resolves.toBe(
       "https://verify.example.com/verify/recovered",
@@ -363,6 +420,7 @@ describe("ensureVendorVerificationServicePoint", () => {
     expect(database.transaction.vendorProfile.update).toHaveBeenCalledWith({
       where: { id: "profile_1" },
       data: {
+        defaultBranchId: "branch_1",
         verificationUrl: "https://verify.example.com/verify/recovered",
         agentServicePointId: "sp_1",
       },
