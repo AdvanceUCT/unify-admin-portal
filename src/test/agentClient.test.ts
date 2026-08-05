@@ -16,14 +16,18 @@ import {
   AgentServiceError,
   changeCredentialLifecycle,
   createBatchActivationLinks,
+  createCheckoutVerificationSession,
   createIssuerDid,
   createVerificationServicePoint,
+  getInPersonVerificationDetails,
   getIssuerDid,
   getStatus,
+  getVerificationResult,
   issuanceSetup,
   listVerificationServicePoints,
   registerTrustedCredentialDefinition,
   resolveActivation,
+  updateVerificationServicePoint,
 } from "@/lib/agentClient";
 
 function responseJson(body: unknown, init: ResponseInit = {}) {
@@ -162,6 +166,14 @@ describe("agent client timeouts", () => {
       vendorName: "Vendor One",
     }), "/api/verifier/service-points", 22],
     ["listVerificationServicePoints", () => listVerificationServicePoints(), "/api/verifier/service-points", 22],
+    ["updateVerificationServicePoint", () => updateVerificationServicePoint("service-point-1", { active: false }), "/api/verifier/service-points/service-point-1", 22],
+    ["createCheckoutVerificationSession", () => createCheckoutVerificationSession({
+      checkoutId: "checkout-1",
+      servicePointId: "service-point-1",
+      vendorId: "vendor-1",
+    }), "/api/verifier/checkout-sessions", 22],
+    ["getVerificationResult", () => getVerificationResult("request-1"), "/api/verifier/proof-requests/request-1", 22],
+    ["getInPersonVerificationDetails", () => getInPersonVerificationDetails("request-1"), "/api/verifier/proof-requests/request-1/details", 22],
     ["issuanceSetup", () => issuanceSetup({
       credentialDefinition: { supportRevocation: true, tag: "student-1" },
       issuerDid: "did:example:issuer",

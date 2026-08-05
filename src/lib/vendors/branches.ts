@@ -2,12 +2,14 @@ import "server-only";
 
 import { z } from "zod";
 
+import { AuditAction } from "@/generated/prisma/enums";
 import {
   AgentServiceError,
   createVerificationServicePoint,
   listVerificationServicePoints,
   updateVerificationServicePoint,
 } from "@/lib/agentClient";
+import { writeAuditLog } from "@/lib/audit/audit";
 import { prisma } from "@/lib/db/prisma";
 
 const branchInputSchema = z.object({
@@ -141,12 +143,63 @@ export async function createVendorBranch(
     if (isUniqueConstraintError(error)) throw new Error("A branch with this name already exists.");
     throw error;
   }
-  return provisionVendorBranch(branch.id);
+  let provisioned;
+  try {
+    provisioned = await provisionVendorBranch(branch.id);
+  } catch (error) {
+    await writeAuditLog({
+      action: AuditAction.VENDOR_BRANCH_CREATED,
+      actorId: createdByUserId,
+      targetType: "vendor_branch",
+      targetId: branch.id,
+      meta: {
+        vendorProfileId,
+        name: data.name,
+        status: "PROVISIONING_FAILED",
+      },
+    });
+    throw error;
+  }
+  await writeAuditLog({
+    action: AuditAction.VENDOR_BRANCH_CREATED,
+    actorId: createdByUserId,
+    targetType: "vendor_branch",
+    targetId: branch.id,
+    meta: {
+      vendorProfileId,
+      name: data.name,
+      status: provisioned.status,
+    },
+  });
+  return provisioned;
+}
+
+export async function retryVendorBranchProvisioning(
+  vendorProfileId: string,
+  branchId: string,
+  actorUserId: string,
+) {
+  const branch = await prisma.vendorBranch.findFirst({
+    where: { id: branchId, vendorProfileId },
+    select: { id: true },
+  });
+  if (!branch) throw new Error("Branch was not found.");
+
+  const provisioned = await provisionVendorBranch(branch.id);
+  await writeAuditLog({
+    action: AuditAction.VENDOR_BRANCH_STATUS_CHANGED,
+    actorId: actorUserId,
+    targetType: "vendor_branch",
+    targetId: branch.id,
+    meta: { vendorProfileId, status: provisioned.status },
+  });
+  return provisioned;
 }
 
 export async function updateVendorBranch(
   vendorProfileId: string,
   branchId: string,
+  actorUserId: string,
   input: { name: string; address?: string },
 ) {
   const data = branchInputSchema.parse(input);
@@ -157,7 +210,7 @@ export async function updateVendorBranch(
     await updateVerificationServicePoint(branch.agentServicePointId, { name: data.name });
   }
   try {
-    return await prisma.vendorBranch.update({
+    const updated = await prisma.vendorBranch.update({
       where: { id: branch.id },
       data: {
         name: data.name,
@@ -165,13 +218,30 @@ export async function updateVendorBranch(
         address: data.address || null,
       },
     });
+    await writeAuditLog({
+      action: AuditAction.VENDOR_BRANCH_UPDATED,
+      actorId: actorUserId,
+      targetType: "vendor_branch",
+      targetId: branch.id,
+      meta: {
+        vendorProfileId,
+        previousName: branch.name,
+        name: updated.name,
+      },
+    });
+    return updated;
   } catch (error) {
     if (isUniqueConstraintError(error)) throw new Error("A branch with this name already exists.");
     throw error;
   }
 }
 
-export async function setVendorBranchActive(vendorProfileId: string, branchId: string, active: boolean) {
+export async function setVendorBranchActive(
+  vendorProfileId: string,
+  branchId: string,
+  actorUserId: string,
+  active: boolean,
+) {
   const branch = await prisma.vendorBranch.findFirst({ where: { id: branchId, vendorProfileId } });
   if (!branch) throw new Error("Branch was not found.");
   if (!active) {
@@ -183,13 +253,28 @@ export async function setVendorBranchActive(vendorProfileId: string, branchId: s
   if (!branch.agentServicePointId) throw new Error("Branch service point is not configured.");
 
   await updateVerificationServicePoint(branch.agentServicePointId, { active });
-  return prisma.vendorBranch.update({
+  const updated = await prisma.vendorBranch.update({
     where: { id: branch.id },
     data: { active, status: active ? "ACTIVE" : "DISABLED" },
   });
+  await writeAuditLog({
+    action: AuditAction.VENDOR_BRANCH_STATUS_CHANGED,
+    actorId: actorUserId,
+    targetType: "vendor_branch",
+    targetId: branch.id,
+    meta: {
+      vendorProfileId,
+      status: active ? "ACTIVE" : "DISABLED",
+    },
+  });
+  return updated;
 }
 
-export async function setDefaultVendorBranch(vendorProfileId: string, branchId: string) {
+export async function setDefaultVendorBranch(
+  vendorProfileId: string,
+  branchId: string,
+  actorUserId: string,
+) {
   const branch = await prisma.vendorBranch.findFirst({
     where: { id: branchId, vendorProfileId, active: true, status: "ACTIVE" },
   });
@@ -203,6 +288,13 @@ export async function setDefaultVendorBranch(vendorProfileId: string, branchId: 
       agentServicePointId: branch.agentServicePointId,
       verificationUrl: branch.verificationUrl,
     },
+  });
+  await writeAuditLog({
+    action: AuditAction.VENDOR_DEFAULT_BRANCH_CHANGED,
+    actorId: actorUserId,
+    targetType: "vendor_branch",
+    targetId: branch.id,
+    meta: { vendorProfileId, name: branch.name },
   });
   return branch;
 }

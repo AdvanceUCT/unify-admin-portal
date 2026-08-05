@@ -445,6 +445,7 @@ export async function updateVerificationServicePoint(
     {
       method: "PATCH",
       body: JSON.stringify(payload),
+      timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
     },
   );
   return response.json();
@@ -493,6 +494,7 @@ export async function getInPersonVerificationDetails(
 ): Promise<AgentInPersonVerificationDetails> {
   const response = await agentFetch(
     `/api/verifier/proof-requests/${encodeURIComponent(verificationRequestId)}/details`,
+    { timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS },
   );
   return response.json();
 }

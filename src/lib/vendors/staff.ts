@@ -3,8 +3,10 @@ import "server-only";
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
+import { AuditAction } from "@/generated/prisma/enums";
 import { auth } from "@/lib/auth/auth";
 import { createInviteToken, hashInviteToken } from "@/lib/auth/invites";
+import { writeAuditLog } from "@/lib/audit/audit";
 import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
 import { sendVendorStaffInviteEmail } from "@/lib/email/vendor-staff-invites";
@@ -79,6 +81,18 @@ export async function createVendorStaffInvite(
   });
   const inviteUrl = new URL("/vendor/accept-invite", env.APP_URL);
   inviteUrl.searchParams.set("token", token);
+  await writeAuditLog({
+    action: AuditAction.VENDOR_STAFF_INVITE_CREATED,
+    actorId: createdByUserId,
+    targetType: "vendor_staff_invite",
+    targetId: invite.id,
+    meta: {
+      vendorProfileId,
+      email,
+      branchCount: branchIds.length,
+      branchIds: branchIds.join(","),
+    },
+  });
   await sendVendorStaffInviteEmail({
     to: email,
     name: invite.name,
@@ -139,6 +153,20 @@ export async function acceptVendorStaffInvite(input: z.input<typeof acceptStaffI
         where: { id: invite.id },
         data: { acceptedByUserId: result.user.id },
       });
+      await writeAuditLog(
+        {
+          action: AuditAction.VENDOR_STAFF_INVITE_ACCEPTED,
+          actorId: result.user.id,
+          targetType: "vendor_staff_invite",
+          targetId: invite.id,
+          meta: {
+            vendorProfileId: invite.vendorProfileId,
+            membershipId: membership.id,
+            branchCount: invite.branches.length,
+          },
+        },
+        tx,
+      );
     });
     return result.user;
   } catch (error) {
@@ -156,6 +184,7 @@ export async function acceptVendorStaffInvite(input: z.input<typeof acceptStaffI
 export async function updateVendorStaffBranches(
   vendorProfileId: string,
   membershipId: string,
+  actorUserId: string,
   branchIds: string[],
 ) {
   const validIds = await validateBranches(vendorProfileId, branchIds);
@@ -169,15 +198,43 @@ export async function updateVendorStaffBranches(
       data: validIds.map((vendorBranchId) => ({ vendorMembershipId: membership.id, vendorBranchId })),
     }),
   ]);
+  await writeAuditLog({
+    action: AuditAction.VENDOR_STAFF_BRANCH_ACCESS_UPDATED,
+    actorId: actorUserId,
+    targetType: "vendor_membership",
+    targetId: membership.id,
+    meta: {
+      vendorProfileId,
+      staffUserId: membership.userId,
+      branchCount: validIds.length,
+      branchIds: validIds.join(","),
+    },
+  });
 }
 
-export async function setVendorStaffActive(vendorProfileId: string, membershipId: string, active: boolean) {
+export async function setVendorStaffActive(
+  vendorProfileId: string,
+  membershipId: string,
+  actorUserId: string,
+  active: boolean,
+) {
   const membership = await prisma.vendorMembership.findFirst({
     where: { id: membershipId, vendorProfileId, role: "STAFF" },
   });
   if (!membership) throw new Error("Staff member was not found.");
   await prisma.vendorMembership.update({ where: { id: membership.id }, data: { active } });
   if (!active) await prisma.session.deleteMany({ where: { userId: membership.userId } });
+  await writeAuditLog({
+    action: AuditAction.VENDOR_STAFF_STATUS_CHANGED,
+    actorId: actorUserId,
+    targetType: "vendor_membership",
+    targetId: membership.id,
+    meta: {
+      vendorProfileId,
+      staffUserId: membership.userId,
+      active,
+    },
+  });
 }
 
 export async function revokeVendorStaffInvite(vendorProfileId: string, inviteId: string, revokedByUserId: string) {
@@ -186,4 +243,11 @@ export async function revokeVendorStaffInvite(vendorProfileId: string, inviteId:
     data: { revokedAt: new Date(), revokedByUserId },
   });
   if (result.count !== 1) throw new Error("Pending invite was not found.");
+  await writeAuditLog({
+    action: AuditAction.VENDOR_STAFF_INVITE_REVOKED,
+    actorId: revokedByUserId,
+    targetType: "vendor_staff_invite",
+    targetId: inviteId,
+    meta: { vendorProfileId },
+  });
 }

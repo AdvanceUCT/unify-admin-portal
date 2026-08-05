@@ -31,20 +31,22 @@ export async function createStaffInviteAction(
 }
 
 export async function updateStaffBranchesAction(formData: FormData) {
-  const { context } = await requireVendorOwnerContext();
+  const { session, context } = await requireVendorOwnerContext();
   await updateVendorStaffBranches(
     context.vendorProfileId,
     String(formData.get("membershipId") ?? ""),
+    session.user.id,
     formData.getAll("branchId").map(String),
   );
   revalidatePath("/vendor/staff");
 }
 
 export async function setStaffActiveAction(formData: FormData) {
-  const { context } = await requireVendorOwnerContext();
+  const { session, context } = await requireVendorOwnerContext();
   await setVendorStaffActive(
     context.vendorProfileId,
     String(formData.get("membershipId") ?? ""),
+    session.user.id,
     formData.get("active") === "true",
   );
   revalidatePath("/vendor/staff");

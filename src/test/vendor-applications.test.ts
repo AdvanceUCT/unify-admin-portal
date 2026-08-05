@@ -431,6 +431,23 @@ describe("ensureVendorVerificationServicePoint", () => {
     database.transaction.vendorProfile.findUnique.mockResolvedValueOnce({
       ...vendorProfile,
       verificationUrl: null,
+      agentServicePointId: null,
+      defaultBranchId: null,
+      branches: [],
+    });
+    database.transaction.vendorBranch.create.mockResolvedValueOnce({
+      id: "branch_1",
+      vendorProfileId: "profile_1",
+      agentServicePointId: null,
+      verificationUrl: null,
+    });
+    database.transaction.vendorBranch.findUnique.mockResolvedValueOnce({
+      id: "branch_1",
+      vendorProfileId: "profile_1",
+      name: "Main Branch",
+      agentServicePointId: null,
+      verificationUrl: null,
+      vendorProfile: { companyName: "Existing Company" },
     });
     agentClient.createVerificationServicePoint.mockRejectedValueOnce(
       new agentClient.AgentServiceError("Agent service request timed out after 15000ms.", 504, {

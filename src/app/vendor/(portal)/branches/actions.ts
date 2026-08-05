@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 
 import {
   createVendorBranch,
-  provisionVendorBranch,
+  retryVendorBranchProvisioning,
   setDefaultVendorBranch,
   setVendorBranchActive,
   updateVendorBranch,
@@ -34,9 +34,9 @@ export async function createBranchAction(
 }
 
 export async function updateBranchAction(formData: FormData) {
-  const { context } = await requireVendorOwnerContext();
+  const { session, context } = await requireVendorOwnerContext();
   const branchId = String(formData.get("branchId") ?? "");
-  await updateVendorBranch(context.vendorProfileId, branchId, {
+  await updateVendorBranch(context.vendorProfileId, branchId, session.user.id, {
     name: String(formData.get("name") ?? ""),
     address: String(formData.get("address") ?? ""),
   });
@@ -45,26 +45,31 @@ export async function updateBranchAction(formData: FormData) {
 }
 
 export async function retryBranchProvisioningAction(formData: FormData) {
-  const { context } = await requireVendorOwnerContext();
+  const { session, context } = await requireVendorOwnerContext();
   const branchId = String(formData.get("branchId") ?? "");
   if (!context.branchIds.includes(branchId)) throw new Error("Branch was not found.");
-  await provisionVendorBranch(branchId);
+  await retryVendorBranchProvisioning(context.vendorProfileId, branchId, session.user.id);
   revalidatePath(`/vendor/branches/${branchId}`);
   revalidatePath("/vendor/branches");
 }
 
 export async function setBranchActiveAction(formData: FormData) {
-  const { context } = await requireVendorOwnerContext();
+  const { session, context } = await requireVendorOwnerContext();
   const branchId = String(formData.get("branchId") ?? "");
-  await setVendorBranchActive(context.vendorProfileId, branchId, formData.get("active") === "true");
+  await setVendorBranchActive(
+    context.vendorProfileId,
+    branchId,
+    session.user.id,
+    formData.get("active") === "true",
+  );
   revalidatePath(`/vendor/branches/${branchId}`);
   revalidatePath("/vendor/branches");
 }
 
 export async function setDefaultBranchAction(formData: FormData) {
-  const { context } = await requireVendorOwnerContext();
+  const { session, context } = await requireVendorOwnerContext();
   const branchId = String(formData.get("branchId") ?? "");
-  await setDefaultVendorBranch(context.vendorProfileId, branchId);
+  await setDefaultVendorBranch(context.vendorProfileId, branchId, session.user.id);
   revalidatePath("/vendor");
   revalidatePath("/vendor/branches");
   revalidatePath(`/vendor/branches/${branchId}`);
