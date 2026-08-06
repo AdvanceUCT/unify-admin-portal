@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 
 import { authClient } from "@/lib/auth/auth-client";
 import { createVendorProfileAction } from "@/app/vendor/(auth)/sign-up/actions";
+import { SERVICE_CATEGORIES } from "@/lib/vendors/constants";
 
 export function VendorSignUpForm() {
   const router = useRouter();
@@ -33,22 +34,23 @@ export function VendorSignUpForm() {
       return;
     }
 
-    // On success this redirects to /vendor and never returns here — see the
-    // action's doc comment for why this call must not be wrapped in try/catch.
     const profileResult = await createVendorProfileAction({ companyName, serviceCategory });
 
     setIsPending(false);
-    setErrorMessage(
-      `Your account was created, but we couldn't save your company details: ${profileResult?.message}. You can update your profile after signing in.`,
-    );
+
+    if (profileResult.status === "error") {
+      setErrorMessage(
+        `Your account was created, but we couldn't save your organisation details: ${profileResult.message}. You can update your profile after signing in.`,
+      );
+    }
+
     router.push("/vendor");
-    router.refresh();
   }
 
   return (
     <main className="grid min-h-screen place-items-center bg-[#f7f8fa] px-6">
       <section className="w-full max-w-sm rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
-        <div className="mb-8 flex items-center gap-3">
+        <div className="mb-5 flex items-center gap-3">
           <span className="grid size-10 place-items-center rounded-md bg-zinc-950 text-white">
             <Landmark size={20} aria-hidden="true" />
           </span>
@@ -57,76 +59,98 @@ export function VendorSignUpForm() {
             <h1 className="text-xl font-semibold text-zinc-950">Vendor sign up</h1>
           </div>
         </div>
+        <p className="mb-5 text-xs text-zinc-500">
+          Tell us who the primary contact is and which organisation they represent. We&apos;ll
+          use this email to communicate with you about your application.
+        </p>
 
         <form className="space-y-4" onSubmit={handleSubmit}>
-          <div>
-            <label className="block text-sm font-medium text-zinc-700" htmlFor="name">
-              Your name
-            </label>
-            <input
-              autoComplete="name"
-              className="mt-2 h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950"
-              id="name"
-              name="name"
-              required
-              type="text"
-            />
-          </div>
+          <fieldset className="space-y-3">
+            <legend className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+              Primary contact
+            </legend>
 
-          <div>
-            <label className="block text-sm font-medium text-zinc-700" htmlFor="email">
-              Email
-            </label>
-            <input
-              autoComplete="email"
-              className="mt-2 h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950"
-              id="email"
-              name="email"
-              required
-              type="email"
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700" htmlFor="name">
+                Full name
+              </label>
+              <input
+                autoComplete="name"
+                className="mt-1 h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950"
+                id="name"
+                name="name"
+                required
+                type="text"
+              />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-zinc-700" htmlFor="password">
-              Password
-            </label>
-            <input
-              autoComplete="new-password"
-              className="mt-2 h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950"
-              id="password"
-              minLength={12}
-              name="password"
-              required
-              type="password"
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700" htmlFor="email">
+                Work email address
+              </label>
+              <input
+                autoComplete="email"
+                className="mt-1 h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950"
+                id="email"
+                name="email"
+                required
+                type="email"
+              />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-zinc-700" htmlFor="companyName">
-              Company name
-            </label>
-            <input
-              className="mt-2 h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950"
-              id="companyName"
-              name="companyName"
-              required
-              type="text"
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700" htmlFor="password">
+                Password
+              </label>
+              <input
+                autoComplete="new-password"
+                className="mt-1 h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950"
+                id="password"
+                minLength={12}
+                name="password"
+                required
+                type="password"
+              />
+            </div>
+          </fieldset>
 
-          <div>
-            <label className="block text-sm font-medium text-zinc-700" htmlFor="serviceCategory">
-              Service category
-            </label>
-            <input
-              className="mt-2 h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950"
-              id="serviceCategory"
-              name="serviceCategory"
-              required
-              type="text"
-            />
-          </div>
+          <fieldset className="space-y-3 border-t border-zinc-200 pt-4">
+            <legend className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+              Organisation
+            </legend>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700" htmlFor="companyName">
+                Organisation name
+              </label>
+              <input
+                className="mt-1 h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950"
+                id="companyName"
+                name="companyName"
+                required
+                type="text"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700" htmlFor="serviceCategory">
+                Service category
+              </label>
+              <select
+                className="mt-1 h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none transition focus:border-zinc-950"
+                id="serviceCategory"
+                name="serviceCategory"
+                required
+              >
+                <option value="">Select a category</option>
+                {SERVICE_CATEGORIES.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </fieldset>
 
           {errorMessage ? (
             <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -144,7 +168,7 @@ export function VendorSignUpForm() {
         </form>
 
         <Link
-          className="mt-6 block text-center text-sm font-medium text-zinc-600 hover:text-zinc-950"
+          className="mt-4 block text-center text-sm font-medium text-zinc-600 hover:text-zinc-950"
           href="/forgot-password?portal=vendor"
         >
           Forgot password?

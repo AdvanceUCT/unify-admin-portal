@@ -4,6 +4,17 @@
  */
 import "server-only";
 import { env } from "@/lib/config/env";
+import { requestIdFrom } from "@/lib/requestId";
+
+const SAFE_READ_RETRY_DELAYS_MS = [250, 750];
+
+const timeoutDetailsCode = "AGENT_SERVICE_TIMEOUT";
+
+type AgentFetchOptions = Omit<RequestInit, "signal"> & {
+  timeoutMs: number;
+};
+
+type AgentApiPath = `/api/${string}`;
 
 /**
  * Custom error for failed Identity Agent Service requests.
@@ -12,13 +23,31 @@ import { env } from "@/lib/config/env";
 export class AgentServiceError extends Error {
   status: number;
   details?: unknown;
+  requestId?: string;
 
-  constructor(message: string, status: number, details?: unknown) {
+  constructor(message: string, status: number, details?: unknown, requestId?: string) {
     super(message);
     this.name = "AgentServiceError";
     this.status = status;
     this.details = details;
+    this.requestId = requestId;
   }
+}
+
+function retryAfterMs(response: Response) {
+  const value = response.headers.get("retry-after");
+  if (!value) return null;
+  const seconds = Number(value);
+  const delay = Number.isFinite(seconds) ? seconds * 1_000 : Date.parse(value) - Date.now();
+  return Number.isFinite(delay) ? Math.max(0, Math.min(delay, 2_000)) : null;
+}
+
+function isRetryableStatus(status: number) {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -61,6 +90,34 @@ function extractErrorMessage(errorBody: unknown, fallback: string) {
   return fallback;
 }
 
+function isAbortError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    error.name === "AbortError"
+  );
+}
+
+function buildAgentServiceUrl(baseUrl: string, path: AgentApiPath) {
+  const base = new URL(baseUrl);
+
+  if (base.protocol !== "http:" && base.protocol !== "https:") {
+    throw new Error("AGENT_SERVICE_URL must use http or https.");
+  }
+
+  if (path.includes("\\") || path.includes("\r") || path.includes("\n")) {
+    throw new Error("Agent service path is invalid.");
+  }
+
+  const url = new URL(base.origin);
+  const basePath = base.pathname.replace(/\/+$/, "");
+  const requestPath = path.replace(/^\/+/, "");
+  url.pathname = `${basePath}/${requestPath}`;
+
+  return url;
+}
+
 /**
  * Internal fetch wrapper for the Identity Agent Service. Prepends the base URL,
  * injects auth headers, and throws an `AgentServiceError` for any non-2xx response.
@@ -72,8 +129,8 @@ function extractErrorMessage(errorBody: unknown, fallback: string) {
  * @throws {AgentServiceError} If the agent returns a non-2xx status.
  */
 async function agentFetch(
-  path: string,
-  options: RequestInit = {},
+  path: AgentApiPath,
+  options: AgentFetchOptions,
 ): Promise<Response> {
   const { AGENT_SERVICE_URL, AGENT_API_KEY } = env;
 
@@ -83,43 +140,90 @@ async function agentFetch(
     );
   }
 
-  const url = new URL(path, AGENT_SERVICE_URL);
-  const response = await fetch(url.toString(), {
-    ...options,
-    headers: {
-      ...options.headers,
-      Authorization: `Bearer ${AGENT_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-  });
+  const url = buildAgentServiceUrl(AGENT_SERVICE_URL, path);
+  const { timeoutMs, ...fetchOptions } = options;
+  const method = (fetchOptions.method ?? "GET").toUpperCase();
+  const retryDelays = method === "GET" ? SAFE_READ_RETRY_DELAYS_MS : [];
+  const requestId = requestIdFrom(undefined);
 
-  if (!response.ok) {
-    let errorBody: unknown;
+  for (let attempt = 0; ; attempt += 1) {
+    const controller = new AbortController();
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+
     try {
-      errorBody = await response.json();
-    } catch {
-      // ignore
+      const response = await fetch(url.toString(), {
+        ...fetchOptions,
+        headers: {
+          ...fetchOptions.headers,
+          Authorization: `Bearer ${AGENT_API_KEY}`,
+          "Content-Type": "application/json",
+          "X-Request-ID": requestId,
+        },
+        signal: controller.signal,
+      });
+
+      if (response.ok) return response;
+
+      if (attempt < retryDelays.length && isRetryableStatus(response.status)) {
+        await sleep(retryAfterMs(response) ?? retryDelays[attempt]);
+        continue;
+      }
+
+      let errorBody: unknown;
+      try {
+        errorBody = await response.json();
+      } catch {
+        // ignore
+      }
+
+      const errorDetails = extractErrorDetails(errorBody);
+      const message = extractErrorMessage(errorBody, `Agent service request failed: ${response.statusText}`);
+      const responseRequestId = response.headers.get("x-request-id") ?? requestId;
+      throw new AgentServiceError(message, response.status, errorDetails, responseRequestId);
+    } catch (error) {
+      if (error instanceof AgentServiceError) throw error;
+      if (timedOut && isAbortError(error)) {
+        throw new AgentServiceError(
+          `Agent service request timed out after ${timeoutMs}ms.`,
+          504,
+          { code: timeoutDetailsCode, path, timeoutMs },
+          requestId,
+        );
+      }
+      if (attempt < retryDelays.length) {
+        await sleep(retryDelays[attempt]);
+        continue;
+      }
+      throw new AgentServiceError(
+        "Agent service is unavailable.",
+        503,
+        undefined,
+        requestId,
+      );
+    } finally {
+      clearTimeout(timeout);
     }
-
-    const errorDetails = extractErrorDetails(errorBody);
-    const message = extractErrorMessage(errorBody, `Agent service request failed: ${response.statusText}`);
-
-    throw new AgentServiceError(message, response.status, errorDetails);
   }
-
-  return response;
 }
 
 export async function getStatus(): Promise<{
   status: string;
   ledger: { reachable: boolean };
 }> {
-  const response = await agentFetch("/api/status");
+  const response = await agentFetch("/api/status", {
+    timeoutMs: env.AGENT_HEALTH_TIMEOUT_MS,
+  });
   return response.json();
 }
 
 export async function getIssuerDid(): Promise<{ did: string }> {
-  const response = await agentFetch("/api/dids/issuer");
+  const response = await agentFetch("/api/dids/issuer", {
+    timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
+  });
   return response.json();
 }
 
@@ -127,6 +231,7 @@ export async function createIssuerDid(alias: string): Promise<{ did: string }> {
   const response = await agentFetch("/api/dids/issuer", {
     method: "POST",
     body: JSON.stringify({ alias }),
+    timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
   });
   return response.json();
 }
@@ -165,6 +270,7 @@ export async function issuanceSetup(payload: {
   const response = await agentFetch("/api/issuance/setup", {
     method: "POST",
     body: JSON.stringify(payload),
+    timeoutMs: env.AGENT_LONG_TIMEOUT_MS,
   });
   return response.json();
 }
@@ -203,6 +309,7 @@ export async function createBatchActivationLinks(payload: {
   const response = await agentFetch("/api/credentials/activation-links/batch", {
     method: "POST",
     body: JSON.stringify(payload),
+    timeoutMs: env.AGENT_LONG_TIMEOUT_MS,
   });
   return response.json();
 }
@@ -232,6 +339,7 @@ export async function resolveActivation(payload: {
   const response = await agentFetch("/api/wallet/activation/resolve", {
     method: "POST",
     body: JSON.stringify(payload),
+    timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
   });
   return response.json();
 }
@@ -260,6 +368,7 @@ export async function changeCredentialLifecycle(
     {
       body: JSON.stringify({ reason }),
       method: "POST",
+      timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
     },
   );
   return response.json();
@@ -284,6 +393,7 @@ export async function registerTrustedCredentialDefinition(
   const response = await agentFetch("/api/verifier/credential-definitions", {
     body: JSON.stringify({ credentialDefinitionId, makeDefault }),
     method: "POST",
+    timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
   });
   return response.json();
 }
@@ -297,6 +407,7 @@ export async function createVerificationServicePoint(payload: {
   const response = await agentFetch("/api/verifier/service-points", {
     method: "POST",
     body: JSON.stringify(payload),
+    timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
   });
   return response.json();
 }
@@ -312,6 +423,78 @@ export async function listVerificationServicePoints(): Promise<
     verificationUrl: string;
   }>
 > {
-  const response = await agentFetch("/api/verifier/service-points");
+  const response = await agentFetch("/api/verifier/service-points", {
+    timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
+  });
+  return response.json();
+}
+
+export async function updateVerificationServicePoint(
+  servicePointId: string,
+  payload: { name?: string; vendorName?: string; active?: boolean },
+): Promise<{
+  id: string;
+  vendorId: string;
+  externalId: string;
+  name: string;
+  active: boolean;
+  verificationUrl: string;
+}> {
+  const response = await agentFetch(
+    `/api/verifier/service-points/${encodeURIComponent(servicePointId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+      timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
+    },
+  );
+  return response.json();
+}
+
+export type AgentVerificationResult = {
+  verificationRequestId: string;
+  checkoutId?: string;
+  status: "Pending" | "Approved" | "Declined" | "Expired" | "Failed";
+  failureCode?: string;
+  createdAt: string;
+  expiresAt: string;
+  completedAt?: string;
+};
+
+export type AgentInPersonVerificationDetails = Omit<AgentVerificationResult, "checkoutId"> & {
+  servicePointId: string;
+  servicePointName: string;
+  isVerified?: boolean;
+  attributes?: Record<string, string>;
+};
+
+export async function createCheckoutVerificationSession(payload: {
+  vendorId: string;
+  servicePointId: string;
+  checkoutId: string;
+}): Promise<AgentVerificationResult & { verificationUrl: string }> {
+  const response = await agentFetch("/api/verifier/checkout-sessions", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
+  });
+  return response.json();
+}
+
+export async function getVerificationResult(verificationRequestId: string): Promise<AgentVerificationResult> {
+  const response = await agentFetch(
+    `/api/verifier/proof-requests/${encodeURIComponent(verificationRequestId)}`,
+    { timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS },
+  );
+  return response.json();
+}
+
+export async function getInPersonVerificationDetails(
+  verificationRequestId: string,
+): Promise<AgentInPersonVerificationDetails> {
+  const response = await agentFetch(
+    `/api/verifier/proof-requests/${encodeURIComponent(verificationRequestId)}/details`,
+    { timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS },
+  );
   return response.json();
 }

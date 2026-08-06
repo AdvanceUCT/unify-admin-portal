@@ -24,6 +24,9 @@ model User {
   sessions      Session[]
   accounts      Account[]
   vendorProfile VendorProfile?
+  vendorMemberships VendorMembership[]
+  createdVendorBranches VendorBranch[] @relation("VendorBranchCreator")
+  createdVendorStaffInvites VendorStaffInvite[] @relation("VendorStaffInviteCreator")
 
   @@unique([email])
   @@map("user")
@@ -109,12 +112,120 @@ model VendorProfile {
   website                   String?
   description               String?
   verificationUrl           String?
+  agentServicePointId       String?
+  defaultBranchId           String?             @unique
+  defaultBranch             VendorBranch?       @relation("VendorDefaultBranch", fields: [defaultBranchId], references: [id], onDelete: SetNull)
   createdAt                 DateTime            @default(now())
   updatedAt                 DateTime            @updatedAt
   applications              VendorApplication[]
   verifications             VendorVerification[]
+  apiCredentials            VendorApiCredential[]
+  webhookConfig             VendorWebhookConfig?
+  branches                  VendorBranch[]      @relation("VendorBranches")
+  memberships               VendorMembership[]
+  staffInvites              VendorStaffInvite[]
 
   @@map("vendor_profile")
+}
+
+model VendorBranch {
+  id                  String                  @id @default(cuid())
+  vendorProfileId     String
+  vendorProfile       VendorProfile           @relation("VendorBranches", fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  name                String
+  normalizedName      String
+  address             String?
+  agentServicePointId String?                 @unique
+  verificationUrl     String?
+  status              VendorBranchStatus      @default(PROVISIONING)
+  active              Boolean                 @default(true)
+  createdByUserId     String?
+  createdBy           User?                   @relation("VendorBranchCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  defaultFor          VendorProfile?          @relation("VendorDefaultBranch")
+  memberships         VendorBranchMembership[]
+  inviteAssignments   VendorStaffInviteBranch[]
+  verifications       VendorVerification[]
+
+  @@unique([vendorProfileId, normalizedName])
+  @@index([vendorProfileId, active])
+  @@map("vendor_branch")
+}
+
+enum VendorBranchStatus {
+  PROVISIONING
+  ACTIVE
+  DISABLED
+  PROVISIONING_FAILED
+}
+
+model VendorMembership {
+  id              String                   @id @default(cuid())
+  vendorProfileId String
+  vendorProfile   VendorProfile            @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role            VendorMembershipRole
+  active          Boolean                  @default(true)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  branches        VendorBranchMembership[]
+
+  @@unique([vendorProfileId, userId])
+  @@index([userId, active])
+  @@map("vendor_membership")
+}
+
+enum VendorMembershipRole {
+  OWNER
+  STAFF
+}
+
+model VendorBranchMembership {
+  vendorMembershipId String
+  vendorMembership   VendorMembership @relation(fields: [vendorMembershipId], references: [id], onDelete: Cascade)
+  vendorBranchId     String
+  vendorBranch       VendorBranch     @relation(fields: [vendorBranchId], references: [id], onDelete: Cascade)
+  createdAt          DateTime         @default(now())
+
+  @@id([vendorMembershipId, vendorBranchId])
+  @@index([vendorBranchId])
+  @@map("vendor_branch_membership")
+}
+
+model VendorStaffInvite {
+  id               String                    @id @default(cuid())
+  vendorProfileId  String
+  vendorProfile    VendorProfile             @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  email            String
+  name             String
+  tokenHash        String                    @unique
+  expiresAt        DateTime
+  acceptedAt       DateTime?
+  acceptedByUserId String?
+  revokedAt        DateTime?
+  revokedByUserId  String?
+  createdByUserId  String
+  createdBy        User                      @relation("VendorStaffInviteCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+  branches         VendorStaffInviteBranch[]
+
+  @@index([vendorProfileId, email])
+  @@index([expiresAt])
+  @@map("vendor_staff_invite")
+}
+
+model VendorStaffInviteBranch {
+  vendorStaffInviteId String
+  vendorStaffInvite   VendorStaffInvite @relation(fields: [vendorStaffInviteId], references: [id], onDelete: Cascade)
+  vendorBranchId      String
+  vendorBranch        VendorBranch      @relation(fields: [vendorBranchId], references: [id], onDelete: Cascade)
+
+  @@id([vendorStaffInviteId, vendorBranchId])
+  @@index([vendorBranchId])
+  @@map("vendor_staff_invite_branch")
 }
 
 model VendorApplication {
@@ -182,7 +293,11 @@ model VendorVerification {
   id                     String                    @id @default(cuid())
   vendorProfileId        String
   vendorProfile          VendorProfile             @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  branchId                String?
+  branch                  VendorBranch?             @relation(fields: [branchId], references: [id], onDelete: SetNull)
   verificationRequestId  String?                   @unique
+  checkoutId             String?
+  eventId                String?                  @unique
   servicePointId         String?
   servicePointName       String?
   status                 VendorVerificationStatus  @default(PENDING)
@@ -195,11 +310,62 @@ model VendorVerification {
   updatedAt              DateTime                  @updatedAt
   completedAt            DateTime?
   expiresAt              DateTime?
+  deliveries             VendorWebhookDelivery[]
 
+  @@unique([vendorProfileId, checkoutId])
   @@index([vendorProfileId])
+  @@index([branchId, createdAt])
   @@index([status])
   @@index([createdAt])
   @@map("vendor_verification")
+}
+
+model VendorApiCredential {
+  id              String        @id @default(cuid())
+  vendorProfileId String
+  vendorProfile   VendorProfile @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  name            String
+  keyPrefix       String        @unique
+  keyHash         String        @unique
+  lastUsedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime      @default(now())
+
+  @@index([vendorProfileId])
+  @@map("vendor_api_credential")
+}
+
+model VendorWebhookConfig {
+  id                      String        @id @default(cuid())
+  vendorProfileId         String        @unique
+  vendorProfile           VendorProfile @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  url                     String
+  signingSecretCiphertext String
+  enabled                 Boolean       @default(true)
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  @@map("vendor_webhook_config")
+}
+
+model VendorWebhookDelivery {
+  id                   String                      @id @default(cuid())
+  vendorVerificationId String
+  vendorVerification   VendorVerification          @relation(fields: [vendorVerificationId], references: [id], onDelete: Cascade)
+  attemptNumber        Int
+  status               VendorWebhookDeliveryStatus
+  responseStatus       Int?
+  errorMessage         String?
+  attemptedAt          DateTime                    @default(now())
+
+  @@unique([vendorVerificationId, attemptNumber])
+  @@index([status])
+  @@map("vendor_webhook_delivery")
+}
+
+enum VendorWebhookDeliveryStatus {
+  DELIVERED
+  FAILED
 }
 
 enum VendorVerificationStatus {
@@ -607,6 +773,16 @@ enum AuditAction {
   VENDOR_APPLICATION_APPROVED
   VENDOR_APPLICATION_REJECTED
   VENDOR_APPLICATION_REVOKED
+  VENDOR_PROFILE_UPDATED
+  VENDOR_BRANCH_CREATED
+  VENDOR_BRANCH_UPDATED
+  VENDOR_BRANCH_STATUS_CHANGED
+  VENDOR_DEFAULT_BRANCH_CHANGED
+  VENDOR_STAFF_INVITE_CREATED
+  VENDOR_STAFF_INVITE_ACCEPTED
+  VENDOR_STAFF_INVITE_REVOKED
+  VENDOR_STAFF_BRANCH_ACCESS_UPDATED
+  VENDOR_STAFF_STATUS_CHANGED
   STUDENT_IMPORT_COMMITTED
   SCHEMA_VERSION_CREATED
   SCHEMA_PUBLISHED

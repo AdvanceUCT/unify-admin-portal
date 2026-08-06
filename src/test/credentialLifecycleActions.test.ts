@@ -178,4 +178,23 @@ describe("credential lifecycle actions", () => {
     expect((error as CredentialLifecycleActionError).status).toBe(409);
     expect(mocks.changeCredentialLifecycle).not.toHaveBeenCalled();
   });
+
+  it("does not persist lifecycle or audit changes when the agent call times out", async () => {
+    mocks.changeCredentialLifecycle.mockRejectedValueOnce(
+      new Error("Agent service request timed out after 15000ms."),
+    );
+
+    await expect(
+      requestCredentialLifecycleChange({
+        action: "suspend",
+        actorId: "admin-1",
+        reason: "Enrolment review",
+        studentId: "STU001",
+      }),
+    ).rejects.toThrow("Agent service request timed out after 15000ms.");
+
+    expect(mocks.issuanceUpdate).not.toHaveBeenCalled();
+    expect(mocks.auditCreateMany).not.toHaveBeenCalled();
+    expect(mocks.auditUpdateMany).not.toHaveBeenCalled();
+  });
 });

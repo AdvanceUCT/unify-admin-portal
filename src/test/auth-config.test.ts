@@ -48,4 +48,17 @@ describe("auth configuration", () => {
     expect(options.emailAndPassword.onPasswordReset).toEqual(expect.any(Function));
   });
 
+  it("trusts the request host without trusting the caller origin header", async () => {
+    await import("@/lib/auth/auth");
+
+    const options = betterAuthMock.mock.calls[0][0];
+    const request = new Request("https://unify-admin-portal-preview.example/api/auth/sign-out", {
+      headers: { origin: "https://attacker.example" },
+    });
+    const origins = await options.trustedOrigins(request);
+
+    expect(origins).toContain("https://unify-admin-portal-preview.example");
+    expect(origins).not.toContain("https://attacker.example");
+  });
+
 });

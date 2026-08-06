@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { forbidden } from "next/navigation";
 import { ClipboardList } from "lucide-react";
 
 import { SectionHeader } from "@/components/layout/SectionHeader";
@@ -11,6 +12,7 @@ import {
   computeDraftProgress,
   getVendorApplicationForUser,
 } from "@/lib/vendors/applications";
+import { getApprovedVendorContextForUser } from "@/lib/vendors/context";
 
 const DOCUMENT_FIELD_KEYS = [
   "docRegistrationCertificate",
@@ -28,6 +30,8 @@ export default async function VendorApplicationPage({
 }) {
   const { start, step } = await searchParams;
   const session = await requireVendorSession();
+  const context = await getApprovedVendorContextForUser(session.user.id);
+  if (context?.role === "STAFF") forbidden();
   const application = await getVendorApplicationForUser(session.user.id);
 
   if (!application && start !== "1") {

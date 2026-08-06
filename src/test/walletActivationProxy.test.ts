@@ -96,6 +96,23 @@ describe("wallet activation resolve proxy", () => {
     });
   });
 
+  it("passes through agent timeout status in the existing error envelope", async () => {
+    vi.mocked(resolveActivation).mockRejectedValue(
+      new AgentServiceError("Agent service request timed out after 15000ms.", 504, {
+        code: "AGENT_SERVICE_TIMEOUT",
+      }),
+    );
+
+    const response = await resolvePost(jsonRequest({ token: "slow-token" }));
+    const body = await response.json();
+
+    expect(response.status).toBe(504);
+    expect(body.error).toMatchObject({
+      code: "AgentActivationResolveFailed",
+      message: "Agent service request timed out after 15000ms.",
+    });
+  });
+
   it("returns 502 when the agent service is unreachable", async () => {
     vi.mocked(resolveActivation).mockRejectedValue(new Error("AGENT_SERVICE_URL is not set"));
 

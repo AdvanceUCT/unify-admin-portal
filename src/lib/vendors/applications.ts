@@ -4,11 +4,6 @@ import { z } from "zod";
 
 import type { Prisma } from "@/generated/prisma/client";
 import { AuditAction, VendorApplicationStatus } from "@/generated/prisma/enums";
-import {
-  AgentServiceError,
-  createVerificationServicePoint,
-  listVerificationServicePoints,
-} from "@/lib/agentClient";
 import { writeAuditLog } from "@/lib/audit/audit";
 import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
@@ -16,6 +11,7 @@ import { sendVendorApplicationApprovedEmail } from "@/lib/email/vendor-applicati
 import { sendVendorApplicationRejectedEmail } from "@/lib/email/vendor-application-rejected";
 import { sendVendorApplicationRevokedEmail } from "@/lib/email/vendor-application-revoked";
 import { sendVendorApplicationSubmittedEmail } from "@/lib/email/vendor-application-submitted";
+import { ensureDefaultVendorBranch } from "@/lib/vendors/branches";
 
 const ACTIVE_APPLICATION_STATUSES = [
   VendorApplicationStatus.DRAFT,
@@ -495,6 +491,21 @@ export async function reviewVendorApplication({
           },
         });
 
+        await transaction.vendorMembership.upsert({
+          where: {
+            vendorProfileId_userId: {
+              vendorProfileId: application.vendorProfileId,
+              userId: application.vendorProfile.userId,
+            },
+          },
+          create: {
+            vendorProfileId: application.vendorProfileId,
+            userId: application.vendorProfile.userId,
+            role: "OWNER",
+          },
+          update: { role: "OWNER", active: true },
+        });
+
         approvedVendor = { vendorProfileId: application.vendorProfileId, companyName };
       }
 
@@ -565,57 +576,9 @@ export async function reviewVendorApplication({
 }
 
 export async function ensureVendorVerificationServicePoint(vendorProfileId: string) {
-  const vendorProfile = await prisma.vendorProfile.findUnique({
-    where: { id: vendorProfileId },
-    select: {
-      id: true,
-      companyName: true,
-      verificationUrl: true,
-    },
-  });
-
-  if (!vendorProfile) {
-    throw new Error("Vendor profile not found.");
-  }
-
-  if (vendorProfile.verificationUrl) {
-    return vendorProfile.verificationUrl;
-  }
-
-  try {
-    const { verificationUrl } = await createVerificationServicePoint({
-      vendorId: vendorProfile.id,
-      vendorName: vendorProfile.companyName,
-      externalId: vendorProfile.id,
-      name: `${vendorProfile.companyName} Verification Point`,
-    });
-
-    await prisma.vendorProfile.update({
-      where: { id: vendorProfile.id },
-      data: { verificationUrl },
-    });
-
-    return verificationUrl;
-  } catch (error) {
-    if (error instanceof AgentServiceError && error.status === 409) {
-      const existingServicePoint = (await listVerificationServicePoints()).find(
-        (servicePoint) =>
-          servicePoint.vendorId === vendorProfile.id &&
-          servicePoint.externalId === vendorProfile.id,
-      );
-
-      if (existingServicePoint) {
-        await prisma.vendorProfile.update({
-          where: { id: vendorProfile.id },
-          data: { verificationUrl: existingServicePoint.verificationUrl },
-        });
-
-        return existingServicePoint.verificationUrl;
-      }
-    }
-
-    throw error;
-  }
+  const branch = await ensureDefaultVendorBranch(vendorProfileId);
+  if (!branch.verificationUrl) throw new Error("Vendor verification service point is not configured.");
+  return branch.verificationUrl;
 }
 
 export async function markApplicationViewed({

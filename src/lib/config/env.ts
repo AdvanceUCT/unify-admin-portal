@@ -44,6 +44,12 @@ const optionalUrl = z
   .optional()
   .transform((value) => (value === "" ? undefined : value));
 
+const timeoutMs = (defaultValue: number) =>
+  z
+    .union([z.coerce.number().int().positive(), z.literal("")])
+    .optional()
+    .transform((value) => (value === "" || value === undefined ? defaultValue : value));
+
 const envSchema = z.object({
   DATABASE_URL: databaseUrl("DATABASE_URL"),
   DIRECT_URL: databaseUrl("DIRECT_URL").optional(),
@@ -70,10 +76,15 @@ const envSchema = z.object({
     .transform((value) => value?.toLowerCase() === "true"),
   AGENT_SERVICE_URL: optionalUrl,
   AGENT_API_KEY: optionalNonEmptyString,
+  AGENT_HEALTH_TIMEOUT_MS: timeoutMs(5_000),
+  AGENT_STANDARD_TIMEOUT_MS: timeoutMs(15_000),
+  AGENT_LONG_TIMEOUT_MS: timeoutMs(60_000),
   RESEND_API_KEY: optionalNonEmptyString,
   CREDENTIAL_EMAIL_FROM: optionalNonEmptyString,
   CREDENTIAL_EMAIL_DELIVERY_MODE: z.enum(["resend", "console"]).default("resend"),
   WEBHOOK_SIGNING_SECRET: optionalNonEmptyString,
+  VENDOR_API_KEY_PEPPER: optionalNonEmptyString,
+  VENDOR_WEBHOOK_ENCRYPTION_KEY: optionalNonEmptyString,
   SUPABASE_URL: optionalUrl,
   SUPABASE_SERVICE_ROLE_KEY: optionalNonEmptyString,
 });

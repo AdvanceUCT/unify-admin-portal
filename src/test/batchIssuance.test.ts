@@ -350,4 +350,52 @@ describe("real batch issuance orchestration", () => {
       }),
     );
   });
+
+  it("records a failed renewal reason when the agent activation-link call times out", async () => {
+    prismaMocks.issuanceFindFirst.mockResolvedValue({
+      credentialDefinitionId: "cred-def-id",
+      credentialExchangeId: "credential-exchange-old",
+      id: "issuance-old",
+      studentId: "WOOJOS100",
+    });
+    vi.mocked(overlayCredentialStatusForStudent).mockImplementationOnce(async (student) => ({
+      ...student,
+      credential: { ...student.credential, lifecycleState: "ACTIVE" },
+    }));
+    vi.mocked(createBatchActivationLinks).mockRejectedValueOnce(
+      new Error("Agent service request timed out after 60000ms."),
+    );
+
+    await expect(
+      queueRealStudentRenewal("student-demo-100", new Date("2026-04-27T10:00:00Z"), "admin-1"),
+    ).rejects.toThrow("Agent service request timed out after 60000ms.");
+
+    expect(prismaMocks.issuanceUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          renewalFailureReason: null,
+          renewalStatus: "PENDING",
+        }),
+        where: { id: "issuance-old" },
+      }),
+    );
+    expect(prismaMocks.issuanceUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          renewalFailureReason: "Agent service request timed out after 60000ms.",
+          renewalStatus: "FAILED",
+        },
+        where: { id: "issuance-old" },
+      }),
+    );
+    expect(prismaMocks.auditCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "CREDENTIAL_RENEWAL_FAILED",
+          message: "Agent service request timed out after 60000ms.",
+        }),
+      }),
+    );
+    expect(createCredentialIssuanceFromOffer).not.toHaveBeenCalled();
+  });
 });
