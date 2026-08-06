@@ -176,6 +176,7 @@ export function VendorApplicationWizard({
             applicationId={applicationId}
             initialData={initialData}
             onBack={handleBack}
+            onEditStep={goToStep}
           />
         )}
       </section>
