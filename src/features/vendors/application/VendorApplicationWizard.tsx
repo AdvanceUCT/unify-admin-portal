@@ -59,11 +59,13 @@ export function VendorApplicationWizard({
   initialFilenames?: Record<string, string>;
 }) {
   const [currentStep, setCurrentStep] = useState(initialStep);
+  const [maxStepReached, setMaxStepReached] = useState(initialStep);
   const [applicationId, setApplicationId] = useState(initialApplicationId);
   const router = useRouter();
 
   function goToStep(step: number) {
     setCurrentStep(step);
+    setMaxStepReached((prev) => Math.max(prev, step));
     router.replace(`/vendor/application?step=${step}`, { scroll: false });
   }
 
@@ -77,13 +79,19 @@ export function VendorApplicationWizard({
     goToStep(Math.max(currentStep - 1, 1));
   }
 
+  function handleStepTabClick(step: number) {
+    if (step === currentStep || step > maxStepReached) return;
+    goToStep(step);
+  }
+
   return (
     <div className="space-y-6">
       <ol className="grid gap-2 sm:grid-cols-6">
         {STEP_LABELS.map((label, index) => {
           const stepNumber = index + 1;
           const isCurrent = stepNumber === currentStep;
-          const isComplete = stepNumber < currentStep;
+          const isComplete = stepNumber <= maxStepReached && !isCurrent;
+          const isClickable = stepNumber !== currentStep && stepNumber <= maxStepReached;
 
           return (
             <li
@@ -96,7 +104,15 @@ export function VendorApplicationWizard({
                     : "border-zinc-200 bg-zinc-50 text-zinc-400"
               }`}
             >
-              <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleStepTabClick(stepNumber)}
+                disabled={!isClickable}
+                aria-current={isCurrent ? "step" : undefined}
+                className={`flex w-full items-center gap-2 text-left ${
+                  isClickable ? "cursor-pointer" : "cursor-default"
+                }`}
+              >
                 <span
                   className={`grid size-5 shrink-0 place-items-center rounded-full text-xs font-semibold ${
                     isCurrent
@@ -109,7 +125,7 @@ export function VendorApplicationWizard({
                   {stepNumber}
                 </span>
                 <span className="font-medium leading-tight">{label}</span>
-              </div>
+              </button>
             </li>
           );
         })}
