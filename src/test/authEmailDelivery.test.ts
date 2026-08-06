@@ -15,6 +15,7 @@ const validEnv = {
     "postgresql://postgres.realproject:secret@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true",
   DIRECT_URL: "postgresql://postgres:secret@db.realproject.supabase.co:5432/postgres",
   NEXT_PUBLIC_API_BASE_URL: "mock://unify-admin",
+  VENDOR_HELP_EMAIL_FROM: "UNIFY Vendor Help <help@voskuils.com>",
 };
 
 function stubValidEnv(overrides: Record<string, string> = {}) {
@@ -101,5 +102,88 @@ describe("auth email delivery", () => {
         to: "admin@voskuils.com",
       }),
     ).rejects.toThrow("RESEND_API_KEY is required to send admin invite emails.");
+  });
+
+  it("sends vendor help requests to the university contact email with reply metadata", async () => {
+    stubValidEnv({ RESEND_API_KEY: "re_test_key", VENDOR_HELP_EMAIL_DELIVERY_MODE: "resend" });
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: vi.fn().mockResolvedValue({ id: "email_456" }),
+      ok: true,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { sendVendorHelpRequestEmail } = await import("@/lib/email/vendor-help");
+    const result = await sendVendorHelpRequestEmail({
+      details: "The verification QR code is not loading at our main branch.",
+      submittedAt: new Date("2026-08-06T12:00:00.000Z"),
+      submittedBy: {
+        email: "vendor@example.test",
+        name: "Vendor User",
+      },
+      title: "QR code issue",
+      to: "support@example.edu",
+      vendor: {
+        companyName: "Campus Cafe",
+        contactEmail: "owner@example.test",
+        contactPersonName: "Owner User",
+        role: "OWNER",
+        serviceCategory: "Food services",
+      },
+    });
+
+    expect(result).toEqual({ messageId: "email_456", provider: "resend" });
+    const [, request] = fetchMock.mock.calls[0];
+    const body = JSON.parse(request.body);
+
+    expect(body).toMatchObject({
+      from: "UNIFY Vendor Help <help@voskuils.com>",
+      headers: { "Reply-To": "vendor@example.test" },
+      reply_to: "vendor@example.test",
+      subject: "[UNIFY Vendor Help] QR code issue",
+      to: "support@example.edu",
+    });
+    expect(body.text).toContain("Campus Cafe");
+    expect(body.text).toContain("The verification QR code is not loading");
+  });
+
+  it("logs vendor help requests when console delivery is configured", async () => {
+    stubValidEnv({ RESEND_API_KEY: "re_test_key", VENDOR_HELP_EMAIL_DELIVERY_MODE: "console" });
+    vi.stubGlobal("fetch", vi.fn());
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+
+    const { sendVendorHelpRequestEmail } = await import("@/lib/email/vendor-help");
+    const result = await sendVendorHelpRequestEmail({
+      details: "Please help us update our branch configuration.",
+      submittedBy: {
+        email: "vendor@example.test",
+        name: "Vendor User",
+      },
+      title: "Branch configuration",
+      to: "support@example.edu",
+      vendor: {},
+    });
+
+    expect(result).toEqual({ provider: "console" });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(info).toHaveBeenCalledWith(expect.stringContaining("To: support@example.edu"));
+  });
+
+  it("requires a dedicated vendor help sender for Resend delivery", async () => {
+    stubValidEnv({ RESEND_API_KEY: "re_test_key", VENDOR_HELP_EMAIL_FROM: "" });
+
+    const { sendVendorHelpRequestEmail } = await import("@/lib/email/vendor-help");
+
+    await expect(
+      sendVendorHelpRequestEmail({
+        details: "Please help us update our branch configuration.",
+        submittedBy: {
+          email: "vendor@example.test",
+          name: "Vendor User",
+        },
+        title: "Branch configuration",
+        to: "support@example.edu",
+        vendor: {},
+      }),
+    ).rejects.toThrow("VENDOR_HELP_EMAIL_FROM is required to send vendor help request emails.");
   });
 });
