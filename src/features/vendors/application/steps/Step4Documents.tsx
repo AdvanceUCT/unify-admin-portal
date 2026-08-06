@@ -224,12 +224,24 @@ export function Step4Documents({
                   </p>
                   <p className="mt-0.5 text-xs text-zinc-500">{hint}</p>
                   {(status === "done" || status === "removing") && (
-                    <p className="mt-1 text-xs text-emerald-600">
-                      {status === "removing"
-                        ? "Removing..."
-                        : filename
-                          ? `Uploaded: ${filename}`
-                          : "Uploaded"}
+                    <p className="mt-1 text-xs">
+                      {status === "removing" ? (
+                        <span className="text-emerald-600">Removing...</span>
+                      ) : filename ? (
+                        <>
+                          <span className="text-zinc-500">Uploaded: </span>
+                          <button
+                            className="font-medium text-emerald-700 underline decoration-emerald-300 underline-offset-2 hover:text-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={viewingKey === key}
+                            onClick={() => handleView(key)}
+                            type="button"
+                          >
+                            {viewingKey === key ? "Opening..." : filename}
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-emerald-600">Uploaded</span>
+                      )}
                     </p>
                   )}
                   {fieldError && (
@@ -237,16 +249,6 @@ export function Step4Documents({
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  {(status === "done" || status === "removing") && (
-                    <button
-                      className="inline-flex h-9 items-center rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={viewingKey === key || status === "removing"}
-                      onClick={() => handleView(key)}
-                      type="button"
-                    >
-                      {viewingKey === key ? "Opening..." : "View"}
-                    </button>
-                  )}
                   <label
                     className={`inline-flex h-9 cursor-pointer items-center rounded-md border px-3 text-xs font-medium transition ${
                       status === "done"
