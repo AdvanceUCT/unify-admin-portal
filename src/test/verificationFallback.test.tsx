@@ -1,9 +1,13 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import MissingVerificationServicePointPage from "@/app/(public)/verify/page";
 import VerificationFallbackPage from "@/app/(public)/verify/[publicServicePointId]/page";
-import { buildWalletVerificationLink } from "@/lib/verification/walletLink";
+import CheckoutVerificationFallbackPage from "@/app/(public)/verify/checkout/[verificationRequestId]/page";
+import {
+  buildWalletCheckoutVerificationLink,
+  buildWalletVerificationLink,
+} from "@/lib/verification/walletLink";
 
 describe("verification browser fallback", () => {
   it("encodes the custom wallet link path segment", () => {
@@ -30,5 +34,26 @@ describe("verification browser fallback", () => {
       "unifywallet://verify/sp-public-001",
     );
     expect(screen.getByText(/only runs inside the wallet/i)).toBeInTheDocument();
+  });
+
+  it("passes a valid single-use checkout claim to the wallet without displaying it", async () => {
+    const claimToken = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG";
+    expect(buildWalletCheckoutVerificationLink("verification-001", claimToken)).toBe(
+      `unifywallet://verify/checkout/verification-001?token=${claimToken}`,
+    );
+
+    const checkoutPage = render(
+      await CheckoutVerificationFallbackPage({
+        params: Promise.resolve({ verificationRequestId: "verification-001" }),
+        searchParams: Promise.resolve({ token: claimToken }),
+      }),
+    );
+
+    const checkoutContent = within(checkoutPage.container);
+    expect(checkoutContent.getByRole("link", { name: /open student wallet/i })).toHaveAttribute(
+      "href",
+      `unifywallet://verify/checkout/verification-001?token=${claimToken}`,
+    );
+    expect(checkoutContent.queryByText(claimToken)).not.toBeInTheDocument();
   });
 });

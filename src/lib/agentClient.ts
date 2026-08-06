@@ -4,6 +4,9 @@
  */
 import "server-only";
 import { env } from "@/lib/config/env";
+import { requestIdFrom } from "@/lib/requestId";
+
+const SAFE_READ_RETRY_DELAYS_MS = [250, 750];
 
 const timeoutDetailsCode = "AGENT_SERVICE_TIMEOUT";
 
@@ -20,13 +23,31 @@ type AgentApiPath = `/api/${string}`;
 export class AgentServiceError extends Error {
   status: number;
   details?: unknown;
+  requestId?: string;
 
-  constructor(message: string, status: number, details?: unknown) {
+  constructor(message: string, status: number, details?: unknown, requestId?: string) {
     super(message);
     this.name = "AgentServiceError";
     this.status = status;
     this.details = details;
+    this.requestId = requestId;
   }
+}
+
+function retryAfterMs(response: Response) {
+  const value = response.headers.get("retry-after");
+  if (!value) return null;
+  const seconds = Number(value);
+  const delay = Number.isFinite(seconds) ? seconds * 1_000 : Date.parse(value) - Date.now();
+  return Number.isFinite(delay) ? Math.max(0, Math.min(delay, 2_000)) : null;
+}
+
+function isRetryableStatus(status: number) {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -121,52 +142,72 @@ async function agentFetch(
 
   const url = buildAgentServiceUrl(AGENT_SERVICE_URL, path);
   const { timeoutMs, ...fetchOptions } = options;
-  const controller = new AbortController();
-  let timedOut = false;
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
+  const method = (fetchOptions.method ?? "GET").toUpperCase();
+  const retryDelays = method === "GET" ? SAFE_READ_RETRY_DELAYS_MS : [];
+  const requestId = requestIdFrom(undefined);
 
-  let response: Response;
-  try {
-    response = await fetch(url.toString(), {
-      ...fetchOptions,
-      signal: controller.signal,
-      headers: {
-        ...fetchOptions.headers,
-        Authorization: `Bearer ${AGENT_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-    });
-  } catch (error) {
-    if (timedOut && isAbortError(error)) {
-      throw new AgentServiceError(
-        `Agent service request timed out after ${timeoutMs}ms.`,
-        504,
-        { code: timeoutDetailsCode, path, timeoutMs },
-      );
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
+  for (let attempt = 0; ; attempt += 1) {
+    const controller = new AbortController();
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
 
-  if (!response.ok) {
-    let errorBody: unknown;
     try {
-      errorBody = await response.json();
-    } catch {
-      // ignore
+      const response = await fetch(url.toString(), {
+        ...fetchOptions,
+        headers: {
+          ...fetchOptions.headers,
+          Authorization: `Bearer ${AGENT_API_KEY}`,
+          "Content-Type": "application/json",
+          "X-Request-ID": requestId,
+        },
+        signal: controller.signal,
+      });
+
+      if (response.ok) return response;
+
+      if (attempt < retryDelays.length && isRetryableStatus(response.status)) {
+        await sleep(retryAfterMs(response) ?? retryDelays[attempt]);
+        continue;
+      }
+
+      let errorBody: unknown;
+      try {
+        errorBody = await response.json();
+      } catch {
+        // ignore
+      }
+
+      const errorDetails = extractErrorDetails(errorBody);
+      const message = extractErrorMessage(errorBody, `Agent service request failed: ${response.statusText}`);
+      const responseRequestId = response.headers.get("x-request-id") ?? requestId;
+      throw new AgentServiceError(message, response.status, errorDetails, responseRequestId);
+    } catch (error) {
+      if (error instanceof AgentServiceError) throw error;
+      if (timedOut && isAbortError(error)) {
+        throw new AgentServiceError(
+          `Agent service request timed out after ${timeoutMs}ms.`,
+          504,
+          { code: timeoutDetailsCode, path, timeoutMs },
+          requestId,
+        );
+      }
+      if (attempt < retryDelays.length) {
+        await sleep(retryDelays[attempt]);
+        continue;
+      }
+      throw new AgentServiceError(
+        "Agent service is unavailable.",
+        503,
+        undefined,
+        requestId,
+      );
+    } finally {
+      clearTimeout(timeout);
     }
-
-    const errorDetails = extractErrorDetails(errorBody);
-    const message = extractErrorMessage(errorBody, `Agent service request failed: ${response.statusText}`);
-
-    throw new AgentServiceError(message, response.status, errorDetails);
   }
-
-  return response;
 }
 
 export async function getStatus(): Promise<{
@@ -385,5 +426,75 @@ export async function listVerificationServicePoints(): Promise<
   const response = await agentFetch("/api/verifier/service-points", {
     timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
   });
+  return response.json();
+}
+
+export async function updateVerificationServicePoint(
+  servicePointId: string,
+  payload: { name?: string; vendorName?: string; active?: boolean },
+): Promise<{
+  id: string;
+  vendorId: string;
+  externalId: string;
+  name: string;
+  active: boolean;
+  verificationUrl: string;
+}> {
+  const response = await agentFetch(
+    `/api/verifier/service-points/${encodeURIComponent(servicePointId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+      timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
+    },
+  );
+  return response.json();
+}
+
+export type AgentVerificationResult = {
+  verificationRequestId: string;
+  checkoutId?: string;
+  status: "Pending" | "Approved" | "Declined" | "Expired" | "Failed";
+  failureCode?: string;
+  createdAt: string;
+  expiresAt: string;
+  completedAt?: string;
+};
+
+export type AgentInPersonVerificationDetails = Omit<AgentVerificationResult, "checkoutId"> & {
+  servicePointId: string;
+  servicePointName: string;
+  isVerified?: boolean;
+  attributes?: Record<string, string>;
+};
+
+export async function createCheckoutVerificationSession(payload: {
+  vendorId: string;
+  servicePointId: string;
+  checkoutId: string;
+}): Promise<AgentVerificationResult & { verificationUrl: string }> {
+  const response = await agentFetch("/api/verifier/checkout-sessions", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
+  });
+  return response.json();
+}
+
+export async function getVerificationResult(verificationRequestId: string): Promise<AgentVerificationResult> {
+  const response = await agentFetch(
+    `/api/verifier/proof-requests/${encodeURIComponent(verificationRequestId)}`,
+    { timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS },
+  );
+  return response.json();
+}
+
+export async function getInPersonVerificationDetails(
+  verificationRequestId: string,
+): Promise<AgentInPersonVerificationDetails> {
+  const response = await agentFetch(
+    `/api/verifier/proof-requests/${encodeURIComponent(verificationRequestId)}/details`,
+    { timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS },
+  );
   return response.json();
 }

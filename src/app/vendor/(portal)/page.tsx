@@ -4,19 +4,36 @@ import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { VendorApplicationLanding } from "@/features/vendors/VendorApplicationLanding";
 import { VendorVerificationOverview } from "@/features/vendors/VendorVerificationOverview";
+import { prisma } from "@/lib/db/prisma";
 import { requireVendorSession } from "@/lib/auth/session";
 import { getUniversityProfile } from "@/lib/university/profile";
 import { getVendorApplicationForUser } from "@/lib/vendors/applications";
+import { getApprovedVendorContextForUser } from "@/lib/vendors/context";
 import { getVendorVerificationStats, listRecentVendorVerifications } from "@/lib/vendors/verifications";
 
 export default async function VendorDashboardPage() {
   const session = await requireVendorSession();
-  const application = await getVendorApplicationForUser(session.user.id);
+  const context = await getApprovedVendorContextForUser(session.user.id);
 
-  if (application?.status === "APPROVED") {
+  if (context) {
+    const vendor = await prisma.vendorProfile.findUnique({
+      where: { id: context.vendorProfileId },
+      include: {
+        branches: {
+          where: context.role === "STAFF" ? { id: { in: context.branchIds } } : {},
+          orderBy: { name: "asc" },
+        },
+        defaultBranch: true,
+      },
+    });
+    if (!vendor) return null;
+    const displayBranch =
+      (vendor.defaultBranch && context.branchIds.includes(vendor.defaultBranch.id) ? vendor.defaultBranch : null) ??
+      vendor.branches[0] ??
+      null;
     const [stats, recentVerifications, universityProfile] = await Promise.all([
-      getVendorVerificationStats(application.vendorProfileId),
-      listRecentVendorVerifications(application.vendorProfileId),
+      getVendorVerificationStats(context.vendorProfileId, { branchIds: context.branchIds, inPersonOnly: true }),
+      listRecentVendorVerifications(context.vendorProfileId, 10, { branchIds: context.branchIds, inPersonOnly: true }),
       getUniversityProfile(),
     ]);
 
@@ -24,18 +41,26 @@ export default async function VendorDashboardPage() {
       <div className="space-y-6">
         <SectionHeader
           title={`Welcome, ${session.user.name}`}
-          description="Share your verification QR code with students so they can verify your service instantly."
+          description={context.role === "OWNER" ? "Monitor every branch or open one for its QR code and activity." : "Monitor verification activity for your assigned branches."}
         />
         <VendorVerificationOverview
-          companyName={application.vendorProfile.companyName}
-          verificationUrl={application.vendorProfile.verificationUrl}
+          companyName={displayBranch ? `${vendor.companyName} · ${displayBranch.name}` : vendor.companyName}
+          verificationUrl={displayBranch?.verificationUrl ?? null}
           stats={stats}
           recentVerifications={recentVerifications}
           supportEmail={universityProfile?.contactEmail}
         />
+        <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
+          <div className="border-b border-zinc-100 px-5 py-4"><h2 className="font-medium text-zinc-950">Branches</h2></div>
+          <div className="divide-y divide-zinc-100">
+            {vendor.branches.map((branch) => <Link className="flex items-center justify-between gap-3 px-5 py-4 hover:bg-zinc-50" href={`/vendor/branches/${branch.id}`} key={branch.id}><span><span className="font-medium text-zinc-950">{branch.name}</span><span className="ml-2 text-xs text-zinc-500">{branch.status.replaceAll("_", " ")}</span></span><span className="text-sm text-zinc-500">View branch</span></Link>)}
+          </div>
+        </section>
       </div>
     );
   }
+
+  const application = await getVendorApplicationForUser(session.user.id);
 
   const universityProfile = await getUniversityProfile();
 
@@ -83,7 +108,7 @@ export default async function VendorDashboardPage() {
       <VendorApplicationLanding
         universityName={universityProfile?.name}
         supportEmail={universityProfile?.contactEmail}
-        applicationStatus={application?.status}
+        applicationStatus={application?.status === "APPROVED" ? undefined : application?.status}
       />
     </div>
   );

@@ -1,20 +1,10 @@
 import QRCode from "qrcode";
 import { CheckCircle2, Mail, QrCode, ShieldCheck, SmartphoneNfc, UserCheck } from "lucide-react";
 
-import { Badge } from "@/components/ui/Badge";
 import { CopyButton, QrCodeActions } from "@/features/vendors/QrCodeActions";
+import { LiveVerificationList } from "@/features/vendors/LiveVerificationList";
 import { Metric } from "@/components/ui/Metric";
-import { formatDateTime } from "@/lib/formatters";
-import { parseVerificationAttributes } from "@/lib/vendors/verificationContract";
 import type { getVendorVerificationStats, listRecentVendorVerifications } from "@/lib/vendors/verifications";
-
-const STATUS_TONE = {
-  PENDING: "warning",
-  APPROVED: "success",
-  DECLINED: "danger",
-  EXPIRED: "danger",
-  FAILED: "danger",
-} as const;
 
 const HOW_IT_WORKS = [
   {
@@ -29,7 +19,7 @@ const HOW_IT_WORKS = [
   },
   {
     title: "You see the result here",
-    description: "Once they respond, the verified result and disclosed values appear in your history.",
+    description: "Once they respond, the approved or declined result appears in your history.",
     icon: ShieldCheck,
   },
 ];
@@ -157,42 +147,17 @@ export async function VendorVerificationOverview({
         <div className="border-b border-zinc-100 px-5 py-4">
           <h2 className="font-medium text-zinc-950">Recent verifications</h2>
         </div>
-        <div className="divide-y divide-zinc-100">
-          {recentVerifications.map((verification) => {
-            const attributes = Object.entries(parseVerificationAttributes(verification.attributes));
-
-            return (
-              <div className="space-y-3 px-5 py-4" key={verification.id}>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-zinc-900">
-                      {verification.servicePointName ?? "Student verification"}
-                    </p>
-                    <p className="text-xs text-zinc-500">
-                      {formatDateTime(verification.createdAt.toISOString())}
-                    </p>
-                  </div>
-                  <Badge tone={STATUS_TONE[verification.status]}>{verification.status}</Badge>
-                </div>
-                {attributes.length > 0 ? (
-                  <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {attributes.map(([name, value]) => (
-                      <div className="rounded-md bg-zinc-50 px-3 py-2" key={name}>
-                        <dt className="text-xs font-medium text-zinc-500">{name}</dt>
-                        <dd className="mt-0.5 break-words text-sm text-zinc-900">{value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                ) : null}
-              </div>
-            );
-          })}
-          {recentVerifications.length === 0 && (
-            <p className="px-5 py-6 text-sm text-zinc-500">
-              No verifications yet. Results will appear here once students start using your QR code.
-            </p>
-          )}
-        </div>
+        <LiveVerificationList initialItems={recentVerifications.map((verification) => ({
+          id: verification.id,
+          verificationRequestId: verification.verificationRequestId,
+          checkoutId: verification.checkoutId,
+          servicePointName: verification.servicePointName,
+          status: verification.status,
+          failureCode: verification.failureCode,
+          createdAt: verification.createdAt.toISOString(),
+          completedAt: verification.completedAt?.toISOString() ?? null,
+          latestDeliveryStatus: verification.deliveries[0]?.status ?? null,
+        }))} />
       </section>
 
       <section className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-white p-5">
