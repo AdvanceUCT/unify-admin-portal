@@ -30,7 +30,7 @@ const ALLOWED_MIME_TYPES = [
   "application/vnd.ms-excel",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ];
-const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 /** Step 1: creates or resumes a draft, then saves step 1 data. */
 export async function saveStep1Action(formData: FormData): Promise<Step1ActionResult> {
@@ -121,7 +121,7 @@ export async function uploadDocumentAction(formData: FormData): Promise<UploadAc
   if (file.size > MAX_FILE_BYTES) {
     return {
       ok: false,
-      error: "This file is too large. Please upload a file that's 10 MB or smaller.",
+      error: "This file is too large. Please upload a file that's 5 MB or smaller.",
     };
   }
 

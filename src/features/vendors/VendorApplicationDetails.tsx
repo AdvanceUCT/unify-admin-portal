@@ -208,20 +208,23 @@ export function VendorApplicationDetails({
               const signedUrl = documentUrls?.[key];
               const filename = filenameFromStoragePath(path);
               return (
-                <div key={key}>
+                <div key={key} className="min-w-0">
                   <dt className="font-medium text-zinc-900">{label}</dt>
-                  <dd className="mt-0.5">
+                  <dd className="mt-0.5 min-w-0">
                     {signedUrl ? (
                       <a
-                        className="text-zinc-700 underline underline-offset-2 hover:text-zinc-950"
+                        className="block truncate text-zinc-700 underline underline-offset-2 hover:text-zinc-950"
                         href={signedUrl}
                         rel="noopener noreferrer"
                         target="_blank"
+                        title={filename}
                       >
                         {filename}
                       </a>
                     ) : (
-                      <span className="text-emerald-600">{filename || "Uploaded"}</span>
+                      <span className="block truncate text-emerald-600" title={filename || "Uploaded"}>
+                        {filename || "Uploaded"}
+                      </span>
                     )}
                   </dd>
                 </div>

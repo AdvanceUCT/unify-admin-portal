@@ -203,7 +203,7 @@ export function Step4Documents({
       <div>
         <h2 className="text-lg font-semibold">Supporting documents</h2>
         <p className="mt-1 text-sm text-zinc-600">
-          Upload the required documents. Accepted formats: PDF, Word, Excel, JPEG, PNG (max 10 MB
+          Upload the required documents. Accepted formats: PDF, Word, Excel, JPEG, PNG (max 5 MB
           each).
         </p>
       </div>
