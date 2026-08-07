@@ -227,7 +227,7 @@ export default async function VendorsPage({
                       </div>
                       <div className="flex shrink-0 items-start gap-2">
                         <Link
-                          href={`/vendors/${application.id}`}
+                          href={`/vendors/${application.id}?tab=applications`}
                           className="inline-flex h-9 items-center rounded-md border border-zinc-300 px-3 text-sm font-medium"
                         >
                           View
