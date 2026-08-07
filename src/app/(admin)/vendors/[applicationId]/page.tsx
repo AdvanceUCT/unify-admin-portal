@@ -7,7 +7,12 @@ import { VendorApplicationDetails } from "@/features/vendors/VendorApplicationDe
 import { requireRole } from "@/lib/auth/session";
 import { getDocumentSignedUrl } from "@/lib/storage/supabase";
 import { getVendorApplicationById } from "@/lib/vendors/applications";
-import { revokeVendorApplicationAction } from "../actions";
+import {
+  approveVendorApplicationAction,
+  rejectVendorApplicationAction,
+  revokeVendorApplicationAction,
+} from "../actions";
+import { RejectForm } from "../RejectForm";
 import { RevokeButton } from "../RevokeButton";
 import { MarkApplicationViewed } from "./MarkApplicationViewed";
 
@@ -80,6 +85,21 @@ export default async function VendorApplicationDetailPage({
       </div>
 
       <VendorApplicationDetails application={application} documentUrls={documentUrls} />
+
+      {application.status === "PENDING" && (
+        <div className="flex flex-col items-center gap-3 border-t border-zinc-200 pt-6 sm:flex-row sm:justify-center">
+          <form action={approveVendorApplicationAction}>
+            <input name="applicationId" type="hidden" value={application.id} />
+            <button
+              className="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50 sm:w-auto"
+              type="submit"
+            >
+              Approve
+            </button>
+          </form>
+          <RejectForm action={rejectVendorApplicationAction} applicationId={application.id} />
+        </div>
+      )}
     </div>
   );
 }
