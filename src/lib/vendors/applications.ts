@@ -39,7 +39,19 @@ const step1Schema = z.object({
     .trim()
     .regex(/^\d{4}\/\d{6}\/\d{2}$/, "Registration number must be in the format YYYY/NNNNNN/NN"),
   serviceCategory: z.string().trim().min(1, "Service category is required"),
-  website: z.string().trim().url("Website must be a valid URL").optional().or(z.literal("")),
+  website: z
+    .string()
+    .trim()
+    .url("Website must be a valid URL")
+    .refine((value) => {
+      try {
+        return ["http:", "https:"].includes(new URL(value).protocol);
+      } catch {
+        return false;
+      }
+    }, "Website must start with http:// or https://")
+    .optional()
+    .or(z.literal("")),
   tradingName: z.string().trim().max(200, "Trading name must be 200 characters or fewer").optional(),
   organisationType: z.string().trim().min(1, "Organisation type is required"),
   physicalAddress: z
