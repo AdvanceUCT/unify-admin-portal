@@ -14,12 +14,6 @@ import { sendVendorApplicationSubmittedEmail } from "@/lib/email/vendor-applicat
 import { ensureDefaultVendorBranch } from "@/lib/vendors/branches";
 import { OTHER_VERIFICATION_REASON_VALUE, VERIFICATION_REASON_VALUES } from "@/lib/vendors/verification-reasons";
 
-const ACTIVE_APPLICATION_STATUSES = [
-  VendorApplicationStatus.DRAFT,
-  VendorApplicationStatus.PENDING,
-  VendorApplicationStatus.APPROVED,
-] as const;
-
 const DOCUMENT_FIELDS = [
   "docRegistrationCertificate",
   "docProofOfAddress",
@@ -112,31 +106,11 @@ const step5Schema = z.object({
   }),
 });
 
-const createApplicationSchema = z.object({
-  companyName: z.string().trim().min(1, "Company name is required"),
-  companyRegistrationNumber: z.string().trim().min(1, "Company registration number is required"),
-  serviceCategory: z.string().trim().min(1, "Service category is required"),
-  website: z.string().trim().url("Website must be a valid URL").optional().or(z.literal("")),
-  description: z
-    .string()
-    .trim()
-    .min(1, "Service description is required")
-    .refine(
-      (value) => value.split(/\s+/).filter(Boolean).length <= 200,
-      "Description must be 200 words or fewer",
-    ),
-  contactPersonName: z.string().trim().min(1, "Contact person name is required"),
-  contactEmail: z.string().trim().email("Contact email must be valid"),
-  justification: z.string().trim().min(1, "Justification is required"),
-});
-
 const revokeApplicationSchema = z.object({
   applicationId: z.string().trim().min(1),
   reviewerId: z.string().trim().min(1),
   notes: z.string().trim().min(1, "A revocation reason is required").max(500),
 });
-
-export type CreateVendorApplicationInput = z.input<typeof createApplicationSchema>;
 
 function hasPrismaErrorCode(error: unknown, code: string) {
   return (
@@ -169,76 +143,6 @@ function activeApplicationError(status?: VendorApplicationStatus) {
   return status === VendorApplicationStatus.APPROVED
     ? new Error("Your verifier application is already approved.")
     : new Error("You already have an application under review.");
-}
-
-/**
- * Stores a verifier application as an immutable snapshot. The live vendor
- * profile is only updated after an administrator approves the application.
- */
-export async function createVendorApplication({
-  userId,
-  input,
-}: {
-  userId: string;
-  input: CreateVendorApplicationInput;
-}) {
-  const data = createApplicationSchema.parse(input);
-
-  try {
-    return await runSerializableTransaction(async (transaction) => {
-      const vendorProfile = await transaction.vendorProfile.findUnique({
-        where: { userId },
-      });
-
-      if (!vendorProfile) {
-        throw new Error("No vendor profile found for this account.");
-      }
-
-      const existingApplication = await transaction.vendorApplication.findFirst({
-        where: {
-          vendorProfileId: vendorProfile.id,
-          status: { in: [...ACTIVE_APPLICATION_STATUSES] },
-        },
-        select: { status: true },
-      });
-
-      if (existingApplication) {
-        throw activeApplicationError(existingApplication.status);
-      }
-
-      const application = await transaction.vendorApplication.create({
-        data: {
-          vendorProfileId: vendorProfile.id,
-          justification: data.justification,
-          companyRegistrationNumber: data.companyRegistrationNumber,
-          snapshotCompanyName: data.companyName,
-          snapshotServiceCategory: data.serviceCategory,
-          snapshotContactEmail: data.contactEmail,
-          snapshotContactPersonName: data.contactPersonName,
-          snapshotWebsite: data.website || null,
-        },
-      });
-
-      await writeAuditLog(
-        {
-          action: AuditAction.VENDOR_APPLICATION_SUBMITTED,
-          actorId: userId,
-          targetType: "vendor_application",
-          targetId: application.id,
-          meta: { vendorProfileId: vendorProfile.id },
-        },
-        transaction,
-      );
-
-      return application;
-    });
-  } catch (error) {
-    if (hasPrismaErrorCode(error, "P2002")) {
-      throw activeApplicationError();
-    }
-
-    throw error;
-  }
 }
 
 export async function getVendorApplicationForUser(userId: string) {
