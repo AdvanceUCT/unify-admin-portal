@@ -162,7 +162,9 @@ Key variables to configure:
 | `VENDOR_API_KEY_PEPPER` | Random secret of at least 32 characters used to hash vendor API keys |
 | `VENDOR_WEBHOOK_ENCRYPTION_KEY` | Base64-encoded 32-byte key used to encrypt vendor webhook signing secrets |
 | `RESEND_API_KEY` | Resend API key for production email delivery |
-| `CREDENTIAL_EMAIL_DELIVERY_MODE` | `"resend"` for real emails, `"log"` to print to console |
+| `CREDENTIAL_EMAIL_DELIVERY_MODE` | `"resend"` for real emails, `"console"` to print to console |
+| `VENDOR_HELP_EMAIL_FROM` | Verified Resend sender for vendor help request emails; use a domain verified in Resend, e.g. the same domain as `CREDENTIAL_EMAIL_FROM`. Vendor account email is used as `Reply-To` |
+| `VENDOR_HELP_EMAIL_DELIVERY_MODE` | `"resend"` for real vendor help emails, `"console"` to print to console |
 | `SUPABASE_URL` | Supabase project URL — used for vendor document storage (optional if not using vendor applications) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key — used server-side to upload and sign vendor documents |
 
