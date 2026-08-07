@@ -1,18 +1,22 @@
 import Link from "next/link";
 import { forbidden } from "next/navigation";
-import { ClipboardList } from "lucide-react";
+import { ClipboardList, Info } from "lucide-react";
 
 import { SectionHeader } from "@/components/layout/SectionHeader";
+import { Badge } from "@/components/ui/Badge";
 import { VendorApplicationDetails } from "@/features/vendors/VendorApplicationDetails";
+import { VendorApplicationHistory } from "@/features/vendors/VendorApplicationHistory";
+import { VendorApplicationSummary } from "@/features/vendors/VendorApplicationSummary";
 import { TOTAL_STEPS, VendorApplicationWizard } from "@/features/vendors/application/VendorApplicationWizard";
 import type { DraftApplicationData } from "@/features/vendors/application/VendorApplicationWizard";
 import { requireVendorSession } from "@/lib/auth/session";
-import { filenameFromStoragePath } from "@/lib/storage/supabase";
+import { formatDateTime } from "@/lib/formatters";
+import { filenameFromStoragePath, getDocumentSignedUrl } from "@/lib/storage/supabase";
+import { getApprovedVendorContextForUser } from "@/lib/vendors/context";
 import {
   computeDraftProgress,
-  getVendorApplicationForUser,
+  listVendorApplicationsForUser,
 } from "@/lib/vendors/applications";
-import { getApprovedVendorContextForUser } from "@/lib/vendors/context";
 
 const DOCUMENT_FIELD_KEYS = [
   "docRegistrationCertificate",
@@ -32,7 +36,11 @@ export default async function VendorApplicationPage({
   const session = await requireVendorSession();
   const context = await getApprovedVendorContextForUser(session.user.id);
   if (context?.role === "STAFF") forbidden();
-  const application = await getVendorApplicationForUser(session.user.id);
+  const applications = await listVendorApplicationsForUser(session.user.id);
+  const application = applications[0] ?? null;
+  const history = applications.slice(1);
+  const previousDecision =
+    applications.find((a) => a.status === "REJECTED" || a.status === "REVOKED") ?? null;
 
   if (!application && start !== "1") {
     return (
@@ -77,11 +85,13 @@ export default async function VendorApplicationPage({
         : null;
 
     let initialStep: number;
+    let initialUnlockedStep: number;
     if (application?.status === "DRAFT") {
-      const maxReachableStep = computeDraftProgress(application);
-      initialStep = Math.min(validRequestedStep ?? maxReachableStep, maxReachableStep);
+      initialUnlockedStep = computeDraftProgress(application);
+      initialStep = Math.min(validRequestedStep ?? initialUnlockedStep, initialUnlockedStep);
     } else {
-      initialStep = validRequestedStep ?? 1;
+      initialUnlockedStep = 1;
+      initialStep = 1;
     }
 
     const initialData: DraftApplicationData = {
@@ -123,15 +133,81 @@ export default async function VendorApplicationPage({
           title="Verifier application"
           description="Complete all steps to apply for credential verification access."
         />
+        {previousDecision ? (
+          <section className="overflow-hidden rounded-lg border border-zinc-200 border-l-4 border-l-rose-400 bg-white">
+            <div className="flex items-center gap-3 border-b border-zinc-200 bg-zinc-50 px-5 py-3.5">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-rose-50 text-rose-500">
+                <Info className="size-5" aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-medium text-zinc-950">
+                    {previousDecision.status === "REJECTED"
+                      ? "Your previous application was not approved"
+                      : "Your verifier access was revoked"}
+                  </p>
+                  <Badge tone="danger">
+                    {previousDecision.status === "REJECTED" ? "Declined" : "Revoked"}
+                  </Badge>
+                </div>
+                <p className="text-xs text-zinc-500">
+                  {formatDateTime(
+                    (
+                      (previousDecision.status === "REJECTED"
+                        ? previousDecision.reviewedAt
+                        : previousDecision.revokedAt) ?? previousDecision.updatedAt
+                    ).toISOString(),
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="px-5 py-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                Reason given
+              </p>
+              <blockquote className="mt-2 border-l-2 border-rose-300 pl-3 text-sm leading-6 text-zinc-800">
+                {(previousDecision.status === "REJECTED"
+                  ? previousDecision.reviewNotes
+                  : previousDecision.revokedNotes) ?? "No reason was provided."}
+              </blockquote>
+
+              <p className="mt-4 text-xs text-zinc-500">
+                Your previous details, including uploaded documents, have been carried over below —
+                update anything that needs to change before resubmitting.
+              </p>
+            </div>
+          </section>
+        ) : null}
         <VendorApplicationWizard
           initialStep={initialStep}
-          initialApplicationId={application?.id ?? null}
+          initialUnlockedStep={initialUnlockedStep}
+          initialApplicationId={application?.status === "DRAFT" ? application.id : null}
           initialData={initialData}
           initialFilenames={initialFilenames}
         />
+        <VendorApplicationHistory applications={history} />
       </div>
     );
   }
+
+  const [documentUrls, logoUrl] = await Promise.all([
+    (async () => {
+      const urls: Record<string, string> = {};
+      await Promise.all(
+        DOCUMENT_FIELD_KEYS.map(async (key) => {
+          const path = application[key];
+          if (!path) return;
+          const url = await getDocumentSignedUrl(path);
+          if (url) urls[key] = url;
+        }),
+      );
+      return urls;
+    })(),
+    application.vendorProfile.logoPath
+      ? getDocumentSignedUrl(application.vendorProfile.logoPath)
+      : Promise.resolve(null),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -139,7 +215,16 @@ export default async function VendorApplicationPage({
         title="Verifier application"
         description="Apply to become an approved credential verifier."
       />
-      <VendorApplicationDetails application={application} />
+      <VendorApplicationSummary
+        companyName={application.snapshotCompanyName ?? application.vendorProfile.companyName}
+        logoUrl={logoUrl}
+        status={application.status as "PENDING" | "APPROVED"}
+        createdAt={application.createdAt}
+        decidedAt={application.reviewedAt}
+      >
+        <VendorApplicationDetails application={application} documentUrls={documentUrls} />
+      </VendorApplicationSummary>
+      <VendorApplicationHistory applications={history} />
     </div>
   );
 }

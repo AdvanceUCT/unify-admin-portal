@@ -4,11 +4,14 @@ import { AuditAction, VendorApplicationStatus } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit/audit";
 import {
   assertDraftDocumentUploadAllowed,
+  clearDraftDocumentPath,
   createVendorApplication,
   ensureVendorVerificationServicePoint,
+  getOrCreateDraftApplication,
   listDecidedVendorApplications,
   reviewVendorApplication,
   revokeVendorApplication,
+  saveDraftDocumentPath,
 } from "@/lib/vendors/applications";
 
 const agentClient = vi.hoisted(() => ({
@@ -40,11 +43,13 @@ const database = vi.hoisted(() => {
       update: vi.fn(),
     },
     vendorApplication: {
+      count: vi.fn(),
       findFirst: vi.fn(),
       findMany: vi.fn(),
       findUnique: vi.fn(),
       findUniqueOrThrow: vi.fn(),
       create: vi.fn(),
+      update: vi.fn(),
       updateMany: vi.fn(),
     },
     user: {
@@ -198,6 +203,56 @@ describe("assertDraftDocumentUploadAllowed", () => {
         status: VendorApplicationStatus.DRAFT,
       },
       select: { id: true },
+    });
+  });
+});
+
+describe("draft application document paths", () => {
+  const carriedPath = "app/rejected_1/docProofOfAddress/proof.pdf";
+
+  it("does not return a replaced path for deletion while another application references it", async () => {
+    database.transaction.vendorApplication.findFirst.mockResolvedValueOnce({
+      id: "draft_1",
+      docProofOfAddress: carriedPath,
+    });
+    database.transaction.vendorApplication.update.mockResolvedValueOnce({ id: "draft_1" });
+    database.transaction.vendorApplication.count.mockResolvedValueOnce(1);
+
+    await expect(
+      saveDraftDocumentPath(
+        "draft_1",
+        "user_1",
+        "docProofOfAddress",
+        "app/draft_1/docProofOfAddress/new.pdf",
+      ),
+    ).resolves.toEqual({ previousPath: null });
+  });
+
+  it("does not return a cleared path for deletion while another application references it", async () => {
+    database.transaction.vendorApplication.findFirst.mockResolvedValueOnce({
+      id: "draft_1",
+      docProofOfAddress: carriedPath,
+    });
+    database.transaction.vendorApplication.update.mockResolvedValueOnce({ id: "draft_1" });
+    database.transaction.vendorApplication.count.mockResolvedValueOnce(1);
+
+    await expect(
+      clearDraftDocumentPath("draft_1", "user_1", "docProofOfAddress"),
+    ).resolves.toEqual({ removedPath: null });
+  });
+
+  it("returns an unshared path so its storage object can be deleted", async () => {
+    database.transaction.vendorApplication.findFirst.mockResolvedValueOnce({
+      id: "draft_1",
+      docProofOfAddress: "app/draft_1/docProofOfAddress/old.pdf",
+    });
+    database.transaction.vendorApplication.update.mockResolvedValueOnce({ id: "draft_1" });
+    database.transaction.vendorApplication.count.mockResolvedValueOnce(0);
+
+    await expect(
+      clearDraftDocumentPath("draft_1", "user_1", "docProofOfAddress"),
+    ).resolves.toEqual({
+      removedPath: "app/draft_1/docProofOfAddress/old.pdf",
     });
   });
 });
@@ -500,6 +555,95 @@ describe("revokeVendorApplication", () => {
       }),
       database.transaction,
     );
+  });
+});
+
+describe("getOrCreateDraftApplication", () => {
+  it("creates a blank draft when there is no prior decision to carry forward", async () => {
+    database.transaction.vendorProfile.findUnique.mockResolvedValueOnce(vendorProfile);
+    database.transaction.vendorApplication.findFirst
+      .mockResolvedValueOnce(null) // existingActive
+      .mockResolvedValueOnce(null) // existingDraft
+      .mockResolvedValueOnce(null); // previousDecision
+    database.transaction.vendorApplication.create.mockResolvedValueOnce({ id: "draft_1" });
+
+    await getOrCreateDraftApplication("user_1");
+
+    expect(database.transaction.vendorApplication.create).toHaveBeenCalledWith({
+      data: { vendorProfileId: "profile_1", status: VendorApplicationStatus.DRAFT },
+    });
+  });
+
+  it("carries forward details from the most recent rejection, but not the declaration", async () => {
+    const rejectedApplication = {
+      id: "rejected_1",
+      justification: "Need to verify students",
+      companyRegistrationNumber: "12345",
+      snapshotCompanyName: "Acme Corp",
+      snapshotServiceCategory: "Healthcare",
+      snapshotContactEmail: "jane@example.com",
+      snapshotContactPersonName: "Jane Doe",
+      snapshotWebsite: "https://example.com",
+      tradingName: "Acme",
+      organisationType: "Private company",
+      physicalAddress: "1 Main Street",
+      postalAddress: null,
+      contactJobTitle: "Ops Manager",
+      contactPhone: "0821234567",
+      contactEmployeeNumber: null,
+      preferredContactMethod: "email",
+      additionalInfo: null,
+      docRegistrationCertificate: "app/rejected_1/docRegistrationCertificate/cert.pdf",
+      docProofOfAddress: "app/rejected_1/docProofOfAddress/proof.pdf",
+      docRepresentativeId: "app/rejected_1/docRepresentativeId/id.pdf",
+      docLetterOfAuthorisation: "app/rejected_1/docLetterOfAuthorisation/letter.pdf",
+      docTaxCompliance: null,
+      docBusinessLicence: null,
+      declarationAccepted: true,
+      declarationAcceptedAt: new Date("2026-05-01T00:00:00.000Z"),
+    };
+
+    database.transaction.vendorProfile.findUnique.mockResolvedValueOnce(vendorProfile);
+    database.transaction.vendorApplication.findFirst
+      .mockResolvedValueOnce(null) // existingActive
+      .mockResolvedValueOnce(null) // existingDraft
+      .mockResolvedValueOnce(rejectedApplication); // previousDecision
+    database.transaction.vendorApplication.create.mockResolvedValueOnce({ id: "draft_2" });
+
+    await getOrCreateDraftApplication("user_1");
+
+    expect(database.transaction.vendorApplication.create).toHaveBeenCalledWith({
+      data: {
+        vendorProfileId: "profile_1",
+        status: VendorApplicationStatus.DRAFT,
+        justification: rejectedApplication.justification,
+        companyRegistrationNumber: rejectedApplication.companyRegistrationNumber,
+        snapshotCompanyName: rejectedApplication.snapshotCompanyName,
+        snapshotServiceCategory: rejectedApplication.snapshotServiceCategory,
+        snapshotContactEmail: rejectedApplication.snapshotContactEmail,
+        snapshotContactPersonName: rejectedApplication.snapshotContactPersonName,
+        snapshotWebsite: rejectedApplication.snapshotWebsite,
+        tradingName: rejectedApplication.tradingName,
+        organisationType: rejectedApplication.organisationType,
+        physicalAddress: rejectedApplication.physicalAddress,
+        postalAddress: rejectedApplication.postalAddress,
+        contactJobTitle: rejectedApplication.contactJobTitle,
+        contactPhone: rejectedApplication.contactPhone,
+        contactEmployeeNumber: rejectedApplication.contactEmployeeNumber,
+        preferredContactMethod: rejectedApplication.preferredContactMethod,
+        additionalInfo: rejectedApplication.additionalInfo,
+        docRegistrationCertificate: rejectedApplication.docRegistrationCertificate,
+        docProofOfAddress: rejectedApplication.docProofOfAddress,
+        docRepresentativeId: rejectedApplication.docRepresentativeId,
+        docLetterOfAuthorisation: rejectedApplication.docLetterOfAuthorisation,
+        docTaxCompliance: rejectedApplication.docTaxCompliance,
+        docBusinessLicence: rejectedApplication.docBusinessLicence,
+      },
+    });
+
+    const createCallData = database.transaction.vendorApplication.create.mock.calls[0][0].data;
+    expect(createCallData).not.toHaveProperty("declarationAccepted");
+    expect(createCallData).not.toHaveProperty("declarationAcceptedAt");
   });
 });
 

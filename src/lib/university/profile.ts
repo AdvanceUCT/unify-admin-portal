@@ -31,3 +31,20 @@ export async function upsertUniversityProfile(
     },
   });
 }
+
+/**
+ * Updates an existing university profile's editable settings fields.
+ *
+ * @param id - The ID of the university profile to update.
+ * @param data - The fields to update.
+ * @returns The updated university profile.
+ */
+export async function updateUniversityProfile(
+  id: string,
+  data: Pick<UniversityProfile, "name" | "abbreviation" | "contactEmail" | "websiteUrl">,
+) {
+  return prisma.universityProfile.update({
+    where: { id },
+    data,
+  });
+}

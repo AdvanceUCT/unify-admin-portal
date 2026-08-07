@@ -235,6 +235,31 @@ export async function getVendorApplicationForUser(userId: string) {
   });
 }
 
+/** All applications a vendor has ever submitted, most recent first. */
+export async function listVendorApplicationsForUser(userId: string) {
+  const vendorProfile = await prisma.vendorProfile.findUnique({
+    where: { userId },
+  });
+
+  if (!vendorProfile) {
+    return [];
+  }
+
+  return prisma.vendorApplication.findMany({
+    where: { vendorProfileId: vendorProfile.id },
+    include: { vendorProfile: true },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+/** Fetches a single application, scoped to the requesting vendor so one vendor can't view another's by ID. */
+export async function getVendorApplicationByIdForUser(applicationId: string, userId: string) {
+  return prisma.vendorApplication.findFirst({
+    where: { id: applicationId, vendorProfile: { userId } },
+    include: { vendorProfile: true },
+  });
+}
+
 export async function getVendorApplicationById(applicationId: string) {
   return prisma.vendorApplication.findUnique({
     where: { id: applicationId },
@@ -569,8 +594,49 @@ export async function getOrCreateDraftApplication(userId: string) {
         return existingDraft;
       }
 
+      // Resubmitting after a rejection/revocation: carry the previous submission
+      // forward so the vendor only has to fix what the university flagged, instead
+      // of starting over (including re-uploading documents that are still valid).
+      const previousDecision = await transaction.vendorApplication.findFirst({
+        where: {
+          vendorProfileId: vendorProfile.id,
+          status: { in: [VendorApplicationStatus.REJECTED, VendorApplicationStatus.REVOKED] },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
       return transaction.vendorApplication.create({
-        data: { vendorProfileId: vendorProfile.id, status: VendorApplicationStatus.DRAFT },
+        data: {
+          vendorProfileId: vendorProfile.id,
+          status: VendorApplicationStatus.DRAFT,
+          ...(previousDecision
+            ? {
+                justification: previousDecision.justification,
+                companyRegistrationNumber: previousDecision.companyRegistrationNumber,
+                snapshotCompanyName: previousDecision.snapshotCompanyName,
+                snapshotServiceCategory: previousDecision.snapshotServiceCategory,
+                snapshotContactEmail: previousDecision.snapshotContactEmail,
+                snapshotContactPersonName: previousDecision.snapshotContactPersonName,
+                snapshotWebsite: previousDecision.snapshotWebsite,
+                tradingName: previousDecision.tradingName,
+                organisationType: previousDecision.organisationType,
+                physicalAddress: previousDecision.physicalAddress,
+                postalAddress: previousDecision.postalAddress,
+                contactJobTitle: previousDecision.contactJobTitle,
+                contactPhone: previousDecision.contactPhone,
+                contactEmployeeNumber: previousDecision.contactEmployeeNumber,
+                preferredContactMethod: previousDecision.preferredContactMethod,
+                additionalInfo: previousDecision.additionalInfo,
+                docRegistrationCertificate: previousDecision.docRegistrationCertificate,
+                docProofOfAddress: previousDecision.docProofOfAddress,
+                docRepresentativeId: previousDecision.docRepresentativeId,
+                docLetterOfAuthorisation: previousDecision.docLetterOfAuthorisation,
+                docTaxCompliance: previousDecision.docTaxCompliance,
+                docBusinessLicence: previousDecision.docBusinessLicence,
+                // Declaration must be re-affirmed for each new submission.
+              }
+            : {}),
+        },
       });
     });
   } catch (error) {
@@ -658,6 +724,23 @@ export async function saveDraftApplication(
   }
 }
 
+/**
+ * True if another application row (e.g. the rejected/revoked application a draft was
+ * resubmitted from) still points at this storage path, so it must not be deleted.
+ */
+async function isDocumentPathReferencedElsewhere(
+  path: string,
+  excludeApplicationId: string,
+): Promise<boolean> {
+  const count = await prisma.vendorApplication.count({
+    where: {
+      id: { not: excludeApplicationId },
+      OR: DOCUMENT_FIELDS.map((field) => ({ [field]: path })),
+    },
+  });
+  return count > 0;
+}
+
 /** Saves a single document storage path after a successful upload. Returns the path it replaced, if any. */
 export async function saveDraftDocumentPath(
   applicationId: string,
@@ -682,6 +765,10 @@ export async function saveDraftDocumentPath(
   });
 
   const previousPath = application[documentField] as string | null;
+  if (previousPath && (await isDocumentPathReferencedElsewhere(previousPath, applicationId))) {
+    return { previousPath: null };
+  }
+
   return { previousPath };
 }
 
@@ -729,6 +816,10 @@ export async function clearDraftDocumentPath(
     where: { id: applicationId },
     data: { [documentField]: null },
   });
+
+  if (await isDocumentPathReferencedElsewhere(removedPath, applicationId)) {
+    return { removedPath: null };
+  }
 
   return { removedPath };
 }
