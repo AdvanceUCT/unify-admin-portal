@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/Badge";
 import { formatDateTime } from "@/lib/formatters";
 import { filenameFromStoragePath } from "@/lib/storage/supabase";
+import { formatVerificationReasons } from "@/lib/vendors/verification-reasons";
 
 type DocumentUrls = Partial<Record<
   | "docRegistrationCertificate"
@@ -17,7 +18,8 @@ type VendorApplicationDetailsProps = {
     id: string;
     status: "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "REVOKED";
     companyRegistrationNumber: string | null;
-    justification: string | null;
+    verificationReasons: string[];
+    otherVerificationReason: string | null;
     createdAt: Date;
     updatedAt: Date;
     reviewedAt: Date | null;
@@ -180,11 +182,11 @@ export function VendorApplicationDetails({
       )}
 
       {/* Verification requirements */}
-      {application.justification && (
+      {application.verificationReasons.length > 0 && (
         <div className="rounded-lg border border-zinc-200 bg-white p-4">
-          <h3 className="mb-2 text-sm font-semibold text-zinc-800">Purpose for verification</h3>
+          <h3 className="mb-2 text-sm font-semibold text-zinc-800">Reasons for verification</h3>
           <p className="text-sm text-zinc-600 whitespace-pre-line">
-            {application.justification}
+            {formatVerificationReasons(application.verificationReasons, application.otherVerificationReason)}
           </p>
         </div>
       )}

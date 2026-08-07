@@ -71,10 +71,10 @@ export async function saveDraftStepAction(formData: FormData): Promise<StepActio
     for (const [key, value] of formData.entries()) {
       if (key === "applicationId" || key === "step") continue;
 
-      // requestedScopes comes through as multiple entries with the same key
-      if (key === "requestedScopes") {
-        const existing = rawData["requestedScopes"];
-        rawData["requestedScopes"] = Array.isArray(existing)
+      // verificationReasons comes through as multiple entries with the same key
+      if (key === "verificationReasons") {
+        const existing = rawData["verificationReasons"];
+        rawData["verificationReasons"] = Array.isArray(existing)
           ? [...existing, String(value)]
           : [String(value)];
       } else {
@@ -85,6 +85,11 @@ export async function saveDraftStepAction(formData: FormData): Promise<StepActio
     // declarationAccepted comes as "on" from a checkbox
     if (step === 5) {
       rawData["declarationAccepted"] = rawData["declarationAccepted"] === "on" ? true : undefined;
+    }
+
+    // No verificationReasons checked means the key is absent from the form data entirely
+    if (step === 3 && !("verificationReasons" in rawData)) {
+      rawData["verificationReasons"] = [];
     }
 
     await saveDraftApplication(applicationId, session.user.id, step, rawData);

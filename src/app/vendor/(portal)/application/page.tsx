@@ -99,7 +99,8 @@ export default async function VendorApplicationPage({
       contactPhone: application?.contactPhone ?? "",
       contactEmployeeNumber: application?.contactEmployeeNumber ?? "",
       preferredContactMethod: application?.preferredContactMethod ?? "",
-      justification: application?.justification ?? "",
+      verificationReasons: application?.verificationReasons ?? [],
+      otherVerificationReason: application?.otherVerificationReason ?? "",
       additionalInfo: application?.additionalInfo ?? "",
 
       docRegistrationCertificate: application?.docRegistrationCertificate ?? null,

@@ -12,6 +12,7 @@ import { sendVendorApplicationRejectedEmail } from "@/lib/email/vendor-applicati
 import { sendVendorApplicationRevokedEmail } from "@/lib/email/vendor-application-revoked";
 import { sendVendorApplicationSubmittedEmail } from "@/lib/email/vendor-application-submitted";
 import { ensureDefaultVendorBranch } from "@/lib/vendors/branches";
+import { OTHER_VERIFICATION_REASON_VALUE, VERIFICATION_REASON_VALUES } from "@/lib/vendors/verification-reasons";
 
 const ACTIVE_APPLICATION_STATUSES = [
   VendorApplicationStatus.DRAFT,
@@ -79,14 +80,31 @@ const step2Schema = z.object({
   preferredContactMethod: z.enum(["email", "phone"]),
 });
 
-const step3Schema = z.object({
-  justification: z
-    .string()
-    .trim()
-    .min(1, "Purpose for verification is required")
-    .max(2000, "Purpose must be 2000 characters or fewer"),
-  additionalInfo: z.string().trim().max(2000, "Additional information must be 2000 characters or fewer").optional(),
-});
+const step3Schema = z
+  .object({
+    verificationReasons: z
+      .array(z.string().trim().min(1))
+      .min(1, "Select at least one reason for requesting verification access")
+      .refine(
+        (values) => values.every((value) => VERIFICATION_REASON_VALUES.includes(value)),
+        "Select a valid reason for requesting verification access",
+      ),
+    otherVerificationReason: z
+      .string()
+      .trim()
+      .max(500, "Other reason must be 500 characters or fewer")
+      .optional(),
+    additionalInfo: z.string().trim().max(2000, "Additional information must be 2000 characters or fewer").optional(),
+  })
+  .refine(
+    (data) =>
+      !data.verificationReasons.includes(OTHER_VERIFICATION_REASON_VALUE) ||
+      Boolean(data.otherVerificationReason),
+    {
+      message: "Please describe your other reason for requesting verification access",
+      path: ["otherVerificationReason"],
+    },
+  );
 
 const step5Schema = z.object({
   declarationAccepted: z.literal(true, {
@@ -699,7 +717,10 @@ export async function saveDraftApplication(
       return await prisma.vendorApplication.update({
         where: { id: applicationId },
         data: {
-          justification: d.justification,
+          verificationReasons: d.verificationReasons,
+          otherVerificationReason: d.verificationReasons.includes(OTHER_VERIFICATION_REASON_VALUE)
+            ? (d.otherVerificationReason ?? null)
+            : null,
           additionalInfo: d.additionalInfo || null,
         },
       });
@@ -839,7 +860,7 @@ export async function submitDraftApplication(applicationId: string, userId: stri
     if (!app.contactJobTitle) missing.push("job title");
     if (!app.contactPhone) missing.push("phone number");
     if (!app.preferredContactMethod) missing.push("preferred contact method");
-    if (!app.justification) missing.push("purpose for verification");
+    if (app.verificationReasons.length === 0) missing.push("reason for requesting verification access");
     if (!app.docRegistrationCertificate) missing.push("registration certificate");
     if (!app.docProofOfAddress) missing.push("proof of address");
     if (!app.docRepresentativeId) missing.push("representative ID");
@@ -896,7 +917,7 @@ export async function submitDraftApplication(applicationId: string, userId: stri
 export function computeDraftProgress(application: {
   snapshotCompanyName: string | null;
   snapshotContactPersonName: string | null;
-  justification: string | null;
+  verificationReasons: string[];
   docRegistrationCertificate: string | null;
   docProofOfAddress: string | null;
   docRepresentativeId: string | null;
@@ -905,7 +926,7 @@ export function computeDraftProgress(application: {
 }): number {
   if (!application.snapshotCompanyName) return 1;
   if (!application.snapshotContactPersonName) return 2;
-  if (!application.justification) return 3;
+  if (application.verificationReasons.length === 0) return 3;
   if (
     !application.docRegistrationCertificate ||
     !application.docProofOfAddress ||

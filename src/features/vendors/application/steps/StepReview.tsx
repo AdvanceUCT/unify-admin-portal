@@ -3,6 +3,7 @@
 import { Pencil } from "lucide-react";
 import { useActionState } from "react";
 import { submitApplicationAction } from "@/app/vendor/(portal)/application/actions";
+import { formatVerificationReasons } from "@/lib/vendors/verification-reasons";
 import type { DraftApplicationData } from "../VendorApplicationWizard";
 
 function ReviewRow({ label, value }: { label: string; value: string | null | undefined }) {
@@ -106,7 +107,13 @@ export function StepReview({
         </ReviewSection>
 
         <ReviewSection title="Verification requirements" step={3} onEditStep={onEditStep}>
-          <ReviewRow label="Purpose" value={initialData.justification} />
+          <ReviewRow
+            label="Reasons for access"
+            value={formatVerificationReasons(
+              initialData.verificationReasons,
+              initialData.otherVerificationReason,
+            )}
+          />
           <ReviewRow label="Additional info" value={initialData.additionalInfo} />
         </ReviewSection>
 

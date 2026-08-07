@@ -8,6 +8,7 @@ import {
   listDecidedVendorApplications,
   listVendorApplications,
 } from "@/lib/vendors/applications";
+import { formatVerificationReasons } from "@/lib/vendors/verification-reasons";
 import {
   approveVendorApplicationAction,
   createVendorVerificationQrAction,
@@ -209,7 +210,12 @@ export default async function VendorsPage({
                         <p className="text-sm text-zinc-500">
                           {application.snapshotServiceCategory ?? application.vendorProfile.serviceCategory}
                         </p>
-                        <p className="mt-1 text-sm text-zinc-600">{application.justification}</p>
+                        <p className="mt-1 text-sm text-zinc-600">
+                          {formatVerificationReasons(
+                            application.verificationReasons,
+                            application.otherVerificationReason,
+                          )}
+                        </p>
                         <p className="mt-1 text-xs text-zinc-400">
                           Submitted{" "}
                           {new Date(application.createdAt).toLocaleDateString("en-GB", {
