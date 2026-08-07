@@ -109,9 +109,24 @@ export function Step1OrgInfo({
               className={INPUT}
               defaultValue={initialData.companyRegistrationNumber}
               id="companyRegistrationNumber"
-              maxLength={50}
+              inputMode="numeric"
+              maxLength={14}
               name="companyRegistrationNumber"
+              onInput={(event) => {
+                const isDeleting = (event.nativeEvent as InputEvent).inputType?.startsWith("delete") ?? false;
+                const digits = event.currentTarget.value.replace(/\D/g, "").slice(0, 12);
+                const [year, sequence, check] = [digits.slice(0, 4), digits.slice(4, 10), digits.slice(10, 12)];
+
+                let formatted = year;
+                if (sequence || (digits.length >= 4 && !isDeleting)) formatted += `/${sequence}`;
+                if (check || (digits.length >= 10 && !isDeleting)) formatted += `/${check}`;
+
+                event.currentTarget.value = formatted;
+              }}
+              pattern="\d{4}/\d{6}/\d{2}"
+              placeholder="2020/123456/07"
               required
+              title="Format: YYYY/NNNNNN/NN"
               type="text"
             />
           </div>
