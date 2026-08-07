@@ -49,17 +49,23 @@ export const TOTAL_STEPS = STEP_LABELS.length;
 
 export function VendorApplicationWizard({
   initialStep,
+  initialUnlockedStep = 1,
   initialApplicationId,
   initialData,
   initialFilenames,
 }: {
   initialStep: number;
+  initialUnlockedStep?: number;
   initialApplicationId: string | null;
   initialData: DraftApplicationData;
   initialFilenames?: Record<string, string>;
 }) {
   const [currentStep, setCurrentStep] = useState(initialStep);
   const [applicationId, setApplicationId] = useState(initialApplicationId);
+  // The furthest step the vendor has already reached data-wise — steps up to this
+  // point are safe to jump straight to from the step header (e.g. when resubmitting
+  // with most fields already carried over, or after completing later steps this session).
+  const [unlockedStep, setUnlockedStep] = useState(Math.max(initialStep, initialUnlockedStep));
   const router = useRouter();
 
   function goToStep(step: number) {
@@ -69,7 +75,9 @@ export function VendorApplicationWizard({
 
   function handleNext(newApplicationId?: string) {
     if (newApplicationId) setApplicationId(newApplicationId);
-    goToStep(Math.min(currentStep + 1, STEP_LABELS.length));
+    const nextStep = Math.min(currentStep + 1, STEP_LABELS.length);
+    setUnlockedStep((prev) => Math.max(prev, nextStep));
+    goToStep(nextStep);
     router.refresh();
   }
 
@@ -83,33 +91,41 @@ export function VendorApplicationWizard({
         {STEP_LABELS.map((label, index) => {
           const stepNumber = index + 1;
           const isCurrent = stepNumber === currentStep;
-          const isComplete = stepNumber < currentStep;
+          const isUnlocked = stepNumber <= unlockedStep;
 
           return (
-            <li
-              key={label}
-              className={`rounded-lg border px-3 py-2 text-xs ${
-                isCurrent
-                  ? "border-zinc-900 bg-white text-zinc-950"
-                  : isComplete
-                    ? "border-zinc-200 bg-white text-zinc-600"
-                    : "border-zinc-200 bg-zinc-50 text-zinc-400"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span
-                  className={`grid size-5 shrink-0 place-items-center rounded-full text-xs font-semibold ${
-                    isCurrent
-                      ? "bg-zinc-900 text-white"
-                      : isComplete
-                        ? "bg-zinc-200 text-zinc-700"
-                        : "bg-zinc-100 text-zinc-400"
-                  }`}
-                >
-                  {stepNumber}
-                </span>
-                <span className="font-medium leading-tight">{label}</span>
-              </div>
+            <li key={label}>
+              <button
+                type="button"
+                aria-current={isCurrent ? "step" : undefined}
+                disabled={!isUnlocked}
+                onClick={() => {
+                  if (isUnlocked && !isCurrent) goToStep(stepNumber);
+                }}
+                title={isUnlocked ? undefined : "Complete the earlier steps first"}
+                className={`w-full rounded-lg border px-3 py-2 text-left text-xs transition ${
+                  isCurrent
+                    ? "border-zinc-900 bg-white text-zinc-950"
+                    : isUnlocked
+                      ? "cursor-pointer border-zinc-200 bg-white text-zinc-600 hover:border-zinc-400 hover:bg-zinc-50"
+                      : "cursor-not-allowed border-zinc-200 bg-zinc-50 text-zinc-400"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`grid size-5 shrink-0 place-items-center rounded-full text-xs font-semibold ${
+                      isCurrent
+                        ? "bg-zinc-900 text-white"
+                        : isUnlocked
+                          ? "bg-zinc-200 text-zinc-700"
+                          : "bg-zinc-100 text-zinc-400"
+                    }`}
+                  >
+                    {stepNumber}
+                  </span>
+                  <span className="font-medium leading-tight">{label}</span>
+                </div>
+              </button>
             </li>
           );
         })}

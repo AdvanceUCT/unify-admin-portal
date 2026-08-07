@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { saveDraftStepAction } from "@/app/vendor/(portal)/application/actions";
+import { useUnsavedChangesWarning } from "@/hooks/useUnsavedChangesWarning";
 import type { DraftApplicationData } from "../VendorApplicationWizard";
 
 const INPUT =
@@ -22,6 +23,9 @@ export function Step2Representative({
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+
+  useUnsavedChangesWarning(dirty);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -36,6 +40,7 @@ export function Step2Representative({
         setError(result.error ?? "Could not save.");
         return;
       }
+      setDirty(false);
       onComplete();
     } catch {
       setError("An unexpected error occurred.");
@@ -54,7 +59,7 @@ export function Step2Representative({
         </p>
       </div>
 
-      <form className="space-y-4" onSubmit={handleSubmit}>
+      <form className="space-y-4" onChange={() => setDirty(true)} onSubmit={handleSubmit}>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className={LABEL} htmlFor="contactPersonName">

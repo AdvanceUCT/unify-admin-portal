@@ -3,8 +3,10 @@ import { Building2, ClipboardList, Gauge, KeyRound, Landmark, LifeBuoy, UserCog,
 import { PortalShell } from "@/components/layout/PortalShell";
 import { LiveVerificationNotifications } from "@/features/vendors/LiveVerificationNotifications";
 import { requireVendorSession } from "@/lib/auth/session";
+import { getDocumentSignedUrl } from "@/lib/storage/supabase";
 import { getApprovedVendorContextForUser } from "@/lib/vendors/context";
 import { encodeLiveVerificationCursor } from "@/lib/vendors/liveVerifications";
+import { getVendorProfileLogoPath } from "@/lib/vendors/profile";
 
 const ownerNavItems = [
   { href: "/vendor", label: "Overview", icon: Gauge },
@@ -29,10 +31,15 @@ export default async function VendorPortalLayout({
 }>) {
   const session = await requireVendorSession();
   const vendorContext = await getApprovedVendorContextForUser(session.user.id);
+  const logoPath = vendorContext
+    ? await getVendorProfileLogoPath(vendorContext.vendorProfileId)
+    : null;
+  const logoUrl = logoPath ? await getDocumentSignedUrl(logoPath) : null;
 
   return (
     <PortalShell
       context={vendorContext?.companyName ?? "Verifier onboarding"}
+      logoUrl={logoUrl}
       navItems={vendorContext?.role === "STAFF" ? staffNavItems : ownerNavItems}
       productName="UNIFY Vendor"
       sessionLabel={session.user.name}
