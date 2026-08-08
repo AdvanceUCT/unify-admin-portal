@@ -7,7 +7,7 @@ import { checkAgentHealth } from "@/lib/agentClient";
 import { getDashboardSummary, getRecentCredentialEvents } from "@/lib/api/server";
 import { ADMIN_ROLES } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
-import { credentialStatusTone, formatCredentialStatus, formatDateTime } from "@/lib/formatters";
+import { credentialStatusTone, formatCredentialActivityEventStatus, formatDateTime } from "@/lib/formatters";
 import { AgentConnectionWidget } from "./AgentConnectionWidget";
 
 export default async function AdminOverviewPage() {
@@ -76,10 +76,14 @@ export default async function AdminOverviewPage() {
                   <td className="px-5 py-4 font-medium text-zinc-900">{event.studentId ?? "Unknown"}</td>
                   <td className="px-5 py-4">
                     {event.status ? (
-                      <Badge tone={credentialStatusTone(event.status)}>{formatCredentialStatus(event.status)}</Badge>
+                      <Badge tone={credentialStatusTone(event.status)}>
+                        {formatCredentialActivityEventStatus(event)}
+                      </Badge>
                     ) : null}
                   </td>
-                  <td className="px-5 py-4 text-zinc-600">{event.schemaVersion ?? "—"}</td>
+                  <td className="px-5 py-4">
+                    {event.schemaVersion ? <Badge tone="version">v{event.schemaVersion}</Badge> : "—"}
+                  </td>
                   <td className="px-5 py-4 text-zinc-600">{formatDateTime(event.occurredAt)}</td>
                 </tr>
               ))}

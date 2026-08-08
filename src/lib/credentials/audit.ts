@@ -2,7 +2,8 @@ import "server-only";
 
 import { CredentialAuditAction, CredentialDeliveryStatus } from "@/generated/prisma/enums";
 import type { CredentialAuditLogModel } from "@/generated/prisma/models";
-import type { CredentialAuditLogEntry } from "@/lib/api/types";
+import type { CredentialActivityEvent, CredentialAuditLogEntry } from "@/lib/api/types";
+import { credentialStatusForAuditAction } from "@/lib/formatters";
 import { prisma } from "@/lib/db/prisma";
 
 type RecordCredentialOfferSentAuditInput = {
@@ -17,16 +18,34 @@ type RecordCredentialOfferSentAuditInput = {
   studentId: string;
 };
 
+const DASHBOARD_CREDENTIAL_AUDIT_ACTIONS = [
+  CredentialAuditAction.OFFER_SENT,
+  CredentialAuditAction.CREDENTIAL_LIFECYCLE_ACTIVATED,
+  CredentialAuditAction.CREDENTIAL_SUSPENDED,
+  CredentialAuditAction.CREDENTIAL_REACTIVATED,
+  CredentialAuditAction.CREDENTIAL_REVOKED,
+] as const;
+
 function publicDeliveryStatus(status: CredentialDeliveryStatus | null) {
   if (status === CredentialDeliveryStatus.DELIVERED) return "Delivered" as const;
   if (status === CredentialDeliveryStatus.FAILED) return "Failed" as const;
   return status === CredentialDeliveryStatus.PENDING ? "Pending" as const : null;
 }
 
-function publicCredentialAuditLog(log: CredentialAuditLogModel) {
+function uniqueStrings(values: (string | null | undefined)[]) {
+  return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
+}
+
+function publicCredentialAuditLog(
+  log: CredentialAuditLogModel,
+  actorsById = new Map<string, string>(),
+  schemaVersionsByIssuanceId = new Map<string, string | null>(),
+  schemaVersionsByCredentialExchangeId = new Map<string, string | null>(),
+): CredentialAuditLogEntry {
   return {
     action: log.action,
     actorId: log.actorId,
+    actorName: log.actorId ? actorsById.get(log.actorId) ?? null : null,
     batchId: log.batchId,
     batchItemId: log.batchItemId,
     credentialDefinitionId: log.credentialDefinitionId,
@@ -36,8 +55,59 @@ function publicCredentialAuditLog(log: CredentialAuditLogModel) {
     id: log.id,
     message: log.message,
     occurredAt: log.occurredAt.toISOString(),
+    schemaVersion:
+      (log.credentialIssuanceId ? schemaVersionsByIssuanceId.get(log.credentialIssuanceId) : undefined) ??
+      (log.credentialExchangeId ? schemaVersionsByCredentialExchangeId.get(log.credentialExchangeId) : undefined) ??
+      null,
     studentId: log.studentId,
   };
+}
+
+async function hydrateCredentialAuditLogs(logs: CredentialAuditLogModel[]) {
+  const actorIds = uniqueStrings(logs.map((log) => log.actorId));
+  const credentialIssuanceIds = uniqueStrings(logs.map((log) => log.credentialIssuanceId));
+  const credentialExchangeIds = uniqueStrings(logs.map((log) => log.credentialExchangeId));
+
+  const [actors, issuances] = await Promise.all([
+    actorIds.length > 0
+      ? prisma.user.findMany({
+          select: { id: true, name: true },
+          where: { id: { in: actorIds } },
+        })
+      : [],
+    credentialIssuanceIds.length > 0 || credentialExchangeIds.length > 0
+      ? prisma.credentialIssuance.findMany({
+          select: { credentialExchangeId: true, id: true, schemaVersion: true },
+          where: {
+            OR: [
+              ...(credentialIssuanceIds.length > 0 ? [{ id: { in: credentialIssuanceIds } }] : []),
+              ...(credentialExchangeIds.length > 0
+                ? [{ credentialExchangeId: { in: credentialExchangeIds } }]
+                : []),
+            ],
+          },
+        })
+      : [],
+  ]);
+
+  const actorsById = new Map(actors.map((actor) => [actor.id, actor.name]));
+  const schemaVersionsByIssuanceId = new Map(
+    issuances.map((issuance) => [issuance.id, issuance.schemaVersion]),
+  );
+  const schemaVersionsByCredentialExchangeId = new Map(
+    issuances
+      .filter((issuance) => issuance.credentialExchangeId)
+      .map((issuance) => [issuance.credentialExchangeId as string, issuance.schemaVersion]),
+  );
+
+  return logs.map((log) =>
+    publicCredentialAuditLog(
+      log,
+      actorsById,
+      schemaVersionsByIssuanceId,
+      schemaVersionsByCredentialExchangeId,
+    ),
+  );
 }
 
 /**
@@ -109,10 +179,39 @@ export async function getPaginatedCredentialOfferSentAuditLogs({
   });
 
   return {
-    logs: logs.map(publicCredentialAuditLog),
+    logs: await hydrateCredentialAuditLogs(logs),
     page: clampedPage,
     pageSize: take,
     totalCount,
     totalPages,
   };
+}
+
+export async function getRecentCredentialAuditActivityEvents(limit = 10): Promise<CredentialActivityEvent[]> {
+  const logs = await prisma.credentialAuditLog.findMany({
+    orderBy: { occurredAt: "desc" },
+    take: limit,
+    where: { action: { in: [...DASHBOARD_CREDENTIAL_AUDIT_ACTIONS] } },
+  });
+
+  const hydratedLogs = await hydrateCredentialAuditLogs(logs);
+
+  const events: CredentialActivityEvent[] = [];
+
+  for (const log of hydratedLogs) {
+    const status = credentialStatusForAuditAction(log.action);
+    if (!status) continue;
+
+    events.push({
+      credentialExchangeId: log.credentialExchangeId ?? "",
+      id: log.id,
+      occurredAt: log.occurredAt,
+      schemaVersion: log.schemaVersion ?? undefined,
+      state: log.action,
+      status,
+      studentId: log.studentId,
+    });
+  }
+
+  return events;
 }

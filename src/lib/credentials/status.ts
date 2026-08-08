@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   BatchIssuanceRunStatus,
+  CredentialAuditAction,
   CredentialDeliveryStatus,
   CredentialEventType,
   CredentialIssuanceStatus,
@@ -321,6 +322,31 @@ export async function recordCredentialStateChangedEvent(payload: CredentialState
         },
         where: { id: existingIssuance.id },
       });
+
+      if (
+        mappedStatus === CredentialIssuanceStatus.ISSUED &&
+        existingIssuance.status !== CredentialIssuanceStatus.ISSUED &&
+        hasRevocationMetadata
+      ) {
+        await prisma.credentialAuditLog.createMany({
+          data: {
+            action: CredentialAuditAction.CREDENTIAL_LIFECYCLE_ACTIVATED,
+            credentialDefinitionId:
+              existingIssuance.credentialDefinitionId ?? payload.credentialDefinitionId ?? "unknown",
+            credentialExchangeId: payload.credentialExchangeId,
+            credentialIssuanceId: existingIssuance.id,
+            eventId: `credential-activated:${payload.credentialExchangeId}`,
+            message: "Credential activated.",
+            metadata: {
+              credentialRevocationId: payload.credentialRevocationId,
+              revocationRegistryDefinitionId: payload.revocationRegistryDefinitionId,
+            },
+            occurredAt,
+            studentId: existingIssuance.studentId,
+          },
+          skipDuplicates: true,
+        });
+      }
     }
   }
 

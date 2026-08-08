@@ -193,6 +193,7 @@ export type CredentialAuditLogEntry = {
     | "CREDENTIAL_RENEWAL_OFFER_CREATED"
     | "CREDENTIAL_RENEWAL_FAILED";
   actorId?: string | null;
+  actorName?: string | null;
   batchId?: string | null;
   batchItemId?: string | null;
   credentialDefinitionId: string;
@@ -202,6 +203,7 @@ export type CredentialAuditLogEntry = {
   id: string;
   message?: string | null;
   occurredAt: string;
+  schemaVersion?: string | null;
   studentId: string;
 };
 
