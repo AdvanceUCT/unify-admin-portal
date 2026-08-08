@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import QRCode from "qrcode";
 
 import { SectionHeader } from "@/components/layout/SectionHeader";
@@ -30,7 +31,7 @@ export default async function VendorBranchPage({ params }: { params: Promise<{ b
 
   const [stats, history] = await Promise.all([
     getVendorVerificationStats(context.vendorProfileId, { branchIds: [branch.id], inPersonOnly: true }),
-    listRecentVendorVerifications(context.vendorProfileId, 20, { branchIds: [branch.id], inPersonOnly: true }),
+    listRecentVendorVerifications(context.vendorProfileId, 5, { branchIds: [branch.id], inPersonOnly: true }),
   ]);
   const qrSvg = branch.verificationUrl ? await QRCode.toString(branch.verificationUrl, { type: "svg", margin: 1 }) : null;
   const isDefault = branch.vendorProfile.defaultBranchId === branch.id;
@@ -76,7 +77,10 @@ export default async function VendorBranchPage({ params }: { params: Promise<{ b
       </div>
 
       <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
-        <div className="border-b border-zinc-100 px-5 py-4"><h2 className="font-medium text-zinc-950">In-person verification history</h2></div>
+        <div className="flex items-center justify-between gap-3 border-b border-zinc-100 px-5 py-4">
+          <h2 className="font-medium text-zinc-950">Recent verifications</h2>
+          <Link className="text-sm font-medium text-zinc-600 hover:text-zinc-950" href={`/vendor/verifications?branchId=${encodeURIComponent(branch.id)}`}>View all</Link>
+        </div>
         <LiveVerificationList initialItems={history.map((item) => {
           const attributes = normalizedVerificationAttributes(item.attributes);
           return {

@@ -51,6 +51,7 @@ describe("VendorVerificationOverview", () => {
     expect(screen.getByText("Caleb Voskuil")).toBeInTheDocument();
     expect(screen.getByText("VSKCAL001")).toBeInTheDocument();
     expect(screen.getByText("University of Cape Town")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View all" })).toHaveAttribute("href", "/vendor/verifications");
     expect(screen.queryByText("schema_1")).not.toBeInTheDocument();
     expect(screen.queryByText("cred_def_1")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "admin@voskuils.com" })).toHaveAttribute(

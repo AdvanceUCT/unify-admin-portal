@@ -7,6 +7,7 @@ import {
   type AgentVerificationResult,
 } from "@/lib/agentClient";
 import { Prisma } from "@/generated/prisma/client";
+import type { VendorVerificationStatus } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/db/prisma";
 import { ensureVendorVerificationServicePoint } from "@/lib/vendors/applications";
 import { deliverVendorWebhook } from "@/lib/vendors/integrations";
@@ -16,6 +17,8 @@ import {
   summarizeVerificationStudent,
   vendorVerificationFailureReason,
 } from "@/lib/vendors/verificationContract";
+
+const VERIFICATION_EVENTS_PAGE_SIZE = 10;
 
 export type VerificationCompletedEvent = {
   type: "verification.completed";
@@ -31,6 +34,29 @@ export type VerificationCompletedEvent = {
   expiresAt: string;
   completedAt: string;
   timestamp: string;
+};
+
+export type VendorVerificationEventFilters = {
+  branchId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  query?: string;
+  university?: string;
+};
+
+type VerificationEventRow = {
+  id: string;
+  branchId: string | null;
+  branch?: { name: string } | null;
+  servicePointName: string | null;
+  verificationRequestId: string | null;
+  status: VendorVerificationStatus;
+  isVerified: boolean | null;
+  failureCode: string | null;
+  attributes: unknown;
+  createdAt: Date;
+  completedAt: Date | null;
 };
 
 async function getAgentVerificationMetadata(
@@ -76,6 +102,91 @@ function resultShape(verification: {
     student: summarizeVerificationStudent(attributes),
     createdAt: verification.createdAt.toISOString(),
     expiresAt: verification.expiresAt?.toISOString() ?? null,
+    completedAt: verification.completedAt?.toISOString() ?? null,
+  };
+}
+
+function parsedDate(value: string | undefined, endOfDay = false) {
+  if (!value) return undefined;
+  const parsed = new Date(`${value}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}`);
+  return Number.isFinite(parsed.getTime()) ? parsed : undefined;
+}
+
+function normalizedPage(value: number | undefined) {
+  return Number.isInteger(value) && value && value > 0 ? value : 1;
+}
+
+function searchFilters(query: string): Prisma.VendorVerificationWhereInput[] {
+  const search = query.trim();
+  if (!search) return [];
+
+  return [
+    { attributes: { path: ["fullName"], string_contains: search, mode: "insensitive" } },
+    { attributes: { path: ["firstName"], string_contains: search, mode: "insensitive" } },
+    { attributes: { path: ["lastName"], string_contains: search, mode: "insensitive" } },
+    { attributes: { path: ["studentNumber"], string_contains: search, mode: "insensitive" } },
+    { attributes: { path: ["studentId"], string_contains: search, mode: "insensitive" } },
+  ];
+}
+
+function universityFilters(university: string): Prisma.VendorVerificationWhereInput[] {
+  const value = university.trim();
+  if (!value) return [];
+
+  return [
+    { attributes: { path: ["institution"], equals: value } },
+    { attributes: { path: ["university"], equals: value } },
+    { attributes: { path: ["universityName"], equals: value } },
+    { attributes: { path: ["issuer"], equals: value } },
+  ];
+}
+
+function verificationEventsWhere(
+  vendorProfileId: string,
+  allowedBranchIds: string[],
+  filters: VendorVerificationEventFilters = {},
+): Prisma.VendorVerificationWhereInput {
+  const dateFrom = parsedDate(filters.dateFrom);
+  const dateTo = parsedDate(filters.dateTo, true);
+  const branchIds = filters.branchId && allowedBranchIds.includes(filters.branchId)
+    ? [filters.branchId]
+    : allowedBranchIds;
+  const and: Prisma.VendorVerificationWhereInput[] = [
+    {
+      vendorProfileId,
+      branchId: { in: branchIds },
+      checkoutId: null,
+    },
+  ];
+
+  if (dateFrom || dateTo) {
+    and.push({ completedAt: { ...(dateFrom ? { gte: dateFrom } : {}), ...(dateTo ? { lte: dateTo } : {}) } });
+  }
+
+  const queryFilters = searchFilters(filters.query ?? "");
+  if (queryFilters.length > 0) and.push({ OR: queryFilters });
+
+  const selectedUniversityFilters = universityFilters(filters.university ?? "");
+  if (selectedUniversityFilters.length > 0) and.push({ OR: selectedUniversityFilters });
+
+  return { AND: and };
+}
+
+function verificationEventShape(verification: VerificationEventRow) {
+  const attributes = normalizedVerificationAttributes(verification.attributes);
+
+  return {
+    id: verification.id,
+    branchId: verification.branchId,
+    branchName: verification.branch?.name ?? verification.servicePointName ?? "Branch",
+    verificationRequestId: verification.verificationRequestId,
+    status: verification.status,
+    isVerified: verification.isVerified,
+    failureCode: verification.failureCode,
+    failureReason: vendorVerificationFailureReason(verification.failureCode),
+    attributes,
+    student: summarizeVerificationStudent(attributes),
+    createdAt: verification.createdAt.toISOString(),
     completedAt: verification.completedAt?.toISOString() ?? null,
   };
 }
@@ -274,4 +385,55 @@ export async function listRecentVendorVerifications(
       isVerified: verification.isVerified ?? metadata.isVerified,
     };
   }));
+}
+
+export async function listVendorVerificationEvents(
+  vendorProfileId: string,
+  allowedBranchIds: string[],
+  filters: VendorVerificationEventFilters = {},
+) {
+  const page = normalizedPage(filters.page);
+  const where = verificationEventsWhere(vendorProfileId, allowedBranchIds, filters);
+  const [total, rows] = await Promise.all([
+    prisma.vendorVerification.count({ where }),
+    prisma.vendorVerification.findMany({
+      where,
+      include: { branch: { select: { name: true } } },
+      orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+      skip: (page - 1) * VERIFICATION_EVENTS_PAGE_SIZE,
+      take: VERIFICATION_EVENTS_PAGE_SIZE,
+    }),
+  ]);
+
+  return {
+    events: rows.map(verificationEventShape),
+    page,
+    pageSize: VERIFICATION_EVENTS_PAGE_SIZE,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / VERIFICATION_EVENTS_PAGE_SIZE)),
+  };
+}
+
+export async function listVendorVerificationUniversities(
+  vendorProfileId: string,
+  allowedBranchIds: string[],
+) {
+  const rows = await prisma.vendorVerification.findMany({
+    where: {
+      vendorProfileId,
+      branchId: { in: allowedBranchIds },
+      checkoutId: null,
+      attributes: { not: Prisma.DbNull },
+    },
+    select: { attributes: true },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const universities = new Set<string>();
+  for (const row of rows) {
+    const student = summarizeVerificationStudent(normalizedVerificationAttributes(row.attributes));
+    if (student.university) universities.add(student.university);
+  }
+
+  return Array.from(universities).sort((left, right) => left.localeCompare(right));
 }

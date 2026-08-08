@@ -1,4 +1,5 @@
 import QRCode from "qrcode";
+import Link from "next/link";
 import { CheckCircle2, Mail, QrCode, ShieldCheck, SmartphoneNfc, UserCheck } from "lucide-react";
 
 import { CopyButton, QrCodeActions } from "@/features/vendors/QrCodeActions";
@@ -36,6 +37,7 @@ export async function VendorVerificationOverview({
   recentVerifications,
   supportEmail,
   liveCursor,
+  viewAllHref = "/vendor/verifications",
 }: {
   companyName: string;
   verificationUrl: string | null;
@@ -43,6 +45,7 @@ export async function VendorVerificationOverview({
   recentVerifications: Awaited<ReturnType<typeof listRecentVendorVerifications>>;
   supportEmail?: string;
   liveCursor?: string;
+  viewAllHref?: string;
 }) {
   const approvalRate = stats.total > 0 ? Math.round((stats.approved / stats.total) * 100) : null;
   const qrSvg = verificationUrl
@@ -151,8 +154,9 @@ export async function VendorVerificationOverview({
       )}
 
       <section className="rounded-lg border border-zinc-200 bg-white">
-        <div className="border-b border-zinc-100 px-5 py-4">
+        <div className="flex items-center justify-between gap-3 border-b border-zinc-100 px-5 py-4">
           <h2 className="font-medium text-zinc-950">Recent verifications</h2>
+          <Link className="text-sm font-medium text-zinc-600 hover:text-zinc-950" href={viewAllHref}>View all</Link>
         </div>
         <LiveVerificationList initialItems={recentVerifications.map((verification) => {
           const attributes = normalizedVerificationAttributes(verification.attributes);

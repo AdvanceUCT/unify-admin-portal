@@ -4,6 +4,8 @@ import {
   createVendorCheckoutSession,
   getVendorVerificationResult,
   listRecentVendorVerifications,
+  listVendorVerificationEvents,
+  listVendorVerificationUniversities,
   recordVerificationCompletedEvent,
 } from "@/lib/vendors/verifications";
 
@@ -19,6 +21,7 @@ const database = vi.hoisted(() => ({
     findFirst: vi.fn(),
     findUnique: vi.fn(),
     findMany: vi.fn(),
+    count: vi.fn(),
     upsert: vi.fn(),
     update: vi.fn(),
   },
@@ -268,5 +271,67 @@ describe("vendor checkout verification", () => {
       },
       isVerified: true,
     });
+  });
+
+  it("lists paginated verification events with access-scoped filters", async () => {
+    database.vendorVerification.count.mockResolvedValue(12);
+    database.vendorVerification.findMany.mockResolvedValue([{
+      id: "stored-verification-001",
+      branchId: "branch-001",
+      branch: { name: "Main Branch" },
+      verificationRequestId: "verification-001",
+      servicePointName: "Main Branch",
+      status: "APPROVED",
+      isVerified: true,
+      failureCode: null,
+      attributes: completedEvent.attributes,
+      createdAt: new Date("2026-08-03T20:00:00.000Z"),
+      completedAt: new Date("2026-08-03T20:02:00.000Z"),
+    }]);
+
+    const result = await listVendorVerificationEvents("vendor-001", ["branch-001", "branch-002"], {
+      branchId: "branch-001",
+      dateFrom: "2026-08-01",
+      dateTo: "2026-08-08",
+      page: 2,
+      query: "Ada",
+      university: "University of Cape Town",
+    });
+
+    expect(database.vendorVerification.count).toHaveBeenCalledWith({
+      where: expect.objectContaining({ AND: expect.any(Array) }),
+    });
+    expect(database.vendorVerification.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      skip: 10,
+      take: 10,
+      where: expect.objectContaining({ AND: expect.any(Array) }),
+    }));
+    expect(result).toMatchObject({
+      page: 2,
+      pageSize: 10,
+      total: 12,
+      totalPages: 2,
+      events: [{
+        branchName: "Main Branch",
+        student: {
+          id: "STU001",
+          name: "Ada Lovelace",
+          university: "University of Cape Town",
+        },
+      }],
+    });
+  });
+
+  it("derives university filter options from accessible verification attributes", async () => {
+    database.vendorVerification.findMany.mockResolvedValue([
+      { attributes: { institution: "University of Cape Town" } },
+      { attributes: { universityName: "Stellenbosch" } },
+      { attributes: { issuer: "University of Cape Town" } },
+    ]);
+
+    await expect(listVendorVerificationUniversities("vendor-001", ["branch-001"])).resolves.toEqual([
+      "Stellenbosch",
+      "University of Cape Town",
+    ]);
   });
 });

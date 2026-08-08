@@ -1,4 +1,4 @@
-import { Building2, ClipboardList, Gauge, KeyRound, Landmark, LifeBuoy, UserCog, Users } from "lucide-react";
+import { Building2, ClipboardList, Gauge, KeyRound, Landmark, LifeBuoy, ShieldCheck, UserCog, Users } from "lucide-react";
 
 import { PortalShell } from "@/components/layout/PortalShell";
 import { LiveVerificationNotifications } from "@/features/vendors/LiveVerificationNotifications";
@@ -10,6 +10,7 @@ import { getVendorProfileLogoPath } from "@/lib/vendors/profile";
 
 const ownerNavItems = [
   { href: "/vendor", label: "Overview", icon: Gauge },
+  { href: "/vendor/verifications", label: "Verifications", icon: ShieldCheck },
   { href: "/vendor/branches", label: "Branches", icon: Building2 },
   { href: "/vendor/staff", label: "Staff", icon: Users },
   { href: "/vendor/application", label: "Application", icon: ClipboardList },
@@ -20,6 +21,7 @@ const ownerNavItems = [
 
 const staffNavItems = [
   { href: "/vendor", label: "Overview", icon: Gauge },
+  { href: "/vendor/verifications", label: "Verifications", icon: ShieldCheck },
   { href: "/vendor/branches", label: "Branches", icon: Building2 },
   { href: "/vendor/help", label: "Help", icon: LifeBuoy },
 ];
