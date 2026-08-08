@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Badge } from "@/components/ui/Badge";
 import type { CredentialAuditLogEntry } from "@/lib/api/types";
-import { formatActivationDeliveryStatus, formatCredentialAuditAction, formatDateTime } from "@/lib/formatters";
+import { credentialAuditActionTone, formatCredentialAuditAction, formatDateTime } from "@/lib/formatters";
 
 type CredentialAuditLogTableProps = {
   logs: CredentialAuditLogEntry[];
@@ -16,6 +16,11 @@ type CredentialAuditLogTableProps = {
 
 function auditPageHref(page: number) {
   return `/audit?credentialPage=${page}`;
+}
+
+function triggeredByLabel(log: CredentialAuditLogEntry) {
+  if (!log.actorId) return "System";
+  return log.actorName ?? "Unknown admin";
 }
 
 function PaginationLink({
@@ -60,9 +65,9 @@ export function CredentialAuditLogTable({ logs, page, pageSize, totalCount, tota
             <thead className="border-b border-zinc-200 text-xs uppercase tracking-wide text-zinc-500">
               <tr>
                 <th className="px-5 py-3 font-medium">Action</th>
-                <th className="px-5 py-3 font-medium">Actor ID</th>
+                <th className="px-5 py-3 font-medium">Triggered by</th>
                 <th className="px-5 py-3 font-medium">Student ID</th>
-                <th className="px-5 py-3 font-medium">Delivery</th>
+                <th className="px-5 py-3 font-medium">Schema version</th>
                 <th className="px-5 py-3 font-medium">Batch</th>
                 <th className="px-5 py-3 font-medium">Occurred</th>
               </tr>
@@ -77,15 +82,15 @@ export function CredentialAuditLogTable({ logs, page, pageSize, totalCount, tota
               ) : (
                 logs.map((log) => (
                   <tr key={log.id}>
-                    <td className="px-5 py-4 font-medium text-zinc-950">{formatCredentialAuditAction(log.action)}</td>
-                    <td className="px-5 py-4 font-mono text-xs text-zinc-600">{log.actorId ?? "System"}</td>
+                    <td className="px-5 py-4">
+                      <Badge tone={credentialAuditActionTone(log.action)}>
+                        {formatCredentialAuditAction(log.action)}
+                      </Badge>
+                    </td>
+                    <td className="px-5 py-4 text-zinc-600">{triggeredByLabel(log)}</td>
                     <td className="px-5 py-4 font-medium text-zinc-900">{log.studentId}</td>
                     <td className="px-5 py-4">
-                      {log.deliveryStatus ? (
-                        <Badge tone={log.deliveryStatus === "Delivered" ? "success" : "danger"}>
-                          {formatActivationDeliveryStatus(log.deliveryStatus)}
-                        </Badge>
-                      ) : null}
+                      {log.schemaVersion ? <Badge tone="version">v{log.schemaVersion}</Badge> : null}
                     </td>
                     <td className="px-5 py-4 text-zinc-600">{log.batchId ?? "Individual"}</td>
                     <td className="px-5 py-4 text-zinc-600">{formatDateTime(log.occurredAt)}</td>
