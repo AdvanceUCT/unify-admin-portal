@@ -25,19 +25,24 @@ export function decodeLiveVerificationCursor(value: string): Cursor {
   }
 }
 
-export async function getLiveVerificationEvents(context: ApprovedVendorContext, rawCursor?: string) {
+export async function getLiveVerificationEvents(
+  context: ApprovedVendorContext,
+  rawCursor?: string,
+  options: { branchIds?: string[] } = {},
+) {
   if (!rawCursor) {
     return {
       events: [],
       nextCursor: encodeLiveVerificationCursor({ completedAt: new Date().toISOString(), id: "_" }),
     };
   }
+  const branchIds = options.branchIds?.filter((branchId) => context.branchIds.includes(branchId)) ?? context.branchIds;
   const cursor = decodeLiveVerificationCursor(rawCursor);
   const completedAt = new Date(cursor.completedAt);
   const verifications = await prisma.vendorVerification.findMany({
     where: {
       vendorProfileId: context.vendorProfileId,
-      branchId: { in: context.branchIds },
+      branchId: { in: branchIds },
       checkoutId: null,
       completedAt: { not: null },
       OR: [

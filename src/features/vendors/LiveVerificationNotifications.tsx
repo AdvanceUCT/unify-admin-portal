@@ -24,7 +24,13 @@ type LiveEvent = {
   studentUniversity: string | null;
 };
 
-export function LiveVerificationNotifications({ initialCursor }: { initialCursor: string }) {
+export function LiveVerificationNotifications({
+  branchIds = [],
+  initialCursor,
+}: {
+  branchIds?: string[];
+  initialCursor: string;
+}) {
   const [queue, setQueue] = useState<LiveEvent[]>([]);
   const cursor = useRef<string>(initialCursor);
   const polling = useRef(false);
@@ -35,7 +41,9 @@ export function LiveVerificationNotifications({ initialCursor }: { initialCursor
       if (cancelled || document.visibilityState !== "visible" || polling.current) return;
       polling.current = true;
       try {
-        const response = await fetch(`/api/vendor/live-verifications?cursor=${encodeURIComponent(cursor.current)}`, { cache: "no-store" });
+        const params = new URLSearchParams({ cursor: cursor.current });
+        for (const branchId of branchIds) params.append("branchId", branchId);
+        const response = await fetch(`/api/vendor/live-verifications?${params.toString()}`, { cache: "no-store" });
         if (!response.ok) return;
         const result = await response.json() as { events: LiveEvent[]; nextCursor: string };
         cursor.current = result.nextCursor;
@@ -54,7 +62,7 @@ export function LiveVerificationNotifications({ initialCursor }: { initialCursor
     const onVisibility = () => { if (document.visibilityState === "visible") void poll(); };
     document.addEventListener("visibilitychange", onVisibility);
     return () => { cancelled = true; window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisibility); };
-  }, []);
+  }, [branchIds]);
 
   const event = queue[0];
   if (!event) return null;

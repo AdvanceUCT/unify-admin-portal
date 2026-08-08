@@ -61,6 +61,20 @@ describe("live in-person verification feed", () => {
     }));
   });
 
+  it("can narrow the live feed to a notification branch subset", async () => {
+    database.vendorVerification.findMany.mockResolvedValue([]);
+    const cursor = encodeLiveVerificationCursor({ completedAt: "2026-08-04T12:00:00.000Z", id: "_" });
+    await getLiveVerificationEvents(
+      { ...context, branchIds: ["branch-1", "branch-2"] },
+      cursor,
+      { branchIds: ["branch-2"] },
+    );
+
+    expect(database.vendorVerification.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ branchId: { in: ["branch-2"] } }),
+    }));
+  });
+
   it("uses stored identity metadata before calling the agent fallback", async () => {
     database.vendorVerification.findMany.mockResolvedValue([{
       ...verification,
