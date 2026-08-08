@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   formatActivationDeliveryStatus,
+  formatCredentialActivityEventStatus,
+  formatCredentialAuditAction,
   formatCredentialStatus,
   formatDateTime,
   formatEventType,
@@ -21,5 +23,22 @@ describe("formatters", () => {
     expect(formatActivationDeliveryStatus("Delivered")).toBe("Delivered");
     expect(formatEventType("ActivationLinkDelivered")).toBe("Activation link delivered");
     expect(formatEventType("CredentialActivated")).toBe("Credential activated");
+  });
+
+  it("formats credential audit and activity events with compact lifecycle labels", () => {
+    expect(formatCredentialAuditAction("CREDENTIAL_LIFECYCLE_ACTIVATED")).toBe("Activated");
+    expect(formatCredentialAuditAction("CREDENTIAL_REACTIVATED")).toBe("Reactivated");
+    expect(
+      formatCredentialActivityEventStatus({
+        state: "CREDENTIAL_REACTIVATED",
+        status: "ACTIVE",
+      }),
+    ).toBe("Reactivated");
+    expect(
+      formatCredentialActivityEventStatus({
+        state: "CREDENTIAL_LIFECYCLE_ACTIVATED",
+        status: "ACTIVE",
+      }),
+    ).toBe("Activated");
   });
 });

@@ -1,10 +1,10 @@
 import "server-only";
 
 import type { ActivationDelivery } from "@/lib/api/types";
+import { getRecentCredentialAuditActivityEvents } from "@/lib/credentials/audit";
 import {
   getCredentialDeliveryByIssuanceId,
   getDashboardCredentialSummary,
-  getRecentCredentialActivityEvents,
 } from "@/lib/credentials/status";
 
 export async function getDashboardSummary() {
@@ -12,7 +12,7 @@ export async function getDashboardSummary() {
 }
 
 export async function getRecentCredentialEvents() {
-  return getRecentCredentialActivityEvents(10);
+  return getRecentCredentialAuditActivityEvents(10);
 }
 
 export async function getActivationDeliveryByCredentialId(

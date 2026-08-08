@@ -102,28 +102,29 @@ model AdminInvite {
 }
 
 model VendorProfile {
-  id                  String                @id @default(cuid())
-  userId              String                @unique
-  user                User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  companyName         String
-  serviceCategory     String
-  contactPersonName   String?
-  contactEmail        String
-  website             String?
-  description         String?
-  verificationUrl     String?
-  agentServicePointId String?
-  defaultBranchId     String?               @unique
-  defaultBranch       VendorBranch?         @relation("VendorDefaultBranch", fields: [defaultBranchId], references: [id], onDelete: SetNull)
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
-  applications        VendorApplication[]
-  verifications       VendorVerification[]
-  apiCredentials      VendorApiCredential[]
-  webhookConfig       VendorWebhookConfig?
-  branches            VendorBranch[]        @relation("VendorBranches")
-  memberships         VendorMembership[]
-  staffInvites        VendorStaffInvite[]
+  id                        String              @id @default(cuid())
+  userId                    String              @unique
+  user                      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName               String
+  serviceCategory           String
+  contactPersonName         String?
+  contactEmail              String
+  website                   String?
+  description               String?
+  verificationUrl           String?
+  logoPath                  String?
+  agentServicePointId       String?
+  defaultBranchId           String?             @unique
+  defaultBranch             VendorBranch?       @relation("VendorDefaultBranch", fields: [defaultBranchId], references: [id], onDelete: SetNull)
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @updatedAt
+  applications              VendorApplication[]
+  verifications             VendorVerification[]
+  apiCredentials            VendorApiCredential[]
+  webhookConfig             VendorWebhookConfig?
+  branches                  VendorBranch[]      @relation("VendorBranches")
+  memberships               VendorMembership[]
+  staffInvites              VendorStaffInvite[]
 
   @@map("vendor_profile")
 }
@@ -397,22 +398,23 @@ model Student {
 }
 
 model UniversityProfile {
-  id                            String                  @id @default(cuid())
-  name                          String
-  abbreviation                  String
-  logoUrl                       String?
-  contactEmail                  String
-  issuerDid                     String?
-  setupStatus                   SetupStatus             @default(PENDING)
-  setupCompletedAt              DateTime?
-  defaultCredentialValidityDays Int                     @default(365)
-  renewalCadenceMonths          Int                     @default(12)
-  createdAt                     DateTime                @default(now())
-  updatedAt                     DateTime                @updatedAt
-  credentialSchemas             CredentialSchema[]
-  importMapping                 ImportMapping?
-  importRuns                    ImportRun[]
-  customFieldDefinitions        CustomFieldDefinition[]
+  id                 String             @id @default(cuid())
+  name               String
+  abbreviation       String
+  logoUrl            String?
+  contactEmail       String
+  websiteUrl         String?
+  issuerDid          String?
+  setupStatus        SetupStatus        @default(PENDING)
+  setupCompletedAt   DateTime?
+  defaultCredentialValidityDays Int      @default(365)
+  renewalCadenceMonths          Int      @default(12)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  credentialSchemas       CredentialSchema[]
+  importMapping           ImportMapping?
+  importRuns              ImportRun[]
+  customFieldDefinitions  CustomFieldDefinition[]
 
   @@map("university_profile")
 }
@@ -775,6 +777,7 @@ enum AuditAction {
   VENDOR_APPLICATION_APPROVED
   VENDOR_APPLICATION_REJECTED
   VENDOR_APPLICATION_REVOKED
+  SETTINGS_UPDATED
   VENDOR_PROFILE_UPDATED
   VENDOR_BRANCH_CREATED
   VENDOR_BRANCH_UPDATED

@@ -3,20 +3,13 @@ import "server-only";
 import { getInPersonVerificationDetails } from "@/lib/agentClient";
 import { prisma } from "@/lib/db/prisma";
 import type { ApprovedVendorContext } from "@/lib/vendors/context";
+import {
+  normalizedVerificationAttributes,
+  summarizeVerificationStudent,
+  vendorVerificationFailureReason,
+} from "@/lib/vendors/verificationContract";
 
 type Cursor = { completedAt: string; id: string };
-
-const FAILURE_REASONS: Record<string, string> = {
-  CREDO_PROTOCOL_ERROR: "The credential presentation could not be completed.",
-  CREDENTIAL_NOT_CURRENT: "The student credential is no longer current.",
-  PROOF_EXCHANGE_ABANDONED: "The student did not complete the credential presentation.",
-  PROOF_NOT_VERIFIED: "The presented credential proof could not be verified.",
-  PROOF_REQUEST_EXPIRED: "The verification request expired.",
-  REQUIRED_ATTRIBUTE_MISSING: "The credential is missing a required attribute.",
-  REVOCATION_CHECK_FAILED: "The credential revocation status could not be confirmed.",
-  STUDENT_NOT_REGISTERED: "The credential does not identify a registered student.",
-  UNTRUSTED_CREDENTIAL_DEFINITION: "The credential was not issued from a trusted definition.",
-};
 
 export function encodeLiveVerificationCursor(cursor: Cursor) {
   return Buffer.from(JSON.stringify(cursor)).toString("base64url");
@@ -32,28 +25,24 @@ export function decodeLiveVerificationCursor(value: string): Cursor {
   }
 }
 
-function studentIdentity(attributes: Record<string, string> | undefined, verified: boolean | undefined) {
-  if (!verified || !attributes) return { studentName: null, studentNumber: null };
-  const combined = [attributes.firstName, attributes.lastName].filter(Boolean).join(" ").trim();
-  return {
-    studentName: attributes.fullName?.trim() || combined || null,
-    studentNumber: attributes.studentNumber?.trim() || null,
-  };
-}
-
-export async function getLiveVerificationEvents(context: ApprovedVendorContext, rawCursor?: string) {
+export async function getLiveVerificationEvents(
+  context: ApprovedVendorContext,
+  rawCursor?: string,
+  options: { branchIds?: string[] } = {},
+) {
   if (!rawCursor) {
     return {
       events: [],
       nextCursor: encodeLiveVerificationCursor({ completedAt: new Date().toISOString(), id: "_" }),
     };
   }
+  const branchIds = options.branchIds?.filter((branchId) => context.branchIds.includes(branchId)) ?? context.branchIds;
   const cursor = decodeLiveVerificationCursor(rawCursor);
   const completedAt = new Date(cursor.completedAt);
   const verifications = await prisma.vendorVerification.findMany({
     where: {
       vendorProfileId: context.vendorProfileId,
-      branchId: { in: context.branchIds },
+      branchId: { in: branchIds },
       checkoutId: null,
       completedAt: { not: null },
       OR: [
@@ -67,17 +56,20 @@ export async function getLiveVerificationEvents(context: ApprovedVendorContext, 
   });
 
   const events = await Promise.all(verifications.map(async (verification) => {
-    let identity = { studentName: null as string | null, studentNumber: null as string | null };
-    if (verification.verificationRequestId) {
+    let attributes = normalizedVerificationAttributes(verification.attributes);
+    let isVerified = verification.isVerified ?? null;
+    if (!attributes && verification.verificationRequestId) {
       try {
         const result = await getInPersonVerificationDetails(verification.verificationRequestId);
         if (result.servicePointId === verification.servicePointId || !result.servicePointId) {
-          identity = studentIdentity(result.attributes, result.isVerified);
+          attributes = normalizedVerificationAttributes(result.attributes);
+          isVerified = result.isVerified ?? null;
         }
       } catch {
         // Identity is intentionally best-effort and expires at the agent.
       }
     }
+    const student = summarizeVerificationStudent(attributes);
     const failureCode = verification.failureCode;
     return {
       eventId: verification.eventId ?? verification.id,
@@ -85,10 +77,15 @@ export async function getLiveVerificationEvents(context: ApprovedVendorContext, 
       branchId: verification.branchId,
       branchName: verification.branch?.name ?? verification.servicePointName ?? "Branch",
       status: verification.status,
+      isVerified,
       failureCode,
-      failureReason: failureCode ? FAILURE_REASONS[failureCode] ?? "Verification failed." : null,
+      failureReason: vendorVerificationFailureReason(failureCode),
+      attributes,
+      student,
+      studentName: student.name,
+      studentNumber: student.id,
+      studentUniversity: student.university,
       completedAt: verification.completedAt!.toISOString(),
-      ...identity,
     };
   }));
 

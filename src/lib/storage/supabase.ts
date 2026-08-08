@@ -29,6 +29,22 @@ export async function uploadVendorDocument(
   return { path };
 }
 
+export async function uploadVendorLogo(
+  file: File,
+  vendorProfileId: string,
+): Promise<{ path: string }> {
+  const supabase = getClient();
+  const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_").replace(/^\.+/, "");
+  const path = `logos/${vendorProfileId}/${Date.now()}-${safeName || "file"}`;
+
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(path, file, { upsert: true });
+
+  if (error) throw new Error(`Upload failed: ${error.message}`);
+  return { path };
+}
+
 /** Deletes a previously uploaded vendor document, e.g. after it's been replaced. */
 export async function deleteVendorDocument(path: string): Promise<void> {
   const supabase = getClient();
@@ -47,11 +63,15 @@ export async function getDocumentSignedUrl(
   storagePath: string,
   expiresInSeconds = 3600,
 ): Promise<string | null> {
-  const supabase = getClient();
-  const { data, error } = await supabase.storage
-    .from(BUCKET)
-    .createSignedUrl(storagePath, expiresInSeconds);
+  try {
+    const supabase = getClient();
+    const { data, error } = await supabase.storage
+      .from(BUCKET)
+      .createSignedUrl(storagePath, expiresInSeconds);
 
-  if (error || !data) return null;
-  return data.signedUrl;
+    if (error || !data) return null;
+    return data.signedUrl;
+  } catch {
+    return null;
+  }
 }

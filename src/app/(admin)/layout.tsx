@@ -4,6 +4,7 @@ import {
   Landmark,
   Layers3,
   ScrollText,
+  Settings,
   ShieldCheck,
   SlidersHorizontal,
   UserCog,
@@ -35,6 +36,7 @@ const navItems = [
   { href: "/rules", label: "Rules", icon: SlidersHorizontal },
   { href: "/audit", label: "Audit", icon: ScrollText },
   { href: "/users", label: "Users", icon: UserCog },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export default async function AdminLayout({

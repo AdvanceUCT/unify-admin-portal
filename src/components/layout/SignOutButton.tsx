@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { authClient } from "@/lib/auth/auth-client";
+import { confirmDiscardUnsavedChanges } from "@/hooks/useUnsavedChangesWarning";
 
 export function SignOutButton({ redirectTo = "/sign-in" }: { redirectTo?: string }) {
   const router = useRouter();
@@ -11,6 +12,8 @@ export function SignOutButton({ redirectTo = "/sign-in" }: { redirectTo?: string
   const [isPending, setIsPending] = useState(false);
 
   async function handleSignOut() {
+    if (!(await confirmDiscardUnsavedChanges())) return;
+
     setErrorMessage(null);
     setIsPending(true);
 

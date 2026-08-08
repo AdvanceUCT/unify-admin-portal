@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { saveDraftStepAction } from "@/app/vendor/(portal)/application/actions";
+import { useUnsavedChangesWarning } from "@/hooks/useUnsavedChangesWarning";
 import {
   OTHER_VERIFICATION_REASON_VALUE,
   VERIFICATION_REASONS,
@@ -29,6 +30,9 @@ export function Step3VerificationRequirements({
   const [showOtherInput, setShowOtherInput] = useState(
     initialData.verificationReasons.includes(OTHER_VERIFICATION_REASON_VALUE),
   );
+  const [dirty, setDirty] = useState(false);
+
+  useUnsavedChangesWarning(dirty);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -43,6 +47,7 @@ export function Step3VerificationRequirements({
         setError(result.error ?? "Could not save.");
         return;
       }
+      setDirty(false);
       onComplete();
     } catch {
       setError("An unexpected error occurred.");
@@ -60,7 +65,7 @@ export function Step3VerificationRequirements({
         </p>
       </div>
 
-      <form className="space-y-4" onSubmit={handleSubmit}>
+      <form className="space-y-4" onChange={() => setDirty(true)} onSubmit={handleSubmit}>
         <fieldset>
           <legend className={LABEL}>
             Reason for requesting verification access <span className="text-red-500">*</span>

@@ -9,6 +9,7 @@ import { requireVendorSession } from "@/lib/auth/session";
 import { getUniversityProfile } from "@/lib/university/profile";
 import { getVendorApplicationForUser } from "@/lib/vendors/applications";
 import { getApprovedVendorContextForUser } from "@/lib/vendors/context";
+import { encodeLiveVerificationCursor } from "@/lib/vendors/liveVerifications";
 import { getVendorVerificationStats, listRecentVendorVerifications } from "@/lib/vendors/verifications";
 
 export default async function VendorDashboardPage() {
@@ -33,9 +34,12 @@ export default async function VendorDashboardPage() {
       null;
     const [stats, recentVerifications, universityProfile] = await Promise.all([
       getVendorVerificationStats(context.vendorProfileId, { branchIds: context.branchIds, inPersonOnly: true }),
-      listRecentVendorVerifications(context.vendorProfileId, 10, { branchIds: context.branchIds, inPersonOnly: true }),
+      listRecentVendorVerifications(context.vendorProfileId, 5, { branchIds: context.branchIds, inPersonOnly: true }),
       getUniversityProfile(),
     ]);
+    const viewAllHref = context.branchIds.length === 1
+      ? `/vendor/verifications?branchId=${encodeURIComponent(context.branchIds[0])}`
+      : "/vendor/verifications";
 
     return (
       <div className="space-y-6">
@@ -49,6 +53,8 @@ export default async function VendorDashboardPage() {
           stats={stats}
           recentVerifications={recentVerifications}
           supportEmail={universityProfile?.contactEmail}
+          liveCursor={encodeLiveVerificationCursor({ completedAt: new Date().toISOString(), id: "_" })}
+          viewAllHref={viewAllHref}
         />
         <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
           <div className="border-b border-zinc-100 px-5 py-4"><h2 className="font-medium text-zinc-950">Branches</h2></div>

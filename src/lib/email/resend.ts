@@ -9,6 +9,7 @@ type SendResendEmailInput = {
   apiKey: string;
   from: string;
   html: string;
+  replyTo?: string;
   subject: string;
   text: string;
   to: string;
@@ -26,6 +27,7 @@ export async function sendResendEmail({
   apiKey,
   from,
   html,
+  replyTo,
   subject,
   text,
   to,
@@ -34,6 +36,8 @@ export async function sendResendEmail({
     body: JSON.stringify({
       from,
       html,
+      ...(replyTo ? { headers: { "Reply-To": replyTo } } : {}),
+      ...(replyTo ? { reply_to: replyTo } : {}),
       subject,
       text,
       to,

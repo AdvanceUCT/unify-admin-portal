@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { SignOutButton } from "@/components/layout/SignOutButton";
+import { toSafeImageSrc } from "@/lib/url";
 
 export type PortalNavItem = {
   href: string;
@@ -11,6 +12,7 @@ export type PortalNavItem = {
 export function PortalShell({
   children,
   context,
+  logoUrl,
   navItems,
   productName,
   sessionLabel,
@@ -19,19 +21,31 @@ export function PortalShell({
 }: {
   children: React.ReactNode;
   context: string;
+  logoUrl?: string | null;
   navItems: PortalNavItem[];
   productName: string;
   sessionLabel: string;
   signOutRedirectTo?: string;
   utilityIcon: LucideIcon;
 }) {
+  const safeLogoSrc = toSafeImageSrc(logoUrl);
+
   return (
     <div className="min-h-screen bg-[#f7f8fa] text-zinc-950">
       <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-zinc-200 bg-white px-4 py-5 lg:block">
         <div className="flex items-center gap-3 px-2">
-          <span className="grid size-10 place-items-center rounded-md bg-zinc-950 text-white">
-            <UtilityIcon size={20} aria-hidden="true" />
-          </span>
+          {safeLogoSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element -- signed Supabase URL, not compatible with next/image
+            <img
+              alt=""
+              className="size-10 shrink-0 rounded-md border border-zinc-200 bg-white object-contain"
+              src={safeLogoSrc}
+            />
+          ) : (
+            <span className="grid size-10 shrink-0 place-items-center rounded-md bg-zinc-950 text-white">
+              <UtilityIcon size={20} aria-hidden="true" />
+            </span>
+          )}
           <div>
             <p className="text-sm font-medium text-zinc-500">{context}</p>
             <p className="font-semibold text-zinc-950">{productName}</p>

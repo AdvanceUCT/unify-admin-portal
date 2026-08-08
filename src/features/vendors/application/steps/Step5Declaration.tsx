@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { saveDraftStepAction } from "@/app/vendor/(portal)/application/actions";
+import { useUnsavedChangesWarning } from "@/hooks/useUnsavedChangesWarning";
 import type { DraftApplicationData } from "../VendorApplicationWizard";
 
 const DECLARATIONS = [
@@ -24,6 +25,8 @@ export function Step5Declaration({
   const [accepted, setAccepted] = useState(initialData.declarationAccepted);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useUnsavedChangesWarning(accepted !== initialData.declarationAccepted);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

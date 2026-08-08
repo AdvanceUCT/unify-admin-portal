@@ -144,6 +144,12 @@ export default async function VendorsPage({
                         })}
                       </p>
                     )}
+                    <Link
+                      href={`/vendors/${application.id}/verification-history`}
+                      className="inline-flex h-9 items-center rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                    >
+                      Verification history
+                    </Link>
                     <RevokeButton
                       applicationId={application.id}
                       companyName={application.vendorProfile.companyName}

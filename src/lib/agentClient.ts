@@ -220,6 +220,29 @@ export async function getStatus(): Promise<{
   return response.json();
 }
 
+export type AgentHealth =
+  | { ok: true; checkedAt: string; status: string; reachable: boolean }
+  | { ok: false; checkedAt: string; error: string };
+
+/**
+ * Checks Identity Agent Service reachability for display in the admin UI.
+ * Never throws — connection failures are captured in the returned result.
+ */
+export async function checkAgentHealth(): Promise<AgentHealth> {
+  const checkedAt = new Date().toISOString();
+
+  try {
+    const result = await getStatus();
+    return { checkedAt, ok: true, reachable: result.ledger.reachable, status: result.status };
+  } catch (error) {
+    return {
+      checkedAt,
+      error: error instanceof Error ? error.message : "Connection failed.",
+      ok: false,
+    };
+  }
+}
+
 export async function getIssuerDid(): Promise<{ did: string }> {
   const response = await agentFetch("/api/dids/issuer", {
     timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,

@@ -82,6 +82,8 @@ const envSchema = z.object({
   RESEND_API_KEY: optionalNonEmptyString,
   CREDENTIAL_EMAIL_FROM: optionalNonEmptyString,
   CREDENTIAL_EMAIL_DELIVERY_MODE: z.enum(["resend", "console"]).default("resend"),
+  VENDOR_HELP_EMAIL_FROM: optionalNonEmptyString,
+  VENDOR_HELP_EMAIL_DELIVERY_MODE: z.enum(["resend", "console"]).default("resend"),
   WEBHOOK_SIGNING_SECRET: optionalNonEmptyString,
   VENDOR_API_KEY_PEPPER: optionalNonEmptyString,
   VENDOR_WEBHOOK_ENCRYPTION_KEY: optionalNonEmptyString,
