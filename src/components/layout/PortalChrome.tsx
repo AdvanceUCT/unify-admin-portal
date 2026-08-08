@@ -28,6 +28,7 @@ export function PortalChrome({
   navItems,
   settingsHref,
   signOutRedirectTo,
+  status,
   user,
 }: {
   brand: PortalBrandIdentity;
@@ -36,6 +37,7 @@ export function PortalChrome({
   navItems: PortalNavItem[];
   settingsHref: string;
   signOutRedirectTo?: string;
+  status?: React.ReactNode;
   user: PortalUser;
 }) {
   const pathname = usePathname();
@@ -85,6 +87,8 @@ export function PortalChrome({
     <>
       <aside
         className={cn(
+          // No shadow here — the sidebar is meant to blend seamlessly into the
+          // content column at the active nav tab, and a cast shadow breaks that seam.
           "fixed inset-y-0 left-0 hidden w-64 flex-col overflow-y-auto pb-6 pt-6 lg:flex",
           sidebarBackground,
         )}
@@ -137,6 +141,7 @@ export function PortalChrome({
           onOpenNav={openDrawer}
           settingsHref={settingsHref}
           signOutRedirectTo={signOutRedirectTo}
+          status={status}
           title={activeItem?.label ?? fallbackTitle}
           user={user}
         />

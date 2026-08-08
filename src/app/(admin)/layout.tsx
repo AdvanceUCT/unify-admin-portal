@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { PortalShell } from "@/components/layout/PortalShell";
 import type { PortalNavItem } from "@/components/layout/portalTypes";
+import { AgentStatusIndicator } from "@/features/agent/AgentStatusIndicator";
 import {
   ADMIN_ROLES,
   canAccessRoute,
@@ -65,6 +66,7 @@ export default async function AdminLayout({
       navItems={visibleNavItems}
       portal="admin"
       settingsHref="/settings"
+      status={<AgentStatusIndicator />}
       user={{
         email: session.user.email,
         image: session.user.image,

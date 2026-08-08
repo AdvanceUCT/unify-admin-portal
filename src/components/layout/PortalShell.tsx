@@ -29,6 +29,7 @@ export function PortalShell({
   portal,
   settingsHref,
   signOutRedirectTo,
+  status,
   user,
 }: {
   brand: PortalBrandIdentity;
@@ -38,6 +39,8 @@ export function PortalShell({
   portal: PortalVariant;
   settingsHref: string;
   signOutRedirectTo?: string;
+  /** Portal-specific header status slot. */
+  status?: React.ReactNode;
   user: PortalUser;
 }) {
   return (
@@ -48,6 +51,7 @@ export function PortalShell({
         navItems={navItems}
         settingsHref={settingsHref}
         signOutRedirectTo={signOutRedirectTo}
+        status={status}
         user={user}
       >
         {children}

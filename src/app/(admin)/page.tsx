@@ -1,92 +1,99 @@
-import { AlertTriangle } from "lucide-react";
-
-import { SectionHeader } from "@/components/layout/SectionHeader";
-import { Badge } from "@/components/ui/Badge";
 import { Metric } from "@/components/ui/Metric";
-import { checkAgentHealth } from "@/lib/agentClient";
+import { StatusText } from "@/components/ui/StatusText";
 import { getDashboardSummary, getRecentCredentialEvents } from "@/lib/api/server";
 import { ADMIN_ROLES } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
-import { credentialStatusTone, formatCredentialActivityEventStatus, formatDateTime } from "@/lib/formatters";
-import { AgentConnectionWidget } from "./AgentConnectionWidget";
+import {
+  credentialStatusTone,
+  formatCredentialActivityEventStatus,
+  formatDateTime,
+} from "@/lib/formatters";
 
 export default async function AdminOverviewPage() {
   await requireRole(ADMIN_ROLES);
 
-  const [summary, credentialEvents, agentHealth] = await Promise.all([
+  const [summary, credentialEvents] = await Promise.all([
     getDashboardSummary(),
     getRecentCredentialEvents(),
-    checkAgentHealth(),
   ]);
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <SectionHeader
-          title="Operational overview"
-          description="Simulated credential lifecycle, vendor onboarding, and audit activity."
+    <div className="space-y-6">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Metric
+          detail="Stored by students"
+          label="Issued credentials"
+          tone="success"
+          value={summary.issuedCredentials}
         />
-        <AgentConnectionWidget initialHealth={agentHealth} />
-      </div>
-
-      {!agentHealth.ok ? (
-        <div className="flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <div>
-            <p className="font-medium">Identity Agent Service is unreachable</p>
-            <p className="mt-0.5 text-rose-700">
-              {agentHealth.error} Credential issuance and verification may be affected. See{" "}
-              <a className="underline underline-offset-2" href="/settings">
-                Settings → Agent service health
-              </a>{" "}
-              for details.
-            </p>
-          </div>
-        </div>
-      ) : null}
-
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Issued credentials" value={summary.issuedCredentials} detail="stored by students" />
-        <Metric label="Pending issuance" value={summary.pendingIssuance} detail="sent or accepted" />
-        <Metric label="Failed credentials" value={summary.failedCredentials} detail="ready to retry" />
-        <Metric label="Active batches" value={summary.activeBatchJobs} detail="queued or processing" />
+        <Metric
+          detail="Sent or accepted"
+          label="Pending issuance"
+          tone="warning"
+          value={summary.pendingIssuance}
+        />
+        <Metric
+          detail="Ready to retry"
+          label="Failed credentials"
+          tone="danger"
+          value={summary.failedCredentials}
+        />
+        <Metric
+          detail="Awaiting review"
+          label="Vendor applications"
+          tone="brand"
+          value={summary.vendorsPendingApproval}
+        />
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Vendor applications" value={summary.vendorsPendingApproval} detail="awaiting review" />
-      </section>
-
-      <section className="rounded-lg border border-zinc-200 bg-white">
-        <div className="border-b border-zinc-200 px-5 py-4">
-          <h2 className="text-base font-semibold text-zinc-950">Recent credential events</h2>
+      <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="text-section-title text-fg">Recent credential events</h2>
         </div>
+
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-zinc-200 text-xs uppercase tracking-wide text-zinc-500">
-              <tr>
+          <table className="w-full text-center text-body">
+            <thead className="border-b border-border">
+              <tr className="whitespace-nowrap text-caption uppercase tracking-wide text-fg-subtle">
                 <th className="px-5 py-3 font-medium">Student ID</th>
                 <th className="px-5 py-3 font-medium">Status</th>
                 <th className="px-5 py-3 font-medium">Schema version</th>
                 <th className="px-5 py-3 font-medium">Time</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
-              {credentialEvents.map((event) => (
-                <tr key={event.id}>
-                  <td className="px-5 py-4 font-medium text-zinc-900">{event.studentId ?? "Unknown"}</td>
-                  <td className="px-5 py-4">
-                    {event.status ? (
-                      <Badge tone={credentialStatusTone(event.status)}>
-                        {formatCredentialActivityEventStatus(event)}
-                      </Badge>
-                    ) : null}
+            <tbody className="divide-y divide-border">
+              {credentialEvents.length === 0 ? (
+                <tr>
+                  <td className="px-5 py-10 text-fg-subtle" colSpan={4}>
+                    No credential events recorded yet.
                   </td>
-                  <td className="px-5 py-4">
-                    {event.schemaVersion ? <Badge tone="version">v{event.schemaVersion}</Badge> : "—"}
-                  </td>
-                  <td className="px-5 py-4 text-zinc-600">{formatDateTime(event.occurredAt)}</td>
                 </tr>
-              ))}
+              ) : (
+                credentialEvents.map((event) => (
+                  <tr className="transition hover:bg-surface-muted/60" key={event.id}>
+                    <td className="px-5 py-4 font-medium tabular-nums text-fg">
+                      {event.studentId ?? "Unknown"}
+                    </td>
+                    <td className="px-5 py-4">
+                      {event.status ? (
+                        <StatusText tone={credentialStatusTone(event.status)}>
+                          {formatCredentialActivityEventStatus(event)}
+                        </StatusText>
+                      ) : (
+                        <span className="text-fg-subtle">—</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-4 tabular-nums">
+                      {event.schemaVersion ? (
+                        <span className="font-semibold text-info-fg">v{event.schemaVersion}</span>
+                      ) : (
+                        <span className="text-fg-subtle">—</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-4 text-fg-muted">{formatDateTime(event.occurredAt)}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

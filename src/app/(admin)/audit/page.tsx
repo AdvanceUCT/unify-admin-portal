@@ -1,8 +1,7 @@
-import Link from "next/link";
-
-import { SectionHeader } from "@/components/layout/SectionHeader";
-import { Badge } from "@/components/ui/Badge";
+import { PageTabs } from "@/components/layout/PageTabs";
+import { StatusText } from "@/components/ui/StatusText";
 import { CredentialAuditLogTable } from "@/features/audit/CredentialAuditLogTable";
+import { DecisionNoteButton } from "@/features/audit/DecisionNoteButton";
 import { StudentImportAuditLogTable } from "@/features/audit/StudentImportAuditLogTable";
 import { requireRole } from "@/lib/auth/session";
 import { getPaginatedCredentialOfferSentAuditLogs } from "@/lib/credentials/audit";
@@ -16,6 +15,14 @@ function parsePage(value: string | string[] | undefined) {
   const rawValue = Array.isArray(value) ? value[0] : value;
   const parsed = Number.parseInt(rawValue ?? "1", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
+
+function decisionDate(value: Date | string) {
+  return new Date(value).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 export default async function AuditPage({
@@ -43,47 +50,17 @@ export default async function AuditPage({
 
   return (
     <div className="space-y-6">
-      <SectionHeader title="Logs" description="Credential and portal accountability logs." />
-
-      <div className="border-b border-zinc-200">
-        <nav aria-label="Log views" className="-mb-px flex gap-6">
-          <Link
-            href="/audit"
-            className={`border-b-2 px-1 pb-3 text-sm font-medium transition-colors ${
-              activeTab === "credentials"
-                ? "border-zinc-950 text-zinc-950"
-                : "border-transparent text-zinc-500 hover:border-zinc-300 hover:text-zinc-700"
-            }`}
-          >
-            Credential logs
-          </Link>
-          <Link
-            href="/audit?tab=vendors"
-            className={`border-b-2 px-1 pb-3 text-sm font-medium transition-colors ${
-              activeTab === "vendors"
-                ? "border-zinc-950 text-zinc-950"
-                : "border-transparent text-zinc-500 hover:border-zinc-300 hover:text-zinc-700"
-            }`}
-          >
-            Vendor decisions
-            {decidedVendorApplications.length > 0 && (
-              <span className="ml-2 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600">
-                {decidedVendorApplications.length}
-              </span>
-            )}
-          </Link>
-          <Link
-            href="/audit?tab=imports"
-            className={`border-b-2 px-1 pb-3 text-sm font-medium transition-colors ${
-              activeTab === "imports"
-                ? "border-zinc-950 text-zinc-950"
-                : "border-transparent text-zinc-500 hover:border-zinc-300 hover:text-zinc-700"
-            }`}
-          >
-            Import logs
-          </Link>
-        </nav>
-      </div>
+      <PageTabs
+        tabs={[
+          { href: "/audit", isActive: activeTab === "credentials", label: "Credential logs" },
+          {
+            href: "/audit?tab=vendors",
+            isActive: activeTab === "vendors",
+            label: "Vendor decisions",
+          },
+          { href: "/audit?tab=imports", isActive: activeTab === "imports", label: "Import logs" },
+        ]}
+      />
 
       {activeTab === "credentials" && (
         <CredentialAuditLogTable
@@ -96,85 +73,75 @@ export default async function AuditPage({
       )}
 
       {activeTab === "vendors" && (
-        <section className="rounded-lg border border-zinc-200 bg-white">
-          <div className="border-b border-zinc-200 px-5 py-4">
-            <h2 className="text-base font-semibold text-zinc-950">Vendor application decisions</h2>
-            <p className="mt-0.5 text-sm text-zinc-500">
-              Approved, rejected, and revoked verifier applications, ordered by decision date.
-            </p>
+        <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+          <div className="border-b border-border px-5 py-4">
+            <h2 className="text-section-title text-fg">Vendor application decisions</h2>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-zinc-200 text-xs font-medium uppercase tracking-wide text-zinc-500">
-                <tr>
-                  <th className="px-5 py-3">Company</th>
-                  <th className="px-5 py-3">Category</th>
-                  <th className="px-5 py-3">Decision</th>
-                  <th className="px-5 py-3">Decided by</th>
-                  <th className="px-5 py-3">Notes</th>
-                  <th className="px-5 py-3">Decided</th>
-                  <th className="px-5 py-3">Submitted</th>
+            <table className="w-full text-center text-body">
+              <thead className="border-b border-border">
+                <tr className="whitespace-nowrap text-caption uppercase tracking-wide text-fg-subtle">
+                  <th className="px-5 py-3 font-medium">Company</th>
+                  <th className="px-5 py-3 font-medium">Category</th>
+                  <th className="px-5 py-3 font-medium">Decision</th>
+                  <th className="px-5 py-3 font-medium">Decided by</th>
+                  <th className="px-5 py-3 font-medium">Notes</th>
+                  <th className="px-5 py-3 font-medium">Decided</th>
+                  <th className="px-5 py-3 font-medium">Submitted</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100">
+              <tbody className="divide-y divide-border">
                 {decidedVendorApplications.length === 0 ? (
                   <tr>
-                    <td className="px-5 py-12 text-center text-sm text-zinc-500" colSpan={7}>
+                    <td className="px-5 py-10 text-fg-subtle" colSpan={7}>
                       No vendor application decisions have been made yet.
                     </td>
                   </tr>
                 ) : (
                   decidedVendorApplications.map((application) => (
-                    <tr key={application.id}>
+                    <tr className="transition hover:bg-surface-muted/60" key={application.id}>
                       <td className="px-5 py-4">
-                        <div className="font-medium text-zinc-950">
-                          {application.companyName}
-                        </div>
+                        <div className="font-medium text-fg">{application.companyName}</div>
                         {application.companyRegistrationNumber && (
-                          <div className="text-xs text-zinc-400">
+                          <div className="text-xs text-fg-subtle">
                             Reg. {application.companyRegistrationNumber}
                           </div>
                         )}
                       </td>
-                      <td className="px-5 py-4 text-zinc-600">
-                        {application.serviceCategory}
-                      </td>
+                      <td className="px-5 py-4 text-fg-muted">{application.serviceCategory}</td>
                       <td className="px-5 py-4">
                         {application.status === "APPROVED" ? (
-                          <Badge tone="success">Approved</Badge>
+                          <StatusText tone="success">Approved</StatusText>
                         ) : application.status === "REVOKED" ? (
-                          <Badge tone="warning">Revoked</Badge>
+                          <StatusText tone="warning">Revoked</StatusText>
                         ) : (
-                          <Badge tone="danger">Rejected</Badge>
+                          <StatusText tone="danger">Rejected</StatusText>
                         )}
                       </td>
-                      <td className="px-5 py-4 text-zinc-600">
+                      <td className="whitespace-nowrap px-5 py-4 text-fg-muted">
                         {application.decisionActorName ?? (
-                          <span className="text-zinc-400">Unknown</span>
+                          <span className="text-fg-subtle">Unknown</span>
                         )}
                       </td>
-                      <td className="max-w-xs px-5 py-4 text-zinc-600">
+                      <td className="px-5 py-4">
                         {application.decisionNotes ? (
-                          <span className="line-clamp-2">{application.decisionNotes}</span>
+                          <DecisionNoteButton
+                            companyName={application.companyName}
+                            note={application.decisionNotes}
+                          />
                         ) : (
-                          <span className="text-zinc-400">—</span>
+                          <span className="text-fg-subtle">—</span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-5 py-4 text-zinc-500">
-                        {application.decisionAt
-                          ? new Date(application.decisionAt).toLocaleDateString("en-GB", {
-                              day: "numeric",
-                              month: "short",
-                              year: "numeric",
-                            })
-                          : <span className="text-zinc-400">—</span>}
+                      <td className="whitespace-nowrap px-5 py-4 tabular-nums text-fg-muted">
+                        {application.decisionAt ? (
+                          decisionDate(application.decisionAt)
+                        ) : (
+                          <span className="text-fg-subtle">—</span>
+                        )}
                       </td>
-                      <td className="whitespace-nowrap px-5 py-4 text-zinc-500">
-                        {new Date(application.createdAt).toLocaleDateString("en-GB", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        })}
+                      <td className="whitespace-nowrap px-5 py-4 tabular-nums text-fg-muted">
+                        {decisionDate(application.createdAt)}
                       </td>
                     </tr>
                   ))

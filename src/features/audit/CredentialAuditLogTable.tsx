@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
-import { Badge } from "@/components/ui/Badge";
+import { StatusText } from "@/components/ui/StatusText";
 import type { CredentialAuditLogEntry } from "@/lib/api/types";
 import { credentialAuditActionTone, formatCredentialAuditAction, formatDateTime } from "@/lib/formatters";
 
@@ -33,7 +33,7 @@ function PaginationLink({
   href: string;
 }) {
   const className =
-    "inline-flex h-9 items-center gap-2 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50";
+    "inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg";
 
   if (disabled) {
     return (
@@ -56,14 +56,14 @@ export function CredentialAuditLogTable({ logs, page, pageSize, totalCount, tota
 
   return (
     <div className="space-y-3">
-      <section className="rounded-lg border border-zinc-200 bg-white">
-        <div className="border-b border-zinc-200 px-5 py-4">
-          <h2 className="text-base font-semibold text-zinc-950">Credential logs</h2>
+      <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="text-section-title text-fg">Credential logs</h2>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-zinc-200 text-xs uppercase tracking-wide text-zinc-500">
-              <tr>
+          <table className="w-full text-center text-body">
+            <thead className="border-b border-border">
+              <tr className="whitespace-nowrap text-caption uppercase tracking-wide text-fg-subtle">
                 <th className="px-5 py-3 font-medium">Action</th>
                 <th className="px-5 py-3 font-medium">Triggered by</th>
                 <th className="px-5 py-3 font-medium">Student ID</th>
@@ -72,28 +72,32 @@ export function CredentialAuditLogTable({ logs, page, pageSize, totalCount, tota
                 <th className="px-5 py-3 font-medium">Occurred</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
+            <tbody className="divide-y divide-border">
               {logs.length === 0 ? (
                 <tr>
-                  <td className="px-5 py-12 text-center text-sm text-zinc-500" colSpan={6}>
+                  <td className="px-5 py-10 text-fg-subtle" colSpan={6}>
                     No credential logs found.
                   </td>
                 </tr>
               ) : (
                 logs.map((log) => (
-                  <tr key={log.id}>
+                  <tr className="transition hover:bg-surface-muted/60" key={log.id}>
                     <td className="px-5 py-4">
-                      <Badge tone={credentialAuditActionTone(log.action)}>
+                      <StatusText tone={credentialAuditActionTone(log.action)}>
                         {formatCredentialAuditAction(log.action)}
-                      </Badge>
+                      </StatusText>
                     </td>
-                    <td className="px-5 py-4 text-zinc-600">{triggeredByLabel(log)}</td>
-                    <td className="px-5 py-4 font-medium text-zinc-900">{log.studentId}</td>
-                    <td className="px-5 py-4">
-                      {log.schemaVersion ? <Badge tone="version">v{log.schemaVersion}</Badge> : null}
+                    <td className="px-5 py-4 text-fg-muted">{triggeredByLabel(log)}</td>
+                    <td className="px-5 py-4 font-medium tabular-nums text-fg">{log.studentId}</td>
+                    <td className="px-5 py-4 tabular-nums">
+                      {log.schemaVersion ? (
+                        <span className="font-semibold text-info-fg">v{log.schemaVersion}</span>
+                      ) : (
+                        <span className="text-fg-subtle">—</span>
+                      )}
                     </td>
-                    <td className="px-5 py-4 text-zinc-600">{log.batchId ?? "Individual"}</td>
-                    <td className="px-5 py-4 text-zinc-600">{formatDateTime(log.occurredAt)}</td>
+                    <td className="px-5 py-4 text-fg-muted">{log.batchId ?? "Individual"}</td>
+                    <td className="px-5 py-4 text-fg-muted">{formatDateTime(log.occurredAt)}</td>
                   </tr>
                 ))
               )}
@@ -103,7 +107,7 @@ export function CredentialAuditLogTable({ logs, page, pageSize, totalCount, tota
       </section>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-fg-subtle">
           Showing {firstRow}-{lastRow} of {totalCount} logs
         </p>
         <div className="flex items-center gap-2">
@@ -111,7 +115,7 @@ export function CredentialAuditLogTable({ logs, page, pageSize, totalCount, tota
             <ChevronLeft aria-hidden className="size-4" />
             Previous
           </PaginationLink>
-          <span className="text-xs text-zinc-500">
+          <span className="text-xs text-fg-subtle">
             Page {page} of {totalPages}
           </span>
           <PaginationLink disabled={page === totalPages} href={auditPageHref(page + 1)}>

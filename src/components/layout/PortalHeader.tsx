@@ -15,6 +15,7 @@ export function PortalHeader({
   onOpenNav,
   settingsHref,
   signOutRedirectTo,
+  status,
   title,
   user,
 }: {
@@ -22,11 +23,13 @@ export function PortalHeader({
   onOpenNav: () => void;
   settingsHref: string;
   signOutRedirectTo?: string;
+  /** Portal-specific status slot, e.g. the admin agent-service indicator. */
+  status?: React.ReactNode;
   title: string;
   user: PortalUser;
 }) {
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b border-border bg-surface-header px-4 sm:px-6">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b border-border bg-surface-header px-4 shadow-header sm:px-6">
       <div className="flex min-w-0 items-center gap-3">
         <IconButton
           aria-label="Open navigation"
@@ -40,6 +43,8 @@ export function PortalHeader({
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3">
+        {status}
+
         {/* Placeholder — no notifications feed exists yet. */}
         <div className="relative">
           <IconButton
