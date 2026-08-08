@@ -27,7 +27,9 @@ const verification = {
   servicePointId: "service-point-1",
   servicePointName: "Main Branch",
   status: "APPROVED",
+  isVerified: null,
   failureCode: null,
+  attributes: null,
   completedAt,
   branch: { id: "branch-1", name: "Main Branch" },
 };
@@ -59,7 +61,37 @@ describe("live in-person verification feed", () => {
     }));
   });
 
-  it("never exposes attributes from an unverified proof", async () => {
+  it("uses stored identity metadata before calling the agent fallback", async () => {
+    database.vendorVerification.findMany.mockResolvedValue([{
+      ...verification,
+      isVerified: true,
+      attributes: {
+        fullName: "Grace Hopper",
+        institution: "University of Cape Town",
+        studentNumber: "STU002",
+      },
+    }]);
+    const cursor = encodeLiveVerificationCursor({ completedAt: "2026-08-04T12:00:00.000Z", id: "_" });
+    const result = await getLiveVerificationEvents(context, cursor);
+    expect(result.events[0]).toMatchObject({
+      attributes: {
+        fullName: "Grace Hopper",
+        institution: "University of Cape Town",
+        studentNumber: "STU002",
+      },
+      student: {
+        id: "STU002",
+        name: "Grace Hopper",
+        university: "University of Cape Town",
+      },
+      studentName: "Grace Hopper",
+      studentNumber: "STU002",
+      studentUniversity: "University of Cape Town",
+    });
+    expect(agent.getInPersonVerificationDetails).not.toHaveBeenCalled();
+  });
+
+  it("exposes returned metadata even when the proof was not approved", async () => {
     database.vendorVerification.findMany.mockResolvedValue([verification]);
     agent.getInPersonVerificationDetails.mockResolvedValue({
       verificationRequestId: "request-1",
@@ -69,6 +101,6 @@ describe("live in-person verification feed", () => {
     });
     const cursor = encodeLiveVerificationCursor({ completedAt: "2026-08-04T12:00:00.000Z", id: "_" });
     const result = await getLiveVerificationEvents(context, cursor);
-    expect(result.events[0]).toMatchObject({ studentName: null, studentNumber: null });
+    expect(result.events[0]).toMatchObject({ studentName: "Forged Name", studentNumber: "FORGED" });
   });
 });

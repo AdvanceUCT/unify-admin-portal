@@ -8,7 +8,13 @@ import { LiveVerificationList } from "@/features/vendors/LiveVerificationList";
 import { QrCodeActions } from "@/features/vendors/QrCodeActions";
 import { prisma } from "@/lib/db/prisma";
 import { assertBranchAccess, requireApprovedVendorContext } from "@/lib/vendors/context";
+import { encodeLiveVerificationCursor } from "@/lib/vendors/liveVerifications";
 import { getVendorVerificationStats, listRecentVendorVerifications } from "@/lib/vendors/verifications";
+import {
+  normalizedVerificationAttributes,
+  summarizeVerificationStudent,
+  vendorVerificationFailureReason,
+} from "@/lib/vendors/verificationContract";
 
 import { retryBranchProvisioningAction, setBranchActiveAction, setDefaultBranchAction, updateBranchAction } from "../actions";
 
@@ -71,17 +77,25 @@ export default async function VendorBranchPage({ params }: { params: Promise<{ b
 
       <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
         <div className="border-b border-zinc-100 px-5 py-4"><h2 className="font-medium text-zinc-950">In-person verification history</h2></div>
-        <LiveVerificationList initialItems={history.map((item) => ({
-          id: item.id,
-          verificationRequestId: item.verificationRequestId,
-          checkoutId: item.checkoutId,
-          servicePointName: item.servicePointName,
-          status: item.status,
-          failureCode: item.failureCode,
-          createdAt: item.createdAt.toISOString(),
-          completedAt: item.completedAt?.toISOString() ?? null,
-          latestDeliveryStatus: item.deliveries[0]?.status ?? null,
-        }))} />
+        <LiveVerificationList initialItems={history.map((item) => {
+          const attributes = normalizedVerificationAttributes(item.attributes);
+          return {
+            id: item.id,
+            branchId: item.branchId,
+            verificationRequestId: item.verificationRequestId,
+            checkoutId: item.checkoutId,
+            servicePointName: item.servicePointName,
+            status: item.status,
+            isVerified: item.isVerified,
+            failureCode: item.failureCode,
+            failureReason: vendorVerificationFailureReason(item.failureCode),
+            attributes,
+            student: summarizeVerificationStudent(attributes),
+            createdAt: item.createdAt.toISOString(),
+            completedAt: item.completedAt?.toISOString() ?? null,
+            latestDeliveryStatus: item.deliveries[0]?.status ?? null,
+          };
+        })} branchId={branch.id} liveCursor={encodeLiveVerificationCursor({ completedAt: new Date().toISOString(), id: "_" })} />
       </section>
     </div>
   );

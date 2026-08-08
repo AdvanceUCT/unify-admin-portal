@@ -88,6 +88,8 @@ function isVerificationCompletedPayload(value: unknown): value is VerificationCo
     typeof record.servicePointId === "string" &&
     ["Approved", "Declined", "Expired", "Failed"].includes(String(record.decision)) &&
     (record.checkoutId === undefined || typeof record.checkoutId === "string") &&
+    (record.isVerified === undefined || typeof record.isVerified === "boolean") &&
+    (record.attributes === undefined || (record.attributes !== null && typeof record.attributes === "object" && !Array.isArray(record.attributes))) &&
     hasValidDates
   );
 }

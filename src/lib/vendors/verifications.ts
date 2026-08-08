@@ -2,13 +2,20 @@ import "server-only";
 
 import {
   createCheckoutVerificationSession,
+  getInPersonVerificationDetails,
   getVerificationResult,
   type AgentVerificationResult,
 } from "@/lib/agentClient";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { ensureVendorVerificationServicePoint } from "@/lib/vendors/applications";
 import { deliverVendorWebhook } from "@/lib/vendors/integrations";
-import { mapAgentVerificationDecision } from "@/lib/vendors/verificationContract";
+import {
+  mapAgentVerificationDecision,
+  normalizedVerificationAttributes,
+  summarizeVerificationStudent,
+  vendorVerificationFailureReason,
+} from "@/lib/vendors/verificationContract";
 
 export type VerificationCompletedEvent = {
   type: "verification.completed";
@@ -18,26 +25,55 @@ export type VerificationCompletedEvent = {
   vendorId: string;
   servicePointId: string;
   decision: AgentVerificationResult["status"];
+  isVerified?: boolean;
+  attributes?: unknown;
   failureCode?: string;
   expiresAt: string;
   completedAt: string;
   timestamp: string;
 };
 
+async function getAgentVerificationMetadata(
+  verificationRequestId: string | null,
+  servicePointId: string | null,
+) {
+  if (!verificationRequestId) return { attributes: null, isVerified: null };
+
+  try {
+    const result = await getInPersonVerificationDetails(verificationRequestId);
+    if (result.servicePointId && servicePointId && result.servicePointId !== servicePointId) {
+      return { attributes: null, isVerified: null };
+    }
+    return {
+      attributes: normalizedVerificationAttributes(result.attributes),
+      isVerified: result.isVerified ?? null,
+    };
+  } catch {
+    return { attributes: null, isVerified: null };
+  }
+}
+
 function resultShape(verification: {
   verificationRequestId: string | null;
   checkoutId: string | null;
   status: string;
+  isVerified?: boolean | null;
   failureCode: string | null;
+  attributes?: unknown;
   createdAt: Date;
   expiresAt: Date | null;
   completedAt: Date | null;
 }) {
+  const attributes = normalizedVerificationAttributes(verification.attributes);
   return {
     verificationRequestId: verification.verificationRequestId,
     checkoutId: verification.checkoutId,
     status: verification.status,
+    isVerified: verification.isVerified ?? null,
     failureCode: verification.failureCode,
+    failureReason: vendorVerificationFailureReason(verification.failureCode),
+    attributes,
+    student: summarizeVerificationStudent(attributes),
     createdAt: verification.createdAt.toISOString(),
     expiresAt: verification.expiresAt?.toISOString() ?? null,
     completedAt: verification.completedAt?.toISOString() ?? null,
@@ -138,6 +174,14 @@ export async function recordVerificationCompletedEvent(payload: VerificationComp
   });
   if (!branch) throw new Error("Verification event service point is not registered to this vendor.");
 
+  let attributes = normalizedVerificationAttributes(payload.attributes);
+  let isVerified = payload.isVerified ?? null;
+  if (!attributes) {
+    const metadata = await getAgentVerificationMetadata(payload.verificationRequestId, payload.servicePointId);
+    attributes = metadata.attributes;
+    isVerified = isVerified ?? metadata.isVerified;
+  }
+  const storedAttributes = attributes ?? Prisma.DbNull;
   const verification = await prisma.vendorVerification.upsert({
     where: { verificationRequestId: payload.verificationRequestId },
     create: {
@@ -149,7 +193,9 @@ export async function recordVerificationCompletedEvent(payload: VerificationComp
       servicePointId: payload.servicePointId,
       servicePointName: branch.name,
       status: mapAgentVerificationDecision(payload.decision),
+      isVerified,
       failureCode: payload.failureCode ?? null,
+      attributes: storedAttributes,
       expiresAt: new Date(payload.expiresAt),
       completedAt: new Date(payload.completedAt),
     },
@@ -158,7 +204,9 @@ export async function recordVerificationCompletedEvent(payload: VerificationComp
       branchId: branch.id,
       servicePointName: branch.name,
       status: mapAgentVerificationDecision(payload.decision),
+      isVerified,
       failureCode: payload.failureCode ?? null,
+      attributes: storedAttributes,
       expiresAt: new Date(payload.expiresAt),
       completedAt: new Date(payload.completedAt),
     },
@@ -202,7 +250,7 @@ export async function listRecentVendorVerifications(
   limit = 5,
   options: { branchIds?: string[]; inPersonOnly?: boolean } = {},
 ) {
-  return prisma.vendorVerification.findMany({
+  const verifications = await prisma.vendorVerification.findMany({
     where: {
       vendorProfileId,
       ...(options.branchIds ? { branchId: { in: options.branchIds } } : {}),
@@ -212,4 +260,18 @@ export async function listRecentVendorVerifications(
     orderBy: { createdAt: "desc" },
     take: limit,
   });
+
+  return Promise.all(verifications.map(async (verification) => {
+    const storedAttributes = normalizedVerificationAttributes(verification.attributes);
+    if (storedAttributes || !verification.verificationRequestId || verification.checkoutId) return verification;
+
+    const metadata = await getAgentVerificationMetadata(verification.verificationRequestId, verification.servicePointId);
+    if (!metadata.attributes) return verification;
+
+    return {
+      ...verification,
+      attributes: metadata.attributes,
+      isVerified: verification.isVerified ?? metadata.isVerified,
+    };
+  }));
 }

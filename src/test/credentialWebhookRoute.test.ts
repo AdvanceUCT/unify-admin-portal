@@ -116,6 +116,33 @@ describe("agent webhook route", () => {
     expect(recordVerificationCompletedEvent).toHaveBeenCalledWith(payload, "agent-webhook-001");
   });
 
+  it("accepts a terminal verification event with vendor-facing metadata", async () => {
+    const payload = {
+      type: "verification.completed",
+      eventId: "verification-001:Approved",
+      verificationRequestId: "verification-001",
+      checkoutId: "cart-001",
+      vendorId: "vendor-001",
+      servicePointId: "service-point-001",
+      decision: "Approved",
+      isVerified: true,
+      attributes: {
+        firstName: "Ada",
+        institution: "University of Cape Town",
+        lastName: "Lovelace",
+        studentNumber: "STU001",
+      },
+      expiresAt: "2026-08-03T20:05:00.000Z",
+      completedAt: "2026-08-03T20:02:00.000Z",
+      timestamp: "2026-08-03T20:02:00.000Z",
+    };
+
+    const response = await POST(signedRequest(payload));
+
+    expect(response.status).toBe(202);
+    expect(recordVerificationCompletedEvent).toHaveBeenCalledWith(payload, "agent-webhook-001");
+  });
+
   it("ignores non-terminal and malformed verification events", async () => {
     const response = await POST(signedRequest({
       type: "verification.completed",
