@@ -3,13 +3,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   authenticateVendorApiKey,
   createVendorApiCredential,
+  deliverVendorWebhook,
 } from "@/lib/vendors/integrations";
+import { decryptVendorSecret } from "@/lib/vendors/integrationCrypto";
+import { assertSafeWebhookUrl } from "@/lib/vendors/webhookSafety";
 
 const database = vi.hoisted(() => ({
   vendorApiCredential: {
     create: vi.fn(),
     findUnique: vi.fn(),
     update: vi.fn(),
+  },
+  vendorVerification: {
+    findUnique: vi.fn(),
+  },
+  vendorWebhookDelivery: {
+    create: vi.fn(),
   },
 }));
 
@@ -23,7 +32,10 @@ vi.mock("@/lib/vendors/integrationCrypto", () => ({
 vi.mock("@/lib/vendors/webhookSafety", () => ({ assertSafeWebhookUrl: vi.fn() }));
 
 describe("vendor API credentials", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal("fetch", vi.fn());
+  });
 
   it("returns a token once while persisting only its keyed hash", async () => {
     database.vendorApiCredential.create.mockImplementation(async ({ data }) => ({
@@ -77,5 +89,62 @@ describe("vendor API credentials", () => {
         "Bearer unify_vk_abcdef123456_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
       ),
     ).resolves.toBeNull();
+  });
+
+  it("delivers verification metadata without schema identifiers", async () => {
+    vi.mocked(assertSafeWebhookUrl).mockResolvedValue("https://checkout.example.com/webhooks/unify");
+    vi.mocked(decryptVendorSecret).mockReturnValue("vendor-webhook-secret");
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 204 }));
+    database.vendorVerification.findUnique.mockResolvedValue({
+      id: "verification-row-001",
+      eventId: "event-001",
+      verificationRequestId: "verification-001",
+      checkoutId: "cart-001",
+      status: "APPROVED",
+      isVerified: true,
+      failureCode: null,
+      attributes: {
+        firstName: "Ada",
+        institution: "University of Cape Town",
+        lastName: "Lovelace",
+        studentNumber: "STU001",
+      },
+      schemaId: "schema-should-not-leak",
+      credentialDefinitionId: "cred-def-should-not-leak",
+      expiresAt: new Date("2026-08-03T20:05:00.000Z"),
+      completedAt: new Date("2026-08-03T20:02:00.000Z"),
+      deliveries: [],
+      vendorProfile: {
+        webhookConfig: {
+          enabled: true,
+          signingSecretCiphertext: "ciphertext",
+          url: "https://checkout.example.com/webhooks/unify",
+        },
+      },
+    });
+    database.vendorWebhookDelivery.create.mockResolvedValue({});
+
+    await deliverVendorWebhook("verification-row-001", "request-001");
+
+    const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      attributes: {
+        firstName: "Ada",
+        institution: "University of Cape Town",
+        lastName: "Lovelace",
+        studentNumber: "STU001",
+      },
+      isVerified: true,
+      student: {
+        id: "STU001",
+        name: "Ada Lovelace",
+        university: "University of Cape Town",
+      },
+    });
+    expect(body).not.toHaveProperty("schemaId");
+    expect(body).not.toHaveProperty("credentialDefinitionId");
+    expect(database.vendorWebhookDelivery.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "DELIVERED" }),
+    }));
   });
 });

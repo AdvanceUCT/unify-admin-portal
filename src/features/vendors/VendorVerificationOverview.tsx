@@ -1,10 +1,16 @@
 import QRCode from "qrcode";
+import Link from "next/link";
 import { CheckCircle2, Mail, QrCode, ShieldCheck, SmartphoneNfc, UserCheck } from "lucide-react";
 
 import { CopyButton, QrCodeActions } from "@/features/vendors/QrCodeActions";
 import { LiveVerificationList } from "@/features/vendors/LiveVerificationList";
 import { Metric } from "@/components/ui/Metric";
 import type { getVendorVerificationStats, listRecentVendorVerifications } from "@/lib/vendors/verifications";
+import {
+  normalizedVerificationAttributes,
+  summarizeVerificationStudent,
+  vendorVerificationFailureReason,
+} from "@/lib/vendors/verificationContract";
 
 const HOW_IT_WORKS = [
   {
@@ -30,12 +36,16 @@ export async function VendorVerificationOverview({
   stats,
   recentVerifications,
   supportEmail,
+  liveCursor,
+  viewAllHref = "/vendor/verifications",
 }: {
   companyName: string;
   verificationUrl: string | null;
   stats: Awaited<ReturnType<typeof getVendorVerificationStats>>;
   recentVerifications: Awaited<ReturnType<typeof listRecentVendorVerifications>>;
   supportEmail?: string;
+  liveCursor?: string;
+  viewAllHref?: string;
 }) {
   const approvalRate = stats.total > 0 ? Math.round((stats.approved / stats.total) * 100) : null;
   const qrSvg = verificationUrl
@@ -144,20 +154,29 @@ export async function VendorVerificationOverview({
       )}
 
       <section className="rounded-lg border border-zinc-200 bg-white">
-        <div className="border-b border-zinc-100 px-5 py-4">
+        <div className="flex items-center justify-between gap-3 border-b border-zinc-100 px-5 py-4">
           <h2 className="font-medium text-zinc-950">Recent verifications</h2>
+          <Link className="text-sm font-medium text-zinc-600 hover:text-zinc-950" href={viewAllHref}>View all</Link>
         </div>
-        <LiveVerificationList initialItems={recentVerifications.map((verification) => ({
-          id: verification.id,
-          verificationRequestId: verification.verificationRequestId,
-          checkoutId: verification.checkoutId,
-          servicePointName: verification.servicePointName,
-          status: verification.status,
-          failureCode: verification.failureCode,
-          createdAt: verification.createdAt.toISOString(),
-          completedAt: verification.completedAt?.toISOString() ?? null,
-          latestDeliveryStatus: verification.deliveries[0]?.status ?? null,
-        }))} />
+        <LiveVerificationList initialItems={recentVerifications.map((verification) => {
+          const attributes = normalizedVerificationAttributes(verification.attributes);
+          return {
+            id: verification.id,
+            branchId: verification.branchId,
+            verificationRequestId: verification.verificationRequestId,
+            checkoutId: verification.checkoutId,
+            servicePointName: verification.servicePointName,
+            status: verification.status,
+            isVerified: verification.isVerified,
+            failureCode: verification.failureCode,
+            failureReason: vendorVerificationFailureReason(verification.failureCode),
+            attributes,
+            student: summarizeVerificationStudent(attributes),
+            createdAt: verification.createdAt.toISOString(),
+            completedAt: verification.completedAt?.toISOString() ?? null,
+            latestDeliveryStatus: verification.deliveries[0]?.status ?? null,
+          };
+        })} liveCursor={liveCursor} />
       </section>
 
       <section className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-white p-5">

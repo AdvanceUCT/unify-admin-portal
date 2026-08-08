@@ -13,7 +13,16 @@ export async function GET(request: Request) {
   if (!context) return NextResponse.json({ error: { message: "Forbidden." } }, { status: 403 });
 
   try {
-    const result = await getLiveVerificationEvents(context, new URL(request.url).searchParams.get("cursor") ?? undefined);
+    const searchParams = new URL(request.url).searchParams;
+    const branchIds = searchParams.getAll("branchId").filter(Boolean);
+    if (branchIds.some((branchId) => !context.branchIds.includes(branchId))) {
+      return NextResponse.json({ error: { message: "Forbidden." } }, { status: 403 });
+    }
+    const result = await getLiveVerificationEvents(
+      context,
+      searchParams.get("cursor") ?? undefined,
+      branchIds.length > 0 ? { branchIds } : {},
+    );
     return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
   } catch (error) {
     return NextResponse.json(

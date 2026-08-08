@@ -8,7 +8,7 @@ describe("VendorVerificationOverview", () => {
     cleanup();
   });
 
-  it("shows a minimal result without attributes and the configured support address", async () => {
+  it("shows verification identity metadata and the configured support address", async () => {
     render(
       await VendorVerificationOverview({
         companyName: "Demo Vendor",
@@ -29,6 +29,9 @@ describe("VendorVerificationOverview", () => {
             isVerified: true,
             failureCode: null,
             attributes: {
+              firstName: "Caleb",
+              institution: "University of Cape Town",
+              lastName: "Voskuil",
               studentNumber: "VSKCAL001",
               programme: "Computer Science",
             },
@@ -44,9 +47,13 @@ describe("VendorVerificationOverview", () => {
       }),
     );
 
-    expect(screen.getByText("Checkout cart_1")).toBeInTheDocument();
-    expect(screen.queryByText("studentNumber")).not.toBeInTheDocument();
-    expect(screen.queryByText("VSKCAL001")).not.toBeInTheDocument();
+    expect(screen.getByText(/Checkout cart_1/)).toBeInTheDocument();
+    expect(screen.getByText("Caleb Voskuil")).toBeInTheDocument();
+    expect(screen.getByText("VSKCAL001")).toBeInTheDocument();
+    expect(screen.getByText("University of Cape Town")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View all" })).toHaveAttribute("href", "/vendor/verifications");
+    expect(screen.queryByText("schema_1")).not.toBeInTheDocument();
+    expect(screen.queryByText("cred_def_1")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "admin@voskuils.com" })).toHaveAttribute(
       "href",
       "mailto:admin@voskuils.com",
