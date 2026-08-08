@@ -1,6 +1,5 @@
-import { Building2, ClipboardList, Gauge, KeyRound, Landmark, LifeBuoy, ShieldCheck, UserCog, Users } from "lucide-react";
-
 import { PortalShell } from "@/components/layout/PortalShell";
+import type { PortalNavItem } from "@/components/layout/portalTypes";
 import { LiveVerificationNotifications } from "@/features/vendors/LiveVerificationNotifications";
 import { requireVendorSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
@@ -9,22 +8,22 @@ import { getApprovedVendorContextForUser, type ApprovedVendorContext } from "@/l
 import { encodeLiveVerificationCursor } from "@/lib/vendors/liveVerifications";
 import { getVendorProfileLogoPath } from "@/lib/vendors/profile";
 
-const ownerNavItems = [
-  { href: "/vendor", label: "Overview", icon: Gauge },
-  { href: "/vendor/verifications", label: "Verifications", icon: ShieldCheck },
-  { href: "/vendor/branches", label: "Branches", icon: Building2 },
-  { href: "/vendor/staff", label: "Staff", icon: Users },
-  { href: "/vendor/application", label: "Application", icon: ClipboardList },
-  { href: "/vendor/profile", label: "Profile", icon: UserCog },
-  { href: "/vendor/integrations", label: "Integrations", icon: KeyRound },
-  { href: "/vendor/help", label: "Help", icon: LifeBuoy },
+const ownerNavItems: PortalNavItem[] = [
+  { href: "/vendor", label: "Overview", icon: "overview" },
+  { href: "/vendor/verifications", label: "Verifications", icon: "verifications" },
+  { href: "/vendor/branches", label: "Branches", icon: "branches" },
+  { href: "/vendor/staff", label: "Staff", icon: "staff" },
+  { href: "/vendor/application", label: "Application", icon: "application" },
+  { href: "/vendor/profile", label: "Profile", icon: "profile" },
+  { href: "/vendor/integrations", label: "Integrations", icon: "integrations" },
+  { href: "/vendor/help", label: "Help", icon: "help" },
 ];
 
-const staffNavItems = [
-  { href: "/vendor", label: "Overview", icon: Gauge },
-  { href: "/vendor/verifications", label: "Verifications", icon: ShieldCheck },
-  { href: "/vendor/branches", label: "Branches", icon: Building2 },
-  { href: "/vendor/help", label: "Help", icon: LifeBuoy },
+const staffNavItems: PortalNavItem[] = [
+  { href: "/vendor", label: "Overview", icon: "overview" },
+  { href: "/vendor/verifications", label: "Verifications", icon: "verifications" },
+  { href: "/vendor/branches", label: "Branches", icon: "branches" },
+  { href: "/vendor/help", label: "Help", icon: "help" },
 ];
 
 async function notificationBranchIdsFor(context: ApprovedVendorContext) {
@@ -57,13 +56,22 @@ export default async function VendorPortalLayout({
 
   return (
     <PortalShell
-      context={vendorContext?.companyName ?? "Verifier onboarding"}
-      logoUrl={logoUrl}
+      brand={{
+        brandName: "Unify",
+        logoUrl,
+        tenantName: vendorContext?.companyName ?? "Verifier onboarding",
+      }}
+      fallbackTitle="Vendor"
       navItems={vendorContext?.role === "STAFF" ? staffNavItems : ownerNavItems}
-      productName="UNIFY Vendor"
-      sessionLabel={session.user.name}
+      portal="vendor"
+      settingsHref="/vendor/profile"
       signOutRedirectTo="/vendor/sign-in"
-      utilityIcon={Landmark}
+      user={{
+        email: session.user.email,
+        image: session.user.image,
+        name: session.user.name,
+        roleLabel: vendorContext?.role === "STAFF" ? "Staff" : "Owner",
+      }}
     >
       {vendorContext ? (
         <LiveVerificationNotifications
