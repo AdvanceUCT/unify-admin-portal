@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createVendorCheckoutSession,
+  exportVendorVerificationEventsCsv,
   getVendorVerificationResult,
   listRecentVendorVerifications,
   listVendorVerificationEvents,
@@ -333,5 +334,38 @@ describe("vendor checkout verification", () => {
       "Stellenbosch",
       "University of Cape Town",
     ]);
+  });
+
+  it("exports filtered verification events as CSV", async () => {
+    database.vendorVerification.findMany.mockResolvedValue([{
+      id: "stored-verification-001",
+      branch: { name: "Main Branch" },
+      servicePointName: "Fallback Branch",
+      status: "APPROVED",
+      failureCode: null,
+      attributes: {
+        fullName: 'Ada "Countess" Lovelace',
+        institution: "University of Cape Town",
+        studentNumber: "STU001",
+      },
+      createdAt: new Date("2026-08-03T20:00:00.000Z"),
+      completedAt: new Date("2026-08-03T20:02:00.000Z"),
+      verificationRequestId: "verification-001",
+      eventId: "event-001",
+    }]);
+
+    const csv = await exportVendorVerificationEventsCsv("vendor-001", ["branch-001"], {
+      branchId: "branch-001",
+      query: "Ada",
+    });
+
+    expect(csv.split("\r\n")[0]).toBe(
+      '"Completed At","Created At","Branch","Status","Student Name","Student Number","University","Failure Code","Failure Reason","Verification Request ID","Event ID"',
+    );
+    expect(csv).toContain('"Ada ""Countess"" Lovelace"');
+    expect(database.vendorVerification.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      take: 10000,
+      where: expect.objectContaining({ AND: expect.any(Array) }),
+    }));
   });
 });

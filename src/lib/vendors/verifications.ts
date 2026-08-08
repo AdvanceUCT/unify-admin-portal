@@ -19,6 +19,7 @@ import {
 } from "@/lib/vendors/verificationContract";
 
 const VERIFICATION_EVENTS_PAGE_SIZE = 10;
+const VERIFICATION_EVENTS_EXPORT_LIMIT = 10_000;
 
 export type VerificationCompletedEvent = {
   type: "verification.completed";
@@ -436,4 +437,54 @@ export async function listVendorVerificationUniversities(
   }
 
   return Array.from(universities).sort((left, right) => left.localeCompare(right));
+}
+
+function csvCell(value: string | number | null | undefined) {
+  const text = value === null || value === undefined ? "" : String(value);
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+export async function exportVendorVerificationEventsCsv(
+  vendorProfileId: string,
+  allowedBranchIds: string[],
+  filters: VendorVerificationEventFilters = {},
+) {
+  const rows = await prisma.vendorVerification.findMany({
+    where: verificationEventsWhere(vendorProfileId, allowedBranchIds, filters),
+    include: { branch: { select: { name: true } } },
+    orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    take: VERIFICATION_EVENTS_EXPORT_LIMIT,
+  });
+  const header = [
+    "Completed At",
+    "Created At",
+    "Branch",
+    "Status",
+    "Student Name",
+    "Student Number",
+    "University",
+    "Failure Code",
+    "Failure Reason",
+    "Verification Request ID",
+    "Event ID",
+  ];
+  const body = rows.map((row) => {
+    const attributes = normalizedVerificationAttributes(row.attributes);
+    const student = summarizeVerificationStudent(attributes);
+    return [
+      row.completedAt?.toISOString() ?? "",
+      row.createdAt.toISOString(),
+      row.branch?.name ?? row.servicePointName ?? "",
+      row.status,
+      student.name,
+      student.id,
+      student.university,
+      row.failureCode,
+      vendorVerificationFailureReason(row.failureCode),
+      row.verificationRequestId,
+      row.eventId,
+    ].map(csvCell).join(",");
+  });
+
+  return [header.map(csvCell).join(","), ...body].join("\r\n");
 }

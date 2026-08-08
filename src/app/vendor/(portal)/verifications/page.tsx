@@ -33,6 +33,17 @@ function pageHref(filters: VendorVerificationEventFilters, page: number) {
   return `/vendor/verifications?${params.toString()}`;
 }
 
+function exportHref(filters: VendorVerificationEventFilters) {
+  const params = new URLSearchParams();
+  if (filters.query) params.set("q", filters.query);
+  if (filters.university) params.set("university", filters.university);
+  if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
+  if (filters.dateTo) params.set("dateTo", filters.dateTo);
+  if (filters.branchId) params.set("branchId", filters.branchId);
+  const query = params.toString();
+  return `/api/vendor/verifications/export${query ? `?${query}` : ""}`;
+}
+
 export default async function VendorVerificationsPage({
   searchParams,
 }: {
@@ -115,7 +126,10 @@ export default async function VendorVerificationsPage({
       <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 px-5 py-4">
           <h2 className="font-medium text-zinc-950">Events</h2>
-          <p className="text-sm text-zinc-500">Showing {showingStart}-{showingEnd} of {result.total}</p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-zinc-500">Showing {showingStart}-{showingEnd} of {result.total}</p>
+            <a className="inline-flex h-9 items-center rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50" href={exportHref(filters)}>Export CSV</a>
+          </div>
         </div>
         <div className="divide-y divide-zinc-100">
           {result.events.map((event) => (
