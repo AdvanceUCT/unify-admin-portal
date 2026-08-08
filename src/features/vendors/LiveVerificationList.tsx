@@ -170,19 +170,29 @@ export function LiveVerificationList({
           ? `Checkout ${verification.checkoutId}`
           : verification.servicePointName ?? "Student verification";
         const checkedAt = verification.completedAt ?? verification.createdAt;
-        const detailParts = [verification.student.id, verification.student.university].filter(Boolean);
+        const studentName = verification.student.name ?? "Student verification";
+        const studentNumber = verification.student.id ?? "Unavailable";
+        const university = verification.student.university ?? "Unavailable";
 
         return (
-        <div className="flex flex-wrap items-start justify-between gap-3 px-5 py-4" key={verification.id}>
+        <div className="grid gap-3 px-5 py-3 sm:grid-cols-[minmax(0,1fr)_auto]" key={verification.id}>
           <div className="min-w-0">
-            <p className="text-sm font-medium text-zinc-900">{verification.student.name ?? context}</p>
-            {verification.student.name && <p className="mt-0.5 text-xs text-zinc-500">{context}</p>}
-            {detailParts.length > 0 && <p className="mt-1 text-sm text-zinc-700">{detailParts.join(" / ")}</p>}
-            <p className="mt-1 text-xs text-zinc-500">{formatDateTime(checkedAt)}</p>
+            <p className="truncate text-sm font-medium text-zinc-950">{studentName}</p>
+            <dl className="mt-1 grid gap-0.5 text-xs">
+              <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                <dt className="text-zinc-500">Number</dt>
+                <dd className="truncate font-medium text-zinc-800">{studentNumber}</dd>
+              </div>
+              <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                <dt className="text-zinc-500">University</dt>
+                <dd className="truncate font-medium text-zinc-800">{university}</dd>
+              </div>
+            </dl>
+            <p className="mt-1 text-xs text-zinc-400">{context} / {formatDateTime(checkedAt)}</p>
             {verification.failureReason && <p className="mt-1 text-xs text-red-700">{verification.failureReason}</p>}
             {verification.failureCode && <p className="mt-1 font-mono text-xs text-red-600">{verification.failureCode}</p>}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 sm:justify-end">
             {verification.latestDeliveryStatus === "DELIVERED" && <span className="text-xs text-emerald-700">Webhook delivered</span>}
             {verification.latestDeliveryStatus === "FAILED" && (
               <button className="inline-flex items-center gap-1 text-xs font-medium text-zinc-700" disabled={retrying === verification.id} onClick={() => retry(verification)} type="button">

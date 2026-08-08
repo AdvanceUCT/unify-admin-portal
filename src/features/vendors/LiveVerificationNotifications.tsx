@@ -62,27 +62,34 @@ export function LiveVerificationNotifications({ initialCursor }: { initialCursor
   const approved = event.status === "APPROVED";
   const Icon = approved ? CheckCircle2 : ShieldX;
   const studentName = event.student.name ?? event.studentName;
-  const studentId = event.student.id ?? event.studentNumber;
-  const studentUniversity = event.student.university ?? event.studentUniversity;
-  const studentDetails = [studentId, studentUniversity].filter(Boolean);
+  const studentId = event.student.id ?? event.studentNumber ?? "Unavailable";
+  const studentUniversity = event.student.university ?? event.studentUniversity ?? "Unavailable";
 
   return (
-    <aside aria-live="assertive" className="fixed right-4 top-4 z-50 w-[min(24rem,calc(100vw-2rem))] rounded-lg border border-zinc-200 bg-white p-4 shadow-xl" role="status">
+    <aside aria-live="assertive" className="fixed right-4 top-4 z-50 w-[min(23rem,calc(100vw-2rem))] rounded-lg border border-zinc-200 bg-white p-4 shadow-xl" role="status">
       <div className="flex items-start gap-3">
         <Icon className={approved ? "mt-0.5 shrink-0 text-emerald-600" : "mt-0.5 shrink-0 text-red-600"} size={22} aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-zinc-950">Verification {approved ? "successful" : "unsuccessful"}</p>
-          <p className="mt-0.5 text-sm font-medium text-zinc-700">{event.branchName}</p>
-          {(studentName || studentDetails.length > 0) ? (
-            <div className="mt-2 text-sm text-zinc-700">
-              <p>{studentName ?? "Student"}</p>
-              {studentDetails.length > 0 && <p className="text-xs text-zinc-500">{studentDetails.join(" / ")}</p>}
+          {(studentName || studentId !== "Unavailable" || studentUniversity !== "Unavailable") ? (
+            <div className="mt-2">
+              <p className="truncate text-sm font-medium text-zinc-950">{studentName ?? "Student verification"}</p>
+              <dl className="mt-1 grid gap-0.5 text-xs">
+                <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                  <dt className="text-zinc-500">Number</dt>
+                  <dd className="truncate font-medium text-zinc-800">{studentId}</dd>
+                </div>
+                <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                  <dt className="text-zinc-500">University</dt>
+                  <dd className="truncate font-medium text-zinc-800">{studentUniversity}</dd>
+                </div>
+              </dl>
             </div>
           ) : (
             <p className="mt-2 text-sm text-zinc-500">Verified identity details are unavailable.</p>
           )}
           {event.failureReason && <p className="mt-2 text-sm text-red-700">{event.failureReason} <span className="font-mono text-xs">({event.failureCode})</span></p>}
-          <p className="mt-2 text-xs text-zinc-400">{formatDateTime(event.completedAt)}{queue.length > 1 ? ` / ${queue.length - 1} more` : ""}</p>
+          <p className="mt-2 text-xs text-zinc-400">{event.branchName} / {formatDateTime(event.completedAt)}{queue.length > 1 ? ` / ${queue.length - 1} more` : ""}</p>
         </div>
         <button aria-label="Dismiss notification" className="grid size-8 shrink-0 place-items-center rounded-md text-zinc-500 hover:bg-zinc-100" onClick={() => setQueue((current) => current.slice(1))} type="button"><X size={17} /></button>
       </div>
