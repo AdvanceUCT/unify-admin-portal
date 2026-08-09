@@ -70,4 +70,47 @@ describe("SchemaVersionManager", () => {
     // The dialog stays open on failure so the admin can retry or cancel.
     expect(screen.getByRole("button", { name: "Confirm and publish" })).toBeInTheDocument();
   });
+
+  it("confirms deleting a draft via a dialog before submitting the request", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 204 })),
+    );
+
+    render(<SchemaVersionManager attributeAvailability={attributes} versions={versions} />);
+
+    expect(screen.queryByRole("button", { name: "Confirm and delete" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(screen.getByText(/permanently deletes the local draft v2\.0/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm and delete" }));
+
+    expect(await screen.findByText("Draft schema version 2.0 deleted.")).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith("/api/credentials/schemas", {
+      body: JSON.stringify({ schemaId: "schema-draft-1" }),
+      headers: { "Content-Type": "application/json" },
+      method: "DELETE",
+    });
+  });
+
+  it("shows delete errors inside the confirmation dialog and keeps it open", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ error: { message: "Only draft schema versions can be deleted." } }),
+          { headers: { "Content-Type": "application/json" }, status: 409 },
+        ),
+      ),
+    );
+
+    render(<SchemaVersionManager attributeAvailability={attributes} versions={versions} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm and delete" }));
+
+    expect(await screen.findByText("Only draft schema versions can be deleted.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirm and delete" })).toBeInTheDocument();
+  });
 });

@@ -289,6 +289,45 @@ export async function publishCredentialSchemaVersion(input: {
   });
 }
 
+/**
+ * Deletes a local draft schema version. Only DRAFT versions can be removed —
+ * once a version is published it's registered on the ledger and existing
+ * credentials may reference it, so it can only ever be retired, never deleted.
+ */
+export async function deleteDraftCredentialSchemaVersion(input: {
+  actorId?: string | null;
+  schemaId: string;
+}) {
+  const profile = await getUniversityProfile();
+  if (!profile) {
+    throw new CredentialSchemaVersionError("University profile has not been configured.", 409);
+  }
+
+  const draft = await prisma.credentialSchema.findUnique({ where: { id: input.schemaId } });
+  if (!draft || draft.universityProfileId !== profile.id) {
+    throw new CredentialSchemaVersionError("Draft schema version was not found.", 404);
+  }
+  if (draft.status !== CredentialSchemaStatus.DRAFT) {
+    throw new CredentialSchemaVersionError("Only draft schema versions can be deleted.", 409);
+  }
+
+  await prisma.$transaction(async (transaction) => {
+    await transaction.auditLog.create({
+      data: {
+        action: AuditAction.SCHEMA_VERSION_DELETED,
+        actorId: input.actorId ?? null,
+        meta: {
+          schemaVersion: draft.schemaVersion,
+        },
+        targetId: draft.id,
+        targetType: "CredentialSchema",
+      },
+    });
+
+    await transaction.credentialSchema.delete({ where: { id: draft.id } });
+  });
+}
+
 export async function createAndPublishCredentialSchemaVersion(input: {
   actorId?: string | null;
   attributes: string[];
