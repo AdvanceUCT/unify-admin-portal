@@ -25,7 +25,6 @@ describe("permissions", () => {
       "/credentials": true,
       "/students": true,
       "/vendors": true,
-      "/rules": true,
       "/audit": true,
       "/users": true,
     },
@@ -34,7 +33,6 @@ describe("permissions", () => {
       "/credentials": true,
       "/students": true,
       "/vendors": true,
-      "/rules": true,
       "/audit": true,
       "/users": false,
     },
@@ -43,7 +41,6 @@ describe("permissions", () => {
       "/credentials": true,
       "/students": true,
       "/vendors": false,
-      "/rules": false,
       "/audit": false,
       "/users": false,
     },
@@ -52,7 +49,6 @@ describe("permissions", () => {
       "/credentials": false,
       "/students": false,
       "/vendors": false,
-      "/rules": false,
       "/audit": true,
       "/users": false,
     },
@@ -65,8 +61,8 @@ describe("permissions", () => {
   });
 
   it.each([
-    ["SUPER_ADMIN", ["/credentials", "/students", "/vendors", "/rules", "/audit", "/users"]],
-    ["ADMIN", ["/credentials", "/students", "/vendors", "/rules", "/audit"]],
+    ["SUPER_ADMIN", ["/credentials", "/students", "/vendors", "/audit", "/users"]],
+    ["ADMIN", ["/credentials", "/students", "/vendors", "/audit"]],
     ["ISSUER", ["/credentials", "/students"]],
     ["VIEWER", ["/audit"]],
   ] satisfies Array<[AdminRole, string[]]>)(

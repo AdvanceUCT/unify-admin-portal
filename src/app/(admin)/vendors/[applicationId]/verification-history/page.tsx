@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { SectionHeader } from "@/components/layout/SectionHeader";
+import { BackButton } from "@/components/ui/BackButton";
 import { Metric } from "@/components/ui/Metric";
 import { requireRole } from "@/lib/auth/session";
 import { getVendorApplicationById } from "@/lib/vendors/applications";
@@ -29,22 +28,16 @@ export default async function VendorVerificationHistoryPage({
 
   return (
     <div className="space-y-6">
-      <SectionHeader
-        title="Verification history"
-        description={`Monthly successful verification totals for ${companyName}.`}
-      />
+      <BackButton href="/vendors" label="Back to vendors" />
 
-      <Link href="/vendors" className="text-sm text-zinc-500 hover:text-zinc-800">
-        &larr; Back to vendors
-      </Link>
-
-      <section className="rounded-lg border border-zinc-200 bg-white p-5">
-        <p className="text-sm font-medium text-zinc-500">Vendor</p>
-        <h2 className="mt-1 text-xl font-semibold tracking-normal text-zinc-950">
-          {companyName}
-        </h2>
-        <p className="mt-1 text-sm text-zinc-500">{serviceCategory}</p>
-      </section>
+      <div>
+        <h1 className="text-page-title text-fg">Verification history</h1>
+        <p className="mt-1 flex items-center gap-1.5 text-sm text-fg-subtle">
+          <span>{companyName}</span>
+          <span aria-hidden="true">&middot;</span>
+          <span>{serviceCategory}</span>
+        </p>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Metric
@@ -59,30 +52,24 @@ export default async function VendorVerificationHistoryPage({
         />
       </div>
 
-      <section className="rounded-lg border border-zinc-200 bg-white">
-        <div className="border-b border-zinc-200 px-5 py-4">
-          <h2 className="text-base font-semibold text-zinc-950">
-            Monthly successful verifications
-          </h2>
-          <p className="mt-1 text-sm text-zinc-500">
-            Reporting timezone: {history.timezone}
-          </p>
+      <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="text-section-title text-fg">Monthly successful verifications</h2>
+          <p className="mt-1 text-sm text-fg-subtle">Reporting timezone: {history.timezone}</p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-zinc-200 text-xs font-medium uppercase tracking-wide text-zinc-500">
-              <tr>
-                <th className="px-5 py-3">Month</th>
-                <th className="px-5 py-3 text-right">Successful verifications</th>
+          <table className="w-full text-center text-body">
+            <thead className="border-b border-border">
+              <tr className="whitespace-nowrap text-caption uppercase tracking-wide text-fg-subtle">
+                <th className="px-5 py-3 font-medium">Month</th>
+                <th className="px-5 py-3 font-medium">Successful verifications</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
+            <tbody className="divide-y divide-border">
               {history.months.map((month) => (
-                <tr key={month.month}>
-                  <td className="px-5 py-3 font-medium text-zinc-900">
-                    {month.label}
-                  </td>
-                  <td className="px-5 py-3 text-right tabular-nums text-zinc-700">
+                <tr className="transition hover:bg-surface-muted/60" key={month.month}>
+                  <td className="px-5 py-3 font-medium text-fg">{month.label}</td>
+                  <td className="px-5 py-3 tabular-nums text-fg-muted">
                     {month.successfulVerifications}
                   </td>
                 </tr>

@@ -150,13 +150,6 @@ export type StudentRecord = {
   credential: StudentCredential;
 };
 
-export type EligibilityRule = {
-  id: string;
-  name: string;
-  appliesTo: string;
-  description: string;
-};
-
 export type DashboardSummary = {
   activeBatchJobs: number;
   failedCredentials: number;

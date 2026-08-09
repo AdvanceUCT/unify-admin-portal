@@ -1,6 +1,5 @@
 import type {
   BatchIssuancePreview,
-  EligibilityRule,
   StudentRecord,
 } from "@/lib/api/types";
 import {
@@ -11,20 +10,6 @@ import {
 
 export const mockStudents: StudentRecord[] = getSimulatedUniversityStudentRecords();
 
-export const mockEligibilityRules: EligibilityRule[] = [
-  {
-    id: "rule-001",
-    name: "Active enrolment required",
-    appliesTo: "All service points",
-    description: "Student credential lifecycle state must be Active before access is approved.",
-  },
-  {
-    id: "rule-002",
-    name: "Registered students only",
-    appliesTo: "Payment authorization",
-    description: "Wallet payments are limited to students with Registered enrolment status.",
-  },
-];
 
 export const mockBatchIssuancePreview: BatchIssuancePreview = {
   batchId: "batch-001",

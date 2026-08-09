@@ -32,7 +32,18 @@ describe("SchemaVersionManager", () => {
     vi.unstubAllGlobals();
   });
 
-  it("shows publish timeout errors in the schema history panel", async () => {
+  it("confirms publishing via a dialog before submitting the request", () => {
+    render(<SchemaVersionManager attributeAvailability={attributes} versions={versions} />);
+
+    expect(screen.queryByRole("button", { name: "Confirm and publish" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+
+    expect(screen.getByText(/This registers v2\.0 on the ledger/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirm and publish" })).toBeInTheDocument();
+  });
+
+  it("shows publish timeout errors inside the confirmation dialog", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -48,6 +59,7 @@ describe("SchemaVersionManager", () => {
     render(<SchemaVersionManager attributeAvailability={attributes} versions={versions} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm and publish" }));
 
     expect(await screen.findByText("Agent service request timed out after 60000ms.")).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith("/api/credentials/schemas", {
@@ -55,5 +67,7 @@ describe("SchemaVersionManager", () => {
       headers: { "Content-Type": "application/json" },
       method: "PATCH",
     });
+    // The dialog stays open on failure so the admin can retry or cancel.
+    expect(screen.getByRole("button", { name: "Confirm and publish" })).toBeInTheDocument();
   });
 });

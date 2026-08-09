@@ -29,10 +29,6 @@ export const ROLE_ROUTE_MAP: readonly RoleRoute[] = [
     allowedRoles: ["SUPER_ADMIN", "ADMIN"],
   },
   {
-    prefix: "/rules",
-    allowedRoles: ["SUPER_ADMIN", "ADMIN"],
-  },
-  {
     prefix: "/audit",
     allowedRoles: ["SUPER_ADMIN", "ADMIN", "VIEWER"],
   },

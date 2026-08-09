@@ -1,7 +1,4 @@
-import {
-  mockBatchIssuancePreview,
-  mockEligibilityRules,
-} from "@/lib/api/mockData";
+import { mockBatchIssuancePreview } from "@/lib/api/mockData";
 import {
   createMockBatchRun,
   getMockAdminState,
@@ -134,11 +131,6 @@ export async function getStudentById(studentId: string) {
 export async function getActivationDeliveries() {
   const state = await getAdminState();
   return state.activationDeliveries;
-}
-
-export async function getEligibilityRules() {
-  await wait();
-  return mockEligibilityRules;
 }
 
 export async function getAuditEvents() {
