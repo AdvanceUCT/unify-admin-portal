@@ -9,23 +9,23 @@ datasource db {
 }
 
 model User {
-  id            String         @id
-  name          String
-  email         String
-  emailVerified Boolean        @default(false)
-  image         String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  role          String?
-  userType      String         @default("ADMIN")
-  banned        Boolean?       @default(false)
-  banReason     String?
-  banExpires    DateTime?
-  sessions      Session[]
-  accounts      Account[]
-  vendorProfile VendorProfile?
-  vendorMemberships VendorMembership[]
-  createdVendorBranches VendorBranch[] @relation("VendorBranchCreator")
+  id                        String              @id
+  name                      String
+  email                     String
+  emailVerified             Boolean             @default(false)
+  image                     String?
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @updatedAt
+  role                      String?
+  userType                  String              @default("ADMIN")
+  banned                    Boolean?            @default(false)
+  banReason                 String?
+  banExpires                DateTime?
+  sessions                  Session[]
+  accounts                  Account[]
+  vendorProfile             VendorProfile?
+  vendorMemberships         VendorMembership[]
+  createdVendorBranches     VendorBranch[]      @relation("VendorBranchCreator")
   createdVendorStaffInvites VendorStaffInvite[] @relation("VendorStaffInviteCreator")
 
   @@unique([email])
@@ -130,21 +130,21 @@ model VendorProfile {
 }
 
 model VendorBranch {
-  id                  String                  @id @default(cuid())
+  id                  String                    @id @default(cuid())
   vendorProfileId     String
-  vendorProfile       VendorProfile           @relation("VendorBranches", fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  vendorProfile       VendorProfile             @relation("VendorBranches", fields: [vendorProfileId], references: [id], onDelete: Cascade)
   name                String
   normalizedName      String
   address             String?
-  agentServicePointId String?                 @unique
+  agentServicePointId String?                   @unique
   verificationUrl     String?
-  status              VendorBranchStatus      @default(PROVISIONING)
-  active              Boolean                 @default(true)
+  status              VendorBranchStatus        @default(PROVISIONING)
+  active              Boolean                   @default(true)
   createdByUserId     String?
-  createdBy           User?                   @relation("VendorBranchCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  createdAt           DateTime                @default(now())
-  updatedAt           DateTime                @updatedAt
-  defaultFor          VendorProfile?          @relation("VendorDefaultBranch")
+  createdBy           User?                     @relation("VendorBranchCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  defaultFor          VendorProfile?            @relation("VendorDefaultBranch")
   memberships         VendorBranchMembership[]
   inviteAssignments   VendorStaffInviteBranch[]
   verifications       VendorVerification[]
@@ -230,39 +230,41 @@ model VendorStaffInviteBranch {
 }
 
 model VendorApplication {
-  id               String                  @id @default(cuid())
-  vendorProfileId  String
-  vendorProfile    VendorProfile           @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
-  status           VendorApplicationStatus @default(DRAFT)
-  justification    String?
-  companyRegistrationNumber String?
+  id                         String                  @id @default(cuid())
+  vendorProfileId            String
+  vendorProfile              VendorProfile           @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  status                     VendorApplicationStatus @default(DRAFT)
+  justification              String?
+  companyRegistrationNumber  String?
   // Original review decision fields — immutable after approval/rejection
-  reviewedByUserId String?
-  reviewedAt       DateTime?
-  reviewNotes      String?
+  reviewedByUserId           String?
+  reviewedAt                 DateTime?
+  reviewNotes                String?
   // Revocation fields — populated only when status transitions to REVOKED
-  revokedByUserId  String?
-  revokedAt        DateTime?
-  revokedNotes     String?
-  viewedByAdminAt  DateTime?
+  revokedByUserId            String?
+  revokedAt                  DateTime?
+  revokedNotes               String?
+  viewedByAdminAt            DateTime?
   // Immutable snapshot of vendor profile at time of submission
-  snapshotCompanyName       String?
-  snapshotServiceCategory   String?
-  snapshotContactEmail      String?
-  snapshotContactPersonName String?
-  snapshotWebsite           String?
+  snapshotCompanyName        String?
+  snapshotServiceCategory    String?
+  snapshotContactEmail       String?
+  snapshotContactPersonName  String?
+  snapshotWebsite            String?
   // Step 1 — Organisation Information
-  tradingName               String?
-  organisationType          String?
-  physicalAddress           String?
-  postalAddress             String?
+  tradingName                String?
+  organisationType           String?
+  physicalAddress            String?
+  postalAddress              String?
   // Step 2 — Authorised Representative
-  contactJobTitle           String?
-  contactPhone              String?
-  contactEmployeeNumber     String?
-  preferredContactMethod    String?
+  contactJobTitle            String?
+  contactPhone               String?
+  contactEmployeeNumber      String?
+  preferredContactMethod     String?
   // Step 3 — Verification Requirements
-  additionalInfo            String?
+  verificationReasons        String[]                @default([])
+  otherVerificationReason    String?
+  additionalInfo             String?
   // Step 4 — Supporting Documents (Supabase Storage paths)
   docRegistrationCertificate String?
   docProofOfAddress          String?
@@ -271,14 +273,14 @@ model VendorApplication {
   docTaxCompliance           String?
   docBusinessLicence         String?
   // Step 5 — Declaration
-  declarationAccepted       Boolean?
-  declarationAcceptedAt     DateTime?
-  createdAt        DateTime                @default(now())
-  updatedAt        DateTime                @updatedAt
+  declarationAccepted        Boolean?
+  declarationAcceptedAt      DateTime?
+  createdAt                  DateTime                @default(now())
+  updatedAt                  DateTime                @updatedAt
 
+  @@unique([vendorProfileId], map: "vendor_application_one_active_per_profile", where: raw("\"status\" IN ('DRAFT', 'PENDING', 'APPROVED')"))
   @@index([vendorProfileId])
   @@index([status])
-  @@unique([vendorProfileId], map: "vendor_application_one_active_per_profile", where: raw("\"status\" IN ('DRAFT', 'PENDING', 'APPROVED')"))
   @@map("vendor_application")
 }
 
@@ -291,24 +293,24 @@ enum VendorApplicationStatus {
 }
 
 model VendorVerification {
-  id                     String                    @id @default(cuid())
+  id                     String                   @id @default(cuid())
   vendorProfileId        String
-  vendorProfile          VendorProfile             @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
-  branchId                String?
-  branch                  VendorBranch?             @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  verificationRequestId  String?                   @unique
+  vendorProfile          VendorProfile            @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  branchId               String?
+  branch                 VendorBranch?            @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  verificationRequestId  String?                  @unique
   checkoutId             String?
   eventId                String?                  @unique
   servicePointId         String?
   servicePointName       String?
-  status                 VendorVerificationStatus  @default(PENDING)
+  status                 VendorVerificationStatus @default(PENDING)
   isVerified             Boolean?
   failureCode            String?
   attributes             Json?
   schemaId               String?
   credentialDefinitionId String?
-  createdAt              DateTime                  @default(now())
-  updatedAt              DateTime                  @updatedAt
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
   completedAt            DateTime?
   expiresAt              DateTime?
   deliveries             VendorWebhookDelivery[]
@@ -435,14 +437,14 @@ model ImportMapping {
 /// offering/populating it. Re-adding a previously removed key reactivates the
 /// same row rather than creating an ambiguous duplicate.
 model CustomFieldDefinition {
-  id                   String            @id @default(cuid())
-  universityProfileId  String
-  universityProfile    UniversityProfile @relation(fields: [universityProfileId], references: [id])
-  key                  String
-  label                String
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
-  removedAt            DateTime?
+  id                  String            @id @default(cuid())
+  universityProfileId String
+  universityProfile   UniversityProfile @relation(fields: [universityProfileId], references: [id])
+  key                 String
+  label               String
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  removedAt           DateTime?
 
   @@unique([universityProfileId, key], map: "custom_field_definition_active_key", where: raw("\"removedAt\" IS NULL"))
   @@index([universityProfileId])
@@ -490,9 +492,9 @@ enum ImportRowStatus {
 }
 
 model CredentialSchema {
-  id                             String            @id @default(cuid())
+  id                             String                 @id @default(cuid())
   universityProfileId            String
-  universityProfile              UniversityProfile @relation(fields: [universityProfileId], references: [id])
+  universityProfile              UniversityProfile      @relation(fields: [universityProfileId], references: [id])
   schemaName                     String
   schemaVersion                  String
   schemaAttributes               String[]
@@ -500,12 +502,12 @@ model CredentialSchema {
   credentialDefinitionId         String?
   revocationRegistryDefinitionId String?
   status                         CredentialSchemaStatus @default(ACTIVE)
-  isActive                       Boolean           @default(true)
+  isActive                       Boolean                @default(true)
   activatedAt                    DateTime?
   publishedAt                    DateTime?
   retiredAt                      DateTime?
-  createdAt                      DateTime          @default(now())
-  updatedAt                      DateTime          @updatedAt
+  createdAt                      DateTime               @default(now())
+  updatedAt                      DateTime               @updatedAt
 
   @@unique([universityProfileId, schemaName, schemaVersion])
   @@index([universityProfileId])
@@ -531,7 +533,7 @@ model CredentialIssuance {
   lifecycleStatus                CredentialLifecycleStatus?
   lifecycleStatusUpdatedAt       DateTime?
   lifecycleReason                String?
-  renewalStatus                  CredentialRenewalStatus @default(NONE)
+  renewalStatus                  CredentialRenewalStatus    @default(NONE)
   renewalRequestedAt             DateTime?
   renewalCompletedAt             DateTime?
   renewalFailureReason           String?

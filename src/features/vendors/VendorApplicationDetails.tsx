@@ -1,5 +1,7 @@
 import { Badge } from "@/components/ui/Badge";
 import { formatDateTime } from "@/lib/formatters";
+import { filenameFromStoragePath } from "@/lib/storage/supabase";
+import { formatVerificationReasons } from "@/lib/vendors/verification-reasons";
 
 type DocumentUrls = Partial<Record<
   | "docRegistrationCertificate"
@@ -16,7 +18,8 @@ type VendorApplicationDetailsProps = {
     id: string;
     status: "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "REVOKED";
     companyRegistrationNumber: string | null;
-    justification: string | null;
+    verificationReasons: string[];
+    otherVerificationReason: string | null;
     createdAt: Date;
     updatedAt: Date;
     reviewedAt: Date | null;
@@ -179,11 +182,11 @@ export function VendorApplicationDetails({
       )}
 
       {/* Verification requirements */}
-      {application.justification && (
+      {application.verificationReasons.length > 0 && (
         <div className="rounded-lg border border-zinc-200 bg-white p-4">
-          <h3 className="mb-2 text-sm font-semibold text-zinc-800">Purpose for verification</h3>
+          <h3 className="mb-2 text-sm font-semibold text-zinc-800">Reasons for verification</h3>
           <p className="text-sm text-zinc-600 whitespace-pre-line">
-            {application.justification}
+            {formatVerificationReasons(application.verificationReasons, application.otherVerificationReason)}
           </p>
         </div>
       )}
@@ -205,21 +208,25 @@ export function VendorApplicationDetails({
               const path = application[key];
               if (!path) return null;
               const signedUrl = documentUrls?.[key];
+              const filename = filenameFromStoragePath(path);
               return (
-                <div key={key}>
+                <div key={key} className="min-w-0">
                   <dt className="font-medium text-zinc-900">{label}</dt>
-                  <dd className="mt-0.5">
+                  <dd className="mt-0.5 min-w-0">
                     {signedUrl ? (
                       <a
-                        className="text-zinc-700 underline underline-offset-2 hover:text-zinc-950"
+                        className="block truncate text-zinc-700 underline underline-offset-2 hover:text-zinc-950"
                         href={signedUrl}
                         rel="noopener noreferrer"
                         target="_blank"
+                        title={filename}
                       >
-                        Open
+                        {filename}
                       </a>
                     ) : (
-                      <span className="text-emerald-600">Uploaded</span>
+                      <span className="block truncate text-emerald-600" title={filename || "Uploaded"}>
+                        {filename || "Uploaded"}
+                      </span>
                     )}
                   </dd>
                 </div>

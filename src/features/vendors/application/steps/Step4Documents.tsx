@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { deleteDocumentAction, uploadDocumentAction } from "@/app/vendor/(portal)/application/actions";
+import {
+  deleteDocumentAction,
+  getDocumentViewUrlAction,
+  uploadDocumentAction,
+} from "@/app/vendor/(portal)/application/actions";
 import type { DraftApplicationData } from "../VendorApplicationWizard";
 
 type UploadStatus = "idle" | "uploading" | "done" | "error" | "removing";
@@ -80,10 +84,42 @@ export function Step4Documents({
   });
   const [filenames, setFilenames] = useState<Record<string, string>>(() => initialFilenames ?? {});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [viewingKey, setViewingKey] = useState<string | null>(null);
 
   const requiredDone = DOCUMENT_FIELDS.filter((f) => f.required).every(
     (f) => statuses[f.key] === "done",
   );
+
+  async function handleView(fieldKey: string) {
+    setViewingKey(fieldKey);
+    setErrors((prev) => ({ ...prev, [fieldKey]: "" }));
+
+    // Open the tab synchronously so the browser doesn't block it as a popup,
+    // then redirect it once the signed URL comes back.
+    const tab = window.open("", "_blank");
+
+    try {
+      const result = await getDocumentViewUrlAction(applicationId, fieldKey);
+
+      if (result.ok && result.url) {
+        if (tab) tab.location.href = result.url;
+      } else {
+        tab?.close();
+        setErrors((prev) => ({
+          ...prev,
+          [fieldKey]: result.error ?? "Could not open the file. Please try again.",
+        }));
+      }
+    } catch {
+      tab?.close();
+      setErrors((prev) => ({
+        ...prev,
+        [fieldKey]: "Something went wrong while opening the file. Please try again.",
+      }));
+    } finally {
+      setViewingKey(null);
+    }
+  }
 
   async function handleFileChange(
     event: React.ChangeEvent<HTMLInputElement>,
@@ -167,7 +203,7 @@ export function Step4Documents({
       <div>
         <h2 className="text-lg font-semibold">Supporting documents</h2>
         <p className="mt-1 text-sm text-zinc-600">
-          Upload the required documents. Accepted formats: PDF, Word, Excel, JPEG, PNG (max 10 MB
+          Upload the required documents. Accepted formats: PDF, Word, Excel, JPEG, PNG (max 5 MB
           each).
         </p>
       </div>
@@ -188,12 +224,24 @@ export function Step4Documents({
                   </p>
                   <p className="mt-0.5 text-xs text-zinc-500">{hint}</p>
                   {(status === "done" || status === "removing") && (
-                    <p className="mt-1 text-xs text-emerald-600">
-                      {status === "removing"
-                        ? "Removing..."
-                        : filename
-                          ? `Uploaded: ${filename}`
-                          : "Uploaded"}
+                    <p className="mt-1 text-xs">
+                      {status === "removing" ? (
+                        <span className="text-emerald-600">Removing...</span>
+                      ) : filename ? (
+                        <>
+                          <span className="text-zinc-500">Uploaded: </span>
+                          <button
+                            className="font-medium text-emerald-700 underline decoration-emerald-300 underline-offset-2 hover:text-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={viewingKey === key}
+                            onClick={() => handleView(key)}
+                            type="button"
+                          >
+                            {viewingKey === key ? "Opening..." : filename}
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-emerald-600">Uploaded</span>
+                      )}
                     </p>
                   )}
                   {fieldError && (

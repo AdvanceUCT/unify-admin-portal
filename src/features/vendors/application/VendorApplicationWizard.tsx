@@ -24,7 +24,8 @@ export type DraftApplicationData = {
   contactPhone: string;
   contactEmployeeNumber: string;
   preferredContactMethod: string;
-  justification: string;
+  verificationReasons: string[];
+  otherVerificationReason: string;
   additionalInfo: string;
 
   docRegistrationCertificate: string | null;
@@ -176,6 +177,7 @@ export function VendorApplicationWizard({
             applicationId={applicationId}
             initialData={initialData}
             onBack={handleBack}
+            onEditStep={goToStep}
           />
         )}
       </section>

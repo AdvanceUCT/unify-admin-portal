@@ -5,14 +5,14 @@ import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { AuditAction, VendorApplicationStatus } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit/audit";
+import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
+import { sendVendorApplicationApprovedEmail } from "@/lib/email/vendor-application-approved";
+import { sendVendorApplicationRejectedEmail } from "@/lib/email/vendor-application-rejected";
+import { sendVendorApplicationRevokedEmail } from "@/lib/email/vendor-application-revoked";
+import { sendVendorApplicationSubmittedEmail } from "@/lib/email/vendor-application-submitted";
 import { ensureDefaultVendorBranch } from "@/lib/vendors/branches";
-
-const ACTIVE_APPLICATION_STATUSES = [
-  VendorApplicationStatus.DRAFT,
-  VendorApplicationStatus.PENDING,
-  VendorApplicationStatus.APPROVED,
-] as const;
+import { OTHER_VERIFICATION_REASON_VALUE, VERIFICATION_REASON_VALUES } from "@/lib/vendors/verification-reasons";
 
 const DOCUMENT_FIELDS = [
   "docRegistrationCertificate",
@@ -37,10 +37,21 @@ const step1Schema = z.object({
   companyRegistrationNumber: z
     .string()
     .trim()
-    .min(1, "Registration number is required")
-    .max(50, "Registration number must be 50 characters or fewer"),
+    .regex(/^\d{4}\/\d{6}\/\d{2}$/, "Registration number must be in the format YYYY/NNNNNN/NN"),
   serviceCategory: z.string().trim().min(1, "Service category is required"),
-  website: z.string().trim().url("Website must be a valid URL").optional().or(z.literal("")),
+  website: z
+    .string()
+    .trim()
+    .url("Website must be a valid URL")
+    .refine((value) => {
+      try {
+        return ["http:", "https:"].includes(new URL(value).protocol);
+      } catch {
+        return false;
+      }
+    }, "Website must start with http:// or https://")
+    .optional()
+    .or(z.literal("")),
   tradingName: z.string().trim().max(200, "Trading name must be 200 characters or fewer").optional(),
   organisationType: z.string().trim().min(1, "Organisation type is required"),
   physicalAddress: z
@@ -75,14 +86,31 @@ const step2Schema = z.object({
   preferredContactMethod: z.enum(["email", "phone"]),
 });
 
-const step3Schema = z.object({
-  justification: z
-    .string()
-    .trim()
-    .min(1, "Purpose for verification is required")
-    .max(2000, "Purpose must be 2000 characters or fewer"),
-  additionalInfo: z.string().trim().max(2000, "Additional information must be 2000 characters or fewer").optional(),
-});
+const step3Schema = z
+  .object({
+    verificationReasons: z
+      .array(z.string().trim().min(1))
+      .min(1, "Select at least one reason for requesting verification access")
+      .refine(
+        (values) => values.every((value) => VERIFICATION_REASON_VALUES.includes(value)),
+        "Select a valid reason for requesting verification access",
+      ),
+    otherVerificationReason: z
+      .string()
+      .trim()
+      .max(500, "Other reason must be 500 characters or fewer")
+      .optional(),
+    additionalInfo: z.string().trim().max(2000, "Additional information must be 2000 characters or fewer").optional(),
+  })
+  .refine(
+    (data) =>
+      !data.verificationReasons.includes(OTHER_VERIFICATION_REASON_VALUE) ||
+      Boolean(data.otherVerificationReason),
+    {
+      message: "Please describe your other reason for requesting verification access",
+      path: ["otherVerificationReason"],
+    },
+  );
 
 const step5Schema = z.object({
   declarationAccepted: z.literal(true, {
@@ -90,31 +118,11 @@ const step5Schema = z.object({
   }),
 });
 
-const createApplicationSchema = z.object({
-  companyName: z.string().trim().min(1, "Company name is required"),
-  companyRegistrationNumber: z.string().trim().min(1, "Company registration number is required"),
-  serviceCategory: z.string().trim().min(1, "Service category is required"),
-  website: z.string().trim().url("Website must be a valid URL").optional().or(z.literal("")),
-  description: z
-    .string()
-    .trim()
-    .min(1, "Service description is required")
-    .refine(
-      (value) => value.split(/\s+/).filter(Boolean).length <= 200,
-      "Description must be 200 words or fewer",
-    ),
-  contactPersonName: z.string().trim().min(1, "Contact person name is required"),
-  contactEmail: z.string().trim().email("Contact email must be valid"),
-  justification: z.string().trim().min(1, "Justification is required"),
-});
-
 const revokeApplicationSchema = z.object({
   applicationId: z.string().trim().min(1),
   reviewerId: z.string().trim().min(1),
   notes: z.string().trim().min(1, "A revocation reason is required").max(500),
 });
-
-export type CreateVendorApplicationInput = z.input<typeof createApplicationSchema>;
 
 function hasPrismaErrorCode(error: unknown, code: string) {
   return (
@@ -147,76 +155,6 @@ function activeApplicationError(status?: VendorApplicationStatus) {
   return status === VendorApplicationStatus.APPROVED
     ? new Error("Your verifier application is already approved.")
     : new Error("You already have an application under review.");
-}
-
-/**
- * Stores a verifier application as an immutable snapshot. The live vendor
- * profile is only updated after an administrator approves the application.
- */
-export async function createVendorApplication({
-  userId,
-  input,
-}: {
-  userId: string;
-  input: CreateVendorApplicationInput;
-}) {
-  const data = createApplicationSchema.parse(input);
-
-  try {
-    return await runSerializableTransaction(async (transaction) => {
-      const vendorProfile = await transaction.vendorProfile.findUnique({
-        where: { userId },
-      });
-
-      if (!vendorProfile) {
-        throw new Error("No vendor profile found for this account.");
-      }
-
-      const existingApplication = await transaction.vendorApplication.findFirst({
-        where: {
-          vendorProfileId: vendorProfile.id,
-          status: { in: [...ACTIVE_APPLICATION_STATUSES] },
-        },
-        select: { status: true },
-      });
-
-      if (existingApplication) {
-        throw activeApplicationError(existingApplication.status);
-      }
-
-      const application = await transaction.vendorApplication.create({
-        data: {
-          vendorProfileId: vendorProfile.id,
-          justification: data.justification,
-          companyRegistrationNumber: data.companyRegistrationNumber,
-          snapshotCompanyName: data.companyName,
-          snapshotServiceCategory: data.serviceCategory,
-          snapshotContactEmail: data.contactEmail,
-          snapshotContactPersonName: data.contactPersonName,
-          snapshotWebsite: data.website || null,
-        },
-      });
-
-      await writeAuditLog(
-        {
-          action: AuditAction.VENDOR_APPLICATION_SUBMITTED,
-          actorId: userId,
-          targetType: "vendor_application",
-          targetId: application.id,
-          meta: { vendorProfileId: vendorProfile.id },
-        },
-        transaction,
-      );
-
-      return application;
-    });
-  } catch (error) {
-    if (hasPrismaErrorCode(error, "P2002")) {
-      throw activeApplicationError();
-    }
-
-    throw error;
-  }
 }
 
 export async function getVendorApplicationForUser(userId: string) {
@@ -383,7 +321,16 @@ export async function revokeVendorApplication(input: {
 }) {
   const data = revokeApplicationSchema.parse(input);
 
-  return runSerializableTransaction(async (transaction) => {
+  const application = await runSerializableTransaction(async (transaction) => {
+    const existing = await transaction.vendorApplication.findUnique({
+      where: { id: data.applicationId },
+      include: { vendorProfile: true },
+    });
+
+    if (!existing || existing.status !== VendorApplicationStatus.APPROVED) {
+      throw new Error("This vendor is not currently approved.");
+    }
+
     const result = await transaction.vendorApplication.updateMany({
       where: {
         id: data.applicationId,
@@ -411,7 +358,24 @@ export async function revokeVendorApplication(input: {
       },
       transaction,
     );
+
+    return existing;
   });
+
+  try {
+    await sendVendorApplicationRevokedEmail({
+      to: application.snapshotContactEmail ?? application.vendorProfile.contactEmail,
+      contactName:
+        application.snapshotContactPersonName ?? application.vendorProfile.contactPersonName ?? "",
+      companyName: application.snapshotCompanyName ?? application.vendorProfile.companyName,
+      reason: data.notes,
+    });
+  } catch (error) {
+    console.error(
+      `[vendor-application] Failed to send revocation email for ${data.applicationId}:`,
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 }
 
 /** Approves or rejects a pending application and records the decision atomically. */
@@ -432,6 +396,7 @@ export async function reviewVendorApplication({
   }
 
   let approvedVendor: { vendorProfileId: string; companyName: string } | undefined;
+  let notifyContact: { to: string; contactName: string; companyName: string } | undefined;
 
   try {
     const result = await runSerializableTransaction(async (transaction) => {
@@ -443,6 +408,13 @@ export async function reviewVendorApplication({
       if (!application || application.status !== VendorApplicationStatus.PENDING) {
         throw new Error("This application is not pending review.");
       }
+
+      notifyContact = {
+        to: application.snapshotContactEmail ?? application.vendorProfile.contactEmail,
+        contactName:
+          application.snapshotContactPersonName ?? application.vendorProfile.contactPersonName ?? "",
+        companyName: application.snapshotCompanyName ?? application.vendorProfile.companyName,
+      };
 
       const updateResult = await transaction.vendorApplication.updateMany({
         where: { id: applicationId, status: VendorApplicationStatus.PENDING },
@@ -520,6 +492,32 @@ export async function reviewVendorApplication({
       } catch (error) {
         console.error(
           `[verification] Failed to create service point for vendor ${approvedVendor.vendorProfileId}:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
+    if (notifyContact) {
+      try {
+        if (decision === VendorApplicationStatus.APPROVED) {
+          await sendVendorApplicationApprovedEmail({
+            to: notifyContact.to,
+            contactName: notifyContact.contactName,
+            companyName: notifyContact.companyName,
+            portalUrl: `${env.APP_URL}/vendor`,
+          });
+        } else {
+          await sendVendorApplicationRejectedEmail({
+            to: notifyContact.to,
+            contactName: notifyContact.contactName,
+            companyName: notifyContact.companyName,
+            reason: normalizedNotes ?? "",
+            applicationUrl: `${env.APP_URL}/vendor/application`,
+          });
+        }
+      } catch (error) {
+        console.error(
+          `[vendor-application] Failed to send review decision email for ${applicationId}:`,
           error instanceof Error ? error.message : String(error),
         );
       }
@@ -701,7 +699,10 @@ export async function saveDraftApplication(
       return await prisma.vendorApplication.update({
         where: { id: applicationId },
         data: {
-          justification: d.justification,
+          verificationReasons: d.verificationReasons,
+          otherVerificationReason: d.verificationReasons.includes(OTHER_VERIFICATION_REASON_VALUE)
+            ? (d.otherVerificationReason ?? null)
+            : null,
           additionalInfo: d.additionalInfo || null,
         },
       });
@@ -722,6 +723,26 @@ export async function saveDraftApplication(
     }
     throw error;
   }
+}
+
+/** Returns the storage path for a document field, if the application belongs to the given user. */
+export async function getOwnedDocumentPath(
+  applicationId: string,
+  userId: string,
+  fieldKey: string,
+): Promise<string | null> {
+  const documentField = assertDocumentField(fieldKey);
+
+  const application = await prisma.vendorApplication.findFirst({
+    where: { id: applicationId, vendorProfile: { userId } },
+    select: { [documentField]: true },
+  });
+
+  if (!application) {
+    throw new Error("Application not found.");
+  }
+
+  return application[documentField] as string | null;
 }
 
 /**
@@ -826,7 +847,7 @@ export async function clearDraftDocumentPath(
 
 /** Validates completeness then transitions the draft from DRAFT → PENDING. */
 export async function submitDraftApplication(applicationId: string, userId: string) {
-  return runSerializableTransaction(async (transaction) => {
+  const updated = await runSerializableTransaction(async (transaction) => {
     const app = await transaction.vendorApplication.findFirst({
       where: { id: applicationId, vendorProfile: { userId }, status: VendorApplicationStatus.DRAFT },
     });
@@ -846,7 +867,7 @@ export async function submitDraftApplication(applicationId: string, userId: stri
     if (!app.contactJobTitle) missing.push("job title");
     if (!app.contactPhone) missing.push("phone number");
     if (!app.preferredContactMethod) missing.push("preferred contact method");
-    if (!app.justification) missing.push("purpose for verification");
+    if (app.verificationReasons.length === 0) missing.push("reason for requesting verification access");
     if (!app.docRegistrationCertificate) missing.push("registration certificate");
     if (!app.docProofOfAddress) missing.push("proof of address");
     if (!app.docRepresentativeId) missing.push("representative ID");
@@ -859,7 +880,7 @@ export async function submitDraftApplication(applicationId: string, userId: stri
       );
     }
 
-    const updated = await transaction.vendorApplication.update({
+    const updatedApplication = await transaction.vendorApplication.update({
       where: { id: applicationId },
       data: { status: VendorApplicationStatus.PENDING },
     });
@@ -875,15 +896,35 @@ export async function submitDraftApplication(applicationId: string, userId: stri
       transaction,
     );
 
-    return updated;
+    return {
+      application: updatedApplication,
+      contactEmail: app.snapshotContactEmail!,
+      contactName: app.snapshotContactPersonName!,
+      companyName: app.snapshotCompanyName!,
+    };
   });
+
+  try {
+    await sendVendorApplicationSubmittedEmail({
+      to: updated.contactEmail,
+      contactName: updated.contactName,
+      companyName: updated.companyName,
+    });
+  } catch (error) {
+    console.error(
+      `[vendor-application] Failed to send submission confirmation email for ${applicationId}:`,
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+
+  return updated.application;
 }
 
 /** Returns the step number the wizard should open at (1–5, or 6 for review). */
 export function computeDraftProgress(application: {
   snapshotCompanyName: string | null;
   snapshotContactPersonName: string | null;
-  justification: string | null;
+  verificationReasons: string[];
   docRegistrationCertificate: string | null;
   docProofOfAddress: string | null;
   docRepresentativeId: string | null;
@@ -892,7 +933,7 @@ export function computeDraftProgress(application: {
 }): number {
   if (!application.snapshotCompanyName) return 1;
   if (!application.snapshotContactPersonName) return 2;
-  if (!application.justification) return 3;
+  if (application.verificationReasons.length === 0) return 3;
   if (
     !application.docRegistrationCertificate ||
     !application.docProofOfAddress ||

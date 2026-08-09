@@ -3,11 +3,12 @@
 import { revalidatePath } from "next/cache";
 
 import { requireVendorSession } from "@/lib/auth/session";
-import { deleteVendorDocument, uploadVendorDocument } from "@/lib/storage/supabase";
+import { deleteVendorDocument, getDocumentSignedUrl, uploadVendorDocument } from "@/lib/storage/supabase";
 import {
   assertDraftDocumentUploadAllowed,
   clearDraftDocumentPath,
   getOrCreateDraftApplication,
+  getOwnedDocumentPath,
   saveDraftApplication,
   saveDraftDocumentPath,
   submitDraftApplication,
@@ -16,6 +17,7 @@ import {
 export type StepActionResult = { ok: boolean; error?: string };
 export type Step1ActionResult = { ok: boolean; applicationId?: string; error?: string };
 export type UploadActionResult = { ok: boolean; path?: string; filename?: string; error?: string };
+export type ViewUrlActionResult = { ok: boolean; url?: string; error?: string };
 
 const REVALIDATE_PATHS = ["/vendor/application", "/vendor"];
 
@@ -28,7 +30,7 @@ const ALLOWED_MIME_TYPES = [
   "application/vnd.ms-excel",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ];
-const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 /** Step 1: creates or resumes a draft, then saves step 1 data. */
 export async function saveStep1Action(formData: FormData): Promise<Step1ActionResult> {
@@ -69,10 +71,10 @@ export async function saveDraftStepAction(formData: FormData): Promise<StepActio
     for (const [key, value] of formData.entries()) {
       if (key === "applicationId" || key === "step") continue;
 
-      // requestedScopes comes through as multiple entries with the same key
-      if (key === "requestedScopes") {
-        const existing = rawData["requestedScopes"];
-        rawData["requestedScopes"] = Array.isArray(existing)
+      // verificationReasons comes through as multiple entries with the same key
+      if (key === "verificationReasons") {
+        const existing = rawData["verificationReasons"];
+        rawData["verificationReasons"] = Array.isArray(existing)
           ? [...existing, String(value)]
           : [String(value)];
       } else {
@@ -83,6 +85,11 @@ export async function saveDraftStepAction(formData: FormData): Promise<StepActio
     // declarationAccepted comes as "on" from a checkbox
     if (step === 5) {
       rawData["declarationAccepted"] = rawData["declarationAccepted"] === "on" ? true : undefined;
+    }
+
+    // No verificationReasons checked means the key is absent from the form data entirely
+    if (step === 3 && !("verificationReasons" in rawData)) {
+      rawData["verificationReasons"] = [];
     }
 
     await saveDraftApplication(applicationId, session.user.id, step, rawData);
@@ -119,7 +126,7 @@ export async function uploadDocumentAction(formData: FormData): Promise<UploadAc
   if (file.size > MAX_FILE_BYTES) {
     return {
       ok: false,
-      error: "This file is too large. Please upload a file that's 10 MB or smaller.",
+      error: "This file is too large. Please upload a file that's 5 MB or smaller.",
     };
   }
 
@@ -159,6 +166,33 @@ export async function uploadDocumentAction(formData: FormData): Promise<UploadAc
     return {
       ok: false,
       error: "Something went wrong while uploading. Please check the file and try again.",
+    };
+  }
+}
+
+/** Step 4: generates a temporary signed URL so the vendor can view a document they've uploaded. */
+export async function getDocumentViewUrlAction(
+  applicationId: string,
+  fieldKey: string,
+): Promise<ViewUrlActionResult> {
+  const session = await requireVendorSession();
+
+  try {
+    const path = await getOwnedDocumentPath(applicationId, session.user.id, fieldKey);
+    if (!path) {
+      return { ok: false, error: "No file has been uploaded for this document yet." };
+    }
+
+    const url = await getDocumentSignedUrl(path);
+    if (!url) {
+      return { ok: false, error: "Could not open the file. Please try again." };
+    }
+
+    return { ok: true, url };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Could not open the file. Please try again.",
     };
   }
 }

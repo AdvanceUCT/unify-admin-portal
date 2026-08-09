@@ -5,7 +5,6 @@ import { writeAuditLog } from "@/lib/audit/audit";
 import {
   assertDraftDocumentUploadAllowed,
   clearDraftDocumentPath,
-  createVendorApplication,
   ensureVendorVerificationServicePoint,
   getOrCreateDraftApplication,
   listDecidedVendorApplications,
@@ -83,18 +82,29 @@ vi.mock("@/lib/audit/audit", () => ({
   writeAuditLog: vi.fn(),
 }));
 
-const writeAuditLogMock = vi.mocked(writeAuditLog);
+vi.mock("@/lib/config/env", () => ({
+  env: {
+    APP_URL: "http://localhost:3000",
+  },
+}));
 
-const validInput = {
-  companyName: "Acme Corp",
-  companyRegistrationNumber: "12345",
-  serviceCategory: "Healthcare",
-  website: "https://example.com",
-  description: "We verify credentials for healthcare services.",
-  contactPersonName: "Jane Doe",
-  contactEmail: "jane@example.com",
-  justification: "We need to confirm student eligibility.",
-};
+vi.mock("@/lib/email/vendor-application-submitted", () => ({
+  sendVendorApplicationSubmittedEmail: vi.fn(),
+}));
+
+vi.mock("@/lib/email/vendor-application-approved", () => ({
+  sendVendorApplicationApprovedEmail: vi.fn(),
+}));
+
+vi.mock("@/lib/email/vendor-application-rejected", () => ({
+  sendVendorApplicationRejectedEmail: vi.fn(),
+}));
+
+vi.mock("@/lib/email/vendor-application-revoked", () => ({
+  sendVendorApplicationRevokedEmail: vi.fn(),
+}));
+
+const writeAuditLogMock = vi.mocked(writeAuditLog);
 
 const vendorProfile = {
   id: "profile_1",
@@ -117,67 +127,6 @@ beforeEach(() => {
     verificationUrl: "https://verify.example.com/verify/sp-public-1",
   });
   agentClient.listVerificationServicePoints.mockResolvedValue([]);
-});
-
-describe("createVendorApplication", () => {
-  it("throws when the user has no vendor profile", async () => {
-    database.transaction.vendorProfile.findUnique.mockResolvedValueOnce(null);
-
-    await expect(
-      createVendorApplication({ userId: "user_1", input: validInput }),
-    ).rejects.toThrow("No vendor profile found for this account.");
-  });
-
-  it.each([
-    [VendorApplicationStatus.PENDING, "under review"],
-    [VendorApplicationStatus.APPROVED, "already approved"],
-  ])("rejects a new application when one is %s", async (status, message) => {
-    database.transaction.vendorProfile.findUnique.mockResolvedValueOnce(vendorProfile);
-    database.transaction.vendorApplication.findFirst.mockResolvedValueOnce({ status });
-
-    await expect(
-      createVendorApplication({ userId: "user_1", input: validInput }),
-    ).rejects.toThrow(message);
-  });
-
-  it("stores an immutable application snapshot without changing the live profile", async () => {
-    database.transaction.vendorProfile.findUnique.mockResolvedValueOnce(vendorProfile);
-    database.transaction.vendorApplication.findFirst.mockResolvedValueOnce(null);
-    database.transaction.vendorApplication.create.mockResolvedValueOnce({ id: "app_1" });
-
-    await createVendorApplication({ userId: "user_1", input: validInput });
-
-    expect(database.transaction.vendorProfile.update).not.toHaveBeenCalled();
-    expect(database.transaction.vendorApplication.create).toHaveBeenCalledWith({
-      data: {
-        vendorProfileId: "profile_1",
-        justification: validInput.justification,
-        companyRegistrationNumber: "12345",
-        snapshotCompanyName: "Acme Corp",
-        snapshotServiceCategory: "Healthcare",
-        snapshotContactEmail: "jane@example.com",
-        snapshotContactPersonName: "Jane Doe",
-        snapshotWebsite: "https://example.com",
-      },
-    });
-    expect(writeAuditLogMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: AuditAction.VENDOR_APPLICATION_SUBMITTED,
-        targetId: "app_1",
-      }),
-      database.transaction,
-    );
-  });
-
-  it("returns a useful error when the active-application constraint wins a race", async () => {
-    database.transaction.vendorProfile.findUnique.mockResolvedValueOnce(vendorProfile);
-    database.transaction.vendorApplication.findFirst.mockResolvedValueOnce(null);
-    database.transaction.vendorApplication.create.mockRejectedValueOnce({ code: "P2002" });
-
-    await expect(
-      createVendorApplication({ userId: "user_1", input: validInput }),
-    ).rejects.toThrow("already have an application under review");
-  });
 });
 
 describe("assertDraftDocumentUploadAllowed", () => {
@@ -531,6 +480,14 @@ describe("revokeVendorApplication", () => {
   });
 
   it("records revocation metadata without overwriting the approval decision", async () => {
+    database.transaction.vendorApplication.findUnique.mockResolvedValueOnce({
+      id: "app_1",
+      status: VendorApplicationStatus.APPROVED,
+      snapshotCompanyName: "Acme Corp",
+      snapshotContactEmail: "jane@example.com",
+      snapshotContactPersonName: "Jane Doe",
+      vendorProfile,
+    });
     database.transaction.vendorApplication.updateMany.mockResolvedValueOnce({ count: 1 });
 
     await revokeVendorApplication({

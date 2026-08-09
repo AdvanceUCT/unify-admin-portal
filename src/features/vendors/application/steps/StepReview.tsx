@@ -1,7 +1,9 @@
 "use client";
 
+import { Pencil } from "lucide-react";
 import { useActionState } from "react";
 import { submitApplicationAction } from "@/app/vendor/(portal)/application/actions";
+import { formatVerificationReasons } from "@/lib/vendors/verification-reasons";
 import type { DraftApplicationData } from "../VendorApplicationWizard";
 
 function ReviewRow({ label, value }: { label: string; value: string | null | undefined }) {
@@ -14,12 +16,30 @@ function ReviewRow({ label, value }: { label: string; value: string | null | und
   );
 }
 
-function ReviewSection({ title, children }: { title: string; children: React.ReactNode }) {
+function ReviewSection({
+  title,
+  step,
+  onEditStep,
+  children,
+}: {
+  title: string;
+  step: number;
+  onEditStep: (step: number) => void;
+  children: React.ReactNode;
+}) {
   return (
     <div>
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-        {title}
-      </h3>
+      <div className="mb-2 flex items-center gap-1.5">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">{title}</h3>
+        <button
+          aria-label={`Edit ${title}`}
+          className="text-zinc-600 transition hover:text-zinc-950"
+          onClick={() => onEditStep(step)}
+          type="button"
+        >
+          <Pencil className="size-4" />
+        </button>
+      </div>
       <div className="divide-y divide-zinc-100 rounded-lg border border-zinc-200 bg-white">
         {children}
       </div>
@@ -31,10 +51,12 @@ export function StepReview({
   applicationId,
   initialData,
   onBack,
+  onEditStep,
 }: {
   applicationId: string;
   initialData: DraftApplicationData;
   onBack: () => void;
+  onEditStep: (step: number) => void;
 }) {
   const [state, formAction, isPending] = useActionState(submitApplicationAction, { ok: false });
 
@@ -64,7 +86,7 @@ export function StepReview({
       </div>
 
       <div className="space-y-5">
-        <ReviewSection title="Organisation information">
+        <ReviewSection title="Organisation information" step={1} onEditStep={onEditStep}>
           <ReviewRow label="Company name" value={initialData.companyName} />
           <ReviewRow label="Trading name" value={initialData.tradingName} />
           <ReviewRow label="Registration number" value={initialData.companyRegistrationNumber} />
@@ -75,7 +97,7 @@ export function StepReview({
           <ReviewRow label="Postal address" value={initialData.postalAddress} />
         </ReviewSection>
 
-        <ReviewSection title="Authorised representative">
+        <ReviewSection title="Authorised representative" step={2} onEditStep={onEditStep}>
           <ReviewRow label="Full name" value={initialData.contactPersonName} />
           <ReviewRow label="Work email" value={initialData.contactEmail} />
           <ReviewRow label="Job title" value={initialData.contactJobTitle} />
@@ -84,12 +106,18 @@ export function StepReview({
           <ReviewRow label="Preferred contact" value={initialData.preferredContactMethod} />
         </ReviewSection>
 
-        <ReviewSection title="Verification requirements">
-          <ReviewRow label="Purpose" value={initialData.justification} />
+        <ReviewSection title="Verification requirements" step={3} onEditStep={onEditStep}>
+          <ReviewRow
+            label="Reasons for access"
+            value={formatVerificationReasons(
+              initialData.verificationReasons,
+              initialData.otherVerificationReason,
+            )}
+          />
           <ReviewRow label="Additional info" value={initialData.additionalInfo} />
         </ReviewSection>
 
-        <ReviewSection title="Supporting documents">
+        <ReviewSection title="Supporting documents" step={4} onEditStep={onEditStep}>
           {(
             [
               ["Registration certificate", initialData.docRegistrationCertificate],
@@ -110,7 +138,7 @@ export function StepReview({
           )}
         </ReviewSection>
 
-        <ReviewSection title="Declaration">
+        <ReviewSection title="Declaration" step={5} onEditStep={onEditStep}>
           <div className="flex gap-4 px-4 py-2.5 text-sm">
             <span className="w-44 shrink-0 text-zinc-500">Accepted</span>
             <span className="text-zinc-800">
