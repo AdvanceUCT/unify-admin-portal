@@ -28,7 +28,7 @@ export function AgentServiceHealthCard({
 
   return (
     <div>
-      <div className="divide-y divide-zinc-100">
+      <div className="divide-y divide-border">
         <SettingsField
           label="Status"
           value={
@@ -49,16 +49,16 @@ export function AgentServiceHealthCard({
         <SettingsField label="Agent API key" value={apiKeyStatus} />
       </div>
 
-      <div className="mt-4 flex items-center gap-3 border-t border-zinc-100 pt-4">
+      <div className="mt-4 flex items-center gap-3 border-t border-border pt-4">
         <button
-          className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+          className="h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg disabled:cursor-not-allowed disabled:opacity-60"
           disabled={isPending}
           onClick={handleRefresh}
           type="button"
         >
           {isPending ? "Checking..." : "Refresh"}
         </button>
-        <span className="text-sm text-zinc-400">
+        <span className="text-sm text-fg-subtle">
           Checked {new Date(health.checkedAt).toLocaleString()}
         </span>
       </div>

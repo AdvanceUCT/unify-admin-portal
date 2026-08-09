@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
+import { Dialog } from "@/components/ui/Dialog";
 import type { ActivationDelivery, BatchIssuanceResult, StudentRecord } from "@/lib/api/types";
 import { formatActivationDeliveryStatus, formatDateTime } from "@/lib/formatters";
 
@@ -14,6 +15,30 @@ type StudentCredentialActionsProps = {
 };
 
 type LifecycleAction = "reactivate" | "revoke" | "suspend";
+
+const lifecycleCopy: Record<LifecycleAction, { confirmClassName: string; description: string; title: string }> = {
+  reactivate: {
+    confirmClassName: "bg-success-fg hover:opacity-90",
+    description: "Verification will succeed again after the updated status list reaches the ledger.",
+    title: "Reactivate credential",
+  },
+  revoke: {
+    confirmClassName: "bg-danger-fg hover:opacity-90",
+    description: "Revocation is permanent. The student will need a newly issued credential.",
+    title: "Revoke credential",
+  },
+  suspend: {
+    confirmClassName: "bg-warning-fg hover:opacity-90",
+    description: "Verification will fail until an administrator reactivates this credential.",
+    title: "Suspend credential",
+  },
+};
+
+const lifecycleButtonToneClassName: Record<LifecycleAction, string> = {
+  reactivate: "border-success-border bg-success-bg text-success-fg hover:bg-success-border",
+  revoke: "border-danger-border bg-danger-bg text-danger-fg hover:bg-danger-border",
+  suspend: "border-warning-border bg-warning-bg text-warning-fg hover:bg-warning-border",
+};
 
 async function readErrorMessage(response: Response) {
   const body = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
@@ -152,6 +177,10 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
     setLifecycleAction(action);
   }
 
+  function closeLifecycleDialog() {
+    setLifecycleAction(null);
+  }
+
   async function submitLifecycleChange() {
     if (!lifecycleAction || !reason.trim()) return;
     setError(null);
@@ -182,23 +211,37 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
   }
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h2 className="mb-4 text-base font-semibold text-zinc-950">Available actions</h2>
-        {canIssue ? (
-          <div className="flex flex-wrap gap-2">
-            <button
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-zinc-950 bg-zinc-950 px-3 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:border-zinc-300 disabled:bg-zinc-200 disabled:text-zinc-500"
-              disabled={isIssuing}
-              onClick={issueCredential}
-              type="button"
-            >
-              {isIssuing ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Send aria-hidden className="size-4" />}
-              {isIssuing ? "Issuing..." : "Issue credential"}
-            </button>
+    <>
+      <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
+        <h2 className="text-section-title text-fg">Available actions</h2>
+
+        {message ? (
+          <p className="mt-4 rounded-md border border-success-border bg-success-bg px-3 py-2 text-sm text-success-fg">
+            {message}
+          </p>
+        ) : null}
+        {error ? (
+          <p className="mt-4 rounded-md border border-danger-border bg-danger-bg px-3 py-2 text-sm text-danger-fg">
+            {error}
+          </p>
+        ) : null}
+
+        {canIssue || canRenew ? (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {canIssue ? (
+              <button
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand-600 px-3 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-fg-subtle"
+                disabled={isIssuing}
+                onClick={issueCredential}
+                type="button"
+              >
+                {isIssuing ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Send aria-hidden className="size-4" />}
+                {isIssuing ? "Issuing..." : "Issue credential"}
+              </button>
+            ) : null}
             {canRenew ? (
               <button
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-800 transition hover:border-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={isRenewing}
                 onClick={renewCredential}
                 type="button"
@@ -208,24 +251,14 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
               </button>
             ) : null}
           </div>
-        ) : canRenew ? (
-          <button
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-800 transition hover:border-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={isRenewing}
-            onClick={renewCredential}
-            type="button"
-          >
-            {isRenewing ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <RotateCcw aria-hidden className="size-4" />}
-            {isRenewing ? "Renewing..." : "Renew credential"}
-          </button>
         ) : null}
 
-        <div className="mt-4 space-y-2">
-          <h3 className="text-sm font-medium text-zinc-950">Lifecycle controls</h3>
-          <div className="flex flex-wrap gap-2">
+        <div className="mt-5 border-t border-border pt-4">
+          <h3 className="text-sm font-medium text-fg">Lifecycle controls</h3>
+          <div className="mt-3 flex flex-wrap gap-2">
             {canSuspend ? (
               <button
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-amber-300 bg-white px-3 text-sm font-medium text-amber-800 transition hover:bg-amber-50 disabled:opacity-50"
+                className={`inline-flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium transition disabled:opacity-50 ${lifecycleButtonToneClassName.suspend}`}
                 disabled={isChangingLifecycle}
                 onClick={() => selectLifecycleAction("suspend")}
                 type="button"
@@ -236,7 +269,7 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
             ) : null}
             {canReactivate ? (
               <button
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-emerald-300 bg-white px-3 text-sm font-medium text-emerald-800 transition hover:bg-emerald-50 disabled:opacity-50"
+                className={`inline-flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium transition disabled:opacity-50 ${lifecycleButtonToneClassName.reactivate}`}
                 disabled={isChangingLifecycle}
                 onClick={() => selectLifecycleAction("reactivate")}
                 type="button"
@@ -246,7 +279,7 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
               </button>
             ) : null}
             <button
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-rose-300 bg-white px-3 text-sm font-medium text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:bg-zinc-50 disabled:text-zinc-400"
+              className={`inline-flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:border-border disabled:bg-surface-muted disabled:text-fg-subtle disabled:hover:bg-surface-muted ${lifecycleButtonToneClassName.revoke}`}
               disabled={isChangingLifecycle || !canRevoke}
               onClick={() => selectLifecycleAction("revoke")}
               type="button"
@@ -256,94 +289,45 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
             </button>
           </div>
           {!canSuspend && !canReactivate && lifecycleUnavailableReason ? (
-            <p className="text-xs leading-5 text-zinc-600">{lifecycleUnavailableReason}</p>
+            <p className="mt-3 rounded-md border border-warning-border bg-warning-bg px-3 py-2 text-sm text-warning-fg">
+              {lifecycleUnavailableReason}
+            </p>
           ) : null}
         </div>
-
-        {lifecycleAction ? (
-          <div className="mt-4 space-y-3 border-t border-zinc-200 pt-4">
-            <div>
-              <h3 className="text-sm font-medium text-zinc-950">
-                {lifecycleAction === "reactivate" ? "Reactivate credential" : lifecycleAction === "suspend" ? "Suspend credential" : "Revoke credential"}
-              </h3>
-              <p className="mt-1 text-xs leading-5 text-zinc-600">
-                {lifecycleAction === "revoke"
-                  ? "Revocation is permanent. The student will need a newly issued credential."
-                  : lifecycleAction === "suspend"
-                    ? "Verification will fail until an administrator reactivates this credential."
-                    : "Verification will succeed again after the updated status list reaches the ledger."}
-              </p>
-            </div>
-            <label className="block text-sm font-medium text-zinc-800" htmlFor="lifecycle-reason">
-              Reason
-            </label>
-            <textarea
-              className="min-h-24 w-full resize-y rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-950 focus:ring-2 focus:ring-zinc-200"
-              disabled={isChangingLifecycle}
-              id="lifecycle-reason"
-              maxLength={500}
-              onChange={(event) => setReason(event.target.value)}
-              placeholder="Enter the reason for this change"
-              value={reason}
-            />
-            <div className="flex flex-wrap gap-2">
-              <button
-                className={`inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${lifecycleAction === "revoke" ? "bg-rose-700 hover:bg-rose-800" : "bg-zinc-950 hover:bg-zinc-800"}`}
-                disabled={isChangingLifecycle || !reason.trim()}
-                onClick={submitLifecycleChange}
-                type="button"
-              >
-                {isChangingLifecycle ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : null}
-                Confirm
-              </button>
-              <button
-                className="inline-flex h-9 items-center justify-center rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:border-zinc-500 disabled:opacity-50"
-                disabled={isChangingLifecycle}
-                onClick={() => setLifecycleAction(null)}
-                type="button"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : null}
-      </div>
-
-      {message ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p> : null}
-      {error ? <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
+      </section>
 
       {currentDelivery ? (
-        <div className="rounded-md border border-zinc-200 bg-zinc-50 p-4">
+        <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-sm font-medium text-zinc-950">Activation delivery</h3>
+            <h2 className="text-section-title text-fg">Activation delivery</h2>
             <Badge tone={currentDelivery.status === "Failed" ? "danger" : "success"}>
               {formatActivationDeliveryStatus(currentDelivery.status)}
             </Badge>
           </div>
-          <dl className="mt-3 space-y-2 text-sm">
+          <dl className="mt-4 space-y-3 text-sm">
             <div className="flex justify-between gap-4">
-              <dt className="text-zinc-500">Email</dt>
-              <dd className="text-right text-zinc-900">{currentDelivery.email ?? student.profile.email}</dd>
+              <dt className="text-fg-subtle">Email</dt>
+              <dd className="text-right text-fg">{currentDelivery.email ?? student.profile.email}</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-zinc-500">Expires</dt>
-              <dd className="text-right text-zinc-900">{formatDateTime(currentDelivery.expiresAt)}</dd>
+              <dt className="text-fg-subtle">Expires</dt>
+              <dd className="text-right text-fg">{formatDateTime(currentDelivery.expiresAt)}</dd>
             </div>
             {currentDelivery.failureReason ? (
               <div className="flex justify-between gap-4">
-                <dt className="text-zinc-500">Failure</dt>
-                <dd className="max-w-xs text-right text-rose-700">{currentDelivery.failureReason}</dd>
+                <dt className="text-fg-subtle">Failure</dt>
+                <dd className="max-w-xs text-right text-danger-fg">{currentDelivery.failureReason}</dd>
               </div>
             ) : null}
           </dl>
           <div className="mt-4 flex flex-wrap gap-2">
             <input
-              className="min-w-0 flex-1 rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs text-zinc-700"
+              className="min-w-0 flex-1 rounded-md border border-border bg-surface px-3 py-2 font-mono text-xs text-fg-muted"
               readOnly
               value={currentDelivery.activationUrl}
             />
             <a
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-800 transition hover:border-zinc-950"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
               href={currentDelivery.activationUrl}
               rel="noreferrer"
               target="_blank"
@@ -352,7 +336,7 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
               Open
             </a>
             <button
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-800 transition hover:border-zinc-950"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
               onClick={copyActivationLink}
               type="button"
             >
@@ -360,8 +344,53 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
               {copyLabel}
             </button>
           </div>
-        </div>
+        </section>
       ) : null}
-    </div>
+
+      <Dialog
+        isOpen={lifecycleAction !== null}
+        onClose={closeLifecycleDialog}
+        title={lifecycleAction ? lifecycleCopy[lifecycleAction].title : ""}
+      >
+        {lifecycleAction ? (
+          <div className="space-y-3">
+            <p className="text-sm text-fg-muted">{lifecycleCopy[lifecycleAction].description}</p>
+            <div>
+              <label className="block text-sm font-medium text-fg" htmlFor="lifecycle-reason">
+                Reason
+              </label>
+              <textarea
+                className="mt-1.5 min-h-24 w-full resize-y rounded-md border border-border px-3 py-2 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+                disabled={isChangingLifecycle}
+                id="lifecycle-reason"
+                maxLength={500}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="Enter the reason for this change"
+                value={reason}
+              />
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                className="inline-flex h-9 items-center justify-center rounded-md border border-border px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg disabled:opacity-50"
+                disabled={isChangingLifecycle}
+                onClick={closeLifecycleDialog}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className={`inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${lifecycleCopy[lifecycleAction].confirmClassName}`}
+                disabled={isChangingLifecycle || !reason.trim()}
+                onClick={submitLifecycleChange}
+                type="button"
+              >
+                {isChangingLifecycle ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : null}
+                Confirm
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </Dialog>
+    </>
   );
 }

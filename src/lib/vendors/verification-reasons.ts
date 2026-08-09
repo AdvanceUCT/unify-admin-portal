@@ -27,15 +27,22 @@ const VERIFICATION_REASON_LABELS = new Map<string, string>(
   VERIFICATION_REASONS.map((reason) => [reason.value, reason.label]),
 );
 
+/** Resolves selected verification reason values to their human-readable labels. */
+export function verificationReasonLabels(
+  values: string[],
+  otherText?: string | null,
+): string[] {
+  return values.map((value) =>
+    value === OTHER_VERIFICATION_REASON_VALUE && otherText
+      ? `Other: ${otherText}`
+      : (VERIFICATION_REASON_LABELS.get(value) ?? value),
+  );
+}
+
 /** Renders selected verification reason values as a human-readable, comma-separated summary. */
 export function formatVerificationReasons(
   values: string[],
   otherText?: string | null,
 ): string {
-  const labels = values.map((value) =>
-    value === OTHER_VERIFICATION_REASON_VALUE && otherText
-      ? `Other: ${otherText}`
-      : (VERIFICATION_REASON_LABELS.get(value) ?? value),
-  );
-  return labels.join(", ");
+  return verificationReasonLabels(values, otherText).join(", ");
 }

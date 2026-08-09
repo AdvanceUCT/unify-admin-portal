@@ -44,8 +44,8 @@ export function UniversityProfileForm({
           aria-live="polite"
           className={
             state.status === "error"
-              ? "rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-              : "rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
+              ? "rounded-md border border-danger-border bg-danger-bg px-3 py-2 text-sm text-danger-fg"
+              : "rounded-md border border-success-border bg-success-bg px-3 py-2 text-sm text-success-fg"
           }
         >
           {state.message}
@@ -53,7 +53,7 @@ export function UniversityProfileForm({
       ) : null}
       <div className="flex justify-end">
         <button
-          className="h-10 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+          className="h-10 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-fg-subtle"
           disabled={isPending}
           type="submit"
         >
@@ -79,9 +79,9 @@ function Field({
 }) {
   return (
     <label className="block text-sm">
-      <span className="font-medium text-zinc-700">{label}</span>
+      <span className="font-medium text-fg-muted">{label}</span>
       <input
-        className="mt-1.5 h-10 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none focus:border-zinc-950"
+        className="mt-1.5 h-10 w-full rounded-md border border-border px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
         defaultValue={defaultValue}
         name={name}
         required={required}

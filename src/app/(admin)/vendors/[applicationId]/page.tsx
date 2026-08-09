@@ -1,8 +1,7 @@
-import Link from "next/link";
+import { Check } from "lucide-react";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 
-import { SectionHeader } from "@/components/layout/SectionHeader";
+import { BackButton } from "@/components/ui/BackButton";
 import { VendorApplicationDetails } from "@/features/vendors/VendorApplicationDetails";
 import { requireRole } from "@/lib/auth/session";
 import { getDocumentSignedUrl } from "@/lib/storage/supabase";
@@ -43,6 +42,9 @@ export default async function VendorApplicationDetailPage({
 
   const backHref = tab === "applications" ? "/vendors?tab=applications" : "/vendors";
   const backLabel = tab === "applications" ? "Back to applications" : "Back to vendors";
+  const companyName = application.snapshotCompanyName ?? application.vendorProfile.companyName;
+  const serviceCategory =
+    application.snapshotServiceCategory ?? application.vendorProfile.serviceCategory;
 
   // Generate signed URLs for any uploaded documents (1-hour expiry)
   const documentUrls: Record<string, string> = {};
@@ -60,46 +62,41 @@ export default async function VendorApplicationDetailPage({
       {application.status === "PENDING" && !application.viewedByAdminAt ? (
         <MarkApplicationViewed applicationId={application.id} />
       ) : null}
-      <SectionHeader
-        title="Vendor application"
-        description={`Details for ${application.snapshotCompanyName ?? application.vendorProfile.companyName}.`}
-      />
+
+      <BackButton href={backHref} label={backLabel} />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Link
-          href={backHref}
-          className="group inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-800"
-        >
-          <span className="grid size-8 shrink-0 place-items-center rounded-full border border-zinc-300 text-zinc-700 transition group-hover:border-zinc-400 group-hover:text-zinc-900">
-            <ArrowLeft aria-hidden className="size-5" />
-          </span>
-          {backLabel}
-        </Link>
-        {application.status === "APPROVED" && (
-          <RevokeButton
-            action={revokeVendorApplicationAction}
-            applicationId={application.id}
-            companyName={application.snapshotCompanyName ?? application.vendorProfile.companyName}
-          />
-        )}
+        <div>
+          <h1 className="text-page-title text-fg">{companyName}</h1>
+          <p className="mt-1 text-sm text-fg-subtle">{serviceCategory}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {application.status === "APPROVED" && (
+            <RevokeButton
+              action={revokeVendorApplicationAction}
+              applicationId={application.id}
+              companyName={companyName}
+            />
+          )}
+          {application.status === "PENDING" && (
+            <>
+              <form action={approveVendorApplicationAction}>
+                <input name="applicationId" type="hidden" value={application.id} />
+                <button
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-success-border bg-success-bg px-3 text-sm font-medium text-success-fg transition hover:bg-success-border"
+                  type="submit"
+                >
+                  <Check aria-hidden className="size-4" />
+                  Approve
+                </button>
+              </form>
+              <RejectForm action={rejectVendorApplicationAction} applicationId={application.id} />
+            </>
+          )}
+        </div>
       </div>
 
       <VendorApplicationDetails application={application} documentUrls={documentUrls} />
-
-      {application.status === "PENDING" && (
-        <div className="flex flex-col items-center gap-3 border-t border-zinc-200 pt-6 sm:flex-row sm:justify-center">
-          <form action={approveVendorApplicationAction}>
-            <input name="applicationId" type="hidden" value={application.id} />
-            <button
-              className="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50 sm:w-auto"
-              type="submit"
-            >
-              Approve
-            </button>
-          </form>
-          <RejectForm action={rejectVendorApplicationAction} applicationId={application.id} />
-        </div>
-      )}
     </div>
   );
 }

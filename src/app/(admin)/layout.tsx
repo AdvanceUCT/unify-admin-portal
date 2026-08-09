@@ -1,17 +1,7 @@
-import {
-  ClipboardList,
-  Gauge,
-  Landmark,
-  Layers3,
-  ScrollText,
-  Settings,
-  ShieldCheck,
-  SlidersHorizontal,
-  UserCog,
-  Users,
-} from "lucide-react";
 import { redirect } from "next/navigation";
 import { PortalShell } from "@/components/layout/PortalShell";
+import type { PortalNavItem } from "@/components/layout/portalTypes";
+import { AgentStatusIndicator } from "@/features/agent/AgentStatusIndicator";
 import {
   ADMIN_ROLES,
   canAccessRoute,
@@ -22,21 +12,28 @@ import { requireRole } from "@/lib/auth/session";
 import { env } from "@/lib/config/env";
 import { getUniversityProfile } from "@/lib/university/profile";
 
-const navItems = [
-  { href: "/", label: "Overview", icon: Gauge },
-  { href: "/students", label: "Students", icon: Users },
-  { href: "/credentials/issuance", label: "Issue Credentials", icon: ClipboardList },
+const navItems: (PortalNavItem & { allowedRoles?: readonly AdminRole[] })[] = [
+  { href: "/", label: "Overview", icon: "overview" },
+  { href: "/students", label: "Students", icon: "students" },
+  {
+    href: "/credentials/issuance",
+    label: "Issue Credentials",
+    icon: "application",
+    children: [
+      { href: "/credentials/issuance/batch", label: "Batch issuance" },
+      { href: "/credentials/issuance/individual", label: "Individual issuance" },
+    ],
+  },
   {
     href: "/credentials/schemas",
     label: "Credential Schemas",
-    icon: Layers3,
+    icon: "schemas",
     allowedRoles: ["SUPER_ADMIN", "ADMIN"] as const,
   },
-  { href: "/vendors", label: "Vendors", icon: Landmark },
-  { href: "/rules", label: "Rules", icon: SlidersHorizontal },
-  { href: "/audit", label: "Audit", icon: ScrollText },
-  { href: "/users", label: "Users", icon: UserCog },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/vendors", label: "Vendors", icon: "vendors" },
+  { href: "/audit", label: "Audit", icon: "audit" },
+  { href: "/users", label: "Users", icon: "users" },
+  { href: "/settings", label: "Settings", icon: "settings" },
 ];
 
 export default async function AdminLayout({
@@ -67,11 +64,22 @@ export default async function AdminLayout({
 
   return (
     <PortalShell
-      context="Credential governance"
+      brand={{
+        brandName: "Unify",
+        logoUrl: profile?.logoUrl,
+        tenantName: profile?.name ?? "Credential governance",
+      }}
+      fallbackTitle="Admin"
       navItems={visibleNavItems}
-      productName="UNIFY Admin"
-      sessionLabel={`${session.user.name} · ${ROLE_LABELS[role]}`}
-      utilityIcon={ShieldCheck}
+      portal="admin"
+      settingsHref="/settings"
+      status={<AgentStatusIndicator />}
+      user={{
+        email: session.user.email,
+        image: session.user.image,
+        name: session.user.name,
+        roleLabel: ROLE_LABELS[role],
+      }}
     >
       {children}
     </PortalShell>
@@ -80,12 +88,12 @@ export default async function AdminLayout({
 
 function SystemNotConfiguredPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f7f8fa] px-6 text-zinc-950">
-      <div className="max-w-lg rounded-lg border border-zinc-200 bg-white p-6 text-center">
+    <div className="flex min-h-screen items-center justify-center bg-canvas px-6 text-fg">
+      <div className="max-w-lg rounded-lg border border-border bg-surface p-6 text-center shadow-sm">
         <h1 className="text-xl font-semibold">
           System setup is not yet complete
         </h1>
-        <p className="mt-2 text-sm text-zinc-600">
+        <p className="mt-2 text-sm text-fg-muted">
           Please contact your Super Administrator to finish the onboarding
           wizard.
         </p>

@@ -5,6 +5,7 @@ import { getCurrentAdminSession } from "@/lib/auth/session";
 import {
   createDraftCredentialSchemaVersion,
   CredentialSchemaVersionError,
+  deleteDraftCredentialSchemaVersion,
   publishCredentialSchemaVersion,
 } from "@/lib/university/credentialSchema";
 
@@ -99,6 +100,37 @@ export async function PATCH(request: Request) {
     const status = error instanceof CredentialSchemaVersionError ? error.status : 502;
     return NextResponse.json(
       { error: { message: error instanceof Error ? error.message : "Schema publishing failed." } },
+      { status },
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  const sessionOrResponse = await requireSchemaManagement();
+  if (sessionOrResponse instanceof NextResponse) return sessionOrResponse;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: { message: "Request body must be valid JSON." } }, { status: 400 });
+  }
+
+  const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  if (typeof record.schemaId !== "string") {
+    return NextResponse.json({ error: { message: "schemaId is required." } }, { status: 400 });
+  }
+
+  try {
+    await deleteDraftCredentialSchemaVersion({
+      actorId: sessionOrResponse.user.id,
+      schemaId: record.schemaId,
+    });
+    return new NextResponse(null, { status: 204 });
+  } catch (error) {
+    const status = error instanceof CredentialSchemaVersionError ? error.status : 502;
+    return NextResponse.json(
+      { error: { message: error instanceof Error ? error.message : "Schema draft deletion failed." } },
       { status },
     );
   }

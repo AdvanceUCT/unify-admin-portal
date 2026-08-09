@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   auditCreate: vi.fn(),
   create: vi.fn(),
+  deleteSchema: vi.fn(),
   findFirst: vi.fn(),
   findUnique: vi.fn(),
   getActiveCustomFieldDefinitions: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock("@/lib/db/prisma", () => {
     },
     credentialSchema: {
       create: mocks.create,
+      delete: mocks.deleteSchema,
       update: mocks.update,
       updateMany: mocks.updateMany,
     },
@@ -53,6 +55,7 @@ vi.mock("@/lib/db/prisma", () => {
 import {
   createDraftCredentialSchemaVersion,
   CredentialSchemaVersionError,
+  deleteDraftCredentialSchemaVersion,
   publishCredentialSchemaVersion,
   validateCredentialSchemaVersionInput,
 } from "@/lib/university/credentialSchema";
@@ -184,5 +187,51 @@ describe("credential schema versions", () => {
     ).rejects.toMatchObject({ status: 409 });
     expect(mocks.issuanceSetup).not.toHaveBeenCalled();
     expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  describe("deleteDraftCredentialSchemaVersion", () => {
+    it("deletes a local draft and writes an audit log", async () => {
+      await deleteDraftCredentialSchemaVersion({ actorId: "admin-1", schemaId: "schema-row-2" });
+
+      expect(mocks.deleteSchema).toHaveBeenCalledWith({ where: { id: "schema-row-2" } });
+      expect(mocks.auditCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: "SCHEMA_VERSION_DELETED",
+            actorId: "admin-1",
+            targetId: "schema-row-2",
+          }),
+        }),
+      );
+    });
+
+    it("refuses to delete a published or retired version", async () => {
+      mocks.findUnique.mockResolvedValue({
+        id: "schema-row-2",
+        schemaVersion: "2.0",
+        status: "ACTIVE",
+        universityProfileId: "university-1",
+      });
+
+      await expect(
+        deleteDraftCredentialSchemaVersion({ actorId: "admin-1", schemaId: "schema-row-2" }),
+      ).rejects.toMatchObject({ status: 409 });
+      expect(mocks.deleteSchema).not.toHaveBeenCalled();
+      expect(mocks.auditCreate).not.toHaveBeenCalled();
+    });
+
+    it("rejects a schema id from another university", async () => {
+      mocks.findUnique.mockResolvedValue({
+        id: "schema-row-2",
+        schemaVersion: "2.0",
+        status: "DRAFT",
+        universityProfileId: "another-university",
+      });
+
+      await expect(
+        deleteDraftCredentialSchemaVersion({ actorId: "admin-1", schemaId: "schema-row-2" }),
+      ).rejects.toMatchObject({ status: 404 });
+      expect(mocks.deleteSchema).not.toHaveBeenCalled();
+    });
   });
 });

@@ -1,20 +1,12 @@
-import {
-  Activity,
-  Building,
-  Clock,
-  FileText,
-  Link as LinkIcon,
-  UserPlus,
-  Webhook,
-} from "lucide-react";
+import { Activity, Building, Clock, FileText, Link as LinkIcon, Webhook } from "lucide-react";
 
-import { SectionHeader } from "@/components/layout/SectionHeader";
 import { checkAgentHealth } from "@/lib/agentClient";
 import { ADMIN_ROLES, ROLE_LABELS, type AdminRole } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
 import { env } from "@/lib/config/env";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfile } from "@/lib/university/profile";
+import { saveRenewalSettingsAction } from "./actions";
 import { AgentServiceHealthCard } from "./AgentServiceHealthCard";
 import { SettingsCard, SettingsField } from "./SettingsCard";
 import { UniversityProfileForm } from "./UniversityProfileForm";
@@ -36,14 +28,9 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <SectionHeader
-        title="Settings"
-        description="Central location to view and configure key system values."
-      />
-
-      <p className="text-sm text-zinc-500">
+      <p className="text-sm text-fg-subtle">
         Signed in as{" "}
-        <span className="font-medium text-zinc-900">{session.user.name}</span>{" "}
+        <span className="font-medium text-fg">{session.user.name}</span>{" "}
         ({session.user.email}) &middot; {ROLE_LABELS[role]}
       </p>
 
@@ -61,7 +48,7 @@ export default async function SettingsPage() {
               websiteUrl={profile.websiteUrl ?? ""}
             />
           ) : (
-            <div className="divide-y divide-zinc-100">
+            <div className="divide-y divide-border">
               <SettingsField label="University name" value={profile.name} />
               <SettingsField label="Abbreviation" value={profile.abbreviation} />
               <SettingsField label="Contact email" value={profile.contactEmail} />
@@ -69,7 +56,52 @@ export default async function SettingsPage() {
             </div>
           )
         ) : (
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-fg-subtle">
+            No university profile exists yet. Complete the setup wizard first.
+          </p>
+        )}
+      </SettingsCard>
+
+      <SettingsCard
+        description="Default credential validity window and renewal cadence applied to new issuances."
+        icon={Clock}
+        title="Validity & renewal"
+      >
+        {profile ? (
+          <form action={saveRenewalSettingsAction} className="grid gap-4 sm:grid-cols-2">
+            <label className="block text-sm">
+              <span className="font-medium text-fg-muted">Default validity days</span>
+              <input
+                className="mt-1.5 h-10 w-full rounded-md border border-border px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+                defaultValue={profile.defaultCredentialValidityDays}
+                max={3650}
+                min={1}
+                name="defaultCredentialValidityDays"
+                type="number"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="font-medium text-fg-muted">Renewal cadence months</span>
+              <input
+                className="mt-1.5 h-10 w-full rounded-md border border-border px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+                defaultValue={profile.renewalCadenceMonths}
+                max={120}
+                min={1}
+                name="renewalCadenceMonths"
+                type="number"
+              />
+            </label>
+            <div className="sm:col-span-2">
+              <button
+                className="h-10 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700"
+                type="submit"
+              >
+                Save settings
+              </button>
+            </div>
+          </form>
+        ) : (
+          <p className="text-sm text-fg-subtle">
             No university profile exists yet. Complete the setup wizard first.
           </p>
         )}
@@ -93,7 +125,7 @@ export default async function SettingsPage() {
         title="Credential configuration"
       >
         {activeSchema ? (
-          <div className="divide-y divide-zinc-100">
+          <div className="divide-y divide-border">
             <SettingsField label="Schema version" value={activeSchema.schemaVersion} />
             <SettingsField label="Schema ID" value={activeSchema.schemaId ?? "Not set"} />
             <SettingsField
@@ -107,16 +139,16 @@ export default async function SettingsPage() {
             <SettingsField label="Issuer DID" value={profile?.issuerDid ?? "Not set"} />
           </div>
         ) : (
-          <p className="text-sm text-zinc-500">No active credential schema yet.</p>
+          <p className="text-sm text-fg-subtle">No active credential schema yet.</p>
         )}
       </SettingsCard>
 
       <SettingsCard
-        description="Base URL and expiry used for credential activation links. Requires a redeployment to change."
+        description="Base URL and expiry used for credential activation links and admin invites. Requires a redeployment to change."
         icon={LinkIcon}
         title="Activation link settings"
       >
-        <div className="divide-y divide-zinc-100">
+        <div className="divide-y divide-border">
           <SettingsField
             label="Activation public base URL"
             value={env.ACTIVATION_PUBLIC_BASE_URL ?? "Not set"}
@@ -133,7 +165,7 @@ export default async function SettingsPage() {
         icon={Webhook}
         title="Webhook configuration"
       >
-        <div className="divide-y divide-zinc-100">
+        <div className="divide-y divide-border">
           <SettingsField
             label="Webhook signing secret"
             value={configuredStatus(env.WEBHOOK_SIGNING_SECRET)}
@@ -141,24 +173,6 @@ export default async function SettingsPage() {
           <SettingsField
             label="Portal webhook endpoint"
             value={webhookEndpoint}
-          />
-        </div>
-      </SettingsCard>
-
-      <SettingsCard
-        description="How long an admin invite link remains valid before it expires. Read only."
-        icon={UserPlus}
-        title="Admin invite settings"
-      >
-        <div className="divide-y divide-zinc-100">
-          <SettingsField
-            label="Invite expiry"
-            value={
-              <span className="flex items-center gap-1.5">
-                <Clock className="size-3.5 text-zinc-400" aria-hidden="true" />
-                {env.ADMIN_INVITE_TTL_HOURS} hours after an invite is sent
-              </span>
-            }
           />
         </div>
       </SettingsCard>

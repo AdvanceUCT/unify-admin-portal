@@ -12,15 +12,15 @@ export function SettingsCard({
   title: string;
 }) {
   return (
-    <section className="rounded-lg border border-zinc-200 bg-white">
-      <div className="flex items-start gap-3 border-b border-zinc-200 px-5 py-4">
-        <span className="grid size-9 shrink-0 place-items-center rounded-md bg-zinc-100 text-zinc-700">
+    <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+      <div className="flex items-start gap-3 border-b border-border px-5 py-4">
+        <span className="grid size-9 shrink-0 place-items-center rounded-md bg-brand-50 text-brand-700">
           <Icon className="size-4.5" aria-hidden="true" />
         </span>
         <div>
-          <h2 className="text-base font-semibold text-zinc-950">{title}</h2>
+          <h2 className="text-section-title text-fg">{title}</h2>
           {description ? (
-            <p className="mt-0.5 text-sm text-zinc-500">{description}</p>
+            <p className="mt-0.5 text-sm text-fg-subtle">{description}</p>
           ) : null}
         </div>
       </div>
@@ -38,8 +38,8 @@ export function SettingsField({
 }) {
   return (
     <div className="flex items-center justify-between gap-4 py-2 text-sm first:pt-0 last:pb-0">
-      <span className="text-zinc-500">{label}</span>
-      <span className="font-medium text-zinc-950">{value}</span>
+      <span className="text-fg-subtle">{label}</span>
+      <span className="font-medium text-fg">{value}</span>
     </div>
   );
 }

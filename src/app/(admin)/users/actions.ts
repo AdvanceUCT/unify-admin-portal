@@ -8,6 +8,7 @@ import { auth } from "@/lib/auth/auth";
 import { writeAuditLog } from "@/lib/audit/audit";
 import { createAdminInvite } from "@/lib/auth/invites";
 import { isAdminRole, type AdminRole } from "@/lib/auth/permissions";
+import { INVITABLE_ADMIN_ROLES } from "@/lib/auth/roles";
 import { requireRole } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 
@@ -109,7 +110,12 @@ export async function changeUserRoleAction(formData: FormData) {
   const userId = String(formData.get("userId") ?? "");
   const role = String(formData.get("role") ?? "");
 
-  if (!userId || userId === session.user.id || !isAdminRole(role)) {
+  if (
+    !userId ||
+    userId === session.user.id ||
+    !isAdminRole(role) ||
+    !INVITABLE_ADMIN_ROLES.includes(role as (typeof INVITABLE_ADMIN_ROLES)[number])
+  ) {
     return;
   }
 

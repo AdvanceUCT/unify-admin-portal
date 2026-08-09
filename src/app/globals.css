@@ -1,37 +1,365 @@
 @import "tailwindcss";
 
+/* ==========================================================================
+   UNIFY design tokens
+   --------------------------------------------------------------------------
+   Layer 1  Raw colour ramps.        Swap the brand here and nowhere else.
+   Layer 2  Semantic aliases.        The only names components are allowed to use.
+   Layer 3  Portal variants.         Per-portal accent overrides.
+   Layer 4  Tailwind @theme wiring.  Turns the aliases into utilities.
+
+   See docs-local/DESIGN_SYSTEM.md before adding anything here.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Layer 1 — raw ramps
+   -------------------------------------------------------------------------- */
 :root {
-  --background: #f7f8fa;
-  --foreground: #16181d;
+  /* Viridian — UNIFY brand */
+  --viridian-50: #eaf5f1;
+  --viridian-100: #cde8df;
+  --viridian-200: #9fd2c3;
+  --viridian-300: #6bb7a2;
+  --viridian-400: #40826d; /* true viridian */
+  --viridian-500: #2f6e5a;
+  --viridian-600: #265b4b;
+  --viridian-700: #1e4a3d;
+  --viridian-800: #17392f;
+  --viridian-900: #102a23;
+
+  /* Prussian — vendor portal accent */
+  --prussian-50: #eef4fa;
+  --prussian-100: #d5e4f3;
+  --prussian-200: #a8c6e5;
+  --prussian-300: #74a2d2;
+  --prussian-400: #4b7db8;
+  --prussian-500: #2f5f97;
+  --prussian-600: #274e7c;
+  --prussian-700: #1f3f65;
+  --prussian-800: #183150;
+  --prussian-900: #10223a;
+
+  /* Neutral — chrome, text, borders */
+  --neutral-50: #f8f9fb;
+  --neutral-100: #f1f2f5;
+  --neutral-200: #e4e6eb;
+  --neutral-300: #d3d6dd;
+  --neutral-400: #9ca2ae;
+  --neutral-500: #6f7682;
+  --neutral-600: #545a66;
+  --neutral-700: #3d424c;
+  --neutral-800: #272b33;
+  --neutral-900: #16181d;
 }
 
+/* --------------------------------------------------------------------------
+   Layer 2 — semantic aliases
+   -------------------------------------------------------------------------- */
+:root {
+  /* Brand */
+  --brand-50: var(--viridian-50);
+  --brand-100: var(--viridian-100);
+  --brand-200: var(--viridian-200);
+  --brand-300: var(--viridian-300);
+  --brand-400: var(--viridian-400);
+  --brand-500: var(--viridian-500);
+  --brand-600: var(--viridian-600);
+  --brand-700: var(--viridian-700);
+  --brand-800: var(--viridian-800);
+  --brand-900: var(--viridian-900);
+
+  /* Sidebar */
+  --sidebar-from: var(--viridian-800);
+  --sidebar-to: var(--viridian-500);
+  --sidebar-fg: #ffffff;
+  --sidebar-fg-muted: rgb(255 255 255 / 0.72);
+  --sidebar-fg-subtle: rgb(255 255 255 / 0.52);
+  --sidebar-hover: rgb(255 255 255 / 0.1);
+  --sidebar-active-fg: var(--brand-700);
+  --sidebar-width: 16rem;
+
+  /* Surfaces */
+  --canvas: var(--neutral-50);
+  --surface: #ffffff;
+  --surface-muted: var(--neutral-100);
+  --surface-header: #ffffff;
+  --border: var(--neutral-200);
+  --border-strong: var(--neutral-300);
+
+  /* Foreground */
+  --fg: var(--neutral-900);
+  --fg-muted: var(--neutral-600);
+  --fg-subtle: var(--neutral-500);
+  --fg-on-brand: #ffffff;
+
+  /* Status — codifies the emerald / amber / rose / blue conventions.
+     Danger is rose everywhere; `red-*` is deprecated. */
+  --success-bg: #ecfdf5;
+  --success-border: #a7f3d0;
+  --success-fg: #047857;
+  --warning-bg: #fffbeb;
+  --warning-border: #fde68a;
+  --warning-fg: #92400e;
+  --danger-bg: #fff1f2;
+  --danger-border: #fecdd3;
+  --danger-fg: #be123c;
+  --info-bg: #eff6ff;
+  --info-border: #bfdbfe;
+  --info-fg: #1d4ed8;
+
+  /* Chrome metrics */
+  --header-height: 4rem;
+
+  /* Curved active nav tab */
+  --nav-curve: 1rem;
+}
+
+/* --------------------------------------------------------------------------
+   Layer 3 — portal variants
+   Reassign Layer 2 only. Components never change.
+   -------------------------------------------------------------------------- */
+[data-portal="vendor"] {
+  --brand-50: var(--prussian-50);
+  --brand-100: var(--prussian-100);
+  --brand-200: var(--prussian-200);
+  --brand-300: var(--prussian-300);
+  --brand-400: var(--prussian-400);
+  --brand-500: var(--prussian-500);
+  --brand-600: var(--prussian-600);
+  --brand-700: var(--prussian-700);
+  --brand-800: var(--prussian-800);
+  --brand-900: var(--prussian-900);
+
+  --sidebar-from: var(--prussian-800);
+  --sidebar-to: var(--prussian-500);
+  --sidebar-active-fg: var(--brand-700);
+}
+
+/* --------------------------------------------------------------------------
+   Layer 4 — Tailwind v4 wiring
+   `inline` is load-bearing: it makes utilities emit var(--token) rather than
+   the resolved hex, which is what lets [data-portal] re-theme at runtime.
+   -------------------------------------------------------------------------- */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-300: var(--brand-300);
+  --color-brand-400: var(--brand-400);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
+  --color-brand-800: var(--brand-800);
+  --color-brand-900: var(--brand-900);
+
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-surface-header: var(--surface-header);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-fg-on-brand: var(--fg-on-brand);
+
+  --color-sidebar-fg: var(--sidebar-fg);
+  --color-sidebar-fg-muted: var(--sidebar-fg-muted);
+  --color-sidebar-fg-subtle: var(--sidebar-fg-subtle);
+  --color-sidebar-active-fg: var(--sidebar-active-fg);
+
+  --color-success-bg: var(--success-bg);
+  --color-success-border: var(--success-border);
+  --color-success-fg: var(--success-fg);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-border: var(--warning-border);
+  --color-warning-fg: var(--warning-fg);
+  --color-danger-bg: var(--danger-bg);
+  --color-danger-border: var(--danger-border);
+  --color-danger-fg: var(--danger-fg);
+  --color-info-bg: var(--info-bg);
+  --color-info-border: var(--info-border);
+  --color-info-fg: var(--info-fg);
+
+  /* Kept so any existing bg-background / text-foreground usage still resolves. */
+  --color-background: var(--canvas);
+  --color-foreground: var(--fg);
+
+  --font-sans: var(--font-app-sans);
+  --font-mono: var(--font-app-mono);
+
+  /* Radius and elevation are static — no runtime theming, so literal values. */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
+  --shadow-xs: 0 1px 2px 0 rgb(16 24 40 / 0.04);
+  --shadow-sm: 0 1px 3px 0 rgb(16 24 40 / 0.08), 0 1px 2px -1px rgb(16 24 40 / 0.04);
+  --shadow-md: 0 4px 12px -2px rgb(16 24 40 / 0.1), 0 2px 6px -2px rgb(16 24 40 / 0.05);
+  --shadow-lg: 0 12px 32px -8px rgb(16 24 40 / 0.16), 0 4px 12px -4px rgb(16 24 40 / 0.06);
+  /* Cast downward off the header so it lifts off the canvas. The sidebar
+     deliberately has no shadow of its own — it's meant to blend seamlessly
+     into the content column at the active nav tab, and a cast shadow breaks
+     that seam. */
+  --shadow-header: 0 2px 8px -2px rgb(16 24 40 / 0.1);
+
+  /* Semantic type scale — pages should reach for these, not invent sizes. */
+  --text-page-title: 1.5rem;
+  --text-page-title--line-height: 2rem;
+  --text-page-title--font-weight: 600;
+  --text-section-title: 1.125rem;
+  --text-section-title--line-height: 1.625rem;
+  --text-section-title--font-weight: 600;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.375rem;
+  --text-label: 0.8125rem;
+  --text-label--line-height: 1.25rem;
+  --text-label--font-weight: 500;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.125rem;
 }
 
+/* --------------------------------------------------------------------------
+   Base
+   -------------------------------------------------------------------------- */
 * {
   box-sizing: border-box;
 }
 
 html {
   min-height: 100%;
-  background: var(--background);
+  background: var(--canvas);
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   min-height: 100%;
   margin: 0;
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--canvas);
+  color: var(--fg);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 @layer base {
   a {
     color: inherit;
     text-decoration: none;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--brand-500);
+    outline-offset: 2px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Curved active nav tab
+   --------------------------------------------------------------------------
+   The active item is filled with --canvas (the page background, not white) and
+   runs flush to the sidebar's right edge, so it merges seamlessly into the
+   content column.
+
+   The connectors above and below are --canvas squares with a quarter-disc
+   masked out of the corner diagonally opposite the junction. That leaves the
+   edge touching the tab and the edge touching the content column fully filled,
+   with a concave arc sweeping between them — which is what reads as the white
+   "flowing" into the tab. A mask is used rather than the box-shadow-spread
+   trick because the resulting shape is exact rather than approximate.
+
+   Geometry is defined here once so no component has to reproduce it.
+   -------------------------------------------------------------------------- */
+.nav-item {
+  position: relative;
+}
+
+.nav-item-active {
+  background: var(--canvas);
+  color: var(--sidebar-active-fg);
+  border-top-left-radius: 9999px;
+  border-bottom-left-radius: 9999px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.nav-item-active::before,
+.nav-item-active::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  width: var(--nav-curve);
+  height: var(--nav-curve);
+  background: var(--canvas);
+  pointer-events: none;
+}
+
+/* Connector above the tab — disc removed from the top-left. */
+.nav-item-active::before {
+  top: calc(var(--nav-curve) * -1);
+  -webkit-mask-image: radial-gradient(
+    circle var(--nav-curve) at 0 0,
+    transparent 0 var(--nav-curve),
+    #000 var(--nav-curve)
+  );
+  mask-image: radial-gradient(
+    circle var(--nav-curve) at 0 0,
+    transparent 0 var(--nav-curve),
+    #000 var(--nav-curve)
+  );
+}
+
+/* Connector below the tab — disc removed from the bottom-left. */
+.nav-item-active::after {
+  bottom: calc(var(--nav-curve) * -1);
+  -webkit-mask-image: radial-gradient(
+    circle var(--nav-curve) at 0 100%,
+    transparent 0 var(--nav-curve),
+    #000 var(--nav-curve)
+  );
+  mask-image: radial-gradient(
+    circle var(--nav-curve) at 0 100%,
+    transparent 0 var(--nav-curve),
+    #000 var(--nav-curve)
+  );
+}
+
+/* The drawer reuses SidebarNav but has no content column to flow into, so the
+   active item becomes a plain rounded pill instead. */
+.nav-drawer .nav-item-active {
+  border-radius: var(--radius-lg);
+  margin-right: 0.75rem;
+}
+
+.nav-drawer .nav-item-active::before,
+.nav-drawer .nav-item-active::after {
+  content: none;
+}
+
+/* Scrolling still works; only the bar is hidden. Used on the sidebar/drawer —
+   a visible scrollbar reserves layout width, and that width toggling (e.g. a
+   collapsible sub-nav group pushing content past the viewport height) either
+   jumps the content narrower or, if the gutter is reserved permanently
+   instead, leaves a permanent gap between the active tab and the sidebar's
+   right edge. Both break the flush flowing-tab seam; hiding the bar avoids
+   the problem entirely rather than trading one failure mode for the other. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

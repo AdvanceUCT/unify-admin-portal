@@ -1,9 +1,9 @@
 const toneClassName = {
-  neutral: "border-zinc-200 bg-zinc-50 text-zinc-700",
-  success: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  warning: "border-amber-200 bg-amber-50 text-amber-800",
-  danger: "border-rose-200 bg-rose-50 text-rose-700",
-  version: "border-blue-200 bg-blue-50 text-blue-700",
+  neutral: "border-border bg-surface-muted text-fg-muted",
+  success: "border-success-border bg-success-bg text-success-fg",
+  warning: "border-warning-border bg-warning-bg text-warning-fg",
+  danger: "border-danger-border bg-danger-bg text-danger-fg",
+  version: "border-info-border bg-info-bg text-info-fg",
 };
 
 export function Badge({

@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { SectionHeader } from "@/components/layout/SectionHeader";
+import { BackButton } from "@/components/ui/BackButton";
 import { StudentCredentialIssueView } from "@/features/students/StudentCredentialIssueView";
 import { getStudentById } from "@/lib/api/client";
 import { getActivationDeliveryByCredentialId } from "@/lib/api/server";
@@ -30,18 +29,7 @@ export async function StudentCredentialDetailPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <SectionHeader
-          title={`${student.profile.firstName} ${student.profile.lastName}`}
-          description={`${student.profile.institution} | ${student.credential.studentNumber}`}
-        />
-        <Link
-          className="rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
-          href={backHref}
-        >
-          {backLabel}
-        </Link>
-      </div>
+      <BackButton href={backHref} label={backLabel} />
       <StudentCredentialIssueView delivery={delivery} student={student} />
     </div>
   );
