@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useFormStatus } from "react-dom";
+import { Ban } from "lucide-react";
 
 import { Dialog } from "@/components/ui/Dialog";
 
@@ -17,10 +18,11 @@ export function RejectForm({
   return (
     <>
       <button
-        className="h-9 rounded-md border border-danger-border bg-danger-bg px-3 text-sm font-medium text-danger-fg transition hover:bg-danger-border"
+        className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-danger-border bg-danger-bg px-3 text-sm font-medium text-danger-fg transition hover:bg-danger-border"
         onClick={() => setIsOpen(true)}
         type="button"
       >
+        <Ban aria-hidden className="size-4" />
         Reject
       </button>
 

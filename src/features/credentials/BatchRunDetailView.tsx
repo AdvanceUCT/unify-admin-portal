@@ -42,20 +42,20 @@ export function BatchRunDetailView({ initialRun }: { initialRun: BatchIssuanceRu
 
   return (
     <div className="space-y-6">
-      <section className="rounded-lg border border-zinc-200 bg-white p-5">
+      <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-base font-semibold text-zinc-950">{run.batchId}</h2>
+              <h2 className="text-section-title text-fg">{run.batchId}</h2>
               <Badge tone={runTone(run.status)}>{run.status}</Badge>
             </div>
-            <p className="mt-1 text-sm text-zinc-500">
+            <p className="mt-1 text-sm text-fg-muted">
               Created {formatDateTime(run.createdAt)} · {run.issuedCount} issued · {run.failedCount} failed ·{" "}
               {run.skippedCount} skipped
             </p>
           </div>
           <button
-            className="inline-flex h-9 items-center gap-2 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg disabled:cursor-not-allowed disabled:opacity-60"
             disabled={!hasFailedItems || isRetrying}
             onClick={handleRetry}
             type="button"
@@ -64,36 +64,40 @@ export function BatchRunDetailView({ initialRun }: { initialRun: BatchIssuanceRu
             Retry failed
           </button>
         </div>
-        {error ? <p className="mt-3 text-sm text-amber-700">{error}</p> : null}
+        {error ? (
+          <p className="mt-4 rounded-md border border-danger-border bg-danger-bg px-3 py-2 text-sm text-danger-fg">
+            {error}
+          </p>
+        ) : null}
       </section>
 
-      <section className="rounded-lg border border-zinc-200 bg-white">
+      <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-zinc-200 text-xs uppercase tracking-wide text-zinc-500">
-              <tr>
+          <table className="w-full text-center text-body">
+            <thead className="border-b border-border">
+              <tr className="whitespace-nowrap text-caption uppercase tracking-wide text-fg-subtle">
                 <th className="px-5 py-3 font-medium">Student</th>
                 <th className="px-5 py-3 font-medium">Credential</th>
                 <th className="px-5 py-3 font-medium">Status</th>
                 <th className="px-5 py-3 font-medium">Detail</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
+            <tbody className="divide-y divide-border">
               {run.items.map((item) => (
-                <tr key={`${run.batchId}-${item.studentId}`}>
-                  <td className="px-5 py-4">
-                    <p className="font-medium text-zinc-950">{item.holderName}</p>
-                    <p className="text-xs text-zinc-500">{item.studentId}</p>
+                <tr className="transition hover:bg-surface-muted/60" key={`${run.batchId}-${item.studentId}`}>
+                  <td className="whitespace-nowrap px-5 py-4">
+                    <p className="font-medium text-fg">{item.holderName}</p>
+                    <p className="text-xs tabular-nums text-fg-subtle">{item.studentId}</p>
                   </td>
-                  <td className="px-5 py-4 text-zinc-600">{item.credentialId}</td>
+                  <td className="whitespace-nowrap px-5 py-4 tabular-nums text-fg-muted">{item.credentialId}</td>
                   <td className="px-5 py-4">
                     <Badge tone={itemTone(item.status)}>{item.status}</Badge>
                   </td>
-                  <td className="px-5 py-4 text-zinc-600">
+                  <td className="px-5 py-4 text-fg-muted">
                     {item.failureReason ?? item.skipReason ?? (item.deliveredAt ? `Delivered ${formatDateTime(item.deliveredAt)}` : "Pending")}
                     {item.activationUrl ? (
                       <a
-                        className="mt-1 block max-w-xs truncate text-xs font-medium text-zinc-950 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-950"
+                        className="mt-1 block max-w-xs truncate text-xs font-medium text-info-fg hover:underline"
                         href={item.activationUrl}
                         rel="noreferrer"
                         target="_blank"

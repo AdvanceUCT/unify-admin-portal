@@ -1,3 +1,4 @@
+import { Check } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import { BackButton } from "@/components/ui/BackButton";
@@ -62,38 +63,40 @@ export default async function VendorApplicationDetailPage({
         <MarkApplicationViewed applicationId={application.id} />
       ) : null}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <BackButton href={backHref} label={backLabel} />
-        {application.status === "APPROVED" && (
-          <RevokeButton
-            action={revokeVendorApplicationAction}
-            applicationId={application.id}
-            companyName={companyName}
-          />
-        )}
-      </div>
+      <BackButton href={backHref} label={backLabel} />
 
-      <div>
-        <h1 className="text-page-title text-fg">{companyName}</h1>
-        <p className="mt-1 text-sm text-fg-subtle">{serviceCategory}</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-page-title text-fg">{companyName}</h1>
+          <p className="mt-1 text-sm text-fg-subtle">{serviceCategory}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {application.status === "APPROVED" && (
+            <RevokeButton
+              action={revokeVendorApplicationAction}
+              applicationId={application.id}
+              companyName={companyName}
+            />
+          )}
+          {application.status === "PENDING" && (
+            <>
+              <form action={approveVendorApplicationAction}>
+                <input name="applicationId" type="hidden" value={application.id} />
+                <button
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-success-border bg-success-bg px-3 text-sm font-medium text-success-fg transition hover:bg-success-border"
+                  type="submit"
+                >
+                  <Check aria-hidden className="size-4" />
+                  Approve
+                </button>
+              </form>
+              <RejectForm action={rejectVendorApplicationAction} applicationId={application.id} />
+            </>
+          )}
+        </div>
       </div>
 
       <VendorApplicationDetails application={application} documentUrls={documentUrls} />
-
-      {application.status === "PENDING" && (
-        <div className="flex flex-col items-center gap-3 border-t border-border pt-6 sm:flex-row sm:justify-center">
-          <form action={approveVendorApplicationAction}>
-            <input name="applicationId" type="hidden" value={application.id} />
-            <button
-              className="h-9 w-full rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg sm:w-auto"
-              type="submit"
-            >
-              Approve
-            </button>
-          </form>
-          <RejectForm action={rejectVendorApplicationAction} applicationId={application.id} />
-        </div>
-      )}
     </div>
   );
 }

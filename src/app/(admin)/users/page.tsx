@@ -1,6 +1,9 @@
+import { Ban, Check, LogOut, RotateCcw } from "lucide-react";
+
 import { PageTabs } from "@/components/layout/PageTabs";
+import { IconButton } from "@/components/ui/IconButton";
 import { StatusText } from "@/components/ui/StatusText";
-import { ADMIN_ROLES, ROLE_LABELS, type AdminRole } from "@/lib/auth/roles";
+import { INVITABLE_ADMIN_ROLES, ROLE_LABELS, type AdminRole } from "@/lib/auth/roles";
 import { requireRole } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { formatDateTime } from "@/lib/formatters";
@@ -19,6 +22,9 @@ export default async function UsersPage() {
   const session = await requireRole(["SUPER_ADMIN"]);
   const now = new Date();
   const users = await prisma.user.findMany({
+    where: {
+      userType: "ADMIN",
+    },
     include: {
       sessions: {
         where: {
@@ -69,6 +75,7 @@ export default async function UsersPage() {
               ) : null}
               {users.map((user) => {
                 const isCurrentUser = user.id === session.user.id;
+                const isSuperAdmin = user.role === "SUPER_ADMIN";
                 const activeSession = user.sessions[0];
 
                 return (
@@ -78,28 +85,25 @@ export default async function UsersPage() {
                       <p className="text-xs text-fg-subtle">{user.email}</p>
                     </td>
                     <td className="px-5 py-4">
-                      {isCurrentUser ? (
+                      {isCurrentUser || isSuperAdmin ? (
                         <span className="text-fg-muted">{getRoleLabel(user.role)}</span>
                       ) : (
-                        <form action={changeUserRoleAction} className="flex items-center justify-center gap-2">
+                        <form action={changeUserRoleAction} className="flex items-center justify-center gap-1.5">
                           <input name="userId" type="hidden" value={user.id} />
                           <select
                             className="h-9 rounded-md border border-border bg-surface px-2 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
                             defaultValue={user.role ?? "VIEWER"}
                             name="role"
                           >
-                            {ADMIN_ROLES.map((role) => (
+                            {INVITABLE_ADMIN_ROLES.map((role) => (
                               <option key={role} value={role}>
                                 {ROLE_LABELS[role]}
                               </option>
                             ))}
                           </select>
-                          <button
-                            className="h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
-                            type="submit"
-                          >
-                            Save
-                          </button>
+                          <IconButton aria-label="Save role" type="submit">
+                            <Check aria-hidden className="size-4" />
+                          </IconButton>
                         </form>
                       )}
                     </td>
@@ -115,14 +119,15 @@ export default async function UsersPage() {
                       {formatDateTime(user.createdAt.toISOString())}
                     </td>
                     <td className="px-5 py-4">
-                      <div className="flex flex-wrap items-center justify-center gap-2">
+                      <div className="flex flex-col items-stretch gap-1.5">
                         {user.banned ? (
                           <form action={reactivateUserAction}>
                             <input name="userId" type="hidden" value={user.id} />
                             <button
-                              className="h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
+                              className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-success-border bg-success-bg px-2.5 text-xs font-medium text-success-fg transition hover:bg-success-border"
                               type="submit"
                             >
+                              <RotateCcw aria-hidden className="size-3.5" />
                               Reactivate
                             </button>
                           </form>
@@ -130,11 +135,12 @@ export default async function UsersPage() {
                           <form action={deactivateUserAction}>
                             <input name="userId" type="hidden" value={user.id} />
                             <button
-                              className="h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
+                              className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-danger-border bg-danger-bg px-2.5 text-xs font-medium text-danger-fg transition hover:bg-danger-border disabled:cursor-not-allowed disabled:opacity-50"
                               disabled={isCurrentUser}
                               title={isCurrentUser ? "You cannot deactivate your own account" : undefined}
                               type="submit"
                             >
+                              <Ban aria-hidden className="size-3.5" />
                               Deactivate
                             </button>
                           </form>
@@ -142,9 +148,10 @@ export default async function UsersPage() {
                         <form action={revokeUserSessionsAction}>
                           <input name="userId" type="hidden" value={user.id} />
                           <button
-                            className="h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
+                            className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
                             type="submit"
                           >
+                            <LogOut aria-hidden className="size-3.5" />
                             Revoke sessions
                           </button>
                         </form>
