@@ -1,9 +1,9 @@
-import Link from "next/link";
-
-import { SectionHeader } from "@/components/layout/SectionHeader";
 import { BatchIssuancePanel } from "@/features/credentials/BatchIssuancePanel";
+import { NoActiveSchemaBanner } from "@/features/credentials/NoActiveSchemaBanner";
 import { getBatchIssuancePreview, getStudents } from "@/lib/api/client";
 import { requireRole } from "@/lib/auth/session";
+import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
+import { getUniversityProfile } from "@/lib/university/profile";
 
 function programmesByFacultyFrom(students: Awaited<ReturnType<typeof getStudents>>) {
   const programmesByFaculty: Record<string, string[]> = {};
@@ -23,20 +23,14 @@ function programmesByFacultyFrom(students: Awaited<ReturnType<typeof getStudents
 export default async function BatchIssuePage() {
   await requireRole(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
 
+  const profile = await getUniversityProfile();
+  const activeSchema = profile ? await getActiveCredentialSchema(profile.id) : null;
   const [preview, students] = await Promise.all([getBatchIssuancePreview(), getStudents()]);
   const programmesByFaculty = programmesByFacultyFrom(students);
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <SectionHeader title="Batch issue" description="Prepare simulated student VC issuance runs." />
-        <Link
-          className="rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
-          href="/credentials/issuance"
-        >
-          Back to issuance
-        </Link>
-      </div>
+      {!activeSchema ? <NoActiveSchemaBanner /> : null}
       <BatchIssuancePanel preview={preview} programmesByFaculty={programmesByFaculty} />
     </div>
   );

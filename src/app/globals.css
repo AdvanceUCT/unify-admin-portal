@@ -338,6 +338,22 @@ body {
   content: none;
 }
 
+/* Scrolling still works; only the bar is hidden. Used on the sidebar/drawer —
+   a visible scrollbar reserves layout width, and that width toggling (e.g. a
+   collapsible sub-nav group pushing content past the viewport height) either
+   jumps the content narrower or, if the gutter is reserved permanently
+   instead, leaves a permanent gap between the active tab and the sidebar's
+   right edge. Both break the flush flowing-tab seam; hiding the bar avoids
+   the problem entirely rather than trading one failure mode for the other. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

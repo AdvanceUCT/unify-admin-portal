@@ -8,6 +8,20 @@ export type PortalNavItem = {
   href: string;
   label: string;
   icon: NavIconName;
+  /**
+   * Sub-routes shown as a collapsible group under this item (e.g. Batch /
+   * Individual under "Issue Credentials"). `href` on the parent is a route
+   * prefix used for active-state matching only — it doesn't need a page of
+   * its own, and the parent renders as a disclosure toggle rather than a
+   * link when children are present. Children never get their own active
+   * styling; only the parent lights up.
+   */
+  children?: PortalNavChild[];
+};
+
+export type PortalNavChild = {
+  href: string;
+  label: string;
 };
 
 export type PortalUser = {

@@ -15,7 +15,15 @@ import { getUniversityProfile } from "@/lib/university/profile";
 const navItems: (PortalNavItem & { allowedRoles?: readonly AdminRole[] })[] = [
   { href: "/", label: "Overview", icon: "overview" },
   { href: "/students", label: "Students", icon: "students" },
-  { href: "/credentials/issuance", label: "Issue Credentials", icon: "application" },
+  {
+    href: "/credentials/issuance",
+    label: "Issue Credentials",
+    icon: "application",
+    children: [
+      { href: "/credentials/issuance/batch", label: "Batch issuance" },
+      { href: "/credentials/issuance/individual", label: "Individual issuance" },
+    ],
+  },
   {
     href: "/credentials/schemas",
     label: "Credential Schemas",

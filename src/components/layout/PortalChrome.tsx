@@ -89,12 +89,18 @@ export function PortalChrome({
         className={cn(
           // No shadow here — the sidebar is meant to blend seamlessly into the
           // content column at the active nav tab, and a cast shadow breaks that seam.
-          "fixed inset-y-0 left-0 hidden w-64 flex-col overflow-y-auto pb-6 pt-6 lg:flex",
+          // no-scrollbar: a visible scrollbar reserves layout width, and toggling
+          // it (e.g. expanding a collapsible sub-nav group past the viewport
+          // height) would either jump the content narrower or, with
+          // scrollbar-gutter reserved permanently, leave a permanent gap between
+          // the active tab and the sidebar's right edge — breaking the flush
+          // flowing-tab seam either way. Scrolling still works; only the bar is hidden.
+          "fixed inset-y-0 left-0 hidden w-64 flex-col overflow-y-auto pb-6 pt-6 no-scrollbar lg:flex",
           sidebarBackground,
         )}
       >
         <PortalBrand {...brand} className="mb-8 px-6" />
-        <SidebarNav activeHref={activeItem?.href ?? null} navItems={navItems} />
+        <SidebarNav navItems={navItems} pathname={pathname} />
       </aside>
 
       {isDrawerOpen ? (
@@ -110,7 +116,7 @@ export function PortalChrome({
             aria-label="Navigation"
             aria-modal="true"
             className={cn(
-              "absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col overflow-y-auto pb-6 pt-6 shadow-lg",
+              "absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col overflow-y-auto pb-6 pt-6 shadow-lg no-scrollbar",
               sidebarBackground,
             )}
             role="dialog"
@@ -127,9 +133,9 @@ export function PortalChrome({
               </IconButton>
             </div>
             <SidebarNav
-              activeHref={activeItem?.href ?? null}
               navItems={navItems}
               onNavigate={closeDrawer}
+              pathname={pathname}
               variant="drawer"
             />
           </div>
