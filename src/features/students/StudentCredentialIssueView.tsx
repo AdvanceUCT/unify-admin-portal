@@ -4,6 +4,15 @@ import { credentialStatusTone, formatCredentialStatus, formatDateTime } from "@/
 import { StudentCredentialActions } from "@/features/students/StudentCredentialActions";
 import { humanizeFieldName } from "@/lib/imports/mapping";
 
+function FactRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-caption font-medium uppercase tracking-wide text-fg-subtle">{label}</dt>
+      <dd className="mt-1 text-sm font-medium text-fg">{value}</dd>
+    </div>
+  );
+}
+
 export function StudentCredentialIssueView({
   delivery,
   student,
@@ -11,72 +20,62 @@ export function StudentCredentialIssueView({
   delivery?: ActivationDelivery;
   student: StudentRecord;
 }) {
-  const isLegacyNonRevocable = student.credential.lifecycleState === "LEGACY_NON_REVOCABLE";
   const customAttributes = Object.entries(student.credential.attributes ?? {}).filter(
     (entry): entry is [string, string] => entry[1] != null,
   );
 
   return (
-    <section className="grid gap-4 lg:grid-cols-2">
-      <div className="rounded-lg border border-zinc-200 bg-white p-5">
-        <div className="mb-4 flex items-center gap-2">
-          <h2 className="text-base font-semibold text-zinc-950">Credential</h2>
+    <div className="grid items-start gap-6 lg:grid-cols-[18rem_1fr]">
+      {/* Identity + credential facts — static context, kept visually separate
+          from the interactive actions in the main column. */}
+      <aside className="space-y-4 rounded-xl border border-border bg-surface p-5 shadow-md lg:sticky lg:top-6">
+        <div>
+          <h1 className="text-xl font-semibold text-fg">
+            {student.profile.firstName} {student.profile.lastName}
+          </h1>
+          <p className="mt-1 text-sm text-fg-subtle">
+            {student.profile.institution} • {student.credential.studentNumber}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge tone={credentialStatusTone(student.credential.lifecycleState)}>
+            {formatCredentialStatus(student.credential.lifecycleState)}
+          </Badge>
           {student.credential.schemaVersion ? (
             <Badge tone="version">v{student.credential.schemaVersion}</Badge>
           ) : null}
         </div>
-        <dl className="space-y-3 text-sm">
-          <div className="flex items-center justify-between gap-4">
-            <dt className="text-zinc-500">Lifecycle</dt>
-            <dd>
-              <Badge tone={credentialStatusTone(student.credential.lifecycleState)}>
-                {formatCredentialStatus(student.credential.lifecycleState)}
-              </Badge>
-            </dd>
-          </div>
-          {isLegacyNonRevocable ? (
-            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
-              This credential does not have revocation metadata. Reissue it after revocation-enabled setup before using suspend or revoke actions.
-            </div>
-          ) : null}
-          <div className="flex justify-between gap-4">
-            <dt className="text-zinc-500">Faculty</dt>
-            <dd className="text-right text-zinc-900">{student.credential.faculty}</dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-zinc-500">Programme</dt>
-            <dd className="text-right text-zinc-900">{student.credential.programme}</dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-zinc-500">Student number</dt>
-            <dd className="font-mono text-zinc-900">{student.credential.studentNumber}</dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-zinc-500">Valid from</dt>
-            <dd className="text-zinc-900">{formatDateTime(student.credential.validFrom)}</dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-zinc-500">Expires</dt>
-            <dd className="text-zinc-900">{formatDateTime(student.credential.expiresAt)}</dd>
-          </div>
+
+        <dl className="space-y-4 border-t border-border pt-4">
+          <FactRow label="Faculty" value={student.credential.faculty ?? "—"} />
+          <FactRow label="Programme" value={student.credential.programme} />
+          <FactRow label="Valid from" value={formatDateTime(student.credential.validFrom)} />
+          <FactRow label="Expires" value={formatDateTime(student.credential.expiresAt)} />
         </dl>
-      </div>
-      <div className="rounded-lg border border-zinc-200 bg-white p-5">
+
+        {/* Custom import fields — university-specific attributes beyond the
+            fixed platform fields. Lives with the rest of the static facts
+            rather than a separate panel, and grows automatically as more
+            fields get mapped during CSV import: nothing here is hard-coded
+            to a fixed set of columns. */}
+        {customAttributes.length > 0 ? (
+          <div className="space-y-4 border-t border-border pt-4">
+            <p className="text-caption font-semibold uppercase tracking-wide text-fg-subtle">
+              Additional information
+            </p>
+            <dl className="space-y-4">
+              {customAttributes.map(([key, value]) => (
+                <FactRow key={key} label={humanizeFieldName(key)} value={value} />
+              ))}
+            </dl>
+          </div>
+        ) : null}
+      </aside>
+
+      <div className="min-w-0 space-y-6">
         <StudentCredentialActions delivery={delivery} student={student} />
       </div>
-      {customAttributes.length > 0 ? (
-        <div className="rounded-lg border border-zinc-200 bg-white p-5 lg:col-span-2">
-          <h2 className="mb-4 text-base font-semibold text-zinc-950">Additional information</h2>
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            {customAttributes.map(([key, value]) => (
-              <div className="flex justify-between gap-4" key={key}>
-                <dt className="text-zinc-500">{humanizeFieldName(key)}</dt>
-                <dd className="text-right text-zinc-900">{value}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      ) : null}
-    </section>
+    </div>
   );
 }
