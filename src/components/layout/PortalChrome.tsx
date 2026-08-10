@@ -27,6 +27,7 @@ export function PortalChrome({
   fallbackTitle,
   navItems,
   settingsHref,
+  settingsLabel,
   signOutRedirectTo,
   status,
   user,
@@ -36,6 +37,7 @@ export function PortalChrome({
   fallbackTitle: string;
   navItems: PortalNavItem[];
   settingsHref: string;
+  settingsLabel?: string;
   signOutRedirectTo?: string;
   status?: React.ReactNode;
   user: PortalUser;
@@ -146,6 +148,7 @@ export function PortalChrome({
         <PortalHeader
           onOpenNav={openDrawer}
           settingsHref={settingsHref}
+          settingsLabel={settingsLabel}
           signOutRedirectTo={signOutRedirectTo}
           status={status}
           title={activeItem?.label ?? fallbackTitle}

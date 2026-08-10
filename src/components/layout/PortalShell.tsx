@@ -28,6 +28,7 @@ export function PortalShell({
   navItems,
   portal,
   settingsHref,
+  settingsLabel,
   signOutRedirectTo,
   status,
   user,
@@ -38,6 +39,7 @@ export function PortalShell({
   navItems: PortalNavItem[];
   portal: PortalVariant;
   settingsHref: string;
+  settingsLabel?: string;
   signOutRedirectTo?: string;
   /** Portal-specific header status slot. */
   status?: React.ReactNode;
@@ -50,6 +52,7 @@ export function PortalShell({
         fallbackTitle={fallbackTitle}
         navItems={navItems}
         settingsHref={settingsHref}
+        settingsLabel={settingsLabel}
         signOutRedirectTo={signOutRedirectTo}
         status={status}
         user={user}

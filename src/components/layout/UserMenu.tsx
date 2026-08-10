@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, LogOut, Settings } from "lucide-react";
+import { ChevronDown, LogOut, Settings, UserCog } from "lucide-react";
 
 import type { PortalUser } from "@/components/layout/portalTypes";
 import { Avatar } from "@/components/ui/Avatar";
@@ -18,10 +18,12 @@ import { cn } from "@/lib/cn";
  * and focus moving into the menu on open.
  */
 export function UserMenu({
+  settingsLabel = "Settings",
   settingsHref,
   signOutRedirectTo,
   user,
 }: {
+  settingsLabel?: string;
   settingsHref: string;
   signOutRedirectTo?: string;
   user: PortalUser;
@@ -32,6 +34,7 @@ export function UserMenu({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuId = useId();
   const { errorMessage, isPending, signOut } = useSignOut(signOutRedirectTo);
+  const SettingsIcon = settingsLabel === "Profile" ? UserCog : Settings;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -115,8 +118,8 @@ export function UserMenu({
               onClick={() => setIsOpen(false)}
               role="menuitem"
             >
-              <Settings aria-hidden="true" size={16} />
-              Settings
+              <SettingsIcon aria-hidden="true" size={16} />
+              {settingsLabel}
             </Link>
             <button
               className="flex h-9 w-full items-center gap-2.5 rounded-md px-3 text-sm font-medium text-danger-fg transition hover:bg-danger-bg disabled:cursor-not-allowed disabled:opacity-60"

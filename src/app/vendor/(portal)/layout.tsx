@@ -29,6 +29,23 @@ const staffNavItems: PortalNavItem[] = [
   { href: "/vendor/help", label: "Help", icon: "help" },
 ];
 
+const applicantNavItems: PortalNavItem[] = [
+  { href: "/vendor", label: "Overview", icon: "overview" },
+  { href: "/vendor/application", label: "Application", icon: "application" },
+  { href: "/vendor/profile", label: "Profile", icon: "profile" },
+  { href: "/vendor/help", label: "Help", icon: "help" },
+];
+
+function navItemsForVendorContext(context: ApprovedVendorContext | null) {
+  if (!context) return applicantNavItems;
+  return context.role === "STAFF" ? staffNavItems : ownerNavItems;
+}
+
+function roleLabelForVendorContext(context: ApprovedVendorContext | null) {
+  if (!context) return "Applicant";
+  return context.role === "STAFF" ? "Staff" : "Owner";
+}
+
 async function notificationBranchIdsFor(context: ApprovedVendorContext) {
   if (context.role === "STAFF") return context.branchIds;
 
@@ -65,16 +82,24 @@ export default async function VendorPortalLayout({
         tenantName: vendorContext?.companyName ?? "Verifier onboarding",
       }}
       fallbackTitle="Vendor"
-      navItems={vendorContext?.role === "STAFF" ? staffNavItems : ownerNavItems}
+      navItems={navItemsForVendorContext(vendorContext)}
       portal="vendor"
       settingsHref="/vendor/profile"
+      settingsLabel="Profile"
       signOutRedirectTo="/vendor/sign-in"
-      status={<AgentStatusIndicator checkHealth={checkVendorAgentHealthAction} offlineHref="/vendor/help" />}
+      status={
+        vendorContext ? (
+          <AgentStatusIndicator
+            checkHealth={checkVendorAgentHealthAction}
+            offlineHref="/vendor/help"
+          />
+        ) : null
+      }
       user={{
         email: session.user.email,
         image: session.user.image,
         name: session.user.name,
-        roleLabel: vendorContext?.role === "STAFF" ? "Staff" : "Owner",
+        roleLabel: roleLabelForVendorContext(vendorContext),
       }}
     >
       {vendorContext ? (
