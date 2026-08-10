@@ -9,9 +9,9 @@ import type { DraftApplicationData } from "../VendorApplicationWizard";
 function ReviewRow({ label, value }: { label: string; value: string | null | undefined }) {
   if (!value) return null;
   return (
-    <div className="flex gap-4 px-4 py-2.5 text-sm">
-      <span className="w-44 shrink-0 text-zinc-500">{label}</span>
-      <span className="text-zinc-800">{value}</span>
+    <div className="flex gap-4 px-4 py-2.5 text-body">
+      <span className="w-44 shrink-0 text-fg-subtle">{label}</span>
+      <span className="text-fg">{value}</span>
     </div>
   );
 }
@@ -30,17 +30,17 @@ function ReviewSection({
   return (
     <div>
       <div className="mb-2 flex items-center gap-1.5">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">{title}</h3>
+        <h3 className="text-caption font-semibold uppercase tracking-wide text-fg-subtle">{title}</h3>
         <button
           aria-label={`Edit ${title}`}
-          className="text-zinc-600 transition hover:text-zinc-950"
+          className="text-fg-muted transition hover:text-fg"
           onClick={() => onEditStep(step)}
           type="button"
         >
           <Pencil className="size-4" />
         </button>
       </div>
-      <div className="divide-y divide-zinc-100 rounded-lg border border-zinc-200 bg-white">
+      <div className="divide-y divide-border rounded-lg border border-border bg-surface">
         {children}
       </div>
     </div>
@@ -63,11 +63,11 @@ export function StepReview({
   if (state.ok) {
     return (
       <div className="space-y-4 py-8 text-center">
-        <div className="mx-auto grid size-12 place-items-center rounded-full bg-emerald-50 text-2xl">
+        <div className="mx-auto grid size-12 place-items-center rounded-full bg-success-bg text-2xl text-success-fg">
           ✓
         </div>
-        <h2 className="text-lg font-semibold">Application submitted</h2>
-        <p className="mx-auto max-w-sm text-sm text-zinc-600">
+        <h2 className="text-section-title text-fg">Application submitted</h2>
+        <p className="mx-auto max-w-sm text-body text-fg-muted">
           Your verifier application is under review. We&apos;ll notify you by email once a decision
           has been made.
         </p>
@@ -78,8 +78,8 @@ export function StepReview({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Review your application</h2>
-        <p className="mt-1 text-sm text-zinc-600">
+        <h2 className="text-section-title text-fg">Review your application</h2>
+        <p className="mt-1 text-body text-fg-muted">
           Check all details before submitting. Once submitted, the university will review your
           application.
         </p>
@@ -130,18 +130,18 @@ export function StepReview({
           ).map(
             ([label, path]) =>
               path && (
-                <div key={label} className="flex gap-4 px-4 py-2.5 text-sm">
-                  <span className="w-44 shrink-0 text-zinc-500">{label}</span>
-                  <span className="text-emerald-600">Uploaded</span>
+                <div key={label} className="flex gap-4 px-4 py-2.5 text-body">
+                  <span className="w-44 shrink-0 text-fg-subtle">{label}</span>
+                  <span className="text-success-fg">Uploaded</span>
                 </div>
               ),
           )}
         </ReviewSection>
 
         <ReviewSection title="Declaration" step={5} onEditStep={onEditStep}>
-          <div className="flex gap-4 px-4 py-2.5 text-sm">
-            <span className="w-44 shrink-0 text-zinc-500">Accepted</span>
-            <span className="text-zinc-800">
+          <div className="flex gap-4 px-4 py-2.5 text-body">
+            <span className="w-44 shrink-0 text-fg-subtle">Accepted</span>
+            <span className="text-fg">
               {initialData.declarationAccepted ? "Yes" : "No"}
             </span>
           </div>
@@ -149,7 +149,7 @@ export function StepReview({
       </div>
 
       {state.error && (
-        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="rounded-md border border-danger-border bg-danger-bg px-3 py-2 text-body text-danger-fg">
           {state.error}
         </p>
       )}
@@ -158,7 +158,7 @@ export function StepReview({
         <input name="applicationId" type="hidden" value={applicationId} />
         <div className="flex justify-between">
           <button
-            className="h-11 rounded-md border border-zinc-300 px-5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+            className="h-11 rounded-md border border-border px-5 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted"
             disabled={isPending}
             onClick={onBack}
             type="button"
@@ -166,7 +166,7 @@ export function StepReview({
             Back
           </button>
           <button
-            className="h-11 rounded-md bg-zinc-950 px-5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="h-11 rounded-md bg-brand-600 px-5 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isPending}
             type="submit"
           >

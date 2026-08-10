@@ -27,13 +27,13 @@ const ORGANISATION_TYPES = [
 ];
 
 const INPUT =
-  "mt-2 h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950";
+  "mt-2 h-11 w-full rounded-md border border-border px-3 text-body text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20";
 const SELECT =
-  "mt-2 h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none transition focus:border-zinc-950";
+  "mt-2 h-11 w-full rounded-md border border-border bg-surface px-3 text-body text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20";
 const TEXTAREA =
-  "mt-2 min-h-20 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none transition focus:border-zinc-950";
-const LABEL = "block text-sm font-medium text-zinc-700";
-const OPTIONAL = "ml-1 font-normal text-zinc-400";
+  "mt-2 min-h-20 w-full rounded-md border border-border px-3 py-2 text-body text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20";
+const LABEL = "block text-body font-medium text-fg";
+const OPTIONAL = "ml-1 font-normal text-fg-subtle";
 
 export function Step1OrgInfo({
   initialData,
@@ -71,8 +71,8 @@ export function Step1OrgInfo({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Organisation information</h2>
-        <p className="mt-1 text-sm text-zinc-600">
+        <h2 className="text-section-title text-fg">Organisation information</h2>
+        <p className="mt-1 text-body text-fg-muted">
           Provide details about the organisation applying to become a credential verifier.
         </p>
       </div>
@@ -81,7 +81,7 @@ export function Step1OrgInfo({
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className={LABEL} htmlFor="companyName">
-              Company name <span className="text-red-500">*</span>
+              Company name <span className="text-danger-fg">*</span>
             </label>
             <input
               className={INPUT}
@@ -108,7 +108,7 @@ export function Step1OrgInfo({
           </div>
           <div>
             <label className={LABEL} htmlFor="companyRegistrationNumber">
-              Registration number <span className="text-red-500">*</span>
+              Registration number <span className="text-danger-fg">*</span>
             </label>
             <input
               className={INPUT}
@@ -137,7 +137,7 @@ export function Step1OrgInfo({
           </div>
           <div>
             <label className={LABEL} htmlFor="organisationType">
-              Organisation type <span className="text-red-500">*</span>
+              Organisation type <span className="text-danger-fg">*</span>
             </label>
             <select
               className={SELECT}
@@ -156,7 +156,7 @@ export function Step1OrgInfo({
           </div>
           <div>
             <label className={LABEL} htmlFor="serviceCategory">
-              Industry / service category <span className="text-red-500">*</span>
+              Industry / service category <span className="text-danger-fg">*</span>
             </label>
             <select
               className={SELECT}
@@ -188,7 +188,7 @@ export function Step1OrgInfo({
           </div>
           <div className="sm:col-span-2">
             <label className={LABEL} htmlFor="physicalAddress">
-              Physical address <span className="text-red-500">*</span>
+              Physical address <span className="text-danger-fg">*</span>
             </label>
             <textarea
               className={TEXTAREA}
@@ -214,14 +214,14 @@ export function Step1OrgInfo({
         </div>
 
         {error && (
-          <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p className="rounded-md border border-danger-border bg-danger-bg px-3 py-2 text-body text-danger-fg">
             {error}
           </p>
         )}
 
         <div className="flex justify-end">
           <button
-            className="h-11 rounded-md bg-zinc-950 px-5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="h-11 rounded-md bg-brand-600 px-5 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={saving}
             type="submit"
           >

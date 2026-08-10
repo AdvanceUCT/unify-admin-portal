@@ -104,22 +104,22 @@ export function VendorApplicationWizard({
                   if (isUnlocked && !isCurrent) goToStep(stepNumber);
                 }}
                 title={isUnlocked ? undefined : "Complete the earlier steps first"}
-                className={`w-full rounded-lg border px-3 py-2 text-left text-xs transition ${
+                className={`w-full rounded-lg border px-3 py-2 text-left text-caption transition ${
                   isCurrent
-                    ? "border-zinc-900 bg-white text-zinc-950"
+                    ? "border-brand-600 bg-surface text-fg"
                     : isUnlocked
-                      ? "cursor-pointer border-zinc-200 bg-white text-zinc-600 hover:border-zinc-400 hover:bg-zinc-50"
-                      : "cursor-not-allowed border-zinc-200 bg-zinc-50 text-zinc-400"
+                      ? "cursor-pointer border-border bg-surface text-fg-muted hover:border-border-strong hover:bg-surface-muted"
+                      : "cursor-not-allowed border-border bg-surface-muted text-fg-subtle"
                 }`}
               >
                 <div className="flex items-center gap-2">
                   <span
-                    className={`grid size-5 shrink-0 place-items-center rounded-full text-xs font-semibold ${
+                    className={`grid size-5 shrink-0 place-items-center rounded-full text-caption font-semibold ${
                       isCurrent
-                        ? "bg-zinc-900 text-white"
+                        ? "bg-brand-600 text-white"
                         : isUnlocked
-                          ? "bg-zinc-200 text-zinc-700"
-                          : "bg-zinc-100 text-zinc-400"
+                          ? "bg-surface-muted text-fg-muted"
+                          : "bg-surface-muted text-fg-subtle"
                     }`}
                   >
                     {stepNumber}
@@ -132,7 +132,7 @@ export function VendorApplicationWizard({
         })}
       </ol>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-6">
+      <section className="rounded-lg border border-border bg-surface p-6 shadow-md">
         {currentStep === 1 && (
           <Step1OrgInfo
             initialData={initialData}
