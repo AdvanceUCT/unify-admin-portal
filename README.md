@@ -152,6 +152,88 @@ Administrator accounts are invite-only.
 
 Vendor users are a separate account type. Approved vendors can have owners and staff, with staff access limited through branch memberships. Integration access is separately controlled by scoped API credentials.
 
+## Vendor Portal
+
+The Vendor Portal is part of this Next.js application and is available under `/vendor`. It shares the deployment and PostgreSQL database with the university-facing Admin Portal, but vendor accounts use a separate `VENDOR` user type, vendor-specific sessions, protected route groups, and tenant/branch access checks.
+
+Keeping both portals in this repository allows application approval, vendor membership, service-point provisioning, verification records, and audit events to use one consistent data model. Credential proof decisions still come from the separate UNIFY Agent Service.
+
+### Vendor journey
+
+1. A service provider creates an account at `/vendor/sign-up` and completes its organisation profile.
+2. The vendor prepares a draft application, uploads supporting documents, and submits it for university review.
+3. A `SUPER_ADMIN` or `ADMIN` reviews the application in the Admin Portal and approves, rejects, or later revokes it. The decision is recorded in the audit history and the contact receives the corresponding email when delivery is configured.
+4. Approval creates or restores the vendor owner's membership, creates a default branch when necessary, and provisions the branch as a verification service point with the Agent Service.
+5. The owner can add branches, invite staff, assign staff to branches, review verification activity, and configure checkout integrations.
+6. Staff members use the same Vendor Portal but can see and operate only the active branches assigned to them.
+
+### Vendor screens
+
+| Route | Purpose |
+|---|---|
+| `/vendor` | Dashboard showing approval state, branch summaries, and recent activity |
+| `/vendor/application` | Multi-step vendor application and supporting-document submission |
+| `/vendor/application/history/[id]` | Read-only view of a previous submission and decision |
+| `/vendor/profile` | Owner-managed organisation details, contact information, and logo |
+| `/vendor/branches` | Branch/service-point list and owner-only branch creation |
+| `/vendor/branches/[branchId]` | Verification QR, branch configuration, staff count, and recent activity |
+| `/vendor/staff` | Owner-only staff invitations, branch assignments, activation, and deactivation |
+| `/vendor/verifications` | Branch-scoped history with student, university, date, and status filters plus CSV export |
+| `/vendor/integrations` | Owner-only API-key and signed result-webhook management |
+| `/vendor/help` | Authenticated support request form sent to the configured university help address |
+
+### Vendor roles
+
+| Role | Access |
+|---|---|
+| `OWNER` | All vendor branches plus profile, branch, staff, API-key, webhook, reporting, and support functions |
+| `STAFF` | Dashboard, verification activity, and branch pages limited to explicitly assigned active branches |
+
+An owner's branch scope is derived from the vendor's current branches. Staff scope is derived from `VendorBranchMembership` records and is enforced on the server; URL parameters and UI filters cannot expand it.
+
+### Branches and service points
+
+Each vendor branch corresponds to a verifier service point. Creating a branch asks the Agent Service to create the service point and stores its internal agent ID plus stable public URL. A branch can be active, disabled, provisioning, or provisioning-failed, allowing portal users to distinguish an operational QR from a branch that still needs attention.
+
+The public branch URL identifies only the vendor service point. Each wallet scan creates a new short-lived proof exchange with expiry and non-revocation checks, so a printed QR never contains a reusable student proof or completed result.
+
+### Verification modes
+
+The Vendor Portal supports two intentionally different verification modes:
+
+| Mode | Intended use | Result handling |
+|---|---|---|
+| In-person branch verification | A student scans a branch's static QR and presents a credential to staff | Branch-scoped portal history may show the disclosed student summary/attributes, university, exact outcome, failure reason, and timestamp for operational use |
+| Checkout verification API | A vendor checkout server asks whether the student satisfies the credential proof | Returns minimal request/checkout identifiers, status, failure code, and timestamps; disclosed credential attributes are not copied into the external checkout result |
+
+For checkout verification, the vendor server authenticates with an active `unify_vk_...` API key and supplies its own `checkoutId`:
+
+```http
+POST /api/vendor/v1/verification-sessions
+Authorization: Bearer unify_vk_...
+Content-Type: application/json
+
+{ "checkoutId": "order-123" }
+```
+
+The vendor profile and `checkoutId` form an idempotency key, so a safe retry returns the same logical request rather than creating an unrelated checkout verification. The configured default branch supplies the Agent Service verifier context.
+
+After the wallet completes the single-use claim and proof flow, the vendor can obtain the minimal result in either of two ways:
+
+- Poll `GET /api/vendor/v1/verification-sessions/{verificationRequestId}` with the same vendor API key.
+- Configure an HTTPS webhook under `/vendor/integrations` and verify the `X-Unify-Signature: sha256=...` HMAC header.
+
+The portal makes an immediate callback attempt. Failed deliveries are recorded and can be retried manually; polling remains the fallback, so the flow does not depend on a scheduled job.
+
+### Vendor data and security boundaries
+
+- Vendor profiles, applications, memberships, branches, verification records, integration metadata, and audit events live in the same PostgreSQL database as the Admin Portal.
+- Supporting documents live in the private `vendor-documents` Supabase Storage bucket and are opened through short-lived signed URLs.
+- API tokens are displayed only when created; the database stores a prefix and keyed hash rather than the reusable plaintext token.
+- Webhook signing secrets are encrypted at rest with `VENDOR_WEBHOOK_ENCRYPTION_KEY`.
+- Vendor and branch ownership is checked on the server for every protected page, mutation, export, and result lookup.
+- Vendors never receive the Agent Service API key, wallet result capability, issuer keys, or raw Credo records.
+
 ## Local setup
 
 ### Prerequisites
@@ -262,7 +344,8 @@ Credential suspension, reactivation, revocation, and renewal are initiated in th
 - A static service-point URL such as `/verify/{publicServicePointId}` creates a short-lived proof session when scanned.
 - Checkout servers create a single-use session through `POST /api/vendor/v1/verification-sessions`, then poll `GET /api/vendor/v1/verification-sessions/{verificationRequestId}` or receive a signed webhook.
 - The wallet shows the verifier and requested attributes before the student consents.
-- Final vendor results are deliberately minimal: status, failure code, identifiers, and timestamps. Presented credential attributes are not stored in vendor result records.
+- In-person branch history can retain the attributes the student disclosed for that operational verification; access remains vendor- and branch-scoped.
+- External checkout results are deliberately minimal: status, failure code, identifiers, and timestamps. Disclosed attributes are not stored in the checkout result.
 - Failed webhook deliveries can be retried from the vendor portal; polling remains the fallback.
 
 ### Vendor documents
