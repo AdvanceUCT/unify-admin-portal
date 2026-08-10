@@ -45,6 +45,22 @@ export async function uploadVendorLogo(
   return { path };
 }
 
+export async function uploadUniversityLogo(
+  file: File,
+  universityProfileId: string,
+): Promise<{ path: string }> {
+  const supabase = getClient();
+  const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_").replace(/^\.+/, "");
+  const path = `university-logos/${universityProfileId}/${Date.now()}-${safeName || "file"}`;
+
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(path, file, { upsert: true });
+
+  if (error) throw new Error(`Upload failed: ${error.message}`);
+  return { path };
+}
+
 /** Deletes a previously uploaded vendor document, e.g. after it's been replaced. */
 export async function deleteVendorDocument(path: string): Promise<void> {
   const supabase = getClient();

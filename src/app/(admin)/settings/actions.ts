@@ -9,12 +9,21 @@ import { writeAuditLog } from "@/lib/audit/audit";
 import { ADMIN_ROLES } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
-import { getUniversityProfile, updateUniversityProfile } from "@/lib/university/profile";
+import { validateLogoFile } from "@/lib/images/logoValidation";
+import { deleteVendorDocument, uploadUniversityLogo } from "@/lib/storage/supabase";
+import {
+  getUniversityProfile,
+  removeUniversityProfileLogo,
+  saveUniversityProfileLogoPath,
+  updateUniversityProfile,
+} from "@/lib/university/profile";
 
 export type UniversityProfileSettingsState = {
   status: "idle" | "success" | "error";
   message?: string;
 };
+
+export type LogoActionResult = { ok: boolean; error?: string };
 
 const profileSettingsSchema = z.object({
   name: z.string().trim().min(2, "University name must be at least 2 characters.").max(160),
@@ -95,6 +104,92 @@ export async function checkAgentHealthAction() {
   await requireRole(ADMIN_ROLES);
 
   return checkAgentHealth();
+}
+
+function revalidateUniversityLogoPaths() {
+  revalidatePath("/settings");
+  revalidatePath("/", "layout");
+}
+
+export async function uploadUniversityLogoAction(
+  formData: FormData,
+): Promise<LogoActionResult> {
+  const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
+  const file = formData.get("file");
+
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "No file was provided. Please choose an image to upload." };
+  }
+  const validation = await validateLogoFile(file);
+  if (!validation.ok) return validation;
+
+  const profile = await getUniversityProfile();
+  if (!profile) {
+    return { ok: false, error: "No university profile exists yet. Complete setup first." };
+  }
+
+  let uploadedPath: string | undefined;
+  try {
+    const { path } = await uploadUniversityLogo(file, profile.id);
+    uploadedPath = path;
+    const { previousPath } = await saveUniversityProfileLogoPath(
+      profile.id,
+      session.user.id,
+      path,
+    );
+
+    if (previousPath && previousPath !== path) {
+      try {
+        await deleteVendorDocument(previousPath);
+      } catch (error) {
+        console.error(
+          `[university-logo] Failed to delete replaced logo ${previousPath}:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
+    revalidateUniversityLogoPaths();
+    return { ok: true };
+  } catch {
+    if (uploadedPath) {
+      try {
+        await deleteVendorDocument(uploadedPath);
+      } catch (error) {
+        console.error(
+          `[university-logo] Failed to delete orphaned upload ${uploadedPath}:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+    return { ok: false, error: "Something went wrong while uploading. Please try again." };
+  }
+}
+
+export async function removeUniversityLogoAction(): Promise<LogoActionResult> {
+  const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
+  const profile = await getUniversityProfile();
+  if (!profile) {
+    return { ok: false, error: "No university profile exists yet. Complete setup first." };
+  }
+
+  try {
+    const { removedPath } = await removeUniversityProfileLogo(profile.id, session.user.id);
+    if (removedPath) {
+      try {
+        await deleteVendorDocument(removedPath);
+      } catch (error) {
+        console.error(
+          `[university-logo] Failed to delete removed logo ${removedPath}:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+    revalidateUniversityLogoPaths();
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Unable to remove the university logo. Please try again." };
+  }
 }
 
 const renewalSettingsSchema = z.object({

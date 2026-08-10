@@ -402,6 +402,7 @@ model UniversityProfile {
   name               String
   abbreviation       String
   logoUrl            String?
+  logoPath           String?
   contactEmail       String
   websiteUrl         String?
   issuerDid          String?

@@ -10,6 +10,7 @@ import {
 } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
 import { env } from "@/lib/config/env";
+import { getDocumentSignedUrl } from "@/lib/storage/supabase";
 import { getUniversityProfile } from "@/lib/university/profile";
 
 const navItems: (PortalNavItem & { allowedRoles?: readonly AdminRole[] })[] = [
@@ -61,12 +62,15 @@ export default async function AdminLayout({
       canAccessRoute(role, item.href) &&
       (item.allowedRoles?.some((allowedRole) => allowedRole === role) ?? true),
   );
+  const logoUrl = profile?.logoPath
+    ? await getDocumentSignedUrl(profile.logoPath)
+    : profile?.logoUrl;
 
   return (
     <PortalShell
       brand={{
         brandName: "Unify",
-        logoUrl: profile?.logoUrl,
+        logoUrl,
         tenantName: profile?.name ?? "Credential governance",
       }}
       fallbackTitle="Admin"
