@@ -15,12 +15,18 @@ const mocks = vi.hoisted(() => {
   return {
     AgentServiceError,
     createIssuerDid: vi.fn(),
+    deleteVendorDocument: vi.fn(),
+    getDocumentSignedUrl: vi.fn(),
     getIssuerDid: vi.fn(),
     getStatus: vi.fn(),
     getUniversityProfile: vi.fn(),
+    requireRole: vi.fn(),
     revalidatePath: vi.fn(),
+    saveUniversityProfileLogoPath: vi.fn(),
     universityProfileUpdate: vi.fn(),
     upsertUniversityProfile: vi.fn(),
+    uploadUniversityLogo: vi.fn(),
+    validateLogoFile: vi.fn(),
   };
 });
 
@@ -35,6 +41,20 @@ vi.mock("@/lib/agentClient", () => ({
   getStatus: mocks.getStatus,
 }));
 
+vi.mock("@/lib/auth/session", () => ({
+  requireRole: mocks.requireRole,
+}));
+
+vi.mock("@/lib/images/logoValidation", () => ({
+  validateLogoFile: mocks.validateLogoFile,
+}));
+
+vi.mock("@/lib/storage/supabase", () => ({
+  deleteVendorDocument: mocks.deleteVendorDocument,
+  getDocumentSignedUrl: mocks.getDocumentSignedUrl,
+  uploadUniversityLogo: mocks.uploadUniversityLogo,
+}));
+
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     universityProfile: {
@@ -45,6 +65,7 @@ vi.mock("@/lib/db/prisma", () => ({
 
 vi.mock("@/lib/university/profile", () => ({
   getUniversityProfile: mocks.getUniversityProfile,
+  saveUniversityProfileLogoPath: mocks.saveUniversityProfileLogoPath,
   upsertUniversityProfile: mocks.upsertUniversityProfile,
 }));
 
@@ -57,7 +78,7 @@ const profile = {
   defaultCredentialValidityDays: 365,
   id: "profile-1",
   issuerDid: null,
-  logoUrl: null,
+  logoPath: null,
   name: "University of Example",
   renewalCadenceMonths: 12,
   setupCompletedAt: null,
@@ -79,13 +100,13 @@ function profileFormData() {
   formData.append("name", profile.name);
   formData.append("abbreviation", profile.abbreviation);
   formData.append("contactEmail", profile.contactEmail);
-  formData.append("logoUrl", "");
   return formData;
 }
 
 describe("setup actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.requireRole.mockResolvedValue({ user: { id: "actor-1" } });
     mocks.upsertUniversityProfile.mockResolvedValue(profile);
     mocks.universityProfileUpdate.mockResolvedValue(completedProfile());
   });
@@ -96,7 +117,6 @@ describe("setup actions", () => {
     expect(mocks.upsertUniversityProfile).toHaveBeenCalledWith({
       abbreviation: "UEX",
       contactEmail: "admin@example.edu",
-      logoUrl: null,
       name: "University of Example",
     });
     expect(result).toEqual(
@@ -107,6 +127,40 @@ describe("setup actions", () => {
       }),
     );
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/setup");
+  });
+
+  it("uploads a logo included in the same submission and records its path", async () => {
+    mocks.validateLogoFile.mockResolvedValue({ ok: true });
+    mocks.uploadUniversityLogo.mockResolvedValue({ path: "university-logos/profile-1/logo.png" });
+    mocks.saveUniversityProfileLogoPath.mockResolvedValue({ previousPath: null });
+    mocks.getDocumentSignedUrl.mockResolvedValue("https://storage.example/signed-logo.png");
+
+    const formData = profileFormData();
+    const file = new File(["fake-image-bytes"], "logo.png", { type: "image/png" });
+    formData.append("file", file);
+
+    const result = await saveProfileAction(formData);
+
+    expect(mocks.validateLogoFile).toHaveBeenCalledWith(file);
+    expect(mocks.uploadUniversityLogo).toHaveBeenCalledWith(file, "profile-1");
+    expect(mocks.saveUniversityProfileLogoPath).toHaveBeenCalledWith(
+      "profile-1",
+      "actor-1",
+      "university-logos/profile-1/logo.png",
+    );
+    expect(result.logoUrl).toBe("https://storage.example/signed-logo.png");
+  });
+
+  it("saves the profile but surfaces an error when the logo fails validation", async () => {
+    mocks.validateLogoFile.mockResolvedValue({ ok: false, error: "That file is not a valid PNG, JPEG, or WEBP image." });
+
+    const formData = profileFormData();
+    formData.append("file", new File(["not-an-image"], "logo.txt", { type: "text/plain" }));
+
+    await expect(saveProfileAction(formData)).rejects.toThrow(
+      "That file is not a valid PNG, JPEG, or WEBP image.",
+    );
+    expect(mocks.uploadUniversityLogo).not.toHaveBeenCalled();
   });
 
   it("marks setup complete when an issuer DID already exists on the profile", async () => {

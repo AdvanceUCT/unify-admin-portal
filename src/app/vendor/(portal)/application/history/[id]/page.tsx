@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { SectionHeader } from "@/components/layout/SectionHeader";
+import { BackButton } from "@/components/ui/BackButton";
 import { VendorApplicationDetails } from "@/features/vendors/VendorApplicationDetails";
 import { requireVendorSession } from "@/lib/auth/session";
 import { getDocumentSignedUrl } from "@/lib/storage/supabase";
@@ -41,14 +40,11 @@ export default async function VendorApplicationHistoryDetailPage({
 
   return (
     <div className="space-y-6">
-      <SectionHeader
-        title="Previous application"
-        description="Read-only record of a past verifier application submission."
+      <BackButton href="/vendor/application" label="Back to application" />
+      <VendorApplicationDetails
+        application={application}
+        documentUrls={documentUrls}
       />
-      <Link className="text-sm text-zinc-500 hover:text-zinc-800" href="/vendor/application">
-        ← Back to application
-      </Link>
-      <VendorApplicationDetails application={application} documentUrls={documentUrls} />
     </div>
   );
 }

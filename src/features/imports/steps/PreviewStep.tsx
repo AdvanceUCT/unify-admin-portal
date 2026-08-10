@@ -169,11 +169,11 @@ export function PreviewStep({
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">{category.label}</h2>
-            <p className="mt-1 text-sm text-zinc-600">{rows.length} rows from {result.filename}.</p>
+            <h2 className="text-section-title text-fg">{category.label}</h2>
+            <p className="mt-1 text-body text-fg-muted">{rows.length} rows from {result.filename}.</p>
           </div>
           <button
-            className="h-9 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+            className="h-9 rounded-md border border-border px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted"
             onClick={() => setFullViewStatus(null)}
             type="button"
           >
@@ -185,12 +185,12 @@ export function PreviewStep({
 
         {rows.length > FULL_VIEW_PAGE_SIZE ? (
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-zinc-500">
+            <p className="text-caption text-fg-subtle">
               Showing {firstRow}-{lastRow} of {rows.length} rows
             </p>
             <div className="flex items-center gap-2">
               <button
-                className="inline-flex h-9 items-center gap-2 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={page === 1}
                 onClick={() => setFullViewPage((current) => Math.max(1, current - 1))}
                 type="button"
@@ -198,11 +198,11 @@ export function PreviewStep({
                 <ChevronLeft aria-hidden className="size-4" />
                 Previous
               </button>
-              <span className="text-xs text-zinc-500">
+              <span className="text-caption text-fg-subtle">
                 Page {page} of {totalPages}
               </span>
               <button
-                className="inline-flex h-9 items-center gap-2 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={page === totalPages}
                 onClick={() => setFullViewPage((current) => Math.min(totalPages, current + 1))}
                 type="button"
@@ -220,8 +220,8 @@ export function PreviewStep({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Preview import</h2>
-        <p className="mt-1 text-sm text-zinc-600">
+        <h2 className="text-section-title text-fg">Preview import</h2>
+        <p className="mt-1 text-body text-fg-muted">
           Validate every row against your saved mapping and reconcile it against existing students. Nothing is
           saved to the student list yet.
         </p>
@@ -229,7 +229,7 @@ export function PreviewStep({
 
       {!result ? (
         <button
-          className="h-10 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+          className="h-10 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
           disabled={isGenerating}
           onClick={handleGenerate}
           type="button"
@@ -238,10 +238,10 @@ export function PreviewStep({
         </button>
       ) : null}
 
-      {error ? <p className="text-sm text-amber-700">{error}</p> : null}
+      {error ? <p className="text-sm text-danger-fg">{error}</p> : null}
 
       {unmappedColumns.length > 0 ? (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+        <div className="rounded-md border border-warning-border bg-warning-bg px-3 py-2 text-sm text-warning-fg">
           <p className="font-medium">
             {unmappedColumns.length} column{unmappedColumns.length === 1 ? "" : "s"} from this file{" "}
             {unmappedColumns.length === 1 ? "was" : "were"} left unmapped: {unmappedColumns.join(", ")}.
@@ -253,7 +253,7 @@ export function PreviewStep({
       {result ? (
         <div className="space-y-4">
           {result.fileErrors ? (
-            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            <div className="rounded-md border border-warning-border bg-warning-bg px-3 py-2 text-sm text-warning-fg">
               <p className="font-medium">File parsing issues</p>
               <ul className="mt-1 list-disc space-y-0.5 pl-5">
                 {result.fileErrors.map((message) => (
@@ -263,7 +263,7 @@ export function PreviewStep({
             </div>
           ) : null}
 
-          <div className="divide-y divide-zinc-200 rounded-lg border border-zinc-200">
+          <div className="divide-y divide-border rounded-lg border border-border">
             {CATEGORIES.map(({ key, label, status, tone }) => {
               const rows = rowsByStatus.get(status) ?? [];
               const count = result.counts[key];
@@ -274,12 +274,12 @@ export function PreviewStep({
               return (
                 <div key={status}>
                   <button
-                    className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left text-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed"
+                    className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left text-sm transition hover:bg-surface-muted disabled:cursor-not-allowed"
                     disabled={count === 0}
                     onClick={() => toggleExpanded(status)}
                     type="button"
                   >
-                    <span className="flex items-center gap-2 font-medium text-zinc-800">
+                    <span className="flex items-center gap-2 font-medium text-fg">
                       {count > 0 ? (
                         isExpanded ? (
                           <ChevronDown aria-hidden className="size-4" />
@@ -295,16 +295,17 @@ export function PreviewStep({
                   </button>
 
                   {isExpanded && count > 0 ? (
-                    <div className="space-y-2 border-t border-zinc-100 bg-zinc-50 px-4 py-3">
+                    <div className="space-y-2 border-t border-border bg-surface-muted px-4 py-3">
                       <PreviewRowsTable columns={fieldDefinitions} rows={visibleRows} status={status} />
 
                       {remainingCount > 0 ? (
                         <button
-                          className="text-sm font-medium text-zinc-700 underline underline-offset-2 hover:text-zinc-950"
+                          className="inline-flex items-center gap-1 text-sm font-medium text-fg-muted underline underline-offset-2 hover:text-fg"
                           onClick={() => openFullView(status)}
                           type="button"
                         >
-                          View all {count} {label.toLowerCase()} rows &rarr;
+                          View all {count} {label.toLowerCase()} rows
+                          <ChevronRight aria-hidden className="size-3.5" />
                         </button>
                       ) : null}
                     </div>
@@ -314,11 +315,11 @@ export function PreviewStep({
             })}
           </div>
 
-          {commitError ? <p className="text-sm text-amber-700">{commitError}</p> : null}
+          {commitError ? <p className="text-sm text-danger-fg">{commitError}</p> : null}
 
           <div className="flex flex-wrap items-center gap-3">
             <button
-              className="h-9 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="h-9 rounded-md border border-border px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50"
               disabled={isGenerating || isCommitting}
               onClick={handleGenerate}
               type="button"
@@ -327,7 +328,7 @@ export function PreviewStep({
             </button>
 
             <button
-              className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+              className="h-9 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={isCommitting || isGenerating || hasBlockingErrors || result.counts.new + result.counts.updated === 0}
               onClick={handleCommit}
               type="button"
@@ -338,14 +339,14 @@ export function PreviewStep({
             </button>
           </div>
           {hasBlockingErrors ? (
-            <p className="text-sm text-amber-700">Fix or remove rows with errors before committing this import.</p>
+            <p className="text-sm text-danger-fg">Fix or remove rows with errors before committing this import.</p>
           ) : null}
         </div>
       ) : null}
 
       <div>
         <button
-          className="h-10 rounded-md border border-zinc-300 px-4 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+          className="h-10 rounded-md border border-border px-4 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted"
           onClick={onBack}
           type="button"
         >

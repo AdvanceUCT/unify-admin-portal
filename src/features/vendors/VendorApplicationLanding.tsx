@@ -82,9 +82,9 @@ export function VendorApplicationLanding({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-lg border border-zinc-200 bg-white p-5">
-        <h2 className="font-medium text-zinc-950">About UNIFY</h2>
-        <p className="mt-2 text-sm leading-6 text-zinc-600">
+      <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
+        <h2 className="text-section-title text-fg">About UNIFY</h2>
+        <p className="mt-2 text-sm leading-6 text-fg-muted">
           UNIFY is {universityName ? `${universityName}'s` : "the university's"} digital
           credential verification network. Once your business is approved as a verifier, you can
           instantly confirm student status, standing, and eligibility using a secure QR code —
@@ -93,9 +93,9 @@ export function VendorApplicationLanding({
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <section className="rounded-lg border border-zinc-200 bg-white p-5">
-          <h2 className="font-medium text-zinc-950">What you&apos;ll need</h2>
-          <p className="mt-1 text-sm text-zinc-500">
+        <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
+          <h2 className="text-section-title text-fg">What you&apos;ll need</h2>
+          <p className="mt-1 text-sm text-fg-muted">
             Have these ready before you start so you can complete the application in one sitting.
           </p>
           <ul className="mt-4 space-y-4">
@@ -103,12 +103,12 @@ export function VendorApplicationLanding({
               const Icon = item.icon;
               return (
                 <li className="flex gap-3" key={item.title}>
-                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-zinc-100 text-zinc-500">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand-50 text-brand-700">
                     <Icon size={16} aria-hidden="true" />
                   </span>
                   <div>
-                    <p className="text-sm font-medium text-zinc-900">{item.title}</p>
-                    <p className="mt-0.5 text-sm text-zinc-500">{item.description}</p>
+                    <p className="text-sm font-medium text-fg">{item.title}</p>
+                    <p className="mt-0.5 text-sm text-fg-muted">{item.description}</p>
                   </div>
                 </li>
               );
@@ -116,17 +116,17 @@ export function VendorApplicationLanding({
           </ul>
         </section>
 
-        <section className="rounded-lg border border-zinc-200 bg-white p-5">
-          <h2 className="font-medium text-zinc-950">How the application works</h2>
+        <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
+          <h2 className="text-section-title text-fg">How the application works</h2>
           <ol className="mt-4 space-y-4">
             {HOW_IT_WORKS.map((step, index) => (
               <li className="flex gap-3" key={step.title}>
-                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-zinc-900 text-xs font-semibold text-white">
+                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white">
                   {index + 1}
                 </span>
                 <div>
-                  <p className="text-sm font-medium text-zinc-900">{step.title}</p>
-                  <p className="mt-0.5 text-sm text-zinc-500">{step.description}</p>
+                  <p className="text-sm font-medium text-fg">{step.title}</p>
+                  <p className="mt-0.5 text-sm text-fg-muted">{step.description}</p>
                 </div>
               </li>
             ))}
@@ -135,21 +135,21 @@ export function VendorApplicationLanding({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
-          <Save className="mt-0.5 shrink-0 text-blue-600" size={20} aria-hidden="true" />
+        <div className="flex items-start gap-3 rounded-xl border border-info-border bg-info-bg p-4 shadow-md">
+          <Save className="mt-0.5 shrink-0 text-info-fg" size={20} aria-hidden="true" />
           <div>
-            <p className="font-medium text-blue-900">Save and resume anytime</p>
-            <p className="mt-1 text-sm text-blue-700">
+            <p className="font-medium text-info-fg">Save and resume anytime</p>
+            <p className="mt-1 text-sm text-info-fg">
               Your progress is saved automatically after every step. Exit whenever you need to —
               nothing will be lost.
             </p>
           </div>
         </div>
-        <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
-          <ClipboardCheck className="mt-0.5 shrink-0 text-blue-600" size={20} aria-hidden="true" />
+        <div className="flex items-start gap-3 rounded-xl border border-info-border bg-info-bg p-4 shadow-md">
+          <ClipboardCheck className="mt-0.5 shrink-0 text-info-fg" size={20} aria-hidden="true" />
           <div>
-            <p className="font-medium text-blue-900">Reviewed by the university</p>
-            <p className="mt-1 text-sm text-blue-700">
+            <p className="font-medium text-info-fg">Reviewed by the university</p>
+            <p className="mt-1 text-sm text-info-fg">
               Once submitted, {universityName ?? "the university"}&apos;s team will review your
               application. You&apos;ll be notified as soon as a decision is made.
             </p>
@@ -157,38 +157,38 @@ export function VendorApplicationLanding({
         </div>
       </div>
 
-      <section className="flex flex-col items-center gap-4 rounded-lg border border-zinc-200 bg-white p-8 text-center">
-        <span className="grid size-12 place-items-center rounded-full bg-zinc-100 text-zinc-500">
+      <section className="flex flex-col items-center gap-4 rounded-xl border border-border bg-surface p-8 text-center shadow-md">
+        <span className="grid size-12 place-items-center rounded-full bg-brand-50 text-brand-700">
           <ShieldCheck size={24} aria-hidden="true" />
         </span>
         <div>
-          <p className="font-medium text-zinc-950">{ctaHeading}</p>
-          <p className="mt-1 text-sm text-zinc-500">{ctaDetail}</p>
+          <p className="font-medium text-fg">{ctaHeading}</p>
+          <p className="mt-1 text-sm text-fg-muted">{ctaDetail}</p>
         </div>
         <Link
-          className="inline-flex h-11 items-center rounded-md bg-zinc-950 px-6 text-sm font-medium text-white transition hover:bg-zinc-800"
+          className="inline-flex h-10 items-center rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700"
           href={applicationStatus ? "/vendor/application" : "/vendor/application?start=1"}
         >
           {ctaLabel}
         </Link>
       </section>
 
-      <section className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-white p-5">
-        <span className="grid size-10 shrink-0 place-items-center rounded-md bg-zinc-100 text-zinc-500">
+      <section className="flex items-center gap-3 rounded-xl border border-border bg-surface p-5 shadow-md">
+        <span className="grid size-10 shrink-0 place-items-center rounded-md bg-brand-50 text-brand-700">
           <Mail size={18} aria-hidden="true" />
         </span>
         <div>
-          <p className="font-medium text-zinc-950">Need help?</p>
+          <p className="font-medium text-fg">Need help?</p>
           {supportEmail ? (
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-fg-muted">
               Contact{" "}
-              <a className="font-medium text-zinc-700 underline" href={`mailto:${supportEmail}`}>
+              <a className="font-medium text-fg underline" href={`mailto:${supportEmail}`}>
                 {supportEmail}
               </a>{" "}
               if you have any questions before you begin.
             </p>
           ) : (
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-fg-muted">
               Contact your university administrator if you have any questions before you begin.
             </p>
           )}

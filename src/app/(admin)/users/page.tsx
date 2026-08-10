@@ -1,9 +1,8 @@
-import { Ban, Check, LogOut, RotateCcw } from "lucide-react";
+import { Ban, LogOut, RotateCcw } from "lucide-react";
 
 import { PageTabs } from "@/components/layout/PageTabs";
-import { IconButton } from "@/components/ui/IconButton";
 import { StatusText } from "@/components/ui/StatusText";
-import { INVITABLE_ADMIN_ROLES, ROLE_LABELS, type AdminRole } from "@/lib/auth/roles";
+import { ROLE_LABELS, type AdminRole } from "@/lib/auth/roles";
 import { requireRole } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { formatDateTime } from "@/lib/formatters";
@@ -13,6 +12,7 @@ import {
   reactivateUserAction,
   revokeUserSessionsAction,
 } from "./actions";
+import { ChangeRoleButton } from "./ChangeRoleButton";
 
 function getRoleLabel(role: string | null) {
   return ROLE_LABELS[role as AdminRole] ?? role ?? "Unknown";
@@ -88,23 +88,11 @@ export default async function UsersPage() {
                       {isCurrentUser || isSuperAdmin ? (
                         <span className="text-fg-muted">{getRoleLabel(user.role)}</span>
                       ) : (
-                        <form action={changeUserRoleAction} className="flex items-center justify-center gap-1.5">
-                          <input name="userId" type="hidden" value={user.id} />
-                          <select
-                            className="h-9 rounded-md border border-border bg-surface px-2 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-                            defaultValue={user.role ?? "VIEWER"}
-                            name="role"
-                          >
-                            {INVITABLE_ADMIN_ROLES.map((role) => (
-                              <option key={role} value={role}>
-                                {ROLE_LABELS[role]}
-                              </option>
-                            ))}
-                          </select>
-                          <IconButton aria-label="Save role" type="submit">
-                            <Check aria-hidden className="size-4" />
-                          </IconButton>
-                        </form>
+                        <ChangeRoleButton
+                          action={changeUserRoleAction}
+                          currentRole={(user.role as AdminRole | null) ?? "VIEWER"}
+                          userId={user.id}
+                        />
                       )}
                     </td>
                     <td className="px-5 py-4">

@@ -1,5 +1,6 @@
 import { PortalShell } from "@/components/layout/PortalShell";
 import type { PortalNavItem } from "@/components/layout/portalTypes";
+import { AgentStatusIndicator } from "@/features/agent/AgentStatusIndicator";
 import { LiveVerificationNotifications } from "@/features/vendors/LiveVerificationNotifications";
 import { requireVendorSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
@@ -7,6 +8,8 @@ import { getDocumentSignedUrl } from "@/lib/storage/supabase";
 import { getApprovedVendorContextForUser, type ApprovedVendorContext } from "@/lib/vendors/context";
 import { encodeLiveVerificationCursor } from "@/lib/vendors/liveVerifications";
 import { getVendorProfileLogoPath } from "@/lib/vendors/profile";
+
+import { checkVendorAgentHealthAction } from "./actions";
 
 const ownerNavItems: PortalNavItem[] = [
   { href: "/vendor", label: "Overview", icon: "overview" },
@@ -25,6 +28,23 @@ const staffNavItems: PortalNavItem[] = [
   { href: "/vendor/branches", label: "Branches", icon: "branches" },
   { href: "/vendor/help", label: "Help", icon: "help" },
 ];
+
+const applicantNavItems: PortalNavItem[] = [
+  { href: "/vendor", label: "Overview", icon: "overview" },
+  { href: "/vendor/application", label: "Application", icon: "application" },
+  { href: "/vendor/profile", label: "Profile", icon: "profile" },
+  { href: "/vendor/help", label: "Help", icon: "help" },
+];
+
+function navItemsForVendorContext(context: ApprovedVendorContext | null) {
+  if (!context) return applicantNavItems;
+  return context.role === "STAFF" ? staffNavItems : ownerNavItems;
+}
+
+function roleLabelForVendorContext(context: ApprovedVendorContext | null) {
+  if (!context) return "Applicant";
+  return context.role === "STAFF" ? "Staff" : "Owner";
+}
 
 async function notificationBranchIdsFor(context: ApprovedVendorContext) {
   if (context.role === "STAFF") return context.branchIds;
@@ -62,15 +82,24 @@ export default async function VendorPortalLayout({
         tenantName: vendorContext?.companyName ?? "Verifier onboarding",
       }}
       fallbackTitle="Vendor"
-      navItems={vendorContext?.role === "STAFF" ? staffNavItems : ownerNavItems}
+      navItems={navItemsForVendorContext(vendorContext)}
       portal="vendor"
       settingsHref="/vendor/profile"
+      settingsLabel="Profile"
       signOutRedirectTo="/vendor/sign-in"
+      status={
+        vendorContext ? (
+          <AgentStatusIndicator
+            checkHealth={checkVendorAgentHealthAction}
+            offlineHref="/vendor/help"
+          />
+        ) : null
+      }
       user={{
         email: session.user.email,
         image: session.user.image,
         name: session.user.name,
-        roleLabel: vendorContext?.role === "STAFF" ? "Staff" : "Owner",
+        roleLabel: roleLabelForVendorContext(vendorContext),
       }}
     >
       {vendorContext ? (

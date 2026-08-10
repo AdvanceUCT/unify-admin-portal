@@ -5,7 +5,7 @@ type ActiveNavEntry = { href: string; label: string };
 function matchesHref(pathname: string, href: string): boolean {
   if (pathname === href) return true;
   // The portal roots ("/" and "/vendor") would otherwise prefix-match everything.
-  if (href === "/") return false;
+  if (href === "/" || href === "/vendor") return false;
 
   return pathname.startsWith(`${href}/`);
 }

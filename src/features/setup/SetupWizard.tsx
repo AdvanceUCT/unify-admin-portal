@@ -1,12 +1,15 @@
 "use client";
 
-import { CheckCircle2, LoaderCircle, RefreshCw, Server, ShieldCheck, XCircle } from "lucide-react";
+import { Building2, CheckCircle2, LoaderCircle, RefreshCw, Server, ShieldCheck, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 
+import { Badge } from "@/components/ui/Badge";
+import { IconButton } from "@/components/ui/IconButton";
 import { checkAgentStatusAction, createOrGetDidAction, saveProfileAction } from "@/app/(auth)/setup/actions";
+import { toSafeImageSrc } from "@/lib/url";
 
 export type SetupProfile = {
   abbreviation: string;
@@ -36,9 +39,9 @@ const emptyHealth: HealthState = {
 };
 
 function statusTone(status: Reachability) {
-  if (status === "online") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (status === "offline") return "border-rose-200 bg-rose-50 text-rose-700";
-  return "border-zinc-200 bg-zinc-50 text-zinc-600";
+  if (status === "online") return "success" as const;
+  if (status === "offline") return "danger" as const;
+  return "neutral" as const;
 }
 
 function statusLabel(status: Reachability) {
@@ -73,11 +76,35 @@ export function SetupWizard({
   const [health, setHealth] = useState<HealthState>(emptyHealth);
   const [name, setName] = useState(profile?.name ?? "");
   const [abbreviation, setAbbreviation] = useState(profile?.abbreviation ?? "");
-  const [logoUrl, setLogoUrl] = useState(profile?.logoUrl ?? "");
   const [contactEmail, setContactEmail] = useState(profile?.contactEmail ?? "");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+  const logoObjectUrlRef = useRef<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [didStatus, setDidStatus] = useState<DidStatus>(profile?.issuerDid ? "complete" : "idle");
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(
+    () => () => {
+      if (logoObjectUrlRef.current) URL.revokeObjectURL(logoObjectUrlRef.current);
+    },
+    [],
+  );
+
+  function handleLogoFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+    if (logoObjectUrlRef.current) URL.revokeObjectURL(logoObjectUrlRef.current);
+    logoObjectUrlRef.current = file ? URL.createObjectURL(file) : null;
+    setLogoPreviewUrl(logoObjectUrlRef.current);
+    setLogoFile(file);
+  }
+
+  function clearLogoFile() {
+    if (logoObjectUrlRef.current) URL.revokeObjectURL(logoObjectUrlRef.current);
+    logoObjectUrlRef.current = null;
+    setLogoPreviewUrl(null);
+    setLogoFile(null);
+  }
 
   const connectionReady = health.agent === "online" && health.ledger === "online";
   const setupComplete = Boolean(savedProfile?.issuerDid && savedProfile.setupStatus === "COMPLETE");
@@ -155,12 +182,13 @@ export function SetupWizard({
       const formData = new FormData();
       formData.append("name", name.trim());
       formData.append("abbreviation", abbreviation.trim());
-      formData.append("logoUrl", logoUrl.trim());
       formData.append("contactEmail", contactEmail.trim());
+      if (logoFile) formData.append("file", logoFile);
 
       const nextProfile = await saveProfileAction(formData);
       setSavedProfile(nextProfile);
       setDidStatus(nextProfile.issuerDid ? "complete" : connectionReady ? "idle" : "waiting");
+      clearLogoFile();
       router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to save the university profile.");
@@ -169,13 +197,15 @@ export function SetupWizard({
     }
   }
 
+  const safeLogoPreviewSrc = toSafeImageSrc(logoPreviewUrl);
+
   return (
-    <div className="min-h-screen bg-[#f7f8fa] px-4 py-8 text-zinc-950">
+    <div className="min-h-screen bg-canvas px-4 py-8">
       <main className="mx-auto max-w-6xl space-y-6">
         <header>
-          <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">University onboarding</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-normal">Portal setup</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600">
+          <p className="text-caption font-medium uppercase tracking-wide text-fg-subtle">University onboarding</p>
+          <h1 className="mt-2 text-page-title text-fg">Portal setup</h1>
+          <p className="mt-2 max-w-2xl text-body leading-6 text-fg-muted">
             Configure the university profile and issuer identity required for portal access.
           </p>
         </header>
@@ -195,18 +225,18 @@ export function SetupWizard({
                 onRetryDid={createDid}
               />
             ) : (
-              <section className="rounded-lg border border-zinc-200 bg-white">
-                <div className="border-b border-zinc-200 px-5 py-4">
-                  <h2 className="text-base font-semibold text-zinc-950">University profile</h2>
-                  <p className="mt-1 text-sm text-zinc-600">These details identify the institution across the portal.</p>
+              <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+                <div className="border-b border-border px-5 py-4">
+                  <h2 className="text-section-title text-fg">University profile</h2>
+                  <p className="mt-1 text-body text-fg-muted">These details identify the institution across the portal.</p>
                 </div>
 
                 <form className="space-y-5 p-5" onSubmit={handleSubmit}>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="text-sm">
-                      <span className="font-medium text-zinc-700">University name</span>
+                      <span className="font-medium text-fg">University name</span>
                       <input
-                        className="mt-2 h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none transition focus:border-zinc-950 focus:ring-2 focus:ring-zinc-200"
+                        className="mt-2 h-10 w-full rounded-md border border-border bg-surface px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
                         disabled={isSaving}
                         onChange={(event) => setName(event.target.value)}
                         placeholder="University of Example"
@@ -216,9 +246,9 @@ export function SetupWizard({
                     </label>
 
                     <label className="text-sm">
-                      <span className="font-medium text-zinc-700">Abbreviation</span>
+                      <span className="font-medium text-fg">Abbreviation</span>
                       <input
-                        className="mt-2 h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none transition focus:border-zinc-950 focus:ring-2 focus:ring-zinc-200"
+                        className="mt-2 h-10 w-full rounded-md border border-border bg-surface px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
                         disabled={isSaving}
                         onChange={(event) => setAbbreviation(event.target.value)}
                         placeholder="UEX"
@@ -228,38 +258,68 @@ export function SetupWizard({
                     </label>
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <label className="text-sm">
-                      <span className="font-medium text-zinc-700">Contact email</span>
-                      <input
-                        className="mt-2 h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none transition focus:border-zinc-950 focus:ring-2 focus:ring-zinc-200"
-                        disabled={isSaving}
-                        onChange={(event) => setContactEmail(event.target.value)}
-                        placeholder="admin@example.edu"
-                        required
-                        type="email"
-                        value={contactEmail}
-                      />
-                    </label>
+                  <label className="block text-sm">
+                    <span className="font-medium text-fg">Contact email</span>
+                    <input
+                      className="mt-2 h-10 w-full rounded-md border border-border bg-surface px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+                      disabled={isSaving}
+                      onChange={(event) => setContactEmail(event.target.value)}
+                      placeholder="admin@example.edu"
+                      required
+                      type="email"
+                      value={contactEmail}
+                    />
+                  </label>
 
-                    <label className="text-sm">
-                      <span className="font-medium text-zinc-700">Logo URL</span>
-                      <input
-                        className="mt-2 h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none transition focus:border-zinc-950 focus:ring-2 focus:ring-zinc-200"
-                        disabled={isSaving}
-                        onChange={(event) => setLogoUrl(event.target.value)}
-                        placeholder="https://example.edu/logo.png"
-                        value={logoUrl}
-                      />
-                    </label>
+                  <div>
+                    <span className="block text-sm font-medium text-fg">
+                      Logo <span className="ml-1 font-normal text-fg-subtle">(optional)</span>
+                    </span>
+                    <div className="mt-2 flex items-center gap-3">
+                      <div className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-md border border-border bg-surface-muted">
+                        {safeLogoPreviewSrc ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- local object URL preview, not compatible with next/image
+                          <img alt="" className="size-full object-contain" src={safeLogoPreviewSrc} />
+                        ) : (
+                          <Building2 aria-hidden="true" className="size-5 text-fg-subtle" />
+                        )}
+                      </div>
+                      <label
+                        className={`inline-flex h-9 items-center rounded-md border px-3 text-sm font-medium transition ${
+                          isSaving
+                            ? "cursor-not-allowed border-border bg-surface-muted text-fg-subtle"
+                            : "cursor-pointer border-border bg-surface text-fg-muted hover:border-border-strong hover:bg-surface-muted"
+                        }`}
+                      >
+                        {logoFile ? "Change logo" : "Upload logo"}
+                        <input
+                          accept="image/png,image/jpeg,image/webp"
+                          className="sr-only"
+                          disabled={isSaving}
+                          onChange={handleLogoFileChange}
+                          type="file"
+                        />
+                      </label>
+                      {logoFile ? (
+                        <button
+                          className="text-sm font-medium text-fg-subtle transition hover:text-fg"
+                          disabled={isSaving}
+                          onClick={clearLogoFile}
+                          type="button"
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-xs text-fg-subtle">PNG, JPEG, or WEBP. Max 2 MB.</p>
                   </div>
 
                   {error ? (
-                    <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
+                    <p className="rounded-md border border-danger-border bg-danger-bg px-3 py-2 text-sm text-danger-fg">{error}</p>
                   ) : null}
 
                   <button
-                    className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={isSaving}
                     type="submit"
                   >
@@ -272,40 +332,40 @@ export function SetupWizard({
           </section>
 
           <aside>
-          <section className="rounded-lg border border-zinc-200 bg-white">
-            <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4">
-              <div>
-                <h2 className="text-base font-semibold text-zinc-950">Connection</h2>
-                <p className="mt-1 text-sm text-zinc-600">Identity agent status.</p>
-              </div>
-              <button
-                className="inline-flex size-9 items-center justify-center rounded-md border border-zinc-300 text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-                onClick={() => void runHealthCheck()}
-                type="button"
-              >
-                <RefreshCw aria-hidden className="size-4" />
-                <span className="sr-only">Retry connection check</span>
-              </button>
-            </div>
-
-            <div className="space-y-3 p-5">
-              <div className="rounded-md border border-zinc-200 px-3 py-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-sm font-medium text-zinc-800">
-                    <Server aria-hidden className="size-4 text-zinc-500" />
-                    Identity agent
-                  </div>
-                  <StatusBadge status={health.agent} />
+            <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+              <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+                <div>
+                  <h2 className="text-section-title text-fg">Connection</h2>
+                  <p className="mt-1 text-body text-fg-muted">Identity agent status.</p>
                 </div>
-                <p className="mt-2 flex items-center gap-2 text-sm text-zinc-600">
-                  <ShieldCheck aria-hidden className="size-4 text-zinc-400" />
-                  Ledger {ledgerDetailLabel(health.ledger)}
-                </p>
+                <IconButton aria-label="Retry connection check" onClick={() => void runHealthCheck()}>
+                  <RefreshCw aria-hidden className="size-4" />
+                </IconButton>
               </div>
-              {health.error ? <p className="text-sm leading-5 text-rose-700">{health.error}</p> : null}
-              <p className="text-xs text-zinc-500">Last checked: {formatTimestamp(health.checkedAt)}</p>
-            </div>
-          </section>
+
+              <div className="space-y-3 p-5">
+                <div className="rounded-md border border-border px-3 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-sm font-medium text-fg">
+                      <Server aria-hidden className="size-4 text-fg-subtle" />
+                      Identity agent
+                    </div>
+                    <Badge tone={statusTone(health.agent)}>
+                      <span className="flex items-center gap-1">
+                        <StatusIcon status={health.agent} />
+                        {statusLabel(health.agent)}
+                      </span>
+                    </Badge>
+                  </div>
+                  <p className="mt-2 flex items-center gap-2 text-sm text-fg-muted">
+                    <ShieldCheck aria-hidden className="size-4 text-fg-subtle" />
+                    Ledger {ledgerDetailLabel(health.ledger)}
+                  </p>
+                </div>
+                {health.error ? <p className="text-sm leading-5 text-danger-fg">{health.error}</p> : null}
+                <p className="text-caption text-fg-subtle">Last checked: {formatTimestamp(health.checkedAt)}</p>
+              </div>
+            </section>
           </aside>
         </div>
       </main>
@@ -339,20 +399,20 @@ function ProfileCreationStatusCard({
   const hasError = didStatus === "error";
 
   return (
-    <section className="rounded-lg border border-zinc-200 bg-white">
+    <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
       <div className="flex items-center gap-3 px-5 py-5">
         <span
           className={`inline-flex size-9 shrink-0 items-center justify-center rounded-md border ${
-            hasError ? "border-rose-200 bg-rose-50 text-rose-700" : "border-zinc-200 bg-zinc-50 text-zinc-700"
+            hasError ? "border-danger-border bg-danger-bg text-danger-fg" : "border-border bg-surface-muted text-fg-muted"
           }`}
         >
           {hasError ? <XCircle aria-hidden className="size-5" /> : <LoaderCircle aria-hidden className="size-5 animate-spin" />}
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="text-base font-semibold text-zinc-950">Creating profile</h2>
+          <h2 className="text-section-title text-fg">Creating profile</h2>
           {hasError ? (
             <button
-              className="mt-4 inline-flex h-10 items-center justify-center rounded-md border border-zinc-300 px-4 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-4 inline-flex h-10 items-center justify-center rounded-md border border-border px-4 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60"
               disabled={!connectionReady}
               onClick={() => void onRetryDid()}
               type="button"
@@ -376,59 +436,50 @@ function UniversityProfileCard({
   setupMessage: string;
 }) {
   return (
-    <section className="rounded-lg border border-zinc-200 bg-white">
-      <div className="border-b border-zinc-200 px-5 py-4">
-        <h2 className="text-base font-semibold text-zinc-950">University profile complete</h2>
-        <p className="mt-1 text-sm text-zinc-600">{setupMessage}</p>
+    <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+      <div className="border-b border-border px-5 py-4">
+        <h2 className="text-section-title text-fg">University profile complete</h2>
+        <p className="mt-1 text-body text-fg-muted">{setupMessage}</p>
       </div>
 
       <dl className="grid gap-4 p-5 text-sm sm:grid-cols-2">
         <div>
-          <dt className="text-zinc-500">University</dt>
-          <dd className="mt-1 font-medium text-zinc-950">{profile.name}</dd>
+          <dt className="text-fg-subtle">University</dt>
+          <dd className="mt-1 font-medium text-fg">{profile.name}</dd>
         </div>
         <div>
-          <dt className="text-zinc-500">Abbreviation</dt>
-          <dd className="mt-1 font-medium text-zinc-950">{profile.abbreviation}</dd>
+          <dt className="text-fg-subtle">Abbreviation</dt>
+          <dd className="mt-1 font-medium text-fg">{profile.abbreviation}</dd>
         </div>
         <div>
-          <dt className="text-zinc-500">Contact</dt>
-          <dd className="mt-1 break-all font-medium text-zinc-950">{profile.contactEmail}</dd>
+          <dt className="text-fg-subtle">Contact</dt>
+          <dd className="mt-1 break-all font-medium text-fg">{profile.contactEmail}</dd>
         </div>
         <div className="sm:col-span-2">
-          <dt className="text-zinc-500">Issuer DID</dt>
-          <dd className="mt-1 break-all font-mono text-xs font-medium text-zinc-950">{didValue(profile, didStatus)}</dd>
+          <dt className="text-fg-subtle">Issuer DID</dt>
+          <dd className="mt-1 break-all font-mono text-xs font-medium text-fg">{didValue(profile, didStatus)}</dd>
         </div>
         <div>
-          <dt className="text-zinc-500">Completed</dt>
-          <dd className="mt-1 font-medium text-zinc-950">{formatTimestamp(profile.setupCompletedAt)}</dd>
+          <dt className="text-fg-subtle">Completed</dt>
+          <dd className="mt-1 font-medium text-fg">{formatTimestamp(profile.setupCompletedAt)}</dd>
         </div>
       </dl>
 
-      <div className="flex flex-wrap gap-3 border-t border-zinc-200 px-5 py-4">
+      <div className="flex flex-wrap gap-3 border-t border-border px-5 py-4">
         <Link
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800"
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700"
           href="/credentials/schemas"
         >
           <ShieldCheck aria-hidden className="size-4" />
           Configure credential schema
         </Link>
         <Link
-          className="inline-flex h-10 items-center justify-center rounded-md border border-zinc-300 px-4 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+          className="inline-flex h-10 items-center justify-center rounded-md border border-border px-4 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted"
           href="/"
         >
           Go to dashboard
         </Link>
       </div>
     </section>
-  );
-}
-
-function StatusBadge({ status }: { status: Reachability }) {
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium ${statusTone(status)}`}>
-      <StatusIcon status={status} />
-      {statusLabel(status)}
-    </span>
   );
 }

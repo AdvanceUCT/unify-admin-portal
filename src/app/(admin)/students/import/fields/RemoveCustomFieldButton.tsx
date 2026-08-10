@@ -1,8 +1,12 @@
 "use client";
 
-import { useRef } from "react";
+import { useState } from "react";
 
+import { Dialog } from "@/components/ui/Dialog";
 import { removeCustomFieldAction } from "./actions";
+
+const buttonClassName =
+  "h-9 rounded-md border border-danger-border bg-danger-bg px-3 text-sm font-medium text-danger-fg transition hover:bg-danger-border";
 
 export function RemoveCustomFieldButton({
   fieldKey,
@@ -13,33 +17,46 @@ export function RemoveCustomFieldButton({
   requiresConfirmation: boolean;
   warning?: string;
 }) {
-  const formRef = useRef<HTMLFormElement>(null);
-  const confirmedRef = useRef<HTMLInputElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
 
-  function handleClick(event: React.MouseEvent<HTMLButtonElement>) {
-    if (!requiresConfirmation) return;
-
-    event.preventDefault();
-    const confirmed = window.confirm(warning ?? "Remove this custom field?");
-    if (!confirmed) return;
-
-    if (confirmedRef.current) {
-      confirmedRef.current.value = "true";
-    }
-    formRef.current?.requestSubmit();
+  if (!requiresConfirmation) {
+    return (
+      <form action={removeCustomFieldAction}>
+        <input name="key" type="hidden" value={fieldKey} />
+        <input name="confirmed" type="hidden" value="false" />
+        <button className={buttonClassName} type="submit">
+          Remove
+        </button>
+      </form>
+    );
   }
 
   return (
-    <form action={removeCustomFieldAction} ref={formRef}>
-      <input name="key" type="hidden" value={fieldKey} />
-      <input name="confirmed" ref={confirmedRef} type="hidden" value="false" />
-      <button
-        className="h-9 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
-        onClick={handleClick}
-        type="submit"
-      >
+    <>
+      <button className={buttonClassName} onClick={() => setIsOpen(true)} type="button">
         Remove
       </button>
-    </form>
+
+      <Dialog isOpen={isOpen} onClose={() => setIsOpen(false)} title="Remove custom field">
+        <p className="text-sm text-fg-muted">{warning ?? "Remove this custom field?"}</p>
+        <form action={removeCustomFieldAction} className="mt-4 flex justify-end gap-2">
+          <input name="key" type="hidden" value={fieldKey} />
+          <input name="confirmed" type="hidden" value="true" />
+          <button
+            className="h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
+            onClick={() => setIsOpen(false)}
+            type="button"
+          >
+            Cancel
+          </button>
+          <button
+            className="h-9 rounded-md bg-danger-fg px-3 text-sm font-medium text-white transition hover:opacity-90"
+            type="submit"
+          >
+            Remove field
+          </button>
+        </form>
+      </Dialog>
+    </>
   );
 }

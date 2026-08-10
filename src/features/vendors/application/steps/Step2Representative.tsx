@@ -6,9 +6,9 @@ import { useUnsavedChangesWarning } from "@/hooks/useUnsavedChangesWarning";
 import type { DraftApplicationData } from "../VendorApplicationWizard";
 
 const INPUT =
-  "mt-2 h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950";
-const LABEL = "block text-sm font-medium text-zinc-700";
-const OPTIONAL = "ml-1 font-normal text-zinc-400";
+  "mt-2 h-11 w-full rounded-md border border-border px-3 text-body text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20";
+const LABEL = "block text-body font-medium text-fg";
+const OPTIONAL = "ml-1 font-normal text-fg-subtle";
 
 export function Step2Representative({
   applicationId,
@@ -52,8 +52,8 @@ export function Step2Representative({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Authorised representative</h2>
-        <p className="mt-1 text-sm text-zinc-600">
+        <h2 className="text-section-title text-fg">Authorised representative</h2>
+        <p className="mt-1 text-body text-fg-muted">
           Provide details of the person authorised to submit this application on behalf of the
           organisation.
         </p>
@@ -63,7 +63,7 @@ export function Step2Representative({
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className={LABEL} htmlFor="contactPersonName">
-              Full name <span className="text-red-500">*</span>
+              Full name <span className="text-danger-fg">*</span>
             </label>
             <input
               className={INPUT}
@@ -77,7 +77,7 @@ export function Step2Representative({
           </div>
           <div>
             <label className={LABEL} htmlFor="contactEmail">
-              Work email <span className="text-red-500">*</span>
+              Work email <span className="text-danger-fg">*</span>
             </label>
             <input
               className={INPUT}
@@ -91,7 +91,7 @@ export function Step2Representative({
           </div>
           <div>
             <label className={LABEL} htmlFor="contactJobTitle">
-              Job title <span className="text-red-500">*</span>
+              Job title <span className="text-danger-fg">*</span>
             </label>
             <input
               className={INPUT}
@@ -105,7 +105,7 @@ export function Step2Representative({
           </div>
           <div>
             <label className={LABEL} htmlFor="contactPhone">
-              Phone number <span className="text-red-500">*</span>
+              Phone number <span className="text-danger-fg">*</span>
             </label>
             <input
               className={INPUT}
@@ -140,12 +140,13 @@ export function Step2Representative({
           <div>
             <fieldset>
               <legend className={LABEL}>
-                Preferred contact method <span className="text-red-500">*</span>
+                Preferred contact method <span className="text-danger-fg">*</span>
               </legend>
               <div className="mt-3 flex gap-6">
                 {(["email", "phone"] as const).map((method) => (
-                  <label key={method} className="flex items-center gap-2 text-sm">
+                  <label key={method} className="flex items-center gap-2 text-body text-fg">
                     <input
+                      className="accent-brand-600"
                       defaultChecked={initialData.preferredContactMethod === method}
                       name="preferredContactMethod"
                       required
@@ -161,21 +162,21 @@ export function Step2Representative({
         </div>
 
         {error && (
-          <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p className="rounded-md border border-danger-border bg-danger-bg px-3 py-2 text-body text-danger-fg">
             {error}
           </p>
         )}
 
         <div className="flex justify-between">
           <button
-            className="h-11 rounded-md border border-zinc-300 px-5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+            className="h-11 rounded-md border border-border px-5 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted"
             onClick={onBack}
             type="button"
           >
             Back
           </button>
           <button
-            className="h-11 rounded-md bg-zinc-950 px-5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="h-11 rounded-md bg-brand-600 px-5 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={saving}
             type="submit"
           >

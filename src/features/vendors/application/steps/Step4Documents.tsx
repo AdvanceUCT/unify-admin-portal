@@ -6,6 +6,7 @@ import {
   getDocumentViewUrlAction,
   uploadDocumentAction,
 } from "@/app/vendor/(portal)/application/actions";
+import { Dialog } from "@/components/ui/Dialog";
 import type { DraftApplicationData } from "../VendorApplicationWizard";
 
 type UploadStatus = "idle" | "uploading" | "done" | "error" | "removing";
@@ -85,6 +86,8 @@ export function Step4Documents({
   const [filenames, setFilenames] = useState<Record<string, string>>(() => initialFilenames ?? {});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [viewingKey, setViewingKey] = useState<string | null>(null);
+  const [confirmRemoveKey, setConfirmRemoveKey] = useState<string | null>(null);
+  const confirmRemoveField = DOCUMENT_FIELDS.find((field) => field.key === confirmRemoveKey);
 
   const requiredDone = DOCUMENT_FIELDS.filter((f) => f.required).every(
     (f) => statuses[f.key] === "done",
@@ -160,11 +163,8 @@ export function Step4Documents({
     event.target.value = "";
   }
 
-  async function handleRemove(fieldKey: string, label: string) {
-    if (!window.confirm(`Remove ${label}? You'll need to upload it again before submitting.`)) {
-      return;
-    }
-
+  async function handleRemove(fieldKey: string) {
+    setConfirmRemoveKey(null);
     setStatuses((prev) => ({ ...prev, [fieldKey]: "removing" }));
     setErrors((prev) => ({ ...prev, [fieldKey]: "" }));
 
@@ -201,8 +201,8 @@ export function Step4Documents({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Supporting documents</h2>
-        <p className="mt-1 text-sm text-zinc-600">
+        <h2 className="text-section-title text-fg">Supporting documents</h2>
+        <p className="mt-1 text-body text-fg-muted">
           Upload the required documents. Accepted formats: PDF, Word, Excel, JPEG, PNG (max 5 MB
           each).
         </p>
@@ -215,23 +215,23 @@ export function Step4Documents({
           const fieldError = errors[key];
 
           return (
-            <div key={key} className="rounded-lg border border-zinc-200 p-4">
+            <div key={key} className="rounded-lg border border-border p-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-zinc-800">
+                  <p className="text-body font-medium text-fg">
                     {label}
-                    {required && <span className="ml-1 text-red-500">*</span>}
+                    {required && <span className="ml-1 text-danger-fg">*</span>}
                   </p>
-                  <p className="mt-0.5 text-xs text-zinc-500">{hint}</p>
+                  <p className="mt-0.5 text-caption text-fg-subtle">{hint}</p>
                   {(status === "done" || status === "removing") && (
-                    <p className="mt-1 text-xs">
+                    <p className="mt-1 text-caption">
                       {status === "removing" ? (
-                        <span className="text-emerald-600">Removing...</span>
+                        <span className="text-success-fg">Removing...</span>
                       ) : filename ? (
                         <>
-                          <span className="text-zinc-500">Uploaded: </span>
+                          <span className="text-fg-subtle">Uploaded: </span>
                           <button
-                            className="font-medium text-emerald-700 underline decoration-emerald-300 underline-offset-2 hover:text-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="font-medium text-success-fg underline decoration-success-border underline-offset-2 hover:decoration-success-fg disabled:cursor-not-allowed disabled:opacity-60"
                             disabled={viewingKey === key}
                             onClick={() => handleView(key)}
                             type="button"
@@ -240,24 +240,20 @@ export function Step4Documents({
                           </button>
                         </>
                       ) : (
-                        <span className="text-emerald-600">Uploaded</span>
+                        <span className="text-success-fg">Uploaded</span>
                       )}
                     </p>
                   )}
                   {fieldError && (
-                    <p className="mt-1 text-xs text-red-600">{fieldError}</p>
+                    <p className="mt-1 text-caption text-danger-fg">{fieldError}</p>
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <label
-                    className={`inline-flex h-9 cursor-pointer items-center rounded-md border px-3 text-xs font-medium transition ${
-                      status === "done"
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                        : status === "uploading" || status === "removing"
-                          ? "cursor-not-allowed border-zinc-200 bg-zinc-50 text-zinc-400"
-                          : status === "error"
-                            ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
-                            : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
+                    className={`inline-flex h-9 cursor-pointer items-center rounded-md border px-3 text-caption font-medium transition ${
+                      status === "uploading" || status === "removing"
+                        ? "cursor-not-allowed border-border bg-surface-muted text-fg-subtle"
+                        : "border-info-border bg-info-bg text-info-fg hover:bg-info-border"
                     }`}
                   >
                     {status === "uploading"
@@ -277,9 +273,9 @@ export function Step4Documents({
                   </label>
                   {(status === "done" || status === "removing") && (
                     <button
-                      className="inline-flex h-9 items-center rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex h-9 items-center rounded-md border border-danger-border bg-danger-bg px-3 text-caption font-medium text-danger-fg transition hover:bg-danger-border disabled:cursor-not-allowed disabled:opacity-60"
                       disabled={status === "removing"}
-                      onClick={() => handleRemove(key, label)}
+                      onClick={() => setConfirmRemoveKey(key)}
                       type="button"
                     >
                       {status === "removing" ? "Removing..." : "Remove"}
@@ -294,21 +290,43 @@ export function Step4Documents({
 
       <div className="flex justify-between">
         <button
-          className="h-11 rounded-md border border-zinc-300 px-5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+          className="h-11 rounded-md border border-border px-5 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted"
           onClick={onBack}
           type="button"
         >
           Back
         </button>
         <button
-          className="h-11 rounded-md bg-zinc-950 px-5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+          className="h-11 rounded-md bg-brand-600 px-5 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
           disabled={!requiredDone}
           onClick={onComplete}
           type="button"
         >
-          Continue
+          Save and continue
         </button>
       </div>
+
+      <Dialog isOpen={confirmRemoveKey !== null} onClose={() => setConfirmRemoveKey(null)} title="Remove document">
+        <p className="text-sm text-fg-muted">
+          Remove {confirmRemoveField?.label}? You&apos;ll need to upload it again before submitting.
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            className="h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
+            onClick={() => setConfirmRemoveKey(null)}
+            type="button"
+          >
+            Cancel
+          </button>
+          <button
+            className="h-9 rounded-md bg-danger-fg px-3 text-sm font-medium text-white transition hover:opacity-90"
+            onClick={() => confirmRemoveKey && handleRemove(confirmRemoveKey)}
+            type="button"
+          >
+            Remove document
+          </button>
+        </div>
+      </Dialog>
     </div>
   );
 }

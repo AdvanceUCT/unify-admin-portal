@@ -19,9 +19,9 @@ export function PreviewRowsTable({
   const showIssuesColumn = status === "Error" || status === "Missing";
 
   return (
-    <div className="overflow-x-auto rounded-md border border-zinc-200">
+    <div className="overflow-x-auto rounded-md border border-border">
       <table className="w-full text-left text-sm">
-        <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
+        <thead className="border-b border-border text-caption uppercase tracking-wide text-fg-subtle">
           <tr>
             {columns.map((column) => (
               <th className="whitespace-nowrap px-4 py-2 font-medium" key={column.name}>
@@ -31,7 +31,7 @@ export function PreviewRowsTable({
             {showIssuesColumn ? <th className="whitespace-nowrap px-4 py-2 font-medium">Issues</th> : null}
           </tr>
         </thead>
-        <tbody className="divide-y divide-zinc-100">
+        <tbody className="divide-y divide-border">
           {rows.map((row) => (
             <tr key={rowKey(row)}>
               {columns.map((column) => {
@@ -39,24 +39,24 @@ export function PreviewRowsTable({
                 const value = row.mappedData?.[column.name];
 
                 return (
-                  <td className="whitespace-nowrap px-4 py-2 text-zinc-700" key={column.name}>
+                  <td className="whitespace-nowrap px-4 py-2 text-fg-muted" key={column.name}>
                     {change ? (
                       <span>
-                        <span className="text-zinc-400 line-through">{change.old ?? "(empty)"}</span>{" "}
-                        <span className="font-medium text-zinc-900">&rarr; {change.new}</span>
+                        <span className="text-fg-subtle line-through">{change.old ?? "(empty)"}</span>{" "}
+                        <span className="font-medium text-fg">&rarr; {change.new}</span>
                       </span>
                     ) : (
-                      (value ?? <span className="text-zinc-300">—</span>)
+                      (value ?? <span className="text-fg-subtle">—</span>)
                     )}
                   </td>
                 );
               })}
               {showIssuesColumn ? (
-                <td className="px-4 py-2 text-xs text-rose-700">
+                <td className="px-4 py-2 text-xs text-danger-fg">
                   {row.errors && row.errors.length > 0 ? (
                     row.errors.join(" ")
                   ) : status === "Missing" ? (
-                    <span className="text-zinc-500">Not present in the uploaded file.</span>
+                    <span className="text-fg-subtle">Not present in the uploaded file.</span>
                   ) : null}
                 </td>
               ) : null}

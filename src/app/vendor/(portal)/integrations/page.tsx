@@ -1,4 +1,3 @@
-import { SectionHeader } from "@/components/layout/SectionHeader";
 import { VendorIntegrationSettings } from "@/features/vendors/VendorIntegrationSettings";
 import { requireVendorOwnerContext } from "@/lib/vendors/context";
 import { getVendorWebhookConfig, listVendorApiCredentials } from "@/lib/vendors/integrations";
@@ -13,10 +12,6 @@ export default async function VendorIntegrationsPage() {
 
   return (
     <div className="space-y-6">
-      <SectionHeader
-        title="Integrations"
-        description="Manage checkout API access and verification result delivery."
-      />
       <VendorIntegrationSettings
         initialApiKeys={apiKeys.map((key) => ({
           ...key,

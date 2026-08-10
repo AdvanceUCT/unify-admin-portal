@@ -3,7 +3,8 @@
 import { RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { Badge } from "@/components/ui/Badge";
+import { Avatar } from "@/components/ui/Avatar";
+import { StatusText } from "@/components/ui/StatusText";
 import { formatDateTime } from "@/lib/formatters";
 
 type VerificationItem = {
@@ -164,7 +165,7 @@ export function LiveVerificationList({
   }
 
   return (
-    <div className="divide-y divide-zinc-100">
+    <div className="divide-y divide-border">
       {items.map((verification) => {
         const context = verification.checkoutId
           ? `Checkout ${verification.checkoutId}`
@@ -175,36 +176,34 @@ export function LiveVerificationList({
         const university = verification.student.university ?? "Unavailable";
 
         return (
-        <div className="grid gap-3 px-5 py-3 sm:grid-cols-[minmax(0,1fr)_auto]" key={verification.id}>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-zinc-950">{studentName}</p>
-            <dl className="mt-1 grid gap-0.5 text-xs">
-              <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2">
-                <dt className="text-zinc-500">Number</dt>
-                <dd className="truncate font-medium text-zinc-800">{studentNumber}</dd>
-              </div>
-              <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2">
-                <dt className="text-zinc-500">University</dt>
-                <dd className="truncate font-medium text-zinc-800">{university}</dd>
-              </div>
-            </dl>
-            <p className="mt-1 text-xs text-zinc-400">{context} / {formatDateTime(checkedAt)}</p>
-            {verification.failureReason && <p className="mt-1 text-xs text-red-700">{verification.failureReason}</p>}
-            {verification.failureCode && <p className="mt-1 font-mono text-xs text-red-600">{verification.failureCode}</p>}
+        <div className="flex flex-col gap-3 px-5 py-4 transition hover:bg-surface-muted/60 sm:flex-row sm:items-center sm:justify-between" key={verification.id}>
+          <div className="flex min-w-0 items-center gap-3">
+            <Avatar name={studentName} />
+            <div className="min-w-0">
+              <p className="truncate text-body font-medium text-fg">{studentName}</p>
+              <p className="mt-0.5 truncate text-xs text-fg-subtle">{studentNumber} / {university}</p>
+              <p className="mt-0.5 truncate text-xs text-fg-subtle">{context} / {formatDateTime(checkedAt)}</p>
+              {verification.failureReason && (
+                <p className="mt-1 text-xs text-danger-fg">
+                  {verification.failureReason}
+                  {verification.failureCode && <span className="font-mono"> ({verification.failureCode})</span>}
+                </p>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-2 sm:justify-end">
-            {verification.latestDeliveryStatus === "DELIVERED" && <span className="text-xs text-emerald-700">Webhook delivered</span>}
+          <div className="flex shrink-0 items-center gap-3 pl-12 sm:flex-col sm:items-end sm:gap-1.5 sm:pl-0">
+            <StatusText tone={TONE[verification.status]}>{verification.status}</StatusText>
+            {verification.latestDeliveryStatus === "DELIVERED" && <span className="text-xs font-medium text-success-fg">Webhook delivered</span>}
             {verification.latestDeliveryStatus === "FAILED" && (
-              <button className="inline-flex items-center gap-1 text-xs font-medium text-zinc-700" disabled={retrying === verification.id} onClick={() => retry(verification)} type="button">
+              <button className="inline-flex items-center gap-1 text-xs font-medium text-fg-muted transition hover:text-fg disabled:cursor-not-allowed disabled:opacity-60" disabled={retrying === verification.id} onClick={() => retry(verification)} type="button">
                 <RefreshCw className={retrying === verification.id ? "animate-spin" : ""} size={13} /> Retry webhook
               </button>
             )}
-            <Badge tone={TONE[verification.status]}>{verification.status}</Badge>
           </div>
         </div>
         );
       })}
-      {items.length === 0 && <p className="px-5 py-6 text-sm text-zinc-500">No verifications yet. Results will appear here once students start using your QR code.</p>}
+      {items.length === 0 && <p className="px-5 py-8 text-center text-sm text-fg-subtle">No verifications yet. Results will appear here once students start using your QR code.</p>}
     </div>
   );
 }

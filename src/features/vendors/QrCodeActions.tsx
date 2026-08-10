@@ -3,6 +3,8 @@
 import { Check, Copy, Download } from "lucide-react";
 import { useState } from "react";
 
+import { IconButton } from "@/components/ui/IconButton";
+
 export function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
 
@@ -13,14 +15,14 @@ export function CopyButton({ value }: { value: string }) {
   }
 
   return (
-    <button
+    <IconButton
       type="button"
       onClick={handleCopy}
       aria-label={copied ? "Copied" : "Copy to clipboard"}
-      className="grid size-8 shrink-0 place-items-center rounded-md text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700"
+      tone="ghost"
     >
-      {copied ? <Check size={15} className="text-emerald-600" /> : <Copy size={15} />}
-    </button>
+      {copied ? <Check size={15} className="text-success-fg" /> : <Copy size={15} />}
+    </IconButton>
   );
 }
 
@@ -54,11 +56,11 @@ export function QrCodeActions({ svg, filename }: { svg: string; filename: string
   }
 
   return (
-    <div className="flex gap-2">
+    <div className="flex flex-wrap gap-2">
       <button
         type="button"
         onClick={downloadSvg}
-        className="flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+        className="flex h-9 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
       >
         <Download size={14} aria-hidden="true" />
         SVG
@@ -66,7 +68,7 @@ export function QrCodeActions({ svg, filename }: { svg: string; filename: string
       <button
         type="button"
         onClick={downloadPng}
-        className="flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+        className="flex h-9 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
       >
         <Download size={14} aria-hidden="true" />
         PNG

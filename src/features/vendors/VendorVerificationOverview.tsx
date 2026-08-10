@@ -1,7 +1,8 @@
 import QRCode from "qrcode";
 import Link from "next/link";
-import { CheckCircle2, Mail, QrCode, ShieldCheck, SmartphoneNfc, UserCheck } from "lucide-react";
+import { QrCode, ShieldCheck, SmartphoneNfc, UserCheck } from "lucide-react";
 
+import { ApprovedBanner } from "@/features/vendors/ApprovedBanner";
 import { CopyButton, QrCodeActions } from "@/features/vendors/QrCodeActions";
 import { LiveVerificationList } from "@/features/vendors/LiveVerificationList";
 import { Metric } from "@/components/ui/Metric";
@@ -32,18 +33,18 @@ const HOW_IT_WORKS = [
 
 export async function VendorVerificationOverview({
   companyName,
+  vendorId,
   verificationUrl,
   stats,
   recentVerifications,
-  supportEmail,
   liveCursor,
   viewAllHref = "/vendor/verifications",
 }: {
   companyName: string;
+  vendorId: string;
   verificationUrl: string | null;
   stats: Awaited<ReturnType<typeof getVendorVerificationStats>>;
   recentVerifications: Awaited<ReturnType<typeof listRecentVendorVerifications>>;
-  supportEmail?: string;
   liveCursor?: string;
   viewAllHref?: string;
 }) {
@@ -54,31 +55,29 @@ export async function VendorVerificationOverview({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-        <CheckCircle2 className="mt-0.5 shrink-0 text-emerald-600" size={20} aria-hidden="true" />
-        <div>
-          <p className="font-medium text-emerald-900">Verifier application approved</p>
-          <p className="mt-1 text-sm text-emerald-700">
-            {verificationUrl
-              ? `${companyName} is approved and ready to verify student credentials.`
-              : `${companyName} is approved. Your verification QR code will appear here once service setup is complete.`}
-          </p>
-        </div>
-      </div>
+      <ApprovedBanner
+        message={
+          verificationUrl
+            ? `${companyName} is approved and ready to verify student credentials.`
+            : `${companyName} is approved. Your verification QR code will appear here once service setup is complete.`
+        }
+        vendorId={vendorId}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Metric label="Total verifications" value={stats.total} detail="All time" />
+        <Metric label="Total verifications" value={stats.total} detail="All time" tone="brand" />
         <Metric
           label="Approved"
           value={stats.approved}
           detail={approvalRate !== null ? `${approvalRate}% approval rate` : "No verifications yet"}
+          tone="success"
         />
-        <Metric label="Pending" value={stats.pending} detail="Awaiting student response" />
-        <Metric label="This month" value={stats.thisMonth} detail="Verifications since the 1st" />
+        <Metric label="Pending" value={stats.pending} detail="Awaiting student response" tone="warning" />
+        <Metric label="This month" value={stats.thisMonth} detail="Verifications since the 1st" tone="info" />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <section className="flex flex-col items-center justify-center gap-4 rounded-lg border border-zinc-200 bg-white p-8 text-center">
+        <section className="flex flex-col items-center justify-center gap-4 rounded-xl border border-border bg-surface p-8 text-center shadow-md">
           {qrSvg ? (
             <>
               <div
@@ -87,8 +86,8 @@ export async function VendorVerificationOverview({
                 aria-label="Verification QR code"
               />
               <div>
-                <p className="font-medium text-zinc-950">Your verification QR code</p>
-                <p className="mt-1 max-w-xs text-sm text-zinc-500">
+                <p className="font-medium text-fg">Your verification QR code</p>
+                <p className="mt-1 max-w-xs text-sm text-fg-muted">
                   Display this at your service point so students can scan and verify instantly.
                 </p>
               </div>
@@ -96,12 +95,12 @@ export async function VendorVerificationOverview({
             </>
           ) : (
             <>
-              <span className="grid size-16 place-items-center rounded-md bg-zinc-100 text-zinc-400">
+              <span className="grid size-16 place-items-center rounded-md bg-surface-muted text-fg-subtle">
                 <QrCode size={32} aria-hidden="true" />
               </span>
               <div>
-                <p className="font-medium text-zinc-950">QR code is being set up</p>
-                <p className="mt-1 max-w-xs text-sm text-zinc-500">
+                <p className="font-medium text-fg">QR code is being set up</p>
+                <p className="mt-1 max-w-xs text-sm text-fg-muted">
                   Your QR code will appear here shortly. Refresh the page in a moment.
                 </p>
               </div>
@@ -109,22 +108,22 @@ export async function VendorVerificationOverview({
           )}
         </section>
 
-        <section className="rounded-lg border border-zinc-200 bg-white p-5">
-          <h2 className="font-medium text-zinc-950">How verification works</h2>
+        <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
+          <h2 className="text-section-title text-fg">How verification works</h2>
           <ol className="mt-4 space-y-4">
             {HOW_IT_WORKS.map((step, index) => {
               const Icon = step.icon;
               return (
                 <li className="flex gap-3" key={step.title}>
-                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-zinc-900 text-xs font-semibold text-white">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white">
                     {index + 1}
                   </span>
                   <div>
-                    <p className="flex items-center gap-1.5 text-sm font-medium text-zinc-900">
-                      <Icon className="text-zinc-400" size={14} aria-hidden="true" />
+                    <p className="flex items-center gap-1.5 text-sm font-medium text-fg">
+                      <Icon className="text-fg-subtle" size={14} aria-hidden="true" />
                       {step.title}
                     </p>
-                    <p className="mt-0.5 text-sm text-zinc-500">{step.description}</p>
+                    <p className="mt-0.5 text-sm text-fg-muted">{step.description}</p>
                   </div>
                 </li>
               );
@@ -134,17 +133,17 @@ export async function VendorVerificationOverview({
       </div>
 
       {verificationUrl && (
-        <section className="rounded-lg border border-zinc-200 bg-white p-5">
-          <h2 className="font-medium text-zinc-950">Verification link</h2>
-          <p className="mt-1 text-sm text-zinc-500">
+        <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
+          <h2 className="text-section-title text-fg">Verification link</h2>
+          <p className="mt-1 text-sm text-fg-muted">
             Share this link directly for online or remote verifications where a QR code isn&apos;t practical.
           </p>
-          <div className="mt-3 flex items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2">
+          <div className="mt-3 flex items-center gap-2 rounded-md border border-border bg-surface-muted px-3 py-2">
             <a
               href={verificationUrl}
               target="_blank"
               rel="noreferrer"
-              className="min-w-0 flex-1 truncate text-sm text-blue-600 hover:underline"
+              className="min-w-0 flex-1 truncate text-sm font-medium text-info-fg hover:underline"
             >
               {verificationUrl}
             </a>
@@ -153,10 +152,10 @@ export async function VendorVerificationOverview({
         </section>
       )}
 
-      <section className="rounded-lg border border-zinc-200 bg-white">
-        <div className="flex items-center justify-between gap-3 border-b border-zinc-100 px-5 py-4">
-          <h2 className="font-medium text-zinc-950">Recent verifications</h2>
-          <Link className="text-sm font-medium text-zinc-600 hover:text-zinc-950" href={viewAllHref}>View all</Link>
+      <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+        <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
+          <h2 className="text-section-title text-fg">Recent verifications</h2>
+          <Link className="text-sm font-medium text-fg-muted hover:text-fg" href={viewAllHref}>View all</Link>
         </div>
         <LiveVerificationList initialItems={recentVerifications.map((verification) => {
           const attributes = normalizedVerificationAttributes(verification.attributes);
@@ -177,26 +176,6 @@ export async function VendorVerificationOverview({
             latestDeliveryStatus: verification.deliveries[0]?.status ?? null,
           };
         })} liveCursor={liveCursor} />
-      </section>
-
-      <section className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-white p-5">
-        <span className="grid size-10 shrink-0 place-items-center rounded-md bg-zinc-100 text-zinc-500">
-          <Mail size={18} aria-hidden="true" />
-        </span>
-        <div>
-          <p className="font-medium text-zinc-950">Need help?</p>
-          {supportEmail ? (
-            <p className="text-sm text-zinc-500">
-              Contact{" "}
-              <a className="font-medium text-zinc-700 underline" href={`mailto:${supportEmail}`}>
-                {supportEmail}
-              </a>{" "}
-              if you have any questions about verification services.
-            </p>
-          ) : (
-            <p className="text-sm text-zinc-500">Contact your university administrator for verification support.</p>
-          )}
-        </div>
       </section>
     </div>
   );

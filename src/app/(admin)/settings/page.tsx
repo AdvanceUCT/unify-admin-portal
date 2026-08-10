@@ -4,11 +4,13 @@ import { checkAgentHealth } from "@/lib/agentClient";
 import { ADMIN_ROLES, ROLE_LABELS, type AdminRole } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
 import { env } from "@/lib/config/env";
+import { getDocumentSignedUrl } from "@/lib/storage/supabase";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfile } from "@/lib/university/profile";
 import { saveRenewalSettingsAction } from "./actions";
 import { AgentServiceHealthCard } from "./AgentServiceHealthCard";
 import { SettingsCard, SettingsField } from "./SettingsCard";
+import { UniversityLogoUpload } from "./UniversityLogoUpload";
 import { UniversityProfileForm } from "./UniversityProfileForm";
 
 function configuredStatus(value: string | undefined | null): "Configured" | "Not set" {
@@ -22,6 +24,7 @@ export default async function SettingsPage() {
   const canEditProfile = role === "SUPER_ADMIN" || role === "ADMIN";
 
   const profile = await getUniversityProfile();
+  const universityLogoUrl = profile?.logoPath ? await getDocumentSignedUrl(profile.logoPath) : null;
   const activeSchema = profile ? await getActiveCredentialSchema(profile.id) : null;
   const agentHealth = await checkAgentHealth();
   const webhookEndpoint = new URL("/api/webhooks/agent", env.APP_URL).toString();
@@ -35,20 +38,32 @@ export default async function SettingsPage() {
       </p>
 
       <SettingsCard
-        description="Editable details shown across activation emails and the verifier-facing profile."
+        description="Editable details and branding shown across the admin portal, activation emails, and verifier-facing profile."
         icon={Building}
         title="University profile"
       >
         {profile ? (
           canEditProfile ? (
-            <UniversityProfileForm
-              abbreviation={profile.abbreviation}
-              contactEmail={profile.contactEmail}
-              name={profile.name}
-              websiteUrl={profile.websiteUrl ?? ""}
-            />
+            <div className="space-y-5">
+              <div>
+                <p className="mb-3 text-sm font-medium text-fg-muted">University logo</p>
+                <UniversityLogoUpload initialLogoUrl={universityLogoUrl} />
+              </div>
+              <div className="border-t border-border pt-5">
+                <UniversityProfileForm
+                  abbreviation={profile.abbreviation}
+                  contactEmail={profile.contactEmail}
+                  name={profile.name}
+                  websiteUrl={profile.websiteUrl ?? ""}
+                />
+              </div>
+            </div>
           ) : (
             <div className="divide-y divide-border">
+              <SettingsField
+                label="University logo"
+                value={universityLogoUrl ? "Uploaded" : "Not set"}
+              />
               <SettingsField label="University name" value={profile.name} />
               <SettingsField label="Abbreviation" value={profile.abbreviation} />
               <SettingsField label="Contact email" value={profile.contactEmail} />

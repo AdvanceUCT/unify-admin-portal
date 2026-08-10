@@ -14,6 +14,7 @@ export function PortalHeader({
   notificationCount = 0,
   onOpenNav,
   settingsHref,
+  settingsLabel,
   signOutRedirectTo,
   status,
   title,
@@ -22,6 +23,7 @@ export function PortalHeader({
   notificationCount?: number;
   onOpenNav: () => void;
   settingsHref: string;
+  settingsLabel?: string;
   signOutRedirectTo?: string;
   /** Portal-specific status slot, e.g. the admin agent-service indicator. */
   status?: React.ReactNode;
@@ -68,6 +70,7 @@ export function PortalHeader({
 
         <UserMenu
           settingsHref={settingsHref}
+          settingsLabel={settingsLabel}
           signOutRedirectTo={signOutRedirectTo}
           user={user}
         />

@@ -12,8 +12,8 @@ import { prisma } from "@/lib/db/prisma";
 import { sendVendorStaffInviteEmail } from "@/lib/email/vendor-staff-invites";
 
 const createStaffInviteSchema = z.object({
-  email: z.string().trim().email(),
-  name: z.string().trim().min(1).max(100),
+  email: z.string().trim().email("Enter a valid email address."),
+  name: z.string().trim().min(1, "Enter the staff member's name.").max(100),
   branchIds: z.array(z.string().min(1)).min(1, "Select at least one branch."),
 });
 
@@ -50,7 +50,11 @@ export async function createVendorStaffInvite(
   createdByUserId: string,
   input: { email: string; name: string; branchIds: string[] },
 ) {
-  const data = createStaffInviteSchema.parse(input);
+  const parsed = createStaffInviteSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? "Please check the invite details.");
+  }
+  const data = parsed.data;
   const branchIds = await validateBranches(vendorProfileId, data.branchIds);
   const email = data.email.toLowerCase();
   if (await prisma.user.findUnique({ where: { email } })) {

@@ -63,6 +63,34 @@ describe("PortalShell", () => {
     expect(screen.getByText("Admin")).toBeInTheDocument();
     expect(container.querySelector("[data-portal='admin']")).not.toBeNull();
   });
+
+  it("supports a custom account menu settings label", () => {
+    render(
+      <PortalShell
+        brand={{ brandName: "Unify", tenantName: "Demo Vendor" }}
+        fallbackTitle="Vendor"
+        navItems={[{ href: "/vendor", label: "Overview", icon: "overview" }]}
+        portal="vendor"
+        settingsHref="/vendor/profile"
+        settingsLabel="Profile"
+        user={{
+          email: "vendor@example.com",
+          name: "Demo Vendor",
+          roleLabel: "Applicant",
+        }}
+      >
+        <p>Vendor content</p>
+      </PortalShell>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Demo Vendor/ }));
+
+    expect(screen.getByRole("menuitem", { name: "Profile" })).toHaveAttribute(
+      "href",
+      "/vendor/profile",
+    );
+    expect(screen.queryByRole("menuitem", { name: "Settings" })).not.toBeInTheDocument();
+  });
 });
 
 describe("resolveActiveNavItem", () => {
@@ -85,6 +113,17 @@ describe("resolveActiveNavItem", () => {
       "/vendor/branches",
     );
     expect(resolveActiveNavItem("/vendor", items)?.href).toBe("/vendor");
+  });
+
+  it("matches the vendor root only exactly", () => {
+    const items: PortalNavItem[] = [
+      { href: "/vendor", label: "Overview", icon: "overview" },
+      { href: "/vendor/branches", label: "Branches", icon: "branches" },
+      { href: "/vendor/help", label: "Help", icon: "help" },
+    ];
+
+    expect(resolveActiveNavItem("/vendor", items)?.href).toBe("/vendor");
+    expect(resolveActiveNavItem("/vendor/help", items)?.href).toBe("/vendor/help");
   });
 
   it("does not partially match a sibling segment", () => {
@@ -128,6 +167,19 @@ describe("isNavItemActive", () => {
 
   it("is not active on an unrelated route", () => {
     expect(isNavItemActive("/students", parent)).toBe(false);
+  });
+
+  it("does not keep vendor overview active on every vendor sub-route", () => {
+    const overview: PortalNavItem = { href: "/vendor", label: "Overview", icon: "overview" };
+    const branches: PortalNavItem = {
+      href: "/vendor/branches",
+      label: "Branches",
+      icon: "branches",
+    };
+
+    expect(isNavItemActive("/vendor", overview)).toBe(true);
+    expect(isNavItemActive("/vendor/branches", overview)).toBe(false);
+    expect(isNavItemActive("/vendor/branches", branches)).toBe(true);
   });
 });
 

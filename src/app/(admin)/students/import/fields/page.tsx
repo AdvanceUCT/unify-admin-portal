@@ -18,7 +18,7 @@ export default async function ManageFieldsPage() {
     return (
       <div className="space-y-6">
         <SectionHeader description="View and manage system and custom import fields." title="Manage fields" />
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <p className="rounded-md border border-warning-border bg-warning-bg px-4 py-3 text-sm text-warning-fg">
           Complete university setup (profile) before managing import fields.
         </p>
       </div>
@@ -35,41 +35,41 @@ export default async function ManageFieldsPage() {
       <SectionHeader description="View and manage system and custom import fields." title="Manage fields" />
       <ImportSectionTabs active="fields" />
 
-      <section className="rounded-lg border border-zinc-200 bg-white">
-        <div className="border-b border-zinc-200 px-5 py-4">
-          <h2 className="text-base font-semibold text-zinc-950">System fields</h2>
-          <p className="mt-1 text-sm text-zinc-600">
+      <section className="overflow-hidden rounded-lg border border-border bg-surface shadow-md">
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="text-section-title text-fg">System fields</h2>
+          <p className="mt-1 text-body text-fg-muted">
             Fixed and required on every import. These can&apos;t be renamed or removed.
           </p>
         </div>
-        <div className="divide-y divide-zinc-100">
+        <div className="divide-y divide-border">
           {SYSTEM_FIELDS.map((field) => (
-            <div className="flex items-center justify-between px-5 py-3 text-sm" key={field.name}>
-              <span className="font-medium text-zinc-800">{field.label}</span>
-              <span className="text-xs text-zinc-500">{field.name}</span>
+            <div className="flex items-center justify-between px-5 py-3 text-body" key={field.name}>
+              <span className="font-medium text-fg">{field.label}</span>
+              <span className="text-caption text-fg-subtle">{field.name}</span>
             </div>
           ))}
         </div>
       </section>
 
-      <section className="rounded-lg border border-zinc-200 bg-white">
-        <div className="border-b border-zinc-200 px-5 py-4">
-          <h2 className="text-base font-semibold text-zinc-950">Custom fields</h2>
-          <p className="mt-1 text-sm text-zinc-600">
+      <section className="overflow-hidden rounded-lg border border-border bg-surface shadow-md">
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="text-section-title text-fg">Custom fields</h2>
+          <p className="mt-1 text-body text-fg-muted">
             Admin-defined. Once added, a field must be mapped (and given a value on every row) on every future
             import, same as a system field. Removing a field never deletes data already stored under it — it only
             stops being a mapping target for future imports.
           </p>
         </div>
-        <div className="divide-y divide-zinc-100">
+        <div className="divide-y divide-border">
           {customFields.map((field) => {
             const dependsOnSchema = schema ? isRequiredByActiveSchema(field.key, schema.schemaAttributes) : false;
 
             return (
-              <div className="flex items-center justify-between px-5 py-3 text-sm" key={field.id}>
+              <div className="flex items-center justify-between px-5 py-3 text-body" key={field.id}>
                 <div className="flex items-center gap-2">
-                  <span className="font-medium text-zinc-800">{field.label}</span>
-                  <span className="text-xs text-zinc-500">{field.key}</span>
+                  <span className="font-medium text-fg">{field.label}</span>
+                  <span className="text-caption text-fg-subtle">{field.key}</span>
                   {dependsOnSchema ? <Badge tone="warning">Required by active credential schema</Badge> : null}
                 </div>
                 <RemoveCustomFieldButton
@@ -81,7 +81,7 @@ export default async function ManageFieldsPage() {
             );
           })}
           {customFields.length === 0 ? (
-            <p className="px-5 py-6 text-sm text-zinc-500">No custom fields yet — add one below.</p>
+            <p className="px-5 py-6 text-body text-fg-subtle">No custom fields yet — add one below.</p>
           ) : null}
         </div>
       </section>

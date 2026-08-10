@@ -57,17 +57,17 @@ export function Step5Declaration({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Declaration</h2>
-        <p className="mt-1 text-sm text-zinc-600">
+        <h2 className="text-section-title text-fg">Declaration</h2>
+        <p className="mt-1 text-body text-fg-muted">
           Please read the following statements carefully before accepting.
         </p>
       </div>
 
       <form className="space-y-6" onSubmit={handleSubmit}>
-        <ul className="space-y-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+        <ul className="space-y-3 rounded-lg border border-border bg-surface-muted p-4">
           {DECLARATIONS.map((text, index) => (
-            <li key={index} className="flex gap-3 text-sm text-zinc-700">
-              <span className="mt-0.5 shrink-0 font-medium text-zinc-400">{index + 1}.</span>
+            <li key={index} className="flex gap-3 text-body text-fg-muted">
+              <span className="mt-0.5 shrink-0 font-medium text-fg-subtle">{index + 1}.</span>
               <span>{text}</span>
             </li>
           ))}
@@ -76,31 +76,31 @@ export function Step5Declaration({
         <label className="flex cursor-pointer items-start gap-3">
           <input
             checked={accepted}
-            className="mt-0.5 shrink-0"
+            className="mt-0.5 shrink-0 accent-brand-600"
             onChange={(e) => setAccepted(e.target.checked)}
             type="checkbox"
           />
-          <span className="text-sm font-medium text-zinc-800">
+          <span className="text-body font-medium text-fg">
             I confirm that I have read and agree to all of the above statements.
           </span>
         </label>
 
         {error && (
-          <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p className="rounded-md border border-danger-border bg-danger-bg px-3 py-2 text-body text-danger-fg">
             {error}
           </p>
         )}
 
         <div className="flex justify-between">
           <button
-            className="h-11 rounded-md border border-zinc-300 px-5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+            className="h-11 rounded-md border border-border px-5 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted"
             onClick={onBack}
             type="button"
           >
             Back
           </button>
           <button
-            className="h-11 rounded-md bg-zinc-950 px-5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="h-11 rounded-md bg-brand-600 px-5 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={!accepted || saving}
             type="submit"
           >

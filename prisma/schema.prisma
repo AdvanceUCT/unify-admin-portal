@@ -401,7 +401,7 @@ model UniversityProfile {
   id                 String             @id @default(cuid())
   name               String
   abbreviation       String
-  logoUrl            String?
+  logoPath           String?
   contactEmail       String
   websiteUrl         String?
   issuerDid          String?
