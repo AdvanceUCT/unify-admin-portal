@@ -1,5 +1,6 @@
 import { PortalShell } from "@/components/layout/PortalShell";
 import type { PortalNavItem } from "@/components/layout/portalTypes";
+import { AgentStatusIndicator } from "@/features/agent/AgentStatusIndicator";
 import { LiveVerificationNotifications } from "@/features/vendors/LiveVerificationNotifications";
 import { requireVendorSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
@@ -7,6 +8,8 @@ import { getDocumentSignedUrl } from "@/lib/storage/supabase";
 import { getApprovedVendorContextForUser, type ApprovedVendorContext } from "@/lib/vendors/context";
 import { encodeLiveVerificationCursor } from "@/lib/vendors/liveVerifications";
 import { getVendorProfileLogoPath } from "@/lib/vendors/profile";
+
+import { checkVendorAgentHealthAction } from "./actions";
 
 const ownerNavItems: PortalNavItem[] = [
   { href: "/vendor", label: "Overview", icon: "overview" },
@@ -66,6 +69,7 @@ export default async function VendorPortalLayout({
       portal="vendor"
       settingsHref="/vendor/profile"
       signOutRedirectTo="/vendor/sign-in"
+      status={<AgentStatusIndicator checkHealth={checkVendorAgentHealthAction} offlineHref="/vendor/help" />}
       user={{
         email: session.user.email,
         image: session.user.image,

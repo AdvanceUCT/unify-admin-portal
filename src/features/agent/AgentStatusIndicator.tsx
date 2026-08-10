@@ -23,10 +23,24 @@ function formatCheckedAt(checkedAt: string) {
  * connection is visible from every page rather than only the dashboard.
  *
  * It fetches its own state on mount instead of taking it from a server render.
- * The admin layout wraps every page, so probing the agent server-side there
+ * Both portal layouts wrap every page, so probing the agent server-side there
  * would put a network round-trip in front of every single navigation.
+ *
+ * `checkHealth` defaults to the admin action so `<AgentStatusIndicator />`
+ * keeps working unchanged there; the vendor layout passes its own
+ * vendor-session-gated action instead, since the admin one calls
+ * `requireRole(ADMIN_ROLES)` and would reject a vendor session outright.
  */
-export function AgentStatusIndicator({ initialHealth }: { initialHealth?: AgentHealth }) {
+export function AgentStatusIndicator({
+  checkHealth = checkAgentHealthAction,
+  initialHealth,
+  offlineHref = "/settings",
+}: {
+  checkHealth?: () => Promise<AgentHealth>;
+  initialHealth?: AgentHealth;
+  /** Where the "Offline" label links to for diagnostics. Pass `null` to render it as plain text. */
+  offlineHref?: string | null;
+}) {
   const [health, setHealth] = useState<AgentHealth | null>(initialHealth ?? null);
   const [isPending, startTransition] = useTransition();
   const [, forceTick] = useState(0);
@@ -41,10 +55,10 @@ export function AgentStatusIndicator({ initialHealth }: { initialHealth?: AgentH
 
   const refresh = useCallback(() => {
     startTransition(async () => {
-      const next = await checkAgentHealthAction();
+      const next = await checkHealth();
       if (mountedRef.current) setHealth(next);
     });
-  }, []);
+  }, [checkHealth]);
 
   useEffect(() => {
     if (!initialHealth) refresh();
@@ -103,10 +117,10 @@ export function AgentStatusIndicator({ initialHealth }: { initialHealth?: AgentH
       <span className="hidden text-xs font-medium text-fg-subtle sm:inline">Agent</span>
 
       {/* When it's down, the label becomes the route to the diagnostics. */}
-      {!isChecking && !isOk ? (
+      {!isChecking && !isOk && offlineHref ? (
         <Link
           className={cn("text-xs font-semibold underline-offset-2 hover:underline", labelClassName)}
-          href="/settings"
+          href={offlineHref}
         >
           {label}
         </Link>

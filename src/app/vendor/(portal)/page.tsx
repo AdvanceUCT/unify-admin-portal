@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ChevronRight, Mail } from "lucide-react";
 
 import { Badge } from "@/components/ui/Badge";
 import { VendorApplicationLanding } from "@/features/vendors/VendorApplicationLanding";
@@ -48,14 +49,58 @@ export default async function VendorDashboardPage() {
           verificationUrl={displayBranch?.verificationUrl ?? null}
           stats={stats}
           recentVerifications={recentVerifications}
-          supportEmail={universityProfile?.contactEmail}
           liveCursor={encodeLiveVerificationCursor({ completedAt: new Date().toISOString(), id: "_" })}
           viewAllHref={viewAllHref}
         />
         <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
           <div className="border-b border-border px-5 py-4"><h2 className="text-section-title text-fg">Branches</h2></div>
           <div className="divide-y divide-border">
-            {vendor.branches.map((branch) => <Link className="flex items-center justify-between gap-3 px-5 py-4 transition hover:bg-surface-muted/60" href={`/vendor/branches/${branch.id}`} key={branch.id}><span><span className="font-medium text-fg">{branch.name}</span><span className="ml-2 text-xs text-fg-subtle">{branch.status.replaceAll("_", " ")}</span></span><span className="text-sm font-medium text-fg-muted">View branch</span></Link>)}
+            {vendor.branches.map((branch) => (
+              <Link
+                className="flex items-center justify-between gap-3 px-5 py-4 transition hover:bg-surface-muted/60"
+                href={`/vendor/branches/${branch.id}`}
+                key={branch.id}
+              >
+                <span className="min-w-0">
+                  <span className="font-medium text-fg">{branch.name}</span>
+                  <span
+                    className={`ml-2 text-xs font-medium ${
+                      branch.status === "ACTIVE"
+                        ? "text-success-fg"
+                        : branch.status === "PROVISIONING_FAILED"
+                          ? "text-danger-fg"
+                          : "text-warning-fg"
+                    }`}
+                  >
+                    {branch.status.replaceAll("_", " ")}
+                  </span>
+                </span>
+                <span className="flex shrink-0 items-center gap-1 text-sm font-medium text-brand-700">
+                  View branch
+                  <ChevronRight aria-hidden="true" size={16} />
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        <section className="flex items-center gap-3 rounded-xl border border-border bg-surface p-5 shadow-md">
+          <span className="grid size-10 shrink-0 place-items-center rounded-md bg-brand-50 text-brand-700">
+            <Mail size={18} aria-hidden="true" />
+          </span>
+          <div>
+            <p className="font-medium text-fg">Need help?</p>
+            {universityProfile?.contactEmail ? (
+              <p className="text-sm text-fg-muted">
+                Contact{" "}
+                <a className="font-medium text-fg underline" href={`mailto:${universityProfile.contactEmail}`}>
+                  {universityProfile.contactEmail}
+                </a>{" "}
+                if you have any questions about verification services.
+              </p>
+            ) : (
+              <p className="text-sm text-fg-muted">Contact your university administrator for verification support.</p>
+            )}
           </div>
         </section>
       </div>

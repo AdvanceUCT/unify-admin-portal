@@ -1,6 +1,6 @@
 import QRCode from "qrcode";
 import Link from "next/link";
-import { Mail, QrCode, ShieldCheck, SmartphoneNfc, UserCheck } from "lucide-react";
+import { QrCode, ShieldCheck, SmartphoneNfc, UserCheck } from "lucide-react";
 
 import { ApprovedBanner } from "@/features/vendors/ApprovedBanner";
 import { CopyButton, QrCodeActions } from "@/features/vendors/QrCodeActions";
@@ -37,7 +37,6 @@ export async function VendorVerificationOverview({
   verificationUrl,
   stats,
   recentVerifications,
-  supportEmail,
   liveCursor,
   viewAllHref = "/vendor/verifications",
 }: {
@@ -46,7 +45,6 @@ export async function VendorVerificationOverview({
   verificationUrl: string | null;
   stats: Awaited<ReturnType<typeof getVendorVerificationStats>>;
   recentVerifications: Awaited<ReturnType<typeof listRecentVendorVerifications>>;
-  supportEmail?: string;
   liveCursor?: string;
   viewAllHref?: string;
 }) {
@@ -178,26 +176,6 @@ export async function VendorVerificationOverview({
             latestDeliveryStatus: verification.deliveries[0]?.status ?? null,
           };
         })} liveCursor={liveCursor} />
-      </section>
-
-      <section className="flex items-center gap-3 rounded-xl border border-border bg-surface p-5 shadow-md">
-        <span className="grid size-10 shrink-0 place-items-center rounded-md bg-brand-50 text-brand-700">
-          <Mail size={18} aria-hidden="true" />
-        </span>
-        <div>
-          <p className="font-medium text-fg">Need help?</p>
-          {supportEmail ? (
-            <p className="text-sm text-fg-muted">
-              Contact{" "}
-              <a className="font-medium text-fg underline" href={`mailto:${supportEmail}`}>
-                {supportEmail}
-              </a>{" "}
-              if you have any questions about verification services.
-            </p>
-          ) : (
-            <p className="text-sm text-fg-muted">Contact your university administrator for verification support.</p>
-          )}
-        </div>
       </section>
     </div>
   );

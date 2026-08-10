@@ -8,14 +8,13 @@ describe("VendorVerificationOverview", () => {
     cleanup();
   });
 
-  it("shows verification identity metadata and the configured support address", async () => {
+  it("shows verification identity metadata", async () => {
     render(
       await VendorVerificationOverview({
         companyName: "Demo Vendor",
         vendorId: "vendor_1",
         verificationUrl: null,
         stats: { total: 1, approved: 1, pending: 0, thisMonth: 1 },
-        supportEmail: "admin@voskuils.com",
         recentVerifications: [
           {
             id: "verification_1",
@@ -54,10 +53,6 @@ describe("VendorVerificationOverview", () => {
     expect(screen.getByRole("link", { name: "View all" })).toHaveAttribute("href", "/vendor/verifications");
     expect(screen.queryByText("schema_1")).not.toBeInTheDocument();
     expect(screen.queryByText("cred_def_1")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "admin@voskuils.com" })).toHaveAttribute(
-      "href",
-      "mailto:admin@voskuils.com",
-    );
   });
 
   it("shows the live verification link and QR download actions when setup is complete", async () => {
