@@ -82,7 +82,16 @@ function DetailRow({ label, value }: { label: string; value: string | null | und
 export function VendorApplicationDetails({
   application,
   documentUrls,
-}: VendorApplicationDetailsProps) {
+  variant = "standalone",
+}: VendorApplicationDetailsProps & {
+  /**
+   * "embedded" drops the outer card and the "Application details" header +
+   * status badge — used when a caller (the vendor application page's
+   * collapsible summary) already provides both, so this doesn't render as a
+   * redundant card-within-a-card.
+   */
+  variant?: "embedded" | "standalone";
+}) {
   const companyName =
     application.snapshotCompanyName ?? application.vendorProfile.companyName;
   const serviceCategory =
@@ -102,18 +111,8 @@ export function VendorApplicationDetails({
           ? ("neutral" as const)
           : ("danger" as const);
 
-  return (
-    <div className="space-y-6 rounded-xl border border-border bg-surface p-6 shadow-md">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-section-title text-fg">Application details</h2>
-          <p className="mt-1 text-sm text-fg-muted">
-            Full verifier application information, including timestamps.
-          </p>
-        </div>
-        <Badge tone={badgeTone}>{application.status}</Badge>
-      </div>
-
+  const content = (
+    <>
       {/* Organisation & metadata */}
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="space-y-4 rounded-lg bg-surface-muted p-4">
@@ -254,6 +253,25 @@ export function VendorApplicationDetails({
           </dl>
         </div>
       )}
+    </>
+  );
+
+  if (variant === "embedded") {
+    return <div className="space-y-6">{content}</div>;
+  }
+
+  return (
+    <div className="space-y-6 rounded-xl border border-border bg-surface p-6 shadow-md">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-section-title text-fg">Application details</h2>
+          <p className="mt-1 text-sm text-fg-muted">
+            Full verifier application information, including timestamps.
+          </p>
+        </div>
+        <Badge tone={badgeTone}>{application.status}</Badge>
+      </div>
+      {content}
     </div>
   );
 }

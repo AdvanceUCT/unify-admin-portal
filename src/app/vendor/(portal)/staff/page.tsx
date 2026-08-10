@@ -1,5 +1,11 @@
+import { Ban, RotateCcw } from "lucide-react";
+
+import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
+import { StatusText } from "@/components/ui/StatusText";
+import { BranchMultiSelect } from "@/features/vendors/BranchMultiSelect";
 import { StaffInviteForm } from "@/features/vendors/StaffInviteForm";
+import { cn } from "@/lib/cn";
 import { prisma } from "@/lib/db/prisma";
 import { formatDateTime } from "@/lib/formatters";
 import { requireVendorOwnerContext } from "@/lib/vendors/context";
@@ -9,9 +15,6 @@ import {
   setStaffActiveAction,
   updateStaffBranchesAction,
 } from "./actions";
-
-const secondaryButtonClassName =
-  "h-8 rounded-md border border-border bg-surface px-3 text-xs font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg";
 
 export default async function VendorStaffPage() {
   const { context } = await requireVendorOwnerContext();
@@ -48,55 +51,51 @@ export default async function VendorStaffPage() {
         </div>
         <div className="divide-y divide-border">
           {staff.map((member) => (
-            <div className="space-y-3 px-5 py-4" key={member.id}>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
+            <div className="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-start sm:justify-between" key={member.id}>
+              <div className="flex min-w-0 items-start gap-3">
+                <Avatar name={member.user.name} />
+                <div className="min-w-0">
                   <p className="font-medium text-fg">{member.user.name}</p>
                   <p className="text-sm text-fg-muted">{member.user.email}</p>
+                  <StatusText className="mt-1.5 block" tone={member.active ? "success" : "danger"}>
+                    {member.active ? "Active" : "Disabled"}
+                  </StatusText>
                 </div>
-                <Badge tone={member.active ? "success" : "danger"}>
-                  {member.active ? "Active" : "Disabled"}
-                </Badge>
               </div>
-              <form
-                action={updateStaffBranchesAction}
-                className="flex flex-wrap items-center gap-3"
-              >
-                <input name="membershipId" type="hidden" value={member.id} />
-                {branches.map((branch) => (
-                  <label
-                    className="flex items-center gap-1.5 text-sm text-fg-muted"
-                    key={branch.id}
-                  >
-                    <input
-                      defaultChecked={member.branches.some(
-                        (item) => item.vendorBranchId === branch.id,
-                      )}
-                      name="branchId"
-                      type="checkbox"
-                      value={branch.id}
-                    />
-                    {branch.name}
-                  </label>
-                ))}
-                <button className={secondaryButtonClassName} type="submit">
-                  Save assignments
-                </button>
-              </form>
-              <form action={setStaffActiveAction}>
-                <input name="membershipId" type="hidden" value={member.id} />
-                <input
-                  name="active"
-                  type="hidden"
-                  value={member.active ? "false" : "true"}
-                />
-                <button
-                  className="text-xs font-medium text-fg-muted underline underline-offset-2 hover:text-fg"
-                  type="submit"
+              <div className="flex flex-col items-start gap-3 sm:items-end">
+                <form
+                  action={updateStaffBranchesAction}
+                  className="flex flex-wrap items-center gap-2"
                 >
-                  {member.active ? "Disable access" : "Reactivate access"}
-                </button>
-              </form>
+                  <input name="membershipId" type="hidden" value={member.id} />
+                  <BranchMultiSelect
+                    branches={branches}
+                    defaultSelectedIds={member.branches.map((item) => item.vendorBranchId)}
+                    name="branchId"
+                    submitOnApply
+                  />
+                </form>
+                <form action={setStaffActiveAction}>
+                  <input name="membershipId" type="hidden" value={member.id} />
+                  <input
+                    name="active"
+                    type="hidden"
+                    value={member.active ? "false" : "true"}
+                  />
+                  <button
+                    className={cn(
+                      "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition",
+                      member.active
+                        ? "border-danger-border bg-danger-bg text-danger-fg hover:bg-danger-border"
+                        : "border-success-border bg-success-bg text-success-fg hover:bg-success-border",
+                    )}
+                    type="submit"
+                  >
+                    {member.active ? <Ban aria-hidden="true" size={13} /> : <RotateCcw aria-hidden="true" size={13} />}
+                    {member.active ? "Disable access" : "Reactivate access"}
+                  </button>
+                </form>
+              </div>
             </div>
           ))}
           {staff.length === 0 ? (

@@ -210,7 +210,7 @@ export default async function VendorApplicationPage({
         createdAt={application.createdAt}
         decidedAt={application.reviewedAt}
       >
-        <VendorApplicationDetails application={application} documentUrls={documentUrls} />
+        <VendorApplicationDetails application={application} documentUrls={documentUrls} variant="embedded" />
       </VendorApplicationSummary>
       <VendorApplicationHistory applications={history} />
     </div>
