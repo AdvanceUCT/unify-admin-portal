@@ -6,7 +6,7 @@
     "dev": "next dev",
     "predev": "npm run prisma:generate",
     "build": "next build",
-    "prebuild": "npm run prisma:generate",
+    "prebuild": "node scripts/run-production-migrations.mjs && npm run prisma:generate",
     "start": "next start",
     "lint": "eslint",
     "prisma:generate": "prisma generate",
