@@ -24,9 +24,7 @@ export default async function SettingsPage() {
   const canEditProfile = role === "SUPER_ADMIN" || role === "ADMIN";
 
   const profile = await getUniversityProfile();
-  const universityLogoUrl = profile?.logoPath
-    ? await getDocumentSignedUrl(profile.logoPath)
-    : profile?.logoUrl ?? null;
+  const universityLogoUrl = profile?.logoPath ? await getDocumentSignedUrl(profile.logoPath) : null;
   const activeSchema = profile ? await getActiveCredentialSchema(profile.id) : null;
   const agentHealth = await checkAgentHealth();
   const webhookEndpoint = new URL("/api/webhooks/agent", env.APP_URL).toString();

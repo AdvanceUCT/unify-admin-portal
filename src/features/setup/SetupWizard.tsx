@@ -9,6 +9,7 @@ import type { ChangeEvent, FormEvent } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { IconButton } from "@/components/ui/IconButton";
 import { checkAgentStatusAction, createOrGetDidAction, saveProfileAction } from "@/app/(auth)/setup/actions";
+import { toSafeImageSrc } from "@/lib/url";
 
 export type SetupProfile = {
   abbreviation: string;
@@ -196,6 +197,8 @@ export function SetupWizard({
     }
   }
 
+  const safeLogoPreviewSrc = toSafeImageSrc(logoPreviewUrl);
+
   return (
     <div className="min-h-screen bg-canvas px-4 py-8">
       <main className="mx-auto max-w-6xl space-y-6">
@@ -274,9 +277,9 @@ export function SetupWizard({
                     </span>
                     <div className="mt-2 flex items-center gap-3">
                       <div className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-md border border-border bg-surface-muted">
-                        {logoPreviewUrl ? (
+                        {safeLogoPreviewSrc ? (
                           // eslint-disable-next-line @next/next/no-img-element -- local object URL preview, not compatible with next/image
-                          <img alt="" className="size-full object-contain" src={logoPreviewUrl} />
+                          <img alt="" className="size-full object-contain" src={safeLogoPreviewSrc} />
                         ) : (
                           <Building2 aria-hidden="true" className="size-5 text-fg-subtle" />
                         )}

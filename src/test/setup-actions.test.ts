@@ -79,7 +79,6 @@ const profile = {
   id: "profile-1",
   issuerDid: null,
   logoPath: null,
-  logoUrl: null,
   name: "University of Example",
   renewalCadenceMonths: 12,
   setupCompletedAt: null,

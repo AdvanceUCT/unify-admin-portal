@@ -29,7 +29,7 @@ export async function serializeSetupProfile(profile: PersistedSetupProfile) {
     contactEmail: profile.contactEmail,
     id: profile.id,
     issuerDid: profile.issuerDid,
-    logoUrl: profile.logoPath ? await getDocumentSignedUrl(profile.logoPath) : (profile.logoUrl ?? null),
+    logoUrl: profile.logoPath ? await getDocumentSignedUrl(profile.logoPath) : null,
     name: profile.name,
     setupCompletedAt: profile.setupCompletedAt?.toISOString() ?? null,
     setupStatus: profile.setupStatus,

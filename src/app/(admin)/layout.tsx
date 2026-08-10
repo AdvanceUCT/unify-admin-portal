@@ -62,9 +62,7 @@ export default async function AdminLayout({
       canAccessRoute(role, item.href) &&
       (item.allowedRoles?.some((allowedRole) => allowedRole === role) ?? true),
   );
-  const logoUrl = profile?.logoPath
-    ? await getDocumentSignedUrl(profile.logoPath)
-    : profile?.logoUrl;
+  const logoUrl = profile?.logoPath ? await getDocumentSignedUrl(profile.logoPath) : null;
 
   return (
     <PortalShell
