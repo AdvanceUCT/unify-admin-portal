@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the approved vendor page at `/vendor/help`.
+ * @module app/vendor/(portal)/help/page
+ */
+
 import { requireVendorSession } from "@/lib/auth/session";
 import { getUniversityProfile } from "@/lib/university/profile";
 

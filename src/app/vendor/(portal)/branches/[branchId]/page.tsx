@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the approved vendor page at `/vendor/branches/[branchId]`.
+ * @module app/vendor/(portal)/branches/[branchId]/page
+ */
+
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import QRCode from "qrcode";

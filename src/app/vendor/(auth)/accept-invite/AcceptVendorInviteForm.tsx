@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Owns the Accept Vendor Invite Form fields, validation state, and submission feedback.
+ * @module app/vendor/(auth)/accept-invite/AcceptVendorInviteForm
+ */
+
 "use client";
 
 import { Eye, EyeOff } from "lucide-react";

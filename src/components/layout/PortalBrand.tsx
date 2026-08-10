@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the reusable Portal Brand used by portal navigation and page chrome.
+ * @module components/layout/PortalBrand
+ */
+
 import { cn } from "@/lib/cn";
 import { toSafeImageSrc } from "@/lib/url";
 import type { PortalBrandIdentity } from "@/components/layout/portalTypes";

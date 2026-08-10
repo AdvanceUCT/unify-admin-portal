@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the public portal page at `/sign-in`.
+ * @module app/(public)/sign-in/page
+ */
+
 import { redirect } from "next/navigation";
 
 import { SignInForm } from "@/app/(public)/sign-in/SignInForm";

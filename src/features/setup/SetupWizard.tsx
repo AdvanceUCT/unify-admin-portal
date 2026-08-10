@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Guides first-time university profile, agent, DID, and issuance setup.
+ * @module features/setup/SetupWizard
+ */
+
 "use client";
 
 import { Building2, CheckCircle2, LoaderCircle, RefreshCw, Server, ShieldCheck, XCircle } from "lucide-react";

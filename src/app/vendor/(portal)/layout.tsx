@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Wraps approved vendor pages with vendor navigation and session checks.
+ * @module app/vendor/(portal)/layout
+ */
+
 import { PortalShell } from "@/components/layout/PortalShell";
 import type { PortalNavItem } from "@/components/layout/portalTypes";
 import { AgentStatusIndicator } from "@/features/agent/AgentStatusIndicator";

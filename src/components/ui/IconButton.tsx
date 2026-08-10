@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the shared Icon Button UI primitive used across portal screens.
+ * @module components/ui/IconButton
+ */
+
 import type { ButtonHTMLAttributes, Ref } from "react";
 
 import { cn } from "@/lib/cn";

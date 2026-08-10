@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Applies route-level authentication and role redirects before protected pages render.
+ * @module proxy
+ */
+
 import { getSessionCookie } from "better-auth/cookies";
 import { NextResponse, type NextRequest } from "next/server";
 

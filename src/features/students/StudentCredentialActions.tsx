@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Offers the lifecycle actions valid for a student's current credential.
+ * @module features/students/StudentCredentialActions
+ */
+
 "use client";
 
 import { Ban, Copy, ExternalLink, LoaderCircle, PauseCircle, RotateCcw, Send } from "lucide-react";

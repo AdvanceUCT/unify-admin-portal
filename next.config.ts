@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Configures the production Next.js build and deployment behavior.
+ * @module next.config
+ */
+
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {

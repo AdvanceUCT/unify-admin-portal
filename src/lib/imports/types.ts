@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Types shared across roster upload, mapping, preview, and commit stages.
+ * @module lib/imports/types
+ */
+
 // Shared, client-safe types for import preview rows — no "server-only" import,
 // so both server components/routes and client components can use them.
 

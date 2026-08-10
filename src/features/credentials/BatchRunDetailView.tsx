@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Shows per-student progress and failures for one batch issuance run.
+ * @module features/credentials/BatchRunDetailView
+ */
+
 "use client";
 
 import { useState } from "react";

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Introduces the vendor application and resumes any current draft.
+ * @module features/vendors/VendorApplicationLanding
+ */
+
 import Link from "next/link";
 import {
   Building2,

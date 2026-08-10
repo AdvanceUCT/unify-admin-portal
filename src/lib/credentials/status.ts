@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Derives the status shown for a credential issuance record.
+ * @module lib/credentials/status
+ */
+
 import "server-only";
 
 import {

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Validates and uploads the vendor logo used by portal branding.
+ * @module features/vendors/VendorLogoUpload
+ */
+
 "use client";
 
 import { removeLogoAction, uploadLogoAction } from "@/app/vendor/(portal)/profile/actions";

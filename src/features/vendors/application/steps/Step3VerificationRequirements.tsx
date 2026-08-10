@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Captures the credential attributes a vendor needs to verify.
+ * @module features/vendors/application/steps/Step3VerificationRequirements
+ */
+
 "use client";
 
 import { useState } from "react";

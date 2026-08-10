@@ -1,3 +1,8 @@
+/**
+ * @fileoverview In-memory activation records used by the local mock wallet endpoints.
+ * @module lib/api/mockActivationStore
+ */
+
 import { buildWalletActivationLink } from "@/lib/api/activationLinks";
 import {
   mockBatchIssuancePreview,

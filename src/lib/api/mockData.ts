@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Stable mock records used when the portal runs without its external services.
+ * @module lib/api/mockData
+ */
+
 import type {
   BatchIssuancePreview,
   StudentRecord,

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the authenticated administrator page at `/credentials/issuance/batch/runs`.
+ * @module app/(admin)/credentials/issuance/batch/runs/page
+ */
+
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { BackButton } from "@/components/ui/BackButton";
 import { BatchRunsTable } from "@/features/credentials/BatchRunsTable";

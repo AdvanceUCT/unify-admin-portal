@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the authenticated administrator page at `/vendors/[applicationId]`.
+ * @module app/(admin)/vendors/[applicationId]/page
+ */
+
 import { Check } from "lucide-react";
 import { notFound } from "next/navigation";
 

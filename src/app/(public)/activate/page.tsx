@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the public portal page at `/activate`.
+ * @module app/(public)/activate/page
+ */
+
 import { buildWalletDeepLink } from "@/lib/api/activationLinks";
 
 type ActivatePageProps = {

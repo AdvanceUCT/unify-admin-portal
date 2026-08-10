@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Classifies imported students as new, changed, unchanged, or invalid.
+ * @module lib/imports/reconcile
+ */
+
 import "server-only";
 
 import type { Student } from "@/generated/prisma/client";

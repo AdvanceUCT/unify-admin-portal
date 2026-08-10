@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the reusable Page Tabs used by portal navigation and page chrome.
+ * @module components/layout/PageTabs
+ */
+
 import Link from "next/link";
 
 import { cn } from "@/lib/cn";

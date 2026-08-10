@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Summarizes vendor verification volume, outcomes, and branch activity.
+ * @module features/vendors/VendorVerificationOverview
+ */
+
 import QRCode from "qrcode";
 import Link from "next/link";
 import { QrCode, ShieldCheck, SmartphoneNfc, UserCheck } from "lucide-react";

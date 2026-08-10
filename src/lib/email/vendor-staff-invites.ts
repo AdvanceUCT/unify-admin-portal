@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Builds and sends invitations for vendor staff accounts.
+ * @module lib/email/vendor-staff-invites
+ */
+
 import "server-only";
 
 import { env } from "@/lib/config/env";

@@ -1,4 +1,9 @@
 /**
+ * @fileoverview Handles the `/api/mock/cors.ts` API boundary, including its authorization and request validation.
+ * @module app/api/mock/cors
+ */
+
+/**
  * Shared CORS helpers for mock wallet API routes.
  * Wildcard origin is intentional — these routes are only used in dev/demo
  * and need to be reachable from the mobile wallet app on any origin.

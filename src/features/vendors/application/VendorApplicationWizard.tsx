@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Coordinates vendor application steps, draft state, and submission.
+ * @module features/vendors/application/VendorApplicationWizard
+ */
+
 "use client";
 
 import { useState } from "react";

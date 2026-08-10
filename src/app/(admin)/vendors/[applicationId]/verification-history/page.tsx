@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the authenticated administrator page at `/vendors/[applicationId]/verification-history`.
+ * @module app/(admin)/vendors/[applicationId]/verification-history/page
+ */
+
 import { notFound } from "next/navigation";
 
 import { BackButton } from "@/components/ui/BackButton";

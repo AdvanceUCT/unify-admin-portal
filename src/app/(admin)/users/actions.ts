@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Contains the server actions used by the `/users` workflow.
+ * @module app/(admin)/users/actions
+ */
+
 "use server";
 
 import { revalidatePath } from "next/cache";

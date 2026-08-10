@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the authenticated administrator page at `/credentials/issuance/individual/[studentId]`.
+ * @module app/(admin)/credentials/issuance/individual/[studentId]/page
+ */
+
 import { StudentCredentialDetailPage } from "@/features/students/StudentCredentialDetailPage";
 
 export default async function IndividualIssuanceStudentPage({

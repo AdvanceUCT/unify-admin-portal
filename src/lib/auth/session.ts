@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Loads administrator and vendor sessions and applies route-specific access requirements.
+ * @module lib/auth/session
+ */
+
 import "server-only";
 
 import { forbidden, redirect } from "next/navigation";

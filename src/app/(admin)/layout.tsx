@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Wraps administrator pages with authenticated navigation and role-aware portal chrome.
+ * @module app/(admin)/layout
+ */
+
 import { redirect } from "next/navigation";
 import { PortalShell } from "@/components/layout/PortalShell";
 import type { PortalNavItem } from "@/components/layout/portalTypes";

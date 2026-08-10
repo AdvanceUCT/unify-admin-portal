@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the public portal page at `/verify`.
+ * @module app/(public)/verify/page
+ */
+
 export default function MissingVerificationServicePointPage() {
   return (
     <main className="min-h-screen bg-zinc-50 px-6 py-12 text-zinc-950">

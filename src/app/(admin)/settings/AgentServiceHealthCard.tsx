@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the Agent Service Health Card used by `/settings/AgentServiceHealthCard.tsx`.
+ * @module app/(admin)/settings/AgentServiceHealthCard
+ */
+
 "use client";
 
 import { useState, useTransition } from "react";

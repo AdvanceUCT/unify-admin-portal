@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Creates, validates, accepts, and expires administrator invitation tokens.
+ * @module lib/auth/invites
+ */
+
 import "server-only";
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";

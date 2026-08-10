@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Seeds representative student records for local issuance workflows.
+ * @module prisma/seed-students
+ */
+
 /*
  * Seeds a small demo cohort of students (including Caleb and Joshua) into the
  * Student table, for local testing now that CSV import replaces the mock

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Warns administrators when issuance has no active credential schema.
+ * @module features/credentials/NoActiveSchemaBanner
+ */
+
 import Link from "next/link";
 
 /**

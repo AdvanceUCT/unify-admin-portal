@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Notifies a vendor when its application is approved.
+ * @module lib/email/vendor-application-approved
+ */
+
 import "server-only";
 
 import { env } from "@/lib/config/env";

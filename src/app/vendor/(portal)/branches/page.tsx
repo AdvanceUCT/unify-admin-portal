@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the approved vendor page at `/vendor/branches`.
+ * @module app/vendor/(portal)/branches/page
+ */
+
 import { Building2, ChevronRight, MapPin, Plus } from "lucide-react";
 import Link from "next/link";
 

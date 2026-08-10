@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Copies or downloads a branch service-point QR code.
+ * @module features/vendors/QrCodeActions
+ */
+
 "use client";
 
 import { Check, Copy, Download } from "lucide-react";

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the Vendor Verifications Filter Bar used by `/vendor/verifications/VendorVerificationsFilterBar.tsx`.
+ * @module app/vendor/(portal)/verifications/VendorVerificationsFilterBar
+ */
+
 "use client";
 
 import { useRouter } from "next/navigation";

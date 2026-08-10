@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Combines conditional Tailwind class names without conflicting utilities.
+ * @module lib/cn
+ */
+
 type ClassValue = string | false | null | undefined;
 
 /**

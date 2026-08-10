@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Shows recent verification sessions across the permitted vendor branches.
+ * @module features/vendors/LiveVerificationList
+ */
+
 "use client";
 
 import { RefreshCw } from "lucide-react";

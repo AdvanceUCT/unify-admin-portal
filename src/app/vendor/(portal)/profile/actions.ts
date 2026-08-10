@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Contains the server actions used by the `/vendor/profile` workflow.
+ * @module app/vendor/(portal)/profile/actions
+ */
+
 "use server";
 
 import { revalidatePath } from "next/cache";

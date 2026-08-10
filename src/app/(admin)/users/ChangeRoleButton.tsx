@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the Change Role Button interaction on `/users/ChangeRoleButton.tsx`.
+ * @module app/(admin)/users/ChangeRoleButton
+ */
+
 "use client";
 
 import { useRef, useState } from "react";

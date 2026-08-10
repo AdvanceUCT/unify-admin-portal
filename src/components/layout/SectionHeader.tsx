@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the reusable Section Header used by portal navigation and page chrome.
+ * @module components/layout/SectionHeader
+ */
+
 export function SectionHeader({ description, title }: { description?: string; title: string }) {
   return (
     <div>

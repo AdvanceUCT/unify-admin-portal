@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Declares the administrator roles accepted by the portal.
+ * @module lib/auth/roles
+ */
+
 export const ADMIN_ROLES = [
   "SUPER_ADMIN",
   "ADMIN",

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Reads recent branch-scoped verification activity for live vendor screens.
+ * @module lib/vendors/liveVerifications
+ */
+
 import "server-only";
 
 import { getInPersonVerificationDetails } from "@/lib/agentClient";

@@ -1,9 +1,15 @@
+/**
+ * @fileoverview Handles the `/api/vendor/live-verifications` API boundary, including its authorization and request validation.
+ * @module app/api/vendor/live-verifications/route
+ */
+
 import { NextResponse } from "next/server";
 
 import { getApprovedVendorContextForUser } from "@/lib/vendors/context";
 import { getLiveVerificationEvents } from "@/lib/vendors/liveVerifications";
 import { getCurrentVendorSession } from "@/lib/auth/session";
 
+/** Handles GET requests to `/api/vendor/live-verifications`. */
 export async function GET(request: Request) {
   const session = await getCurrentVendorSession();
   if (!session || session.user.userType !== "VENDOR") {

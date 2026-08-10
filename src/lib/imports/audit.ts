@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Records roster import outcomes and row-level validation evidence.
+ * @module lib/imports/audit
+ */
+
 import "server-only";
 
 import { AuditAction } from "@/generated/prisma/enums";

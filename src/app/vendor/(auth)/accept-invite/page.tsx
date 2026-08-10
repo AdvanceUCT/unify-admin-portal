@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the vendor authentication page at `/vendor/accept-invite`.
+ * @module app/vendor/(auth)/accept-invite/page
+ */
+
 import { Landmark, ShieldX } from "lucide-react";
 
 import { formatDateTime } from "@/lib/formatters";

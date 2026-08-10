@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the public portal page at `/accept-invite`.
+ * @module app/(public)/accept-invite/page
+ */
+
 import Link from "next/link";
 import { ShieldCheck, ShieldX } from "lucide-react";
 

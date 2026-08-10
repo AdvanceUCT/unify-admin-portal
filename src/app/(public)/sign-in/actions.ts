@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Contains the server actions used by the `/sign-in` workflow.
+ * @module app/(public)/sign-in/actions
+ */
+
 "use server";
 
 import { headers } from "next/headers";

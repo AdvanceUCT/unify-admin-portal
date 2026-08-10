@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Displays normalized roster rows and their validation results.
+ * @module features/imports/PreviewRowsTable
+ */
+
 import type { ImportFieldDefinition } from "@/lib/imports/mapping";
 import { rowKey, type ImportRowStatus, type PreviewRow } from "@/lib/imports/types";
 

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Builds and sends password reset emails.
+ * @module lib/email/password-reset
+ */
+
 import "server-only";
 
 import { env } from "@/lib/config/env";

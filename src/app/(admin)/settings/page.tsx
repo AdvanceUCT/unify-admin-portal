@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the authenticated administrator page at `/settings`.
+ * @module app/(admin)/settings/page
+ */
+
 import { Activity, Building, Clock, FileText, Link as LinkIcon, Webhook } from "lucide-react";
 
 import { checkAgentHealth } from "@/lib/agentClient";

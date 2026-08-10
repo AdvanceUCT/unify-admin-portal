@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Contains the server actions used by the `/vendor/staff` workflow.
+ * @module app/vendor/(portal)/staff/actions
+ */
+
 "use server";
 
 import { revalidatePath } from "next/cache";

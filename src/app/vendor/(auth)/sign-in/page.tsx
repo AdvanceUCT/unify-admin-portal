@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the vendor authentication page at `/vendor/sign-in`.
+ * @module app/vendor/(auth)/sign-in/page
+ */
+
 import { redirect } from "next/navigation";
 
 import { VendorSignInForm } from "@/app/vendor/(auth)/sign-in/VendorSignInForm";

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Loads the local font families used by the portal theme.
+ * @module lib/fonts
+ */
+
 import { Geist_Mono, Inter } from "next/font/google";
 
 /**

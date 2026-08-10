@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Owns the Forgot Password Form fields, validation state, and submission feedback.
+ * @module app/(public)/forgot-password/ForgotPasswordForm
+ */
+
 "use client";
 
 import Link from "next/link";

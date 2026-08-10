@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Maps uploaded columns onto the university student fields.
+ * @module features/imports/steps/MappingStep
+ */
+
 "use client";
 
 import Link from "next/link";

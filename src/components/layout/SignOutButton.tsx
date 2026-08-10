@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the reusable Sign Out Button used by portal navigation and page chrome.
+ * @module components/layout/SignOutButton
+ */
+
 "use client";
 
 import { useSignOut } from "@/hooks/useSignOut";

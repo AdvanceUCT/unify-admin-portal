@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the authenticated administrator page at `/credentials/schemas`.
+ * @module app/(admin)/credentials/schemas/page
+ */
+
 import { SchemaVersionManager } from "@/features/credentials/SchemaVersionManager";
 import { requireRole } from "@/lib/auth/session";
 import {

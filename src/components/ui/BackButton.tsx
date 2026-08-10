@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the shared Back Button UI primitive used across portal screens.
+ * @module components/ui/BackButton
+ */
+
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 

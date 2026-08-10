@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Validates normalized roster rows before preview or persistence.
+ * @module lib/imports/validate
+ */
+
 import "server-only";
 
 import type { ImportFieldDefinition } from "@/lib/imports/mapping";
@@ -63,6 +68,7 @@ function validateRow(
  * Validates every row, then flags duplicate student numbers within the file
  * — a cross-row check that can only run once every row has been mapped.
  */
+/** Validates normalized rows and returns accepted values alongside row-specific errors. */
 export function validateRows(
   rawRows: Record<string, string>[],
   columnMap: Record<string, string>,

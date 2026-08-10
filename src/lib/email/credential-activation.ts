@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Builds and sends student credential activation emails.
+ * @module lib/email/credential-activation
+ */
+
 import "server-only";
 
 import { env } from "@/lib/config/env";

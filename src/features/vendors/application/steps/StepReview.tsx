@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Presents the complete vendor application for final review.
+ * @module features/vendors/application/steps/StepReview
+ */
+
 "use client";
 
 import { Pencil } from "lucide-react";

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Contains the server actions used by the `/vendor/branches` workflow.
+ * @module app/vendor/(portal)/branches/actions
+ */
+
 "use server";
 
 import { revalidatePath } from "next/cache";

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Creates, scopes, materializes, exports, and retries vendor verification records.
+ * @module lib/vendors/verifications
+ */
+
 import "server-only";
 
 import {
@@ -69,6 +74,8 @@ async function getAgentVerificationMetadata(
   try {
     const result = await getInPersonVerificationDetails(verificationRequestId);
     if (result.servicePointId && servicePointId && result.servicePointId !== servicePointId) {
+      // Never attach disclosed attributes to a record bound to another service
+      // point, even if the verification request identifier was supplied correctly.
       return { attributes: null, isVerified: null };
     }
     return {
@@ -152,6 +159,8 @@ function verificationEventsWhere(
   const branchIds = filters.branchId && allowedBranchIds.includes(filters.branchId)
     ? [filters.branchId]
     : allowedBranchIds;
+  // Vendor and branch scoping is the tenant-isolation boundary. User-selected
+  // filters may narrow this predicate but must never replace it.
   const and: Prisma.VendorVerificationWhereInput[] = [
     {
       vendorProfileId,
@@ -204,6 +213,7 @@ async function applyAgentResult(id: string, result: AgentVerificationResult) {
   });
 }
 
+/** Creates or reuses the checkout verification record identified by the vendor's checkout ID. */
 export async function createVendorCheckoutSession(vendorProfileId: string, checkoutId: string) {
   const normalizedCheckoutId = checkoutId.trim();
   if (!normalizedCheckoutId || normalizedCheckoutId.length > 128) {
@@ -223,6 +233,8 @@ export async function createVendorCheckoutSession(vendorProfileId: string, check
     servicePointId: branch.agentServicePointId,
     checkoutId: normalizedCheckoutId,
   });
+  // vendorProfileId + checkoutId is the caller's idempotency key. Retrying a
+  // checkout must return the existing record rather than create a second result.
   const verification = await prisma.vendorVerification.upsert({
     where: { vendorProfileId_checkoutId: { vendorProfileId, checkoutId: normalizedCheckoutId } },
     create: {
@@ -243,6 +255,7 @@ export async function createVendorCheckoutSession(vendorProfileId: string, check
   return { ...resultShape(verification), verificationUrl: agentResult.verificationUrl };
 }
 
+/** Returns a branch-scoped verification and refreshes pending state from the agent when needed. */
 export async function getVendorVerificationResult(
   vendorProfileId: string,
   verificationRequestId: string,
@@ -258,12 +271,15 @@ export async function getVendorVerificationResult(
   if (!verification) return null;
 
   if (verification.status === "PENDING" && verification.verificationRequestId) {
+    // The backend verifier is authoritative; the portal only materializes its
+    // latest terminal decision and never accepts a client-supplied proof result.
     const agentResult = await getVerificationResult(verification.verificationRequestId);
     verification = await applyAgentResult(verification.id, agentResult);
   }
   return resultShape(verification);
 }
 
+/** Validates webhook bindings before materializing the agent's completed verification result. */
 export async function recordVerificationCompletedEvent(payload: VerificationCompletedEvent, requestId?: string) {
   const duplicate = await prisma.vendorVerification.findUnique({ where: { eventId: payload.eventId } });
   if (duplicate) return { duplicate: true, verification: duplicate };
@@ -277,6 +293,8 @@ export async function recordVerificationCompletedEvent(payload: VerificationComp
       (existing.servicePointId !== null && existing.servicePointId !== payload.servicePointId) ||
       (existing.checkoutId !== null && existing.checkoutId !== payload.checkoutId))
   ) {
+    // Reject attempts to replay a valid event identifier into a different
+    // vendor, service point, or checkout context.
     throw new Error("Verification event does not match the stored checkout binding.");
   }
 
@@ -289,6 +307,8 @@ export async function recordVerificationCompletedEvent(payload: VerificationComp
   let attributes = normalizedVerificationAttributes(payload.attributes);
   let isVerified = payload.isVerified ?? null;
   if (!attributes) {
+    // Older/minimal webhook payloads can be enriched from the agent only after
+    // the service-point ownership checks above have succeeded.
     const metadata = await getAgentVerificationMetadata(payload.verificationRequestId, payload.servicePointId);
     attributes = metadata.attributes;
     isVerified = isVerified ?? metadata.isVerified;
@@ -444,11 +464,14 @@ function csvCell(value: string | number | null | undefined) {
   return `"${text.replaceAll('"', '""')}"`;
 }
 
+/** Exports a bounded, tenant-scoped verification history using the active filters. */
 export async function exportVendorVerificationEventsCsv(
   vendorProfileId: string,
   allowedBranchIds: string[],
   filters: VendorVerificationEventFilters = {},
 ) {
+  // Bound exports so one request cannot load an unbounded tenant history into
+  // the serverless function's memory.
   const rows = await prisma.vendorVerification.findMany({
     where: verificationEventsWhere(vendorProfileId, allowedBranchIds, filters),
     include: { branch: { select: { name: true } } },

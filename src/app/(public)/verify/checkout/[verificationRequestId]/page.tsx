@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the public portal page at `/verify/checkout/[verificationRequestId]`.
+ * @module app/(public)/verify/checkout/[verificationRequestId]/page
+ */
+
 import { buildWalletCheckoutVerificationLink } from "@/lib/verification/walletLink";
 
 type CheckoutVerificationFallbackPageProps = {

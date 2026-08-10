@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the authenticated administrator page at `/users/invites`.
+ * @module app/(admin)/users/invites/page
+ */
+
 import { PageTabs } from "@/components/layout/PageTabs";
 import { StatusText, type StatusTone } from "@/components/ui/StatusText";
 import { getInviteRoleLabel } from "@/lib/auth/invites";

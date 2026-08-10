@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Tracks the state and summary of a student import run.
+ * @module lib/imports/run
+ */
+
 import "server-only";
 
 import { ImportRowStatus } from "@/generated/prisma/enums";
@@ -13,6 +18,7 @@ const STATUS_MAP: Record<ReconciledImportRow["status"], ImportRowStatus> = {
 };
 
 /** Stores a pending import preview. Commit must name the returned run id. */
+/** Stores a bounded import preview so the later commit uses the reviewed row set. */
 export async function saveImportPreview(params: {
   universityProfileId: string;
   filename: string;

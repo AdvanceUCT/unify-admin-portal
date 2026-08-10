@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Notifies a vendor when previously granted access is revoked.
+ * @module lib/email/vendor-application-revoked
+ */
+
 import "server-only";
 
 import { env } from "@/lib/config/env";

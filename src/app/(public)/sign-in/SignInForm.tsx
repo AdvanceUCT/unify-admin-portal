@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Owns the Sign In Form fields, validation state, and submission feedback.
+ * @module app/(public)/sign-in/SignInForm
+ */
+
 "use client";
 
 import Link from "next/link";

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the shared Status Text UI primitive used across portal screens.
+ * @module components/ui/StatusText
+ */
+
 import { cn } from "@/lib/cn";
 
 const toneClassName = {

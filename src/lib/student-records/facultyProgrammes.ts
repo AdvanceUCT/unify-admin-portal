@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Defines faculty and programme reference values used by student forms.
+ * @module lib/student-records/facultyProgrammes
+ */
+
 export const SIMULATED_FACULTY_PROGRAMMES: Record<string, string[]> = {
   Commerce: [
     "Bachelor of Commerce",

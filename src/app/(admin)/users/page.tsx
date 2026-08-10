@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the authenticated administrator page at `/users`.
+ * @module app/(admin)/users/page
+ */
+
 import { Ban, LogOut, RotateCcw } from "lucide-react";
 
 import { PageTabs } from "@/components/layout/PageTabs";

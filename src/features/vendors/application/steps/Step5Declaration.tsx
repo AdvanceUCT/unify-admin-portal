@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Records the applicant's declaration before submission.
+ * @module features/vendors/application/steps/Step5Declaration
+ */
+
 "use client";
 
 import { useState } from "react";

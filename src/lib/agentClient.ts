@@ -1,4 +1,9 @@
 /**
+ * @fileoverview Authenticated server-side client for the Credo agent API, with correlation IDs, timeouts, and safe read retries.
+ * @module lib/agentClient
+ */
+
+/**
  * @file This file contains the client for interacting with the Identity Agent
  * Service. It is intended to be used only on the server-side.
  */
@@ -128,6 +133,11 @@ function buildAgentServiceUrl(baseUrl: string, path: AgentApiPath) {
  * @throws {Error} If `AGENT_SERVICE_URL` or `AGENT_API_KEY` are not set.
  * @throws {AgentServiceError} If the agent returns a non-2xx status.
  */
+/**
+ * Sends one authenticated request to the agent service.
+ * Read requests may retry transient failures; writes are attempted once unless their
+ * higher-level API supplies an explicit idempotency contract.
+ */
 async function agentFetch(
   path: AgentApiPath,
   options: AgentFetchOptions,
@@ -143,7 +153,10 @@ async function agentFetch(
   const url = buildAgentServiceUrl(AGENT_SERVICE_URL, path);
   const { timeoutMs, ...fetchOptions } = options;
   const method = (fetchOptions.method ?? "GET").toUpperCase();
+  // Retry reads only; repeating a write could duplicate an issuance or proof
+  // session unless that endpoint explicitly provides its own idempotency key.
   const retryDelays = method === "GET" ? SAFE_READ_RETRY_DELAYS_MS : [];
+  // Preserve one correlation identifier across every attempt of this request.
   const requestId = requestIdFrom(undefined);
 
   for (let attempt = 0; ; attempt += 1) {
@@ -210,6 +223,7 @@ async function agentFetch(
   }
 }
 
+/** Returns the agent's detailed operational status for administrator diagnostics. */
 export async function getStatus(): Promise<{
   status: string;
   ledger: { reachable: boolean };
@@ -228,6 +242,7 @@ export type AgentHealth =
  * Checks Identity Agent Service reachability for display in the admin UI.
  * Never throws — connection failures are captured in the returned result.
  */
+/** Performs the lightweight health check used by portal readiness indicators. */
 export async function checkAgentHealth(): Promise<AgentHealth> {
   const checkedAt = new Date().toISOString();
 
@@ -270,6 +285,7 @@ export async function createIssuerDid(alias: string): Promise<{ did: string }> {
  * @returns The resolved IDs for the schema, credential definition, and revocation registry.
  * @throws {AgentServiceError} If the agent rejects the setup request.
  */
+/** Creates or reuses the ledger objects required for university credential issuance. */
 export async function issuanceSetup(payload: {
   issuerDid: string;
   schema: {
@@ -308,6 +324,7 @@ export async function issuanceSetup(payload: {
  * @returns Successful offers and any per-student failures.
  * @throws {AgentServiceError} If the agent rejects the entire batch request.
  */
+/** Requests credential offers and activation links for an already validated student batch. */
 export async function createBatchActivationLinks(payload: {
   credentialDefinitionId: string;
   revocationRegistryDefinitionId?: string;
@@ -381,6 +398,7 @@ export type AgentCredentialLifecycleResult = {
   updatedAt: string;
 };
 
+/** Asks the authoritative agent to suspend, reactivate, or revoke one credential. */
 export async function changeCredentialLifecycle(
   credentialExchangeId: string,
   action: "reactivate" | "revoke" | "suspend",
@@ -491,6 +509,7 @@ export type AgentInPersonVerificationDetails = Omit<AgentVerificationResult, "ch
   attributes?: Record<string, string>;
 };
 
+/** Creates an unclaimed, vendor-bound verification capability for one checkout. */
 export async function createCheckoutVerificationSession(payload: {
   vendorId: string;
   servicePointId: string;

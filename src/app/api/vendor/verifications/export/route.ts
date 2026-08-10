@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Handles the `/api/vendor/verifications/export` API boundary, including its authorization and request validation.
+ * @module app/api/vendor/verifications/export/route
+ */
+
 import { NextResponse } from "next/server";
 
 import { getCurrentVendorSession } from "@/lib/auth/session";
@@ -13,6 +18,7 @@ function exportFilename() {
   return `verification-events-${new Date().toISOString().slice(0, 10)}.csv`;
 }
 
+/** Handles GET requests to `/api/vendor/verifications/export`. */
 export async function GET(request: Request) {
   const session = await getCurrentVendorSession();
   if (!session || session.user.userType !== "VENDOR") {

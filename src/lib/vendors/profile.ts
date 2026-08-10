@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Loads and updates the vendor organisation profile.
+ * @module lib/vendors/profile
+ */
+
 import "server-only";
 
 import { z } from "zod";

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Coordinates upload, column mapping, preview, and commit for a roster import.
+ * @module features/imports/ImportWizard
+ */
+
 "use client";
 
 import { useState } from "react";

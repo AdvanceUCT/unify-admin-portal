@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Handles the `/api/students/import/commit` API boundary, including its authorization and request validation.
+ * @module app/api/students/import/commit/route
+ */
+
 import { NextResponse } from "next/server";
 
 import { assertCan, PermissionError, type SessionWithRole } from "@/lib/auth/permissions";
@@ -5,6 +10,7 @@ import { getCurrentAdminSession, getSessionForAudit } from "@/lib/auth/session";
 import { commitImportRun, ImportRunHasErrorsError, NoImportRunError } from "@/lib/imports/commit";
 import { getUniversityProfile } from "@/lib/university/profile";
 
+/** Handles POST requests to `/api/students/import/commit`. */
 export async function POST(request: Request) {
   const session = await getCurrentAdminSession();
 

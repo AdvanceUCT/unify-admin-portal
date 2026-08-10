@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Writes administrator activity to the portal audit log.
+ * @module lib/audit/audit
+ */
+
 import { AuditAction } from "@/generated/prisma/enums";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";

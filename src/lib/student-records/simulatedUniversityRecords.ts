@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides deterministic university records for the local student-data adapter.
+ * @module lib/student-records/simulatedUniversityRecords
+ */
+
 /*
  * This file was made by Claude to help create simulated student records for testing the app.
  * It creates sample students, their programme info, and credential

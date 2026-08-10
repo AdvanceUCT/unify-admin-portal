@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the Export Csv Button interaction on `/vendor/verifications/ExportCsvButton.tsx`.
+ * @module app/vendor/(portal)/verifications/ExportCsvButton
+ */
+
 "use client";
 
 import { Download, Loader2 } from "lucide-react";

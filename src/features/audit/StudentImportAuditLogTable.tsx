@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders roster-import audit records and their recorded outcomes.
+ * @module features/audit/StudentImportAuditLogTable
+ */
+
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";

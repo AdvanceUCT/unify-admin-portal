@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Normalizes safe user-facing explanations for failed verifications.
+ * @module lib/vendors/verification-reasons
+ */
+
 export const VERIFICATION_REASONS = [
   { value: "student_discounts", label: "Verify student eligibility for discounts" },
   { value: "student_exclusive_products", label: "Provide student-exclusive products or services" },

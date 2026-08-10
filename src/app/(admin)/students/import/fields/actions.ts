@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Contains the server actions used by the `/students/import/fields` workflow.
+ * @module app/(admin)/students/import/fields/actions
+ */
+
 "use server";
 
 import { revalidatePath } from "next/cache";

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the authenticated administrator dashboard.
+ * @module app/(admin)/page
+ */
+
 import { Metric } from "@/components/ui/Metric";
 import { StatusText } from "@/components/ui/StatusText";
 import { getDashboardSummary, getRecentCredentialEvents } from "@/lib/api/server";

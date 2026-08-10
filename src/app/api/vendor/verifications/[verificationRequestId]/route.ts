@@ -1,9 +1,15 @@
+/**
+ * @fileoverview Handles the `/api/vendor/verifications/[verificationRequestId]` API boundary, including its authorization and request validation.
+ * @module app/api/vendor/verifications/[verificationRequestId]/route
+ */
+
 import { NextResponse } from "next/server";
 
 import { getCurrentVendorSession } from "@/lib/auth/session";
 import { getApprovedVendorContextForUser } from "@/lib/vendors/context";
 import { getVendorVerificationResult } from "@/lib/vendors/verifications";
 
+/** Handles GET requests to `/api/vendor/verifications/[verificationRequestId]`. */
 export async function GET(
   _request: Request,
   context: { params: Promise<{ verificationRequestId: string }> },

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Lists a vendor's previous applications and decisions.
+ * @module features/vendors/VendorApplicationHistory
+ */
+
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/Badge";

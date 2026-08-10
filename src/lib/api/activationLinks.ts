@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Creates activation links and retrieves their current delivery state.
+ * @module lib/api/activationLinks
+ */
+
 export const walletActivationRoute = "unifywallet://activate";
 const activationPath = "/activate";
 

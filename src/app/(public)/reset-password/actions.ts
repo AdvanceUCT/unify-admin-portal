@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Contains the server actions used by the `/reset-password` workflow.
+ * @module app/(public)/reset-password/actions
+ */
+
 "use server";
 
 import { redirect } from "next/navigation";

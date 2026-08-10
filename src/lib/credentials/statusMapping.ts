@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Maps agent credential states onto the portal lifecycle vocabulary.
+ * @module lib/credentials/statusMapping
+ */
+
 import { createHash } from "node:crypto";
 
 import { CredentialIssuanceStatus } from "@/generated/prisma/enums";

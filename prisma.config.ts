@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Points Prisma tooling at the portal schema and direct database connection.
+ * @module prisma.config
+ */
+
 import { config } from "dotenv";
 import { defineConfig } from "prisma/config";
 

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the shared Metric UI primitive used across portal screens.
+ * @module components/ui/Metric
+ */
+
 import { cn } from "@/lib/cn";
 
 const accentClassName = {

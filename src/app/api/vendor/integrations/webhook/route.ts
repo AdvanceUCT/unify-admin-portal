@@ -1,14 +1,21 @@
+/**
+ * @fileoverview Handles the `/api/vendor/integrations/webhook` API boundary, including its authorization and request validation.
+ * @module app/api/vendor/integrations/webhook/route
+ */
+
 import { NextResponse } from "next/server";
 
 import { configureVendorWebhook, disableVendorWebhook, getVendorWebhookConfig } from "@/lib/vendors/integrations";
 import { vendorFromPortalSession } from "@/lib/vendors/routeAuth";
 
+/** Handles GET requests to `/api/vendor/integrations/webhook`. */
 export async function GET() {
   const vendor = await vendorFromPortalSession();
   if (!vendor) return NextResponse.json({ error: { message: "Unauthorized." } }, { status: 401 });
   return NextResponse.json(await getVendorWebhookConfig(vendor.id));
 }
 
+/** Handles PUT requests to `/api/vendor/integrations/webhook`. */
 export async function PUT(request: Request) {
   const vendor = await vendorFromPortalSession();
   if (!vendor) return NextResponse.json({ error: { message: "Unauthorized." } }, { status: 401 });
@@ -26,6 +33,7 @@ export async function PUT(request: Request) {
   }
 }
 
+/** Handles DELETE requests to `/api/vendor/integrations/webhook`. */
 export async function DELETE() {
   const vendor = await vendorFromPortalSession();
   if (!vendor) return NextResponse.json({ error: { message: "Unauthorized." } }, { status: 401 });

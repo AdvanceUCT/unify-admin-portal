@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Validates webhook destinations and blocks unsafe or private network targets.
+ * @module lib/vendors/webhookSafety
+ */
+
 import "server-only";
 
 import { lookup } from "node:dns/promises";

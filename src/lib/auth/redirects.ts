@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Validates post-authentication redirects so users stay on trusted portal routes.
+ * @module lib/auth/redirects
+ */
+
 const CALLBACK_URL_BASE = "http://unify-admin.local";
 
 /**

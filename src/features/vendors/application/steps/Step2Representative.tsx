@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Collects the vendor representative and contact details.
+ * @module features/vendors/application/steps/Step2Representative
+ */
+
 "use client";
 
 import { useState } from "react";

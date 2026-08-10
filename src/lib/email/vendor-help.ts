@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Sends vendor support requests to the configured help address.
+ * @module lib/email/vendor-help
+ */
+
 import "server-only";
 
 import { env } from "@/lib/config/env";

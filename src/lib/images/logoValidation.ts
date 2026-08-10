@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Checks uploaded logo type, size, and image dimensions before storage.
+ * @module lib/images/logoValidation
+ */
+
 export type LogoValidationResult =
   | { ok: true }
   | { ok: false; error: string };

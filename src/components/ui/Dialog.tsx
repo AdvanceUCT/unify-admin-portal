@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the shared Dialog UI primitive used across portal screens.
+ * @module components/ui/Dialog
+ */
+
 "use client";
 
 import { useEffect, useRef } from "react";

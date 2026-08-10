@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the reusable Sidebar Nav used by portal navigation and page chrome.
+ * @module components/layout/SidebarNav
+ */
+
 "use client";
 
 import { useState } from "react";

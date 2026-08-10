@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Collects the supporting documents required for vendor review.
+ * @module features/vendors/application/steps/Step4Documents
+ */
+
 "use client";
 
 import { useState } from "react";

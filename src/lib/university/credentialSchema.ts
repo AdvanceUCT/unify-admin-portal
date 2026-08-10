@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Builds the university credential schema and tracks published versions.
+ * @module lib/university/credentialSchema
+ */
+
 import { prisma } from "@/lib/db/prisma";
 import type { CredentialSchema, Prisma } from "@/generated/prisma/client";
 import { AuditAction, CredentialSchemaStatus } from "@/generated/prisma/enums";

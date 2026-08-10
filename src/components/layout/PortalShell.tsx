@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the reusable Portal Shell used by portal navigation and page chrome.
+ * @module components/layout/PortalShell
+ */
+
 import { PortalChrome } from "@/components/layout/PortalChrome";
 import type {
   PortalBrandIdentity,
