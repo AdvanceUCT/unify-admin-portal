@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Configures Better Auth, Prisma persistence, sessions, and account policies.
+ * @module lib/auth/auth
+ */
+
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { admin } from "better-auth/plugins";

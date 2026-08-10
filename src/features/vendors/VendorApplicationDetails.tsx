@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Presents a submitted vendor application for administrator review.
+ * @module features/vendors/VendorApplicationDetails
+ */
+
 import { Badge } from "@/components/ui/Badge";
 import { formatDateTime } from "@/lib/formatters";
 import { filenameFromStoragePath } from "@/lib/storage/supabase";

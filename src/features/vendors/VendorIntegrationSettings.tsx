@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Manages vendor API credentials and webhook delivery settings.
+ * @module features/vendors/VendorIntegrationSettings
+ */
+
 "use client";
 
 import {

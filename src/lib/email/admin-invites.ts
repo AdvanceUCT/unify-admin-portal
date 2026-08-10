@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Builds and sends administrator invitation emails.
+ * @module lib/email/admin-invites
+ */
+
 import "server-only";
 
 import { env } from "@/lib/config/env";

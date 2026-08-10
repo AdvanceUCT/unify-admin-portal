@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Aggregates completed vendor verifications into monthly totals.
+ * @module lib/vendors/monthlyVerificationHistory
+ */
+
 import "server-only";
 
 import { prisma } from "@/lib/db/prisma";

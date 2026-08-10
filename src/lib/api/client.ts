@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Browser JSON client that normalizes portal API responses and failures.
+ * @module lib/api/client
+ */
+
 import { mockBatchIssuancePreview } from "@/lib/api/mockData";
 import {
   createMockBatchRun,

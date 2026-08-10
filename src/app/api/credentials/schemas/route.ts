@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Handles the `/api/credentials/schemas` API boundary, including its authorization and request validation.
+ * @module app/api/credentials/schemas/route
+ */
+
 import { NextResponse } from "next/server";
 
 import { assertCan, PermissionError, type SessionWithRole } from "@/lib/auth/permissions";
@@ -23,6 +28,7 @@ async function requireSchemaManagement() {
   }
 }
 
+/** Handles POST requests to `/api/credentials/schemas`. */
 export async function POST(request: Request) {
   const sessionOrResponse = await requireSchemaManagement();
   if (sessionOrResponse instanceof NextResponse) return sessionOrResponse;
@@ -68,6 +74,7 @@ export async function POST(request: Request) {
   }
 }
 
+/** Handles PATCH requests to `/api/credentials/schemas`. */
 export async function PATCH(request: Request) {
   const sessionOrResponse = await requireSchemaManagement();
   if (sessionOrResponse instanceof NextResponse) return sessionOrResponse;
@@ -105,6 +112,7 @@ export async function PATCH(request: Request) {
   }
 }
 
+/** Handles DELETE requests to `/api/credentials/schemas`. */
 export async function DELETE(request: Request) {
   const sessionOrResponse = await requireSchemaManagement();
   if (sessionOrResponse instanceof NextResponse) return sessionOrResponse;

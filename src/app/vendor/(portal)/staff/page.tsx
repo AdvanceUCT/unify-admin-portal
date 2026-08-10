@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the approved vendor page at `/vendor/staff`.
+ * @module app/vendor/(portal)/staff/page
+ */
+
 import { Ban, RotateCcw } from "lucide-react";
 
 import { Avatar } from "@/components/ui/Avatar";

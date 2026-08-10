@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the authenticated administrator page at `/credentials/issuance/batch`.
+ * @module app/(admin)/credentials/issuance/batch/page
+ */
+
 import { BatchIssuancePanel } from "@/features/credentials/BatchIssuancePanel";
 import { NoActiveSchemaBanner } from "@/features/credentials/NoActiveSchemaBanner";
 import { getBatchIssuancePreview, getStudents } from "@/lib/api/client";

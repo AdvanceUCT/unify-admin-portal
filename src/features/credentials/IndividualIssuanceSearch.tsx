@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Finds a student before starting an individual credential issuance.
+ * @module features/credentials/IndividualIssuanceSearch
+ */
+
 "use client";
 
 import { StudentPickerTable } from "@/features/students/StudentPickerTable";

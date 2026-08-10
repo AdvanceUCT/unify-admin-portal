@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Collects batch filters, previews eligibility, and starts credential issuance.
+ * @module features/credentials/BatchIssuancePanel
+ */
+
 "use client";
 
 import Link from "next/link";

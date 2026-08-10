@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Commits validated roster rows to the student repository in one import run.
+ * @module lib/imports/commit
+ */
+
 import "server-only";
 
 import { AuditAction, ImportRowStatus } from "@/generated/prisma/enums";
@@ -48,6 +53,7 @@ export type CommitImportRunResult = {
  * rows are never touched, and Error rows block the commit so partial imports
  * cannot happen by accident.
  */
+/** Persists only accepted preview rows and records one auditable import result. */
 export async function commitImportRun(params: {
   universityProfileId: string;
   importRunId: string;

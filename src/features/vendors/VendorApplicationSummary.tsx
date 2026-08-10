@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Summarizes the current vendor application status and next action.
+ * @module features/vendors/VendorApplicationSummary
+ */
+
 "use client";
 
 import { useState } from "react";

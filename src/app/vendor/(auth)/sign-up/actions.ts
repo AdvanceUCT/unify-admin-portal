@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Contains the server actions used by the `/vendor/sign-up` workflow.
+ * @module app/vendor/(auth)/sign-up/actions
+ */
+
 "use server";
 
 import { z } from "zod";

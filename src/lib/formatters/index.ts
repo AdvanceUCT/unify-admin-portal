@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Formats dates, identifiers, names, and status values for portal screens.
+ * @module lib/formatters/index
+ */
+
 import type {
   ActivationDeliveryStatus,
   AuditEvent,

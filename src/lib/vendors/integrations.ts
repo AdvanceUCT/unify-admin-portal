@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Creates and rotates vendor API keys and webhook configuration.
+ * @module lib/vendors/integrations
+ */
+
 import "server-only";
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";

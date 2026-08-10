@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Owns the Reject Form fields, validation state, and submission feedback.
+ * @module app/(admin)/vendors/RejectForm
+ */
+
 "use client";
 
 import { useState } from "react";

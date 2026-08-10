@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Lists recent batch issuance runs and their completion totals.
+ * @module features/credentials/BatchRunsTable
+ */
+
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/Badge";

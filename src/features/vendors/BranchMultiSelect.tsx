@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Selects the branches a staff member or verification filter may access.
+ * @module features/vendors/BranchMultiSelect
+ */
+
 "use client";
 
 import { Search, SquarePen } from "lucide-react";

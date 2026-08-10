@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Handles the `/api/webhooks/agent` API boundary, including its authorization and request validation.
+ * @module app/api/webhooks/agent/route
+ */
+
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { NextResponse } from "next/server";

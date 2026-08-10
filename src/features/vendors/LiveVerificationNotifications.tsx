@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Surfaces newly completed vendor verifications without duplicating alerts.
+ * @module features/vendors/LiveVerificationNotifications
+ */
+
 "use client";
 
 import { CheckCircle2, ShieldX, X } from "lucide-react";

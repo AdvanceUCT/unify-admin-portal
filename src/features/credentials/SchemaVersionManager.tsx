@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Creates and activates versioned university credential schemas.
+ * @module features/credentials/SchemaVersionManager
+ */
+
 "use client";
 
 import { LoaderCircle, Plus, Trash2, UploadCloud } from "lucide-react";

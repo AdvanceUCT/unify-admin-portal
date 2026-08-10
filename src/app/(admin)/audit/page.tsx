@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the authenticated administrator page at `/audit`.
+ * @module app/(admin)/audit/page
+ */
+
 import { PageTabs } from "@/components/layout/PageTabs";
 import { StatusText } from "@/components/ui/StatusText";
 import { CredentialAuditLogTable } from "@/features/audit/CredentialAuditLogTable";

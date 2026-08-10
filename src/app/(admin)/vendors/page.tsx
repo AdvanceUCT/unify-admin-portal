@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the authenticated administrator page at `/vendors`.
+ * @module app/(admin)/vendors/page
+ */
+
 import Link from "next/link";
 import { Check, Eye, Globe, History, Link as LinkIcon, Mail, QrCode, TriangleAlert, User } from "lucide-react";
 

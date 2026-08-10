@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the administrator setup page at `/setup`.
+ * @module app/(auth)/setup/page
+ */
+
 import { getUniversityProfile } from "@/lib/university/profile";
 import { SetupWizard } from "@/features/setup/SetupWizard";
 import { serializeSetupProfile } from "./actions";

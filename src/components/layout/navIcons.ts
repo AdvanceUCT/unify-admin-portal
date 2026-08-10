@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the reusable nav Icons used by portal navigation and page chrome.
+ * @module components/layout/navIcons
+ */
+
 import {
   Building2,
   ClipboardList,

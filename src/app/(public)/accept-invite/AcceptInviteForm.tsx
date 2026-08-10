@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Owns the Accept Invite Form fields, validation state, and submission feedback.
+ * @module app/(public)/accept-invite/AcceptInviteForm
+ */
+
 "use client";
 
 import { useActionState, useState } from "react";

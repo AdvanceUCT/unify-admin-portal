@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Notifies a vendor when its application is rejected.
+ * @module lib/email/vendor-application-rejected
+ */
+
 import "server-only";
 
 import { env } from "@/lib/config/env";

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Defines the use Unsaved Changes Warning hook and its browser-side lifecycle behavior.
+ * @module hooks/useUnsavedChangesWarning
+ */
+
 "use client";
 
 import { useEffect } from "react";

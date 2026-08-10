@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the reusable Unsaved Changes Dialog Provider used by portal navigation and page chrome.
+ * @module components/layout/UnsavedChangesDialogProvider
+ */
+
 "use client";
 
 import { useCallback, useEffect, useState } from "react";

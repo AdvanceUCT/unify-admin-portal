@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Handles the `/api/students/import/upload` API boundary, including its authorization and request validation.
+ * @module app/api/students/import/upload/route
+ */
+
 import { NextResponse } from "next/server";
 
 import { assertCan, PermissionError, type SessionWithRole } from "@/lib/auth/permissions";

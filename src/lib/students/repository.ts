@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Reads and writes student records through Prisma with normalized filters.
+ * @module lib/students/repository
+ */
+
 import "server-only";
 
 import type { Student } from "@/generated/prisma/client";

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Creates, scopes, materializes, exports, and retries vendor verification records.
+ * @module lib/vendors/verifications
+ */
+
 import "server-only";
 
 import {
@@ -208,6 +213,7 @@ async function applyAgentResult(id: string, result: AgentVerificationResult) {
   });
 }
 
+/** Creates or reuses the checkout verification record identified by the vendor's checkout ID. */
 export async function createVendorCheckoutSession(vendorProfileId: string, checkoutId: string) {
   const normalizedCheckoutId = checkoutId.trim();
   if (!normalizedCheckoutId || normalizedCheckoutId.length > 128) {
@@ -249,6 +255,7 @@ export async function createVendorCheckoutSession(vendorProfileId: string, check
   return { ...resultShape(verification), verificationUrl: agentResult.verificationUrl };
 }
 
+/** Returns a branch-scoped verification and refreshes pending state from the agent when needed. */
 export async function getVendorVerificationResult(
   vendorProfileId: string,
   verificationRequestId: string,
@@ -272,6 +279,7 @@ export async function getVendorVerificationResult(
   return resultShape(verification);
 }
 
+/** Validates webhook bindings before materializing the agent's completed verification result. */
 export async function recordVerificationCompletedEvent(payload: VerificationCompletedEvent, requestId?: string) {
   const duplicate = await prisma.vendorVerification.findUnique({ where: { eventId: payload.eventId } });
   if (duplicate) return { duplicate: true, verification: duplicate };
@@ -456,6 +464,7 @@ function csvCell(value: string | number | null | undefined) {
   return `"${text.replaceAll('"', '""')}"`;
 }
 
+/** Exports a bounded, tenant-scoped verification history using the active filters. */
 export async function exportVendorVerificationEventsCsv(
   vendorProfileId: string,
   allowedBranchIds: string[],

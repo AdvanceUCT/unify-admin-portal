@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the access-denied page used by protected portal routes.
+ * @module app/forbidden
+ */
+
 import Link from "next/link";
 
 export default function ForbiddenPage() {

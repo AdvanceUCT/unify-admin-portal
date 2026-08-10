@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Validates the public vendor verification API request and response contract.
+ * @module lib/vendors/verificationContract
+ */
+
 import { z } from "zod";
 
 import { VendorVerificationStatus } from "@/generated/prisma/enums";

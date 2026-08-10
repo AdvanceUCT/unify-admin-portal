@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Parses uploaded CSV files into normalized headers and row values.
+ * @module lib/imports/csv
+ */
+
 import "server-only";
 
 import Papa from "papaparse";

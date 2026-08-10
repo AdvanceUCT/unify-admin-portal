@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Handles the `/api/students/import/mapping` API boundary, including its authorization and request validation.
+ * @module app/api/students/import/mapping/route
+ */
+
 import { NextResponse } from "next/server";
 
 import { assertCan, PermissionError, type SessionWithRole } from "@/lib/auth/permissions";
@@ -32,6 +37,7 @@ async function loadFieldDefinitions() {
   return { fieldDefinitions: getImportFieldDefinitions(customFields), profile };
 }
 
+/** Handles GET requests to `/api/students/import/mapping`. */
 export async function GET() {
   const session = await getCurrentAdminSession();
 
@@ -59,6 +65,7 @@ export async function GET() {
   }
 }
 
+/** Handles POST requests to `/api/students/import/mapping`. */
 export async function POST(request: Request) {
   const session = await getCurrentAdminSession();
 

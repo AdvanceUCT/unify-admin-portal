@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Contains the server actions used by the `/forgot-password` workflow.
+ * @module app/(public)/forgot-password/actions
+ */
+
 "use server";
 
 import { revalidatePath } from "next/cache";

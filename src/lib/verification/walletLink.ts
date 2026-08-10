@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Builds wallet deep links for service-point and checkout verification.
+ * @module lib/verification/walletLink
+ */
+
 export function buildWalletVerificationLink(publicServicePointId: string) {
   const normalizedId = publicServicePointId.trim();
   if (!normalizedId) return undefined;

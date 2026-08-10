@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the Remove Custom Field Button interaction on `/students/import/fields/RemoveCustomFieldButton.tsx`.
+ * @module app/(admin)/students/import/fields/RemoveCustomFieldButton
+ */
+
 "use client";
 
 import { useState } from "react";

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Maps source roster columns onto required and custom student fields.
+ * @module lib/imports/mapping
+ */
+
 import "server-only";
 
 import type { ImportMapping } from "@/generated/prisma/client";

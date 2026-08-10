@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Builds trusted absolute portal URLs from configured origins.
+ * @module lib/url
+ */
+
 const SAFE_IMAGE_PROTOCOLS = new Set(["http:", "https:", "blob:"]);
 
 /**

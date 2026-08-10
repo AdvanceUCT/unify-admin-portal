@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Manages university-defined fields accepted during student imports.
+ * @module lib/imports/customFields
+ */
+
 import "server-only";
 
 import type { CustomFieldDefinition } from "@/generated/prisma/client";

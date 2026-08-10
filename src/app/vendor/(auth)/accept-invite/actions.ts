@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Contains the server actions used by the `/vendor/accept-invite` workflow.
+ * @module app/vendor/(auth)/accept-invite/actions
+ */
+
 "use server";
 
 import { redirect } from "next/navigation";

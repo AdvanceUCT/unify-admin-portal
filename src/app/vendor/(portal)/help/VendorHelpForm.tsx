@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Owns the Vendor Help Form fields, validation state, and submission feedback.
+ * @module app/vendor/(portal)/help/VendorHelpForm
+ */
+
 "use client";
 
 import { SendHorizontal } from "lucide-react";

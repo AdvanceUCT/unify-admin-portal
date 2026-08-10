@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders filterable credential issuance and lifecycle audit records.
+ * @module features/audit/CredentialAuditLogTable
+ */
+
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";

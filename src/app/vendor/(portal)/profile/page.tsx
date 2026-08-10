@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the approved vendor page at `/vendor/profile`.
+ * @module app/vendor/(portal)/profile/page
+ */
+
 import { forbidden } from "next/navigation";
 
 import { VendorLogoUpload } from "@/features/vendors/VendorLogoUpload";

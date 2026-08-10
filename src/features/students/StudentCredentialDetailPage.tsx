@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Shows one student's credential, delivery, and lifecycle history.
+ * @module features/students/StudentCredentialDetailPage
+ */
+
 import { notFound } from "next/navigation";
 
 import { BackButton } from "@/components/ui/BackButton";

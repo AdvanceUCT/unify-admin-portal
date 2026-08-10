@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the selectable student table used by issuance workflows.
+ * @module features/students/StudentPickerTable
+ */
+
 "use client";
 
 import { useMemo, useState } from "react";

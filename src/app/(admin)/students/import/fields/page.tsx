@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the authenticated administrator page at `/students/import/fields`.
+ * @module app/(admin)/students/import/fields/page
+ */
+
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { requireRole } from "@/lib/auth/session";

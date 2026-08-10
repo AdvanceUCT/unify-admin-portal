@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Defines allowed credential lifecycle states and transition rules.
+ * @module lib/credentials/lifecycle
+ */
+
 import { CredentialIssuanceStatus, CredentialLifecycleStatus } from "@/generated/prisma/enums";
 import type { CredentialLifecycleState } from "@/lib/api/types";
 

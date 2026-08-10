@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Hashes API credentials and encrypts vendor webhook secrets at rest.
+ * @module lib/vendors/integrationCrypto
+ */
+
 import "server-only";
 
 import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "node:crypto";

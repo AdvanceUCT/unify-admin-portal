@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Contains the server actions used by the `/vendors` workflow.
+ * @module app/(admin)/vendors/actions
+ */
+
 "use server";
 
 import { revalidatePath } from "next/cache";

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the reusable navigation used by portal navigation and page chrome.
+ * @module components/layout/navigation
+ */
+
 import type { PortalNavItem } from "@/components/layout/portalTypes";
 
 type ActiveNavEntry = { href: string; label: string };

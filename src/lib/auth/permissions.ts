@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Defines administrator capabilities and enforces role-based access checks.
+ * @module lib/auth/permissions
+ */
+
 import { defaultAc, userAc } from "better-auth/plugins/admin/access";
 
 import { ADMIN_ROLES, type AdminRole } from "@/lib/auth/roles";

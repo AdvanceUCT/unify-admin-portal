@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the approved vendor dashboard.
+ * @module app/vendor/(portal)/page
+ */
+
 import Link from "next/link";
 import { ChevronRight, Mail } from "lucide-react";
 

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the reusable portal Types used by portal navigation and page chrome.
+ * @module components/layout/portalTypes
+ */
+
 import type { NavIconName } from "@/components/layout/navIcons";
 
 /**

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Seeds the development database with the minimum portal accounts and reference data.
+ * @module prisma/seed
+ */
+
 /*
  * This seed file sets up the first admin user for the app.
  * It checks the env details, makes sure we are not in production,

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the public portal page at `/verify/[publicServicePointId]`.
+ * @module app/(public)/verify/[publicServicePointId]/page
+ */
+
 import { buildWalletVerificationLink } from "@/lib/verification/walletLink";
 
 type VerificationFallbackPageProps = {

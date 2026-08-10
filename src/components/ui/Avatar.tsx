@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the shared Avatar UI primitive used across portal screens.
+ * @module components/ui/Avatar
+ */
+
 import { cn } from "@/lib/cn";
 import { toSafeImageSrc } from "@/lib/url";
 

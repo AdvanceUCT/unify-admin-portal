@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the authenticated administrator page at `/credentials/issuance/individual`.
+ * @module app/(admin)/credentials/issuance/individual/page
+ */
+
 import { Suspense } from "react";
 
 import { NoActiveSchemaBanner } from "@/features/credentials/NoActiveSchemaBanner";

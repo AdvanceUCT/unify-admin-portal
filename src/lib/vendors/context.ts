@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Loads the approved vendor profile and branch scope for the current session.
+ * @module lib/vendors/context
+ */
+
 import "server-only";
 
 import { forbidden } from "next/navigation";

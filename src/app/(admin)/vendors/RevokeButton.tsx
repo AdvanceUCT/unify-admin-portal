@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the Revoke Button interaction on `/vendors/RevokeButton.tsx`.
+ * @module app/(admin)/vendors/RevokeButton
+ */
+
 "use client";
 
 import { useState } from "react";

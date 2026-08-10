@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Defines the use Sign Out hook and its browser-side lifecycle behavior.
+ * @module hooks/useSignOut
+ */
+
 "use client";
 
 import { useCallback, useState } from "react";

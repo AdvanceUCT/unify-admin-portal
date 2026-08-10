@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Contains the server actions used by the `/vendor/help` workflow.
+ * @module app/vendor/(portal)/help/actions
+ */
+
 "use server";
 
 import { z } from "zod";

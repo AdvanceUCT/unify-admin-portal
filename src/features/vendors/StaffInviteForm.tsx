@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Invites vendor staff and assigns their permitted branches.
+ * @module features/vendors/StaffInviteForm
+ */
+
 "use client";
 
 import { useActionState } from "react";

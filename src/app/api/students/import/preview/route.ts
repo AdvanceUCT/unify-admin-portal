@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Handles the `/api/students/import/preview` API boundary, including its authorization and request validation.
+ * @module app/api/students/import/preview/route
+ */
+
 import { NextResponse } from "next/server";
 
 import { assertCan, PermissionError, type SessionWithRole } from "@/lib/auth/permissions";
@@ -27,6 +32,7 @@ function countBy(rows: ReconciledImportRow[]) {
   };
 }
 
+/** Handles POST requests to `/api/students/import/preview`. */
 export async function POST(request: Request) {
   const session = await getCurrentAdminSession();
 

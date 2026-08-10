@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Acknowledges a newly submitted vendor application.
+ * @module lib/email/vendor-application-submitted
+ */
+
 import "server-only";
 
 import { env } from "@/lib/config/env";

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the approved vendor page at `/vendor/verifications`.
+ * @module app/vendor/(portal)/verifications/page
+ */
+
 import Link from "next/link";
 
 import { Avatar } from "@/components/ui/Avatar";

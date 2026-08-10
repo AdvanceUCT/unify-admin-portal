@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Filters the student directory without discarding the current result set.
+ * @module features/students/StudentSearch
+ */
+
 "use client";
 
 import Link from "next/link";

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Owns the Reset Password Form fields, validation state, and submission feedback.
+ * @module app/(public)/reset-password/ResetPasswordForm
+ */
+
 "use client";
 
 import Link from "next/link";

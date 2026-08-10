@@ -1,9 +1,15 @@
+/**
+ * @fileoverview Handles the `/api/credentials/issuance/batch/runs/[batchId]/retry-failed` API boundary, including its authorization and request validation.
+ * @module app/api/credentials/issuance/batch/runs/[batchId]/retry-failed/route
+ */
+
 import { NextResponse } from "next/server";
 
 import { assertCan, PermissionError, type SessionWithRole } from "@/lib/auth/permissions";
 import { getCurrentAdminSession, getSessionForAudit } from "@/lib/auth/session";
 import { retryFailedBatchRun } from "@/lib/issuance/batchRuns";
 
+/** Handles POST requests to `/api/credentials/issuance/batch/runs/[batchId]/retry-failed`. */
 export async function POST(_request: Request, { params }: { params: Promise<{ batchId: string }> }) {
   const session = await getCurrentAdminSession();
 

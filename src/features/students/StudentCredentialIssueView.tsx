@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Previews student attributes and starts an individual credential offer.
+ * @module features/students/StudentCredentialIssueView
+ */
+
 import { Badge } from "@/components/ui/Badge";
 import type { ActivationDelivery, StudentRecord } from "@/lib/api/types";
 import { credentialStatusTone, formatCredentialStatus, formatDateTime } from "@/lib/formatters";

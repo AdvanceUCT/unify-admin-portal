@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Handles the `/api/credentials/issuance/batch/runs` API boundary, including its authorization and request validation.
+ * @module app/api/credentials/issuance/batch/runs/route
+ */
+
 import { NextResponse } from "next/server";
 
 import { assertCan, PermissionError, type SessionWithRole } from "@/lib/auth/permissions";
@@ -5,6 +10,7 @@ import { getCurrentAdminSession, getSessionForAudit } from "@/lib/auth/session";
 import { createAndProcessBatchRun, listBatchRuns } from "@/lib/issuance/batchRuns";
 import { parseBatchIssuanceSelection, StudentIssuanceError } from "@/lib/issuance/batchIssuance";
 
+/** Handles GET requests to `/api/credentials/issuance/batch/runs`. */
 export async function GET() {
   const session = await getCurrentAdminSession();
 

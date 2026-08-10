@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Owns the University Profile Form fields, validation state, and submission feedback.
+ * @module app/(admin)/settings/UniversityProfileForm
+ */
+
 "use client";
 
 import { useActionState } from "react";

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Creates a service branch beneath the current vendor account.
+ * @module features/vendors/BranchCreateForm
+ */
+
 "use client";
 
 import { useActionState } from "react";

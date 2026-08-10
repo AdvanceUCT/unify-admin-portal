@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Loads and updates the university profile used for issuance and branding.
+ * @module lib/university/profile
+ */
+
 import { prisma } from "@/lib/db/prisma";
 import type { UniversityProfile } from "@/generated/prisma/client";
 import { AuditAction } from "@/generated/prisma/enums";

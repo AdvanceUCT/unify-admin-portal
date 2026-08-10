@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Coordinates lifecycle requests with the agent and mirrors authoritative results in PostgreSQL.
+ * @module lib/credentials/lifecycleActions
+ */
+
 import "server-only";
 
 import { CredentialAuditAction, CredentialIssuanceStatus, CredentialLifecycleStatus } from "@/generated/prisma/enums";
@@ -141,6 +146,10 @@ function canRevokeRevocationBackedPendingCredential(status: string, issuance: {
   return (status === "OFFER_SENT" || status === "ACCEPTED") && hasRevocationHandle(issuance);
 }
 
+/**
+ * Validates an administrator lifecycle request, commits it through the agent, and
+ * mirrors the authoritative result with its audit evidence.
+ */
 export async function requestCredentialLifecycleChange(params: {
   action: CredentialLifecycleAction;
   actorId?: string | null;
@@ -206,6 +215,7 @@ export async function requestCredentialLifecycleChange(params: {
   });
 }
 
+/** Replays an agent lifecycle webhook through the same idempotent persistence path. */
 export async function recordCredentialLifecycleChangedEvent(payload: CredentialLifecycleChangedWebhookPayload) {
   // Direct API responses and retried webhooks deliberately converge on the same
   // persistence path. eventId plus skipDuplicates makes the audit write replay-safe.

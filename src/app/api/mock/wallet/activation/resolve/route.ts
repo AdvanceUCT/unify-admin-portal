@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Handles the `/api/mock/wallet/activation/resolve` API boundary, including its authorization and request validation.
+ * @module app/api/mock/wallet/activation/resolve/route
+ */
+
 import { corsPreflight, jsonWithCors } from "@/app/api/mock/cors";
 import { AgentServiceError, resolveActivation } from "@/lib/agentClient";
 import type { WalletActivationResolveRequest } from "@/lib/api/types";

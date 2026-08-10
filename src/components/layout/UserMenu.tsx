@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the reusable User Menu used by portal navigation and page chrome.
+ * @module components/layout/UserMenu
+ */
+
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";

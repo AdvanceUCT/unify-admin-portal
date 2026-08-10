@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the reusable Portal Header used by portal navigation and page chrome.
+ * @module components/layout/PortalHeader
+ */
+
 "use client";
 
 import { Bell, Menu } from "lucide-react";

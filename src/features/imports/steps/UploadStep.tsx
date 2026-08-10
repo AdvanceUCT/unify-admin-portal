@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Accepts the roster file and extracts its source columns.
+ * @module features/imports/steps/UploadStep
+ */
+
 "use client";
 
 import { useState } from "react";

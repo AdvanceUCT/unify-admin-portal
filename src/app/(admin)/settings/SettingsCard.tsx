@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the Settings Card used by `/settings/SettingsCard.tsx`.
+ * @module app/(admin)/settings/SettingsCard
+ */
+
 import type { LucideIcon } from "lucide-react";
 
 export function SettingsCard({

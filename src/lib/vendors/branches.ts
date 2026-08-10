@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Creates vendor branches and enforces branch ownership.
+ * @module lib/vendors/branches
+ */
+
 import "server-only";
 
 import { z } from "zod";

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the University Logo Upload used by `/settings/UniversityLogoUpload.tsx`.
+ * @module app/(admin)/settings/UniversityLogoUpload
+ */
+
 "use client";
 
 import { removeUniversityLogoAction, uploadUniversityLogoAction } from "./actions";

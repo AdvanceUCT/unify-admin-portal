@@ -1,9 +1,15 @@
+/**
+ * @fileoverview Handles the `/api/students/[studentId]/credentials/renew` API boundary, including its authorization and request validation.
+ * @module app/api/students/[studentId]/credentials/renew/route
+ */
+
 import { NextResponse } from "next/server";
 
 import { assertCan, PermissionError, type SessionWithRole } from "@/lib/auth/permissions";
 import { getCurrentAdminSession, getSessionForAudit } from "@/lib/auth/session";
 import { queueRealStudentRenewal, StudentIssuanceError } from "@/lib/issuance/batchIssuance";
 
+/** Handles POST requests to `/api/students/[studentId]/credentials/renew`. */
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ studentId: string }> },

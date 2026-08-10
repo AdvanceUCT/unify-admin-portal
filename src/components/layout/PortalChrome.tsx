@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the reusable Portal Chrome used by portal navigation and page chrome.
+ * @module components/layout/PortalChrome
+ */
+
 "use client";
 
 import { useEffect, useRef, useState } from "react";

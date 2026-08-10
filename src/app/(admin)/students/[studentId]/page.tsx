@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the authenticated administrator page at `/students/[studentId]`.
+ * @module app/(admin)/students/[studentId]/page
+ */
+
 import { StudentCredentialDetailPage } from "@/features/students/StudentCredentialDetailPage";
 
 export default async function StudentDetailPage({

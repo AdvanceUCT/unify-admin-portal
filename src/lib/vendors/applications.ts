@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Creates and evaluates vendor applications and their review history.
+ * @module lib/vendors/applications
+ */
+
 import "server-only";
 
 import { z } from "zod";

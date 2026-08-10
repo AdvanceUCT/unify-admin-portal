@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the approved vendor page at `/vendor/integrations`.
+ * @module app/vendor/(portal)/integrations/page
+ */
+
 import { VendorIntegrationSettings } from "@/features/vendors/VendorIntegrationSettings";
 import { requireVendorOwnerContext } from "@/lib/vendors/context";
 import { getVendorWebhookConfig, listVendorApiCredentials } from "@/lib/vendors/integrations";

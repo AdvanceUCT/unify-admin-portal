@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Owns the Vendor Profile Form fields, validation state, and submission feedback.
+ * @module app/vendor/(portal)/profile/VendorProfileForm
+ */
+
 "use client";
 
 import { useActionState, useState } from "react";

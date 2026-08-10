@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the authenticated administrator page at `/students`.
+ * @module app/(admin)/students/page
+ */
+
 import { Suspense } from "react";
 import { getStudents } from "@/lib/api/client";
 import { requireRole } from "@/lib/auth/session";

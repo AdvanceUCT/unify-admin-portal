@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the shared Logo Upload UI primitive used across portal screens.
+ * @module components/ui/LogoUpload
+ */
+
 "use client";
 
 import type { ChangeEvent } from "react";

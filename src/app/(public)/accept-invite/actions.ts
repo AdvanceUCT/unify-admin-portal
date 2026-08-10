@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Contains the server actions used by the `/accept-invite` workflow.
+ * @module app/(public)/accept-invite/actions
+ */
+
 "use server";
 
 import { redirect } from "next/navigation";

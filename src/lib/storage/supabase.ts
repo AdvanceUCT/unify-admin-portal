@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Creates the Supabase client used for managed object storage.
+ * @module lib/storage/supabase
+ */
+
 import { createClient } from "@supabase/supabase-js";
 import { env } from "@/lib/config/env";
 

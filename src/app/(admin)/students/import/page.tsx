@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the authenticated administrator page at `/students/import`.
+ * @module app/(admin)/students/import/page
+ */
+
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { ImportWizard } from "@/features/imports/ImportWizard";
 import { requireRole } from "@/lib/auth/session";

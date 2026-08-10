@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Server-only request helpers for calling internal portal APIs.
+ * @module lib/api/server
+ */
+
 import "server-only";
 
 import type { ActivationDelivery } from "@/lib/api/types";

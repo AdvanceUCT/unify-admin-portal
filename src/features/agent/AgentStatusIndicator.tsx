@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Shows whether the portal can reach a ready Credo agent.
+ * @module features/agent/AgentStatusIndicator
+ */
+
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";

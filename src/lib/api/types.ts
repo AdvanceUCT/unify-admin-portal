@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Shared request and response shapes for portal API clients.
+ * @module lib/api/types
+ */
+
 export type StudentProfile = {
   email: string;
   id: string;

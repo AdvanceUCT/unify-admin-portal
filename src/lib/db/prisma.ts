@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Creates the pooled Prisma client and safely reuses it during Next.js development reloads.
+ * @module lib/db/prisma
+ */
+
 import { PrismaPg } from "@prisma/adapter-pg";
 
 import { PrismaClient } from "@/generated/prisma/client";

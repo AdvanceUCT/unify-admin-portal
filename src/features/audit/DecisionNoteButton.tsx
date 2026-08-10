@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Reveals the administrator note attached to a vendor decision.
+ * @module features/audit/DecisionNoteButton
+ */
+
 "use client";
 
 import { useState } from "react";

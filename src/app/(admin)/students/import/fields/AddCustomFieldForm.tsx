@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Owns the Add Custom Field Form fields, validation state, and submission feedback.
+ * @module app/(admin)/students/import/fields/AddCustomFieldForm
+ */
+
 "use client";
 
 import { useActionState, useState } from "react";

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Shows the approved-vendor state and a direct link to the vendor portal.
+ * @module features/vendors/ApprovedBanner
+ */
+
 "use client";
 
 import { CheckCircle2, X } from "lucide-react";

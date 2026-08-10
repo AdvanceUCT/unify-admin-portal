@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the public portal page at `/reset-password`.
+ * @module app/(public)/reset-password/page
+ */
+
 import { ResetPasswordForm } from "./ResetPasswordForm";
 
 export default async function ResetPasswordPage({

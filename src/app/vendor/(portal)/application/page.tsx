@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the approved vendor page at `/vendor/application`.
+ * @module app/vendor/(portal)/application/page
+ */
+
 import Link from "next/link";
 import { forbidden } from "next/navigation";
 import { ClipboardList, Info } from "lucide-react";

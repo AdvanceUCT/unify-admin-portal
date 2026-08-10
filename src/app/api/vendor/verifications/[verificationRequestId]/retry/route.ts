@@ -1,9 +1,15 @@
+/**
+ * @fileoverview Handles the `/api/vendor/verifications/[verificationRequestId]/retry` API boundary, including its authorization and request validation.
+ * @module app/api/vendor/verifications/[verificationRequestId]/retry/route
+ */
+
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db/prisma";
 import { vendorFromPortalSession } from "@/lib/vendors/routeAuth";
 import { retryVendorWebhook } from "@/lib/vendors/verifications";
 
+/** Handles POST requests to `/api/vendor/verifications/[verificationRequestId]/retry`. */
 export async function POST(
   _request: Request,
   context: { params: Promise<{ verificationRequestId: string }> },

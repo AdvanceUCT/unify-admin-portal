@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Selects eligible students and queues credential offers while retaining per-item outcomes.
+ * @module lib/issuance/batchIssuance
+ */
+
 import "server-only";
 
 import { CredentialAuditAction, CredentialDeliveryStatus, CredentialRenewalStatus } from "@/generated/prisma/enums";
@@ -147,6 +152,7 @@ function optionalTrimmedString(value: unknown) {
  * @returns A validated `BatchIssuanceSelection` object.
  * @throws {StudentIssuanceError} If a filter value or the limit is out of range.
  */
+/** Parses and bounds faculty, programme, status, and maximum-recipient filters. */
 export function parseBatchIssuanceSelection(value: unknown): BatchIssuanceSelection {
   if (!value || typeof value !== "object") {
     return { cohortId: SIMULATED_STUDENT_COHORT_ID };
@@ -404,6 +410,7 @@ async function issueStudentActivationLinks(
  * @param actorId - Who triggered the batch, if anyone.
  * @returns A `BatchIssuanceResult` for the queued batch.
  */
+/** Queues offers for eligible filtered students and preserves every per-item outcome. */
 export async function queueRealBatchIssuance(
   selectionInputOrNow: BatchIssuanceSelection | Date = {},
   requestedNow = new Date(),
@@ -430,6 +437,7 @@ export async function queueRealBatchIssuance(
  * @returns A `BatchIssuanceResult` scoped to the single student.
  * @throws {StudentIssuanceError} If the student is not found (404) or not eligible (409).
  */
+/** Issues a new credential offer for one eligible student. */
 export async function queueRealStudentIssuance(
   studentId: string,
   now = new Date(),
@@ -453,6 +461,7 @@ export async function queueRealStudentIssuance(
   return issueStudentActivationLinks([studentWithCredentialStatus], now, 1, {}, actorId, false);
 }
 
+/** Issues a replacement offer using the active schema and current student attributes. */
 export async function queueRealStudentRenewal(
   studentId: string,
   now = new Date(),

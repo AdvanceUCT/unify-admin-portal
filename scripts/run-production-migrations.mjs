@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Runs pending Prisma migrations during production builds and fails closed when the direct URL is missing.
+ * @module scripts/run-production-migrations
+ */
+
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 

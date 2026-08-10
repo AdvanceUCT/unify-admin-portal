@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Collects the applicant organisation details in the first vendor step.
+ * @module features/vendors/application/steps/Step1OrgInfo
+ */
+
 "use client";
 
 import { useState } from "react";

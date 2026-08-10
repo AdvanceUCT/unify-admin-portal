@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the approved vendor page at `/vendor/application/history/[id]`.
+ * @module app/vendor/(portal)/application/history/[id]/page
+ */
+
 import { notFound } from "next/navigation";
 
 import { BackButton } from "@/components/ui/BackButton";

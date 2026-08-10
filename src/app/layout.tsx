@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Defines the root HTML shell, metadata, fonts, and global providers.
+ * @module app/layout
+ */
+
 import type { Metadata } from "next";
 import "./globals.css";
 

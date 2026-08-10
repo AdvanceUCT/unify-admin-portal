@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Summarizes accepted and rejected rows before an import is committed.
+ * @module features/imports/steps/PreviewStep
+ */
+
 "use client";
 
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";

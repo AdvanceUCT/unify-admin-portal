@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Invites and manages staff within an approved vendor account.
+ * @module lib/vendors/staff
+ */
+
 import "server-only";
 
 import { timingSafeEqual } from "node:crypto";

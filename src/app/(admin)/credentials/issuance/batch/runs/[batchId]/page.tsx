@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the authenticated administrator page at `/credentials/issuance/batch/runs/[batchId]`.
+ * @module app/(admin)/credentials/issuance/batch/runs/[batchId]/page
+ */
+
 import { notFound } from "next/navigation";
 
 import { SectionHeader } from "@/components/layout/SectionHeader";

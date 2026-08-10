@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Owns the Vendor Sign In Form fields, validation state, and submission feedback.
+ * @module app/vendor/(auth)/sign-in/VendorSignInForm
+ */
+
 "use client";
 
 import Link from "next/link";

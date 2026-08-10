@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Handles the `/api/students/[studentId]/credentials/lifecycle` API boundary, including its authorization and request validation.
+ * @module app/api/students/[studentId]/credentials/lifecycle/route
+ */
+
 import { NextResponse } from "next/server";
 
 import { assertCan, PermissionError, type SessionWithRole } from "@/lib/auth/permissions";
@@ -13,6 +18,7 @@ function isLifecycleAction(value: unknown): value is CredentialLifecycleAction {
   return value === "reactivate" || value === "revoke" || value === "suspend";
 }
 
+/** Handles POST requests to `/api/students/[studentId]/credentials/lifecycle`. */
 export async function POST(request: Request, { params }: { params: Promise<{ studentId: string }> }) {
   const session = await getCurrentAdminSession();
   try {

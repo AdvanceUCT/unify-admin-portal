@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Records credential issuance and lifecycle events in the audit log.
+ * @module lib/credentials/audit
+ */
+
 import "server-only";
 
 import { CredentialAuditAction, CredentialDeliveryStatus } from "@/generated/prisma/enums";

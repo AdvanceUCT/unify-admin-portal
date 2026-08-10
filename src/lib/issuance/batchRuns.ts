@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Reads and summarizes persisted batch issuance runs.
+ * @module lib/issuance/batchRuns
+ */
+
 import "server-only";
 
 import { BatchIssuanceItemStatus, BatchIssuanceRunStatus, CredentialDeliveryStatus } from "@/generated/prisma/enums";

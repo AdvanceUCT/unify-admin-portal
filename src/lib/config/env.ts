@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Validates server and public environment variables at startup.
+ * @module lib/config/env
+ */
+
 /*
  * This file checks the app's environment variables.
  * It makes sure required settings like database, auth, and email values

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Authenticates vendor API requests and resolves their permitted branch scope.
+ * @module lib/vendors/routeAuth
+ */
+
 import "server-only";
 
 import { getCurrentVendorSession } from "@/lib/auth/session";

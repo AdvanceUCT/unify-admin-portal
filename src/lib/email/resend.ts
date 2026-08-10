@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Creates the Resend client and centralizes outbound email defaults.
+ * @module lib/email/resend
+ */
+
 import "server-only";
 
 export type EmailDeliveryResult = {

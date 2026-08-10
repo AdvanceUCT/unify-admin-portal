@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Renders the Mark Application Viewed used by `/vendors/[applicationId]/MarkApplicationViewed.tsx`.
+ * @module app/(admin)/vendors/[applicationId]/MarkApplicationViewed
+ */
+
 "use client";
 
 import { useEffect } from "react";
