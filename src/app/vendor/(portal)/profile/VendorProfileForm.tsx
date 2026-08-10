@@ -21,6 +21,19 @@ type VendorProfileFormProps = {
   initialProfile: VendorProfile;
 };
 
+const inputClassName =
+  "mt-1.5 h-10 w-full rounded-md border border-border bg-surface px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20";
+const labelClassName = "block text-sm font-medium text-fg-muted";
+
+function ProfileField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="py-2 first:pt-0 last:pb-0">
+      <p className="text-sm font-medium text-fg-subtle">{label}</p>
+      <p className="mt-0.5 font-medium text-fg">{value || "-"}</p>
+    </div>
+  );
+}
+
 export function VendorProfileForm({ initialProfile }: VendorProfileFormProps) {
   const [state, formAction, isPending] = useActionState(
     updateVendorProfileAction,
@@ -40,32 +53,25 @@ export function VendorProfileForm({ initialProfile }: VendorProfileFormProps) {
 
   if (mode === "view") {
     return (
-      <section className="space-y-4 rounded-lg border border-zinc-200 bg-white p-5">
-        <div>
-          <p className="text-sm font-medium text-zinc-500">Company name</p>
-          <p className="text-zinc-950">{profile.companyName || "—"}</p>
-        </div>
-        <div>
-          <p className="text-sm font-medium text-zinc-500">Service category</p>
-          <p className="text-zinc-950">{profile.serviceCategory || "—"}</p>
-        </div>
-        <div>
-          <p className="text-sm font-medium text-zinc-500">Contact person name</p>
-          <p className="text-zinc-950">{profile.contactPersonName || "—"}</p>
-        </div>
-        <div>
-          <p className="text-sm font-medium text-zinc-500">Contact email</p>
-          <p className="text-zinc-950">{profile.contactEmail || "—"}</p>
+      <section className="space-y-4 rounded-xl border border-border bg-surface p-5 shadow-md">
+        <div className="divide-y divide-border">
+          <ProfileField label="Company name" value={profile.companyName} />
+          <ProfileField label="Service category" value={profile.serviceCategory} />
+          <ProfileField
+            label="Contact person name"
+            value={profile.contactPersonName}
+          />
+          <ProfileField label="Contact email" value={profile.contactEmail} />
         </div>
 
         {state.message ? (
-          <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          <p className="rounded-md border border-success-border bg-success-bg px-3 py-2 text-sm text-success-fg">
             {state.message}
           </p>
         ) : null}
 
         <button
-          className="h-11 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800"
+          className="h-10 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700"
           onClick={() => setMode("edit")}
           type="button"
         >
@@ -76,14 +82,17 @@ export function VendorProfileForm({ initialProfile }: VendorProfileFormProps) {
   }
 
   return (
-    <form action={formAction} className="space-y-6 rounded-lg border border-zinc-200 bg-white p-5">
+    <form
+      action={formAction}
+      className="space-y-6 rounded-xl border border-border bg-surface p-5 shadow-md"
+    >
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <label className="block text-sm font-medium text-zinc-700" htmlFor="companyName">
+          <label className={labelClassName} htmlFor="companyName">
             Company name
           </label>
           <input
-            className="mt-2 h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950"
+            className={inputClassName}
             id="companyName"
             name="companyName"
             type="text"
@@ -93,11 +102,11 @@ export function VendorProfileForm({ initialProfile }: VendorProfileFormProps) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-zinc-700" htmlFor="serviceCategory">
+          <label className={labelClassName} htmlFor="serviceCategory">
             Service category
           </label>
           <select
-            className="mt-2 h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none transition focus:border-zinc-950"
+            className={inputClassName}
             id="serviceCategory"
             name="serviceCategory"
             defaultValue={profile.serviceCategory}
@@ -113,11 +122,11 @@ export function VendorProfileForm({ initialProfile }: VendorProfileFormProps) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-zinc-700" htmlFor="contactPersonName">
+          <label className={labelClassName} htmlFor="contactPersonName">
             Contact person name
           </label>
           <input
-            className="mt-2 h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950"
+            className={inputClassName}
             id="contactPersonName"
             name="contactPersonName"
             type="text"
@@ -127,11 +136,11 @@ export function VendorProfileForm({ initialProfile }: VendorProfileFormProps) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-zinc-700" htmlFor="contactEmail">
+          <label className={labelClassName} htmlFor="contactEmail">
             Contact email
           </label>
           <input
-            className="mt-2 h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950"
+            className={inputClassName}
             id="contactEmail"
             name="contactEmail"
             type="email"
@@ -145,8 +154,8 @@ export function VendorProfileForm({ initialProfile }: VendorProfileFormProps) {
         <p
           className={
             state.status === "error"
-              ? "rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-              : "rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
+              ? "rounded-md border border-danger-border bg-danger-bg px-3 py-2 text-sm text-danger-fg"
+              : "rounded-md border border-success-border bg-success-bg px-3 py-2 text-sm text-success-fg"
           }
         >
           {state.message}
@@ -155,14 +164,14 @@ export function VendorProfileForm({ initialProfile }: VendorProfileFormProps) {
 
       <div className="flex gap-3">
         <button
-          className="h-11 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+          className="h-10 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-fg-subtle"
           disabled={isPending}
           type="submit"
         >
           {isPending ? "Saving..." : "Save changes"}
         </button>
         <button
-          className="h-11 rounded-md border border-zinc-300 px-4 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+          className="h-10 rounded-md border border-border bg-surface px-4 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg disabled:cursor-not-allowed disabled:opacity-60"
           disabled={isPending}
           onClick={() => setMode("view")}
           type="button"

@@ -24,14 +24,14 @@ export function VendorApplicationHistory({ applications }: { applications: Histo
   if (applications.length === 0) return null;
 
   return (
-    <section className="rounded-lg border border-zinc-200 bg-white">
-      <div className="border-b border-zinc-200 px-5 py-4">
-        <h2 className="text-base font-semibold text-zinc-950">Previous applications</h2>
-        <p className="mt-0.5 text-sm text-zinc-500">
+    <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+      <div className="border-b border-border px-5 py-4">
+        <h2 className="text-section-title text-fg">Previous applications</h2>
+        <p className="mt-0.5 text-sm text-fg-muted">
           A record of your past verifier application submissions.
         </p>
       </div>
-      <div className="divide-y divide-zinc-100">
+      <div className="divide-y divide-border">
         {applications.map((application) => {
           const decidedAt = application.revokedAt ?? application.reviewedAt;
           return (
@@ -40,10 +40,10 @@ export function VendorApplicationHistory({ applications }: { applications: Histo
               className="flex flex-col gap-2 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
             >
               <div>
-                <p className="text-sm font-medium text-zinc-900">
+                <p className="text-sm font-medium text-fg">
                   {application.snapshotCompanyName ?? application.vendorProfile.companyName}
                 </p>
-                <p className="mt-0.5 text-xs text-zinc-500">
+                <p className="mt-0.5 text-xs text-fg-subtle">
                   Submitted {formatDateTime(application.createdAt.toISOString())}
                   {decidedAt ? ` · Decided ${formatDateTime(decidedAt.toISOString())}` : ""}
                 </p>
@@ -51,7 +51,7 @@ export function VendorApplicationHistory({ applications }: { applications: Histo
               <div className="flex items-center gap-3">
                 <Badge tone={statusTone(application.status)}>{application.status}</Badge>
                 <Link
-                  className="text-sm text-zinc-600 underline underline-offset-2 hover:text-zinc-950"
+                  className="text-sm font-medium text-fg-muted underline underline-offset-2 hover:text-fg"
                   href={`/vendor/application/history/${application.id}`}
                 >
                   View

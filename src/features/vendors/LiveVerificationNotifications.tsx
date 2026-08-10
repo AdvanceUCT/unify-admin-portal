@@ -3,6 +3,7 @@
 import { CheckCircle2, ShieldX, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { IconButton } from "@/components/ui/IconButton";
 import { formatDateTime } from "@/lib/formatters";
 
 type LiveEvent = {
@@ -74,32 +75,32 @@ export function LiveVerificationNotifications({
   const studentUniversity = event.student.university ?? event.studentUniversity ?? "Unavailable";
 
   return (
-    <aside aria-live="assertive" className="fixed right-4 top-4 z-50 w-[min(23rem,calc(100vw-2rem))] rounded-lg border border-zinc-200 bg-white p-4 shadow-xl" role="status">
+    <aside aria-live="assertive" className="fixed right-4 top-4 z-50 w-[min(23rem,calc(100vw-2rem))] rounded-xl border border-border bg-surface p-4 shadow-lg" role="status">
       <div className="flex items-start gap-3">
-        <Icon className={approved ? "mt-0.5 shrink-0 text-emerald-600" : "mt-0.5 shrink-0 text-red-600"} size={22} aria-hidden="true" />
+        <Icon className={approved ? "mt-0.5 shrink-0 text-success-fg" : "mt-0.5 shrink-0 text-danger-fg"} size={22} aria-hidden="true" />
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-zinc-950">Verification {approved ? "successful" : "unsuccessful"}</p>
+          <p className="font-semibold text-fg">Verification {approved ? "successful" : "unsuccessful"}</p>
           {(studentName || studentId !== "Unavailable" || studentUniversity !== "Unavailable") ? (
             <div className="mt-2">
-              <p className="truncate text-sm font-medium text-zinc-950">{studentName ?? "Student verification"}</p>
+              <p className="truncate text-sm font-medium text-fg">{studentName ?? "Student verification"}</p>
               <dl className="mt-1 grid gap-0.5 text-xs">
                 <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2">
-                  <dt className="text-zinc-500">Number</dt>
-                  <dd className="truncate font-medium text-zinc-800">{studentId}</dd>
+                  <dt className="text-fg-subtle">Number</dt>
+                  <dd className="truncate font-medium text-fg-muted">{studentId}</dd>
                 </div>
                 <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2">
-                  <dt className="text-zinc-500">University</dt>
-                  <dd className="truncate font-medium text-zinc-800">{studentUniversity}</dd>
+                  <dt className="text-fg-subtle">University</dt>
+                  <dd className="truncate font-medium text-fg-muted">{studentUniversity}</dd>
                 </div>
               </dl>
             </div>
           ) : (
-            <p className="mt-2 text-sm text-zinc-500">Verified identity details are unavailable.</p>
+            <p className="mt-2 text-sm text-fg-muted">Verified identity details are unavailable.</p>
           )}
-          {event.failureReason && <p className="mt-2 text-sm text-red-700">{event.failureReason} <span className="font-mono text-xs">({event.failureCode})</span></p>}
-          <p className="mt-2 text-xs text-zinc-400">{event.branchName} / {formatDateTime(event.completedAt)}{queue.length > 1 ? ` / ${queue.length - 1} more` : ""}</p>
+          {event.failureReason && <p className="mt-2 text-sm text-danger-fg">{event.failureReason} <span className="font-mono text-xs">({event.failureCode})</span></p>}
+          <p className="mt-2 text-xs text-fg-subtle">{event.branchName} / {formatDateTime(event.completedAt)}{queue.length > 1 ? ` / ${queue.length - 1} more` : ""}</p>
         </div>
-        <button aria-label="Dismiss notification" className="grid size-8 shrink-0 place-items-center rounded-md text-zinc-500 hover:bg-zinc-100" onClick={() => setQueue((current) => current.slice(1))} type="button"><X size={17} /></button>
+        <IconButton aria-label="Dismiss notification" onClick={() => setQueue((current) => current.slice(1))} tone="ghost" type="button"><X size={17} /></IconButton>
       </div>
     </aside>
   );

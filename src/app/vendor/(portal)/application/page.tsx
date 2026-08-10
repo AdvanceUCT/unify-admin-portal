@@ -2,7 +2,6 @@ import Link from "next/link";
 import { forbidden } from "next/navigation";
 import { ClipboardList, Info } from "lucide-react";
 
-import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { VendorApplicationDetails } from "@/features/vendors/VendorApplicationDetails";
 import { VendorApplicationHistory } from "@/features/vendors/VendorApplicationHistory";
@@ -45,23 +44,19 @@ export default async function VendorApplicationPage({
   if (!application && start !== "1") {
     return (
       <div className="space-y-6">
-        <SectionHeader
-          title="Verifier application"
-          description="Apply to become an approved credential verifier."
-        />
-        <section className="flex flex-col items-center gap-4 rounded-lg border border-zinc-200 bg-white p-10 text-center">
-          <span className="grid size-12 place-items-center rounded-full bg-zinc-100 text-zinc-500">
+        <section className="flex flex-col items-center gap-4 rounded-xl border border-border bg-surface p-10 text-center shadow-md">
+          <span className="grid size-12 place-items-center rounded-full bg-brand-50 text-brand-700">
             <ClipboardList size={24} aria-hidden="true" />
           </span>
           <div>
-            <p className="text-lg font-medium text-zinc-950">Start application?</p>
-            <p className="mt-1 max-w-sm text-sm text-zinc-500">
+            <p className="text-section-title text-fg">Start application?</p>
+            <p className="mt-1 max-w-sm text-sm text-fg-muted">
               You&apos;re about to begin your verifier application. You can save your progress
               and exit at any point along the way.
             </p>
           </div>
           <Link
-            className="inline-flex h-11 items-center rounded-md bg-zinc-950 px-6 text-sm font-medium text-white transition hover:bg-zinc-800"
+            className="inline-flex h-10 items-center rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700"
             href="/vendor/application?start=1"
           >
             Start application
@@ -130,19 +125,15 @@ export default async function VendorApplicationPage({
 
     return (
       <div className="space-y-6">
-        <SectionHeader
-          title="Verifier application"
-          description="Complete all steps to apply for credential verification access."
-        />
         {previousDecision ? (
-          <section className="overflow-hidden rounded-lg border border-zinc-200 border-l-4 border-l-rose-400 bg-white">
-            <div className="flex items-center gap-3 border-b border-zinc-200 bg-zinc-50 px-5 py-3.5">
-              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-rose-50 text-rose-500">
+          <section className="overflow-hidden rounded-xl border border-danger-border bg-surface shadow-md">
+            <div className="flex items-center gap-3 border-b border-danger-border bg-danger-bg px-5 py-3.5">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-surface text-danger-fg">
                 <Info className="size-5" aria-hidden="true" />
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-medium text-zinc-950">
+                  <p className="font-medium text-fg">
                     {previousDecision.status === "REJECTED"
                       ? "Your previous application was not approved"
                       : "Your verifier access was revoked"}
@@ -151,7 +142,7 @@ export default async function VendorApplicationPage({
                     {previousDecision.status === "REJECTED" ? "Declined" : "Revoked"}
                   </Badge>
                 </div>
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-danger-fg">
                   {formatDateTime(
                     (
                       (previousDecision.status === "REJECTED"
@@ -164,16 +155,16 @@ export default async function VendorApplicationPage({
             </div>
 
             <div className="px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+              <p className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
                 Reason given
               </p>
-              <blockquote className="mt-2 border-l-2 border-rose-300 pl-3 text-sm leading-6 text-zinc-800">
+              <blockquote className="mt-2 border-l-2 border-danger-border pl-3 text-sm leading-6 text-fg-muted">
                 {(previousDecision.status === "REJECTED"
                   ? previousDecision.reviewNotes
                   : previousDecision.revokedNotes) ?? "No reason was provided."}
               </blockquote>
 
-              <p className="mt-4 text-xs text-zinc-500">
+              <p className="mt-4 text-xs text-fg-subtle">
                 Your previous details, including uploaded documents, have been carried over below —
                 update anything that needs to change before resubmitting.
               </p>
@@ -212,10 +203,6 @@ export default async function VendorApplicationPage({
 
   return (
     <div className="space-y-6">
-      <SectionHeader
-        title="Verifier application"
-        description="Apply to become an approved credential verifier."
-      />
       <VendorApplicationSummary
         companyName={application.snapshotCompanyName ?? application.vendorProfile.companyName}
         logoUrl={logoUrl}

@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Trash2, X } from "lucide-react";
+import { Building2 } from "lucide-react";
 
 import { removeLogoAction, uploadLogoAction } from "@/app/vendor/(portal)/profile/actions";
+import { Dialog } from "@/components/ui/Dialog";
 import { toSafeImageSrc } from "@/lib/url";
 
 type Status = "idle" | "uploading" | "removing";
@@ -17,17 +18,6 @@ export function VendorLogoUpload({ initialLogoUrl }: { initialLogoUrl: string | 
   const objectUrlRef = useRef<string | null>(null);
   const router = useRouter();
   const safeLogoSrc = toSafeImageSrc(logoUrl);
-
-  useEffect(() => {
-    if (!confirmOpen) return;
-
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setConfirmOpen(false);
-    };
-
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [confirmOpen]);
 
   useEffect(
     () => () => {
@@ -89,12 +79,12 @@ export function VendorLogoUpload({ initialLogoUrl }: { initialLogoUrl: string | 
 
   return (
     <div className="flex items-center gap-4">
-      <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50">
+      <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-lg border border-border bg-surface-muted">
         {safeLogoSrc ? (
           // eslint-disable-next-line @next/next/no-img-element -- signed/blob URLs aren't compatible with next/image
           <img alt="Organisation logo" className="size-full object-contain" src={safeLogoSrc} />
         ) : (
-          <Building2 className="size-6 text-zinc-300" aria-hidden="true" />
+          <Building2 className="size-6 text-fg-subtle" aria-hidden="true" />
         )}
       </div>
 
@@ -103,8 +93,8 @@ export function VendorLogoUpload({ initialLogoUrl }: { initialLogoUrl: string | 
           <label
             className={`inline-flex h-9 cursor-pointer items-center rounded-md border px-3 text-xs font-medium transition ${
               status !== "idle"
-                ? "cursor-not-allowed border-zinc-200 bg-zinc-50 text-zinc-400"
-                : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
+                ? "cursor-not-allowed border-border bg-surface-muted text-fg-subtle"
+                : "border-border bg-surface text-fg-muted hover:border-border-strong hover:bg-surface-muted hover:text-fg"
             }`}
           >
             {status === "uploading" ? "Uploading..." : logoUrl ? "Replace" : "Upload logo"}
@@ -118,7 +108,7 @@ export function VendorLogoUpload({ initialLogoUrl }: { initialLogoUrl: string | 
           </label>
           {logoUrl ? (
             <button
-              className="inline-flex h-9 items-center rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-9 items-center rounded-md border border-danger-border bg-danger-bg px-3 text-xs font-medium text-danger-fg transition hover:bg-danger-border disabled:cursor-not-allowed disabled:opacity-60"
               disabled={status !== "idle"}
               onClick={() => setConfirmOpen(true)}
               type="button"
@@ -127,67 +117,36 @@ export function VendorLogoUpload({ initialLogoUrl }: { initialLogoUrl: string | 
             </button>
           ) : null}
         </div>
-        <p className="mt-1 text-xs text-zinc-500">PNG, JPEG, or WEBP. Max 2 MB.</p>
-        {error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
+        <p className="mt-1 text-xs text-fg-subtle">PNG, JPEG, or WEBP. Max 2 MB.</p>
+        {error ? <p className="mt-1 text-xs text-danger-fg">{error}</p> : null}
       </div>
 
-      {confirmOpen ? (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setConfirmOpen(false);
-          }}
-        >
-          <div
-            aria-describedby="remove-logo-description"
-            aria-labelledby="remove-logo-title"
-            aria-modal="true"
-            className="w-full max-w-sm rounded-lg border border-zinc-200 bg-white shadow-xl"
-            role="dialog"
+      <Dialog
+        isOpen={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        title="Remove organisation logo?"
+      >
+        <p>
+          Your profile and dashboard will fall back to the default icon until
+          you upload a new one.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            className="h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted hover:border-border-strong hover:bg-surface-muted hover:text-fg"
+            onClick={() => setConfirmOpen(false)}
+            type="button"
           >
-            <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4">
-              <div className="flex gap-3">
-                <span className="grid size-9 shrink-0 place-items-center rounded-md bg-red-50 text-red-700">
-                  <Trash2 className="size-5" aria-hidden="true" />
-                </span>
-                <div>
-                  <h2 id="remove-logo-title" className="font-semibold text-zinc-950">
-                    Remove organisation logo?
-                  </h2>
-                  <p id="remove-logo-description" className="mt-1 text-sm text-zinc-600">
-                    Your profile and dashboard will fall back to the default icon until you upload a new one.
-                  </p>
-                </div>
-              </div>
-              <button
-                aria-label="Close"
-                className="grid size-8 shrink-0 place-items-center rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800"
-                onClick={() => setConfirmOpen(false)}
-                type="button"
-              >
-                <X className="size-4" aria-hidden="true" />
-              </button>
-            </div>
-            <div className="flex justify-end gap-2 px-5 py-4">
-              <button
-                className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-                onClick={() => setConfirmOpen(false)}
-                type="button"
-              >
-                Cancel
-              </button>
-              <button
-                className="h-9 rounded-md bg-red-700 px-3 text-sm font-medium text-white hover:bg-red-800"
-                onClick={handleRemove}
-                type="button"
-              >
-                Remove logo
-              </button>
-            </div>
-          </div>
+            Cancel
+          </button>
+          <button
+            className="h-9 rounded-md bg-danger-fg px-3 text-sm font-medium text-white hover:opacity-90"
+            onClick={handleRemove}
+            type="button"
+          >
+            Remove logo
+          </button>
         </div>
-      ) : null}
+      </Dialog>
     </div>
   );
 }

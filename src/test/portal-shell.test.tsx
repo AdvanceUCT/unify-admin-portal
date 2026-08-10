@@ -87,6 +87,17 @@ describe("resolveActiveNavItem", () => {
     expect(resolveActiveNavItem("/vendor", items)?.href).toBe("/vendor");
   });
 
+  it("matches the vendor root only exactly", () => {
+    const items: PortalNavItem[] = [
+      { href: "/vendor", label: "Overview", icon: "overview" },
+      { href: "/vendor/branches", label: "Branches", icon: "branches" },
+      { href: "/vendor/help", label: "Help", icon: "help" },
+    ];
+
+    expect(resolveActiveNavItem("/vendor", items)?.href).toBe("/vendor");
+    expect(resolveActiveNavItem("/vendor/help", items)?.href).toBe("/vendor/help");
+  });
+
   it("does not partially match a sibling segment", () => {
     expect(resolveActiveNavItem("/students-archive", navItems)).toBeNull();
   });
@@ -128,6 +139,19 @@ describe("isNavItemActive", () => {
 
   it("is not active on an unrelated route", () => {
     expect(isNavItemActive("/students", parent)).toBe(false);
+  });
+
+  it("does not keep vendor overview active on every vendor sub-route", () => {
+    const overview: PortalNavItem = { href: "/vendor", label: "Overview", icon: "overview" };
+    const branches: PortalNavItem = {
+      href: "/vendor/branches",
+      label: "Branches",
+      icon: "branches",
+    };
+
+    expect(isNavItemActive("/vendor", overview)).toBe(true);
+    expect(isNavItemActive("/vendor/branches", overview)).toBe(false);
+    expect(isNavItemActive("/vendor/branches", branches)).toBe(true);
   });
 });
 
