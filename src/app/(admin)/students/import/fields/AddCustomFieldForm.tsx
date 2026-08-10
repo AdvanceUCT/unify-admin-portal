@@ -12,13 +12,13 @@ export function AddCustomFieldForm() {
   const [label, setLabel] = useState("");
 
   return (
-    <form action={formAction} className="space-y-4 rounded-lg border border-zinc-200 bg-white p-5">
+    <form action={formAction} className="space-y-4 rounded-lg border border-border bg-surface p-5 shadow-md">
       <div className="max-w-sm">
-        <label className="block text-sm font-medium text-zinc-700" htmlFor="label">
+        <label className="block text-sm font-medium text-fg" htmlFor="label">
           Label
         </label>
         <input
-          className="mt-2 h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950"
+          className="mt-2 h-11 w-full rounded-md border border-border px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
           id="label"
           name="label"
           onChange={(event) => setLabel(event.target.value)}
@@ -33,8 +33,8 @@ export function AddCustomFieldForm() {
         <p
           className={
             state.status === "error"
-              ? "rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-              : "rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
+              ? "rounded-md border border-danger-border bg-danger-bg px-3 py-2 text-sm text-danger-fg"
+              : "rounded-md border border-success-border bg-success-bg px-3 py-2 text-sm text-success-fg"
           }
         >
           {state.message}
@@ -42,7 +42,7 @@ export function AddCustomFieldForm() {
       ) : null}
 
       <button
-        className="h-11 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+        className="h-11 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
         disabled={isPending}
         type="submit"
       >

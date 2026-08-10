@@ -116,13 +116,13 @@ export function MappingStep({
     const availableColumns = columns.filter((column) => column === selectedColumn || !mappedColumns.has(column));
 
     return (
-      <label key={field.name} className="grid grid-cols-[1fr_2fr] items-center gap-4 text-sm">
-        <span className="font-medium text-zinc-700">
+      <label key={field.name} className="grid grid-cols-[1fr_2fr] items-center gap-4 text-body">
+        <span className="font-medium text-fg">
           {field.label}
-          {field.required ? <span className="ml-1 text-rose-600">*</span> : null}
+          {field.required ? <span className="ml-1 text-danger-fg">*</span> : null}
         </span>
         <select
-          className="h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-800 focus:border-zinc-500 focus:outline-none"
+          className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
           onChange={(event) => handleSelect(field.name, event.target.value)}
           value={selectedColumn}
         >
@@ -140,27 +140,27 @@ export function MappingStep({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Map columns</h2>
-        <p className="mt-1 text-sm text-zinc-600">
+        <h2 className="text-section-title text-fg">Map columns</h2>
+        <p className="mt-1 text-body text-fg-muted">
           Match each field to a column from your uploaded file. This mapping is saved so future imports don&apos;t
           need remapping from scratch.
         </p>
       </div>
 
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-zinc-800">System fields</h3>
+        <h3 className="text-sm font-semibold text-fg">System fields</h3>
         {systemFields.map(renderFieldRow)}
       </div>
 
       {customFields.length > 0 ? (
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-zinc-800">Custom fields</h3>
+          <h3 className="text-sm font-semibold text-fg">Custom fields</h3>
           {customFields.map(renderFieldRow)}
         </div>
       ) : null}
 
       {unmappedColumns.length > 0 ? (
-        <p className="text-sm text-amber-800">
+        <p className="text-sm text-warning-fg">
           <span className="font-medium">Unmapped:</span> {unmappedColumns.join(", ")}. Map above, or add a field in{" "}
           <Link className="underline underline-offset-2" href="/students/import/fields">
             Manage fields
@@ -169,18 +169,18 @@ export function MappingStep({
         </p>
       ) : null}
 
-      {error ? <p className="text-sm text-amber-700">{error}</p> : null}
+      {error ? <p className="text-sm text-danger-fg">{error}</p> : null}
 
       <div className="flex items-center gap-3">
         <button
-          className="h-10 rounded-md border border-zinc-300 px-4 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+          className="h-10 rounded-md border border-border px-4 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted"
           onClick={onBack}
           type="button"
         >
           Back
         </button>
         <button
-          className="h-10 rounded-md border border-zinc-300 px-4 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-10 rounded-md border border-border px-4 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50"
           disabled={!canSave}
           onClick={handleSave}
           type="button"
@@ -188,7 +188,7 @@ export function MappingStep({
           {isSaving ? "Saving" : "Save mapping"}
         </button>
         <button
-          className="h-10 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+          className="h-10 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
           disabled={!canSave}
           onClick={handleContinue}
           type="button"

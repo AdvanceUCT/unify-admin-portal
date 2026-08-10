@@ -15,7 +15,7 @@ export default async function StudentsImportPage() {
     return (
       <div className="space-y-6">
         <SectionHeader description="Upload a CSV and map its columns to system fields." title="Import students" />
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <p className="rounded-md border border-warning-border bg-warning-bg px-4 py-3 text-sm text-warning-fg">
           Complete university setup (profile) before importing students.
         </p>
       </div>

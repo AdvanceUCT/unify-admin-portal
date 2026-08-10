@@ -32,22 +32,22 @@ export function ImportWizard({
           return (
             <li
               key={label}
-              className={`rounded-lg border px-3 py-2 text-sm ${
+              className={`rounded-lg border px-3 py-2 text-caption ${
                 isCurrent
-                  ? "border-zinc-900 bg-white text-zinc-950"
+                  ? "border-brand-600 bg-surface text-fg"
                   : isComplete
-                    ? "border-zinc-200 bg-white text-zinc-600"
-                    : "border-zinc-200 bg-zinc-50 text-zinc-400"
+                    ? "border-border bg-surface text-fg-muted"
+                    : "border-border bg-surface-muted text-fg-subtle"
               }`}
             >
               <div className="flex items-center gap-2">
                 <span
-                  className={`grid size-6 place-items-center rounded-full text-xs font-semibold ${
+                  className={`grid size-6 place-items-center rounded-full text-caption font-semibold ${
                     isCurrent
-                      ? "bg-zinc-900 text-white"
+                      ? "bg-brand-600 text-white"
                       : isComplete
-                        ? "bg-zinc-200 text-zinc-700"
-                        : "bg-zinc-100 text-zinc-400"
+                        ? "bg-surface-muted text-fg-muted"
+                        : "bg-surface-muted text-fg-subtle"
                   }`}
                 >
                   {index + 1}
@@ -59,7 +59,7 @@ export function ImportWizard({
         })}
       </ol>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-6">
+      <section className="rounded-lg border border-border bg-surface p-6 shadow-md">
         {currentStep === 0 ? (
           <UploadStep
             onUploaded={(nextFile, nextColumns) => {
@@ -98,7 +98,7 @@ export function ImportWizard({
       </section>
 
       {currentStep === 1 && savedAt ? (
-        <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+        <p className="rounded-md border border-success-border bg-success-bg px-3 py-2 text-sm text-success-fg">
           Mapping saved. The next CSV upload will pre-fill these choices.
         </p>
       ) : null}

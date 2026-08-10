@@ -47,8 +47,8 @@ export function UploadStep({ onUploaded }: { onUploaded: (file: File, columns: s
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Upload student CSV</h2>
-        <p className="mt-1 text-sm text-zinc-600">
+        <h2 className="text-section-title text-fg">Upload student CSV</h2>
+        <p className="mt-1 text-body text-fg-muted">
           Choose the CSV file exported from your student records system. You&apos;ll map its columns to system
           fields next.
         </p>
@@ -57,15 +57,15 @@ export function UploadStep({ onUploaded }: { onUploaded: (file: File, columns: s
       <form className="space-y-4" onSubmit={handleSubmit}>
         <input
           accept=".csv,text/csv"
-          className="block w-full text-sm text-zinc-700 file:mr-4 file:h-10 file:rounded-md file:border file:border-zinc-300 file:bg-white file:px-4 file:text-sm file:font-medium file:text-zinc-700 hover:file:bg-zinc-50"
+          className="block w-full text-sm text-fg-muted file:mr-4 file:h-10 file:rounded-md file:border file:border-border file:bg-surface file:px-4 file:text-sm file:font-medium file:text-fg-muted hover:file:bg-surface-muted"
           onChange={(event) => setFile(event.target.files?.[0] ?? null)}
           type="file"
         />
 
-        {error ? <p className="text-sm text-amber-700">{error}</p> : null}
+        {error ? <p className="text-sm text-danger-fg">{error}</p> : null}
 
         <button
-          className="h-10 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+          className="h-10 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
           disabled={isUploading}
           type="submit"
         >
