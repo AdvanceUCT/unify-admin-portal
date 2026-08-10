@@ -43,31 +43,96 @@ University administrator           Approved vendor
 
 | Layer | Technology |
 |---|---|
-| Application | Next.js 16.2, React 19.2, TypeScript 5, Tailwind CSS 4 |
-| Authentication | Better Auth 1.6 with Prisma adapter |
-| Data | PostgreSQL, Prisma 7.8, Supabase Postgres and private Storage |
-| Validation and integrations | Zod 4, Resend, QR Code, UNIFY Agent Service |
-| Testing and deployment | Vitest 4, Testing Library, ESLint, Vercel |
+| Framework | [![Next.js](https://img.shields.io/badge/Next.js_16.2-black?style=flat-square&logo=next.js&logoColor=white)](https://nextjs.org/) [![React](https://img.shields.io/badge/React_19.2-20232A?style=flat-square&logo=react&logoColor=61DAFB)](https://react.dev/) |
+| Language | [![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) |
+| Styling | [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS_4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/) |
+| Authentication | [![Better Auth](https://img.shields.io/badge/Better_Auth_1.6-black?style=flat-square&logo=auth0&logoColor=white)](https://www.better-auth.com/) |
+| Data | [![Prisma](https://img.shields.io/badge/Prisma_7.8-2D3748?style=flat-square&logo=prisma&logoColor=white)](https://www.prisma.io/) [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/) [![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=flat-square&logo=supabase&logoColor=white)](https://supabase.com/) |
+| Validation and email | [![Zod](https://img.shields.io/badge/Zod_4-3E67B1?style=flat-square&logo=zod&logoColor=white)](https://zod.dev/) [![Resend](https://img.shields.io/badge/Resend-black?style=flat-square&logo=resend&logoColor=white)](https://resend.com/) |
+| Agent integration | [![Credo](https://img.shields.io/badge/UNIFY_Agent-Credo_TS-informational?style=flat-square&logo=hyperledger&logoColor=white)](https://credo.js.org/) |
+| Testing | [![Vitest](https://img.shields.io/badge/Vitest_4-6E9F18?style=flat-square&logo=vitest&logoColor=white)](https://vitest.dev/) [![Testing Library](https://img.shields.io/badge/Testing_Library-E33332?style=flat-square&logo=testinglibrary&logoColor=white)](https://testing-library.com/) |
+| Deployment | [![Vercel](https://img.shields.io/badge/Vercel-black?style=flat-square&logo=vercel&logoColor=white)](https://vercel.com/) |
 
 ## Repository layout
 
 ```text
 unify-admin-portal/
-├── prisma/                         # Schema, migrations, bootstrap seed, student seed
-├── scripts/                        # Production migration and operational scripts
+├── prisma/
+│   ├── migrations/                 # Committed PostgreSQL migration history
+│   ├── schema.prisma               # Auth, students, credentials, vendors, verification, audit
+│   ├── seed.ts                     # Initial SUPER_ADMIN seed
+│   └── seed-students.ts            # Optional demonstration student records
+├── scripts/
+│   └── run-production-migrations.mjs # Fail-closed Vercel production migration runner
 ├── src/
 │   ├── app/
-│   │   ├── (admin)/                # Protected university administration pages
-│   │   ├── (auth)/                 # First-run setup
-│   │   ├── (public)/               # Auth, activation, and public verification pages
-│   │   ├── api/                    # Admin, issuance, vendor, and agent webhook APIs
-│   │   └── vendor/                 # Vendor authentication and protected portal
-│   ├── components/                 # Shared layout and UI primitives
-│   ├── features/                   # Domain-oriented admin and vendor UI
-│   ├── generated/prisma/           # Generated Prisma client; do not edit
-│   ├── lib/                        # Auth, database, agent, issuance, email, audit, storage
-│   └── test/                       # Vitest setup and shared test helpers
-├── .env.example                    # Local and deployment configuration reference
+│   │   ├── (admin)/
+│   │   │   ├── audit/              # Searchable administrator audit history
+│   │   │   ├── credentials/
+│   │   │   │   ├── issuance/
+│   │   │   │   │   ├── batch/      # Preview, start, inspect, and retry batch runs
+│   │   │   │   │   └── individual/ # Per-student issuance workflow
+│   │   │   │   └── schemas/        # Credential schema versions and status
+│   │   │   ├── settings/           # University profile, logo, and agent health
+│   │   │   ├── students/
+│   │   │   │   ├── [studentId]/    # Student detail and credential lifecycle
+│   │   │   │   └── import/         # CSV upload, mapping, preview, custom fields
+│   │   │   ├── users/              # Admin roles, status, sessions, and invites
+│   │   │   └── vendors/            # Application review and verification history
+│   │   ├── (auth)/setup/            # Issuer DID/schema/credential-definition wizard
+│   │   ├── (public)/
+│   │   │   ├── activate/            # Student credential activation landing page
+│   │   │   ├── verify/              # Wallet launch and browser verification fallback
+│   │   │   ├── accept-invite/       # Admin invitation acceptance
+│   │   │   ├── sign-in/             # Shared administrator sign-in
+│   │   │   ├── forgot-password/     # Password-reset request
+│   │   │   └── reset-password/      # Token-bound password reset
+│   │   ├── api/
+│   │   │   ├── credentials/         # Schema and batch issuance APIs
+│   │   │   ├── students/            # Search, import, issue, renew, lifecycle APIs
+│   │   │   ├── vendor/              # Live, checkout, export, API-key, webhook APIs
+│   │   │   └── webhooks/agent/      # Signed credential event receiver
+│   │   └── vendor/
+│   │       ├── (auth)/               # Vendor sign-up, sign-in, invite acceptance
+│   │       └── (portal)/
+│   │           ├── application/      # Application wizard and submission history
+│   │           ├── branches/         # Service-point branch management
+│   │           ├── integrations/     # API credentials and result webhooks
+│   │           ├── staff/            # Staff invitations and branch assignment
+│   │           ├── verifications/    # History, filters, CSV export, callback retry
+│   │           ├── profile/          # Vendor organization profile
+│   │           └── help/             # Authenticated vendor support requests
+│   ├── components/
+│   │   ├── layout/                   # Admin/vendor shells and navigation
+│   │   └── ui/                       # Shared form, status, table, and metric primitives
+│   ├── features/
+│   │   ├── agent/                    # Agent availability and status UI
+│   │   ├── setup/                    # University bootstrap wizard components
+│   │   ├── credentials/              # Credential and issuance components
+│   │   ├── students/                 # Student search/detail components
+│   │   ├── imports/                  # CSV mapping, preview, reconciliation UI
+│   │   ├── vendors/                  # Application and vendor management UI
+│   │   ├── audit/                    # Audit history presentation
+│   │   └── rules/                    # Credential validity presentation
+│   ├── lib/
+│   │   ├── auth/                     # Better Auth, sessions, roles, permissions, invites
+│   │   ├── db/                       # Prisma singleton using the pooled runtime URL
+│   │   ├── credentials/              # Lifecycle mapping and status reconciliation
+│   │   ├── issuance/                 # Batch run orchestration
+│   │   ├── imports/                  # CSV parsing, mapping, validation, commit
+│   │   ├── students/                 # Student repository
+│   │   ├── vendors/                  # Vendor access, crypto, callbacks, history
+│   │   ├── verification/             # Wallet/deep-link construction
+│   │   ├── email/                    # Resend delivery and templates
+│   │   ├── storage/                  # Private Supabase vendor documents
+│   │   ├── audit/                    # Append-oriented audit writers
+│   │   └── agentClient.ts            # Authenticated agent-service client
+│   ├── generated/prisma/             # Generated Prisma client; do not edit
+│   └── test/                         # Vitest setup and shared test helpers
+├── .env.example                      # Complete local/deployment configuration reference
+├── prisma.config.ts                  # Prisma schema, migrations, seed, direct URL
+├── proxy.ts                          # Session-aware route protection and redirects
+├── vercel.json                       # Hosted deployment configuration
 ├── next.config.ts
 └── package.json
 ```
