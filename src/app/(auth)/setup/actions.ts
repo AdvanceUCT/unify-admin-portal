@@ -6,31 +6,47 @@ import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import * as agentClient from "@/lib/agentClient";
 import { AgentServiceError } from "@/lib/agentClient";
-import { getUniversityProfile, upsertUniversityProfile } from "@/lib/university/profile";
+import { validateLogoFile } from "@/lib/images/logoValidation";
+import { requireRole } from "@/lib/auth/session";
+import { deleteVendorDocument, getDocumentSignedUrl, uploadUniversityLogo } from "@/lib/storage/supabase";
+import {
+  getUniversityProfile,
+  saveUniversityProfileLogoPath,
+  upsertUniversityProfile,
+} from "@/lib/university/profile";
 
 const profileSchema = z.object({
   abbreviation: z.string().min(1, "Abbreviation is required"),
   contactEmail: z.string().email("Invalid email address"),
-  logoUrl: z.string().url().optional().or(z.literal("")),
   name: z.string().min(1, "University name is required"),
 });
 
 type PersistedSetupProfile = NonNullable<Awaited<ReturnType<typeof getUniversityProfile>>>;
 
-function serializeSetupProfile(profile: PersistedSetupProfile) {
+export async function serializeSetupProfile(profile: PersistedSetupProfile) {
   return {
     abbreviation: profile.abbreviation,
     contactEmail: profile.contactEmail,
     id: profile.id,
     issuerDid: profile.issuerDid,
-    logoUrl: profile.logoUrl,
+    logoUrl: profile.logoPath ? await getDocumentSignedUrl(profile.logoPath) : (profile.logoUrl ?? null),
     name: profile.name,
     setupCompletedAt: profile.setupCompletedAt?.toISOString() ?? null,
     setupStatus: profile.setupStatus,
   };
 }
 
+/**
+ * Saves the university profile and, if a logo file was included in the same
+ * submission, uploads it in the same step — the setup wizard offers logo
+ * upload as part of this one form rather than as a separate step, so this
+ * reuses the same validate -> upload -> record-path sequence
+ * `uploadUniversityLogoAction` (settings page) uses, just inlined here since
+ * that action requires a profile to already exist and at this point in setup
+ * it doesn't yet.
+ */
 export async function saveProfileAction(formData: FormData) {
+  const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
   const rawData = Object.fromEntries(formData.entries());
   const parsed = profileSchema.safeParse(rawData);
 
@@ -38,10 +54,37 @@ export async function saveProfileAction(formData: FormData) {
     throw new Error(`Invalid profile data: ${parsed.error.flatten().fieldErrors}`);
   }
 
-  const profile = await upsertUniversityProfile({
-    ...parsed.data,
-    logoUrl: parsed.data.logoUrl || null,
-  });
+  let profile = await upsertUniversityProfile(parsed.data);
+
+  const file = formData.get("file");
+  if (file instanceof File && file.size > 0) {
+    const validation = await validateLogoFile(file);
+    if (!validation.ok) {
+      throw new Error(validation.error ?? "That logo file could not be uploaded.");
+    }
+
+    let uploadedPath: string | undefined;
+    try {
+      const { path } = await uploadUniversityLogo(file, profile.id);
+      uploadedPath = path;
+      await saveUniversityProfileLogoPath(profile.id, session.user.id, path);
+      profile = { ...profile, logoPath: path };
+    } catch (error) {
+      if (uploadedPath) {
+        try {
+          await deleteVendorDocument(uploadedPath);
+        } catch (cleanupError) {
+          console.error(
+            `[setup] Failed to delete orphaned logo upload ${uploadedPath}:`,
+            cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+          );
+        }
+      }
+      console.error("[setup] Logo upload failed:", error instanceof Error ? error.message : String(error));
+      throw new Error("The profile was saved, but the logo upload failed. You can try again from Settings.");
+    }
+  }
+
   revalidatePath("/setup");
 
   return serializeSetupProfile(profile);

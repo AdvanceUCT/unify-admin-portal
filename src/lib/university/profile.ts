@@ -17,7 +17,7 @@ export async function getUniversityProfile(): Promise<UniversityProfile | null> 
 export async function upsertUniversityProfile(
   data: Pick<
     UniversityProfile,
-    "name" | "abbreviation" | "logoUrl" | "contactEmail"
+    "name" | "abbreviation" | "contactEmail"
   >,
 ) {
   const existingProfile = await getUniversityProfile();
