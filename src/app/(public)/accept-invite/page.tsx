@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, ShieldX } from "lucide-react";
 
 import { AcceptInviteForm } from "@/app/(public)/accept-invite/AcceptInviteForm";
 import { getPendingInviteByToken } from "@/lib/auth/invites";
@@ -7,14 +7,17 @@ import { formatDateTime } from "@/lib/formatters";
 
 function InvalidInvite() {
   return (
-    <main className="grid min-h-screen place-items-center bg-[#f7f8fa] px-6">
-      <section className="w-full max-w-sm rounded-lg border border-zinc-200 bg-white p-6 text-center shadow-sm">
-        <h1 className="text-xl font-semibold text-zinc-950">Invite unavailable</h1>
-        <p className="mt-3 text-sm leading-6 text-zinc-600">
+    <main className="grid min-h-screen place-items-center bg-canvas px-6">
+      <section className="w-full max-w-sm rounded-xl border border-border bg-surface p-6 text-center shadow-md">
+        <span className="mx-auto grid size-10 shrink-0 place-items-center rounded-xl bg-[linear-gradient(180deg,var(--sidebar-from),var(--sidebar-to))] text-white">
+          <ShieldX size={20} aria-hidden="true" />
+        </span>
+        <h1 className="mt-4 text-page-title text-fg">Invite unavailable</h1>
+        <p className="mt-3 text-sm leading-6 text-fg-muted">
           This invite link is invalid, expired, revoked, or already used.
         </p>
         <Link
-          className="mt-6 inline-flex h-10 items-center justify-center rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800"
+          className="mt-6 inline-flex h-10 items-center justify-center rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700"
           href="/sign-in"
         >
           Go to sign in
@@ -43,19 +46,19 @@ export default async function AcceptInvitePage({
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-[#f7f8fa] px-6">
-      <section className="w-full max-w-sm rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
+    <main className="grid min-h-screen place-items-center bg-canvas px-6">
+      <section className="w-full max-w-sm rounded-xl border border-border bg-surface p-6 shadow-md">
         <div className="mb-8 flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-md bg-zinc-950 text-white">
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[linear-gradient(180deg,var(--sidebar-from),var(--sidebar-to))] text-white">
             <ShieldCheck size={20} aria-hidden="true" />
           </span>
           <div>
-            <p className="text-sm font-medium text-zinc-500">UNIFY</p>
-            <h1 className="text-xl font-semibold text-zinc-950">Accept invite</h1>
+            <p className="text-sm font-medium text-fg-subtle">UNIFY</p>
+            <h1 className="text-page-title text-fg">Accept invite</h1>
           </div>
         </div>
 
-        <p className="text-sm leading-6 text-zinc-600">
+        <p className="text-sm leading-6 text-fg-muted">
           Set your password to activate your admin portal account.
         </p>
 

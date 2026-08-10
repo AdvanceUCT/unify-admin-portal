@@ -11,17 +11,25 @@ const labelClassName = "grid gap-1 text-sm font-medium text-fg-muted";
 
 export function StaffInviteForm({ branches }: { branches: Array<{ id: string; name: string }> }) {
   const [state, action, pending] = useActionState<StaffInviteState, FormData>(createStaffInviteAction, {});
+  const resetKey = state.resetKey ?? "initial";
+
   return (
-    <form action={action} className="space-y-4">
+    <form action={action} className="space-y-4" key={resetKey}>
       <div className="grid gap-4 sm:grid-cols-2">
-        <label className={labelClassName}>Name<input className={inputClassName} maxLength={100} name="name" required /></label>
-        <label className={labelClassName}>Email<input className={inputClassName} name="email" required type="email" /></label>
+        <label className={labelClassName}>Name<input className={inputClassName} defaultValue={state.values?.name ?? ""} maxLength={100} name="name" required /></label>
+        <label className={labelClassName}>Email<input className={inputClassName} defaultValue={state.values?.email ?? ""} name="email" required type="email" /></label>
       </div>
       <fieldset>
         <legend className="text-sm font-medium text-fg-muted">Assigned branches</legend>
         <div className="mt-2">
           {branches.length > 0 ? (
-            <BranchMultiSelect branches={branches} name="branchId" triggerLabel="Select branches" />
+            <BranchMultiSelect
+              branches={branches}
+              defaultSelectedIds={state.values?.branchIds ?? []}
+              emptyLabel="No branches selected"
+              name="branchId"
+              triggerLabel="Select branches"
+            />
           ) : (
             <p className="text-sm text-fg-subtle">No branches available yet.</p>
           )}

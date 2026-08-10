@@ -10,23 +10,49 @@ import {
   updateVendorStaffBranches,
 } from "@/lib/vendors/staff";
 
-export type StaffInviteState = { error?: string; success?: string };
+export type StaffInviteState = {
+  error?: string;
+  success?: string;
+  resetKey?: string;
+  values?: {
+    branchIds: string[];
+    email: string;
+    name: string;
+  };
+};
 
 export async function createStaffInviteAction(
   _state: StaffInviteState,
   formData: FormData,
 ): Promise<StaffInviteState> {
   const { session, context } = await requireVendorOwnerContext();
+  const values = {
+    email: String(formData.get("email") ?? ""),
+    name: String(formData.get("name") ?? ""),
+    branchIds: formData.getAll("branchId").map(String).filter(Boolean),
+  };
+  if (values.branchIds.length === 0) {
+    return {
+      error: "Select at least one branch before sending the invite.",
+      resetKey: String(Date.now()),
+      values,
+    };
+  }
+
   try {
     await createVendorStaffInvite(context.vendorProfileId, session.user.id, {
-      email: String(formData.get("email") ?? ""),
-      name: String(formData.get("name") ?? ""),
-      branchIds: formData.getAll("branchId").map(String),
+      email: values.email,
+      name: values.name,
+      branchIds: values.branchIds,
     });
     revalidatePath("/vendor/staff");
-    return { success: "Invite created." };
+    return { resetKey: String(Date.now()), success: "Invite created." };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Unable to create invite." };
+    return {
+      error: error instanceof Error ? error.message : "Unable to create invite.",
+      resetKey: String(Date.now()),
+      values,
+    };
   }
 }
 

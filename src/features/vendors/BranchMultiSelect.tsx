@@ -29,12 +29,14 @@ const MAX_VISIBLE_CHIPS = 3;
 export function BranchMultiSelect({
   branches,
   defaultSelectedIds = [],
+  emptyLabel = "No branches assigned",
   name,
   submitOnApply = false,
   triggerLabel = "Edit branches",
 }: {
   branches: { id: string; name: string }[];
   defaultSelectedIds?: string[];
+  emptyLabel?: string;
   name: string;
   submitOnApply?: boolean;
   triggerLabel?: string;
@@ -87,7 +89,7 @@ export function BranchMultiSelect({
       {allSelected ? (
         <span className="rounded-md bg-brand-50 px-2 py-1 text-xs font-medium text-brand-700">All branches</span>
       ) : selectedBranches.length === 0 ? (
-        <span className="text-xs text-fg-subtle">No branches assigned</span>
+        <span className="text-xs text-fg-subtle">{emptyLabel}</span>
       ) : (
         <>
           {visibleChips.map((branch) => (
