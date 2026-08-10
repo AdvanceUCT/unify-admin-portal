@@ -12,6 +12,7 @@ describe("VendorVerificationOverview", () => {
     render(
       await VendorVerificationOverview({
         companyName: "Demo Vendor",
+        vendorId: "vendor_1",
         verificationUrl: null,
         stats: { total: 1, approved: 1, pending: 0, thisMonth: 1 },
         supportEmail: "admin@voskuils.com",
@@ -49,8 +50,7 @@ describe("VendorVerificationOverview", () => {
 
     expect(screen.getByText(/Checkout cart_1/)).toBeInTheDocument();
     expect(screen.getByText("Caleb Voskuil")).toBeInTheDocument();
-    expect(screen.getByText("VSKCAL001")).toBeInTheDocument();
-    expect(screen.getByText("University of Cape Town")).toBeInTheDocument();
+    expect(screen.getByText("VSKCAL001 / University of Cape Town")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View all" })).toHaveAttribute("href", "/vendor/verifications");
     expect(screen.queryByText("schema_1")).not.toBeInTheDocument();
     expect(screen.queryByText("cred_def_1")).not.toBeInTheDocument();
@@ -64,6 +64,7 @@ describe("VendorVerificationOverview", () => {
     render(
       await VendorVerificationOverview({
         companyName: "Demo Vendor",
+        vendorId: "vendor_1",
         verificationUrl: "https://voskuils.com/verify/sp-public-demo",
         stats: { total: 0, approved: 0, pending: 0, thisMonth: 0 },
         recentVerifications: [],

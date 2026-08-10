@@ -44,6 +44,7 @@ export default async function VendorDashboardPage() {
       <div className="space-y-6">
         <VendorVerificationOverview
           companyName={displayBranch ? `${vendor.companyName} · ${displayBranch.name}` : vendor.companyName}
+          vendorId={vendor.id}
           verificationUrl={displayBranch?.verificationUrl ?? null}
           stats={stats}
           recentVerifications={recentVerifications}

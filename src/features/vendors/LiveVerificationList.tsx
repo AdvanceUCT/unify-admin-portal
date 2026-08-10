@@ -3,7 +3,8 @@
 import { RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { Badge } from "@/components/ui/Badge";
+import { Avatar } from "@/components/ui/Avatar";
+import { StatusText } from "@/components/ui/StatusText";
 import { formatDateTime } from "@/lib/formatters";
 
 type VerificationItem = {
@@ -175,31 +176,29 @@ export function LiveVerificationList({
         const university = verification.student.university ?? "Unavailable";
 
         return (
-        <div className="grid gap-3 px-5 py-4 transition hover:bg-surface-muted/60 sm:grid-cols-[minmax(0,1fr)_auto]" key={verification.id}>
-          <div className="min-w-0">
-            <p className="truncate text-body font-medium text-fg">{studentName}</p>
-            <dl className="mt-1 grid gap-0.5 text-xs">
-              <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2">
-                <dt className="text-fg-subtle">Number</dt>
-                <dd className="truncate font-medium text-fg-muted">{studentNumber}</dd>
-              </div>
-              <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2">
-                <dt className="text-fg-subtle">University</dt>
-                <dd className="truncate font-medium text-fg-muted">{university}</dd>
-              </div>
-            </dl>
-            <p className="mt-1 text-xs text-fg-subtle">{context} / {formatDateTime(checkedAt)}</p>
-            {verification.failureReason && <p className="mt-1 text-xs text-danger-fg">{verification.failureReason}</p>}
-            {verification.failureCode && <p className="mt-1 font-mono text-xs text-danger-fg">{verification.failureCode}</p>}
+        <div className="flex flex-col gap-3 px-5 py-4 transition hover:bg-surface-muted/60 sm:flex-row sm:items-center sm:justify-between" key={verification.id}>
+          <div className="flex min-w-0 items-center gap-3">
+            <Avatar name={studentName} />
+            <div className="min-w-0">
+              <p className="truncate text-body font-medium text-fg">{studentName}</p>
+              <p className="mt-0.5 truncate text-xs text-fg-subtle">{studentNumber} / {university}</p>
+              <p className="mt-0.5 truncate text-xs text-fg-subtle">{context} / {formatDateTime(checkedAt)}</p>
+              {verification.failureReason && (
+                <p className="mt-1 text-xs text-danger-fg">
+                  {verification.failureReason}
+                  {verification.failureCode && <span className="font-mono"> ({verification.failureCode})</span>}
+                </p>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-2 sm:justify-end">
+          <div className="flex shrink-0 items-center gap-3 pl-12 sm:flex-col sm:items-end sm:gap-1.5 sm:pl-0">
+            <StatusText tone={TONE[verification.status]}>{verification.status}</StatusText>
             {verification.latestDeliveryStatus === "DELIVERED" && <span className="text-xs font-medium text-success-fg">Webhook delivered</span>}
             {verification.latestDeliveryStatus === "FAILED" && (
               <button className="inline-flex items-center gap-1 text-xs font-medium text-fg-muted transition hover:text-fg disabled:cursor-not-allowed disabled:opacity-60" disabled={retrying === verification.id} onClick={() => retry(verification)} type="button">
                 <RefreshCw className={retrying === verification.id ? "animate-spin" : ""} size={13} /> Retry webhook
               </button>
             )}
-            <Badge tone={TONE[verification.status]}>{verification.status}</Badge>
           </div>
         </div>
         );

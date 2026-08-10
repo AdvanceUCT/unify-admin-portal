@@ -1,7 +1,8 @@
 import QRCode from "qrcode";
 import Link from "next/link";
-import { CheckCircle2, Mail, QrCode, ShieldCheck, SmartphoneNfc, UserCheck } from "lucide-react";
+import { Mail, QrCode, ShieldCheck, SmartphoneNfc, UserCheck } from "lucide-react";
 
+import { ApprovedBanner } from "@/features/vendors/ApprovedBanner";
 import { CopyButton, QrCodeActions } from "@/features/vendors/QrCodeActions";
 import { LiveVerificationList } from "@/features/vendors/LiveVerificationList";
 import { Metric } from "@/components/ui/Metric";
@@ -32,6 +33,7 @@ const HOW_IT_WORKS = [
 
 export async function VendorVerificationOverview({
   companyName,
+  vendorId,
   verificationUrl,
   stats,
   recentVerifications,
@@ -40,6 +42,7 @@ export async function VendorVerificationOverview({
   viewAllHref = "/vendor/verifications",
 }: {
   companyName: string;
+  vendorId: string;
   verificationUrl: string | null;
   stats: Awaited<ReturnType<typeof getVendorVerificationStats>>;
   recentVerifications: Awaited<ReturnType<typeof listRecentVendorVerifications>>;
@@ -54,17 +57,14 @@ export async function VendorVerificationOverview({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start gap-3 rounded-xl border border-success-border bg-success-bg p-4 shadow-md">
-        <CheckCircle2 className="mt-0.5 shrink-0 text-success-fg" size={20} aria-hidden="true" />
-        <div>
-          <p className="font-medium text-success-fg">Verifier application approved</p>
-          <p className="mt-1 text-sm text-success-fg">
-            {verificationUrl
-              ? `${companyName} is approved and ready to verify student credentials.`
-              : `${companyName} is approved. Your verification QR code will appear here once service setup is complete.`}
-          </p>
-        </div>
-      </div>
+      <ApprovedBanner
+        message={
+          verificationUrl
+            ? `${companyName} is approved and ready to verify student credentials.`
+            : `${companyName} is approved. Your verification QR code will appear here once service setup is complete.`
+        }
+        vendorId={vendorId}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Metric label="Total verifications" value={stats.total} detail="All time" tone="brand" />
