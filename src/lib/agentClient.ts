@@ -143,7 +143,10 @@ async function agentFetch(
   const url = buildAgentServiceUrl(AGENT_SERVICE_URL, path);
   const { timeoutMs, ...fetchOptions } = options;
   const method = (fetchOptions.method ?? "GET").toUpperCase();
+  // Retry reads only; repeating a write could duplicate an issuance or proof
+  // session unless that endpoint explicitly provides its own idempotency key.
   const retryDelays = method === "GET" ? SAFE_READ_RETRY_DELAYS_MS : [];
+  // Preserve one correlation identifier across every attempt of this request.
   const requestId = requestIdFrom(undefined);
 
   for (let attempt = 0; ; attempt += 1) {

@@ -61,6 +61,8 @@ async function persistLifecycleChange(change: PersistedLifecycleChange) {
     (issuance.revocationRegistryDefinitionId &&
       issuance.revocationRegistryDefinitionId !== change.revocationRegistryDefinitionId)
   ) {
+    // The exchange and revocation handles form the binding to the ledger-backed
+    // credential. A mismatch is a trust failure, not a field to reconcile.
     throw new CredentialLifecycleActionError("Agent revocation metadata does not match the stored issuance.", 409);
   }
 
@@ -69,6 +71,8 @@ async function persistLifecycleChange(change: PersistedLifecycleChange) {
     throw new CredentialLifecycleActionError("Agent returned an invalid lifecycle timestamp.", 502);
   }
 
+  // Keep the materialized credential state and its audit evidence atomic: a
+  // lifecycle transition must never be visible without the corresponding log.
   await prisma.$transaction(async (transaction) => {
     await transaction.credentialIssuance.update({
       data: {
@@ -173,6 +177,8 @@ export async function requestCredentialLifecycleChange(params: {
     );
   }
 
+  // The agent owns the revocation registry, so it must commit the authoritative
+  // transition before the portal mirrors that state in PostgreSQL.
   const result: AgentCredentialLifecycleResult = await changeCredentialLifecycle(
     issuance.credentialExchangeId,
     params.action,
@@ -201,6 +207,8 @@ export async function requestCredentialLifecycleChange(params: {
 }
 
 export async function recordCredentialLifecycleChangedEvent(payload: CredentialLifecycleChangedWebhookPayload) {
+  // Direct API responses and retried webhooks deliberately converge on the same
+  // persistence path. eventId plus skipDuplicates makes the audit write replay-safe.
   return persistLifecycleChange({
     credentialExchangeId: payload.credentialExchangeId,
     credentialRevocationId: payload.credentialRevocationId,
