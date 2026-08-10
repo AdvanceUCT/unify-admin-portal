@@ -18,7 +18,7 @@ export function BranchCreateForm() {
         <input className={inputClassName} maxLength={100} name="name" required />
       </label>
       <label className={labelClassName}>
-        Address <span className="font-normal text-fg-subtle">Optional</span>
+        <span>Address <span className="font-normal text-fg-subtle">Optional</span></span>
         <input className={inputClassName} maxLength={240} name="address" />
       </label>
       {state.error && <p className="rounded-md border border-danger-border bg-danger-bg px-3 py-2 text-sm text-danger-fg sm:col-span-2">{state.error}</p>}
