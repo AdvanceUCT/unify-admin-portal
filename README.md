@@ -1,9 +1,10 @@
-# UNIFY Admin Portal
+# UNIFY Portal
 
 The administration, governance, and vendor portal for the UNIFY student digital credential system. University teams use it to manage student records, issue and govern credentials, onboard service providers, and audit verification activity.
 
 UNIFY is a proof of concept. It demonstrates privacy-preserving credential workflows; it is not a production student-records or payment platform.
 
+# Admin Portal
 ## Current capabilities
 
 | Area | What is implemented |
