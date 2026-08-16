@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createHmac } from "node:crypto";
 
 import {
   authenticateVendorApiKey,
@@ -91,7 +92,7 @@ describe("vendor API credentials", () => {
     ).resolves.toBeNull();
   });
 
-  it("delivers verification metadata without schema identifiers", async () => {
+  it("delivers a signed minimal checkout result without identity data", async () => {
     vi.mocked(assertSafeWebhookUrl).mockResolvedValue("https://checkout.example.com/webhooks/unify");
     vi.mocked(decryptVendorSecret).mockReturnValue("vendor-webhook-secret");
     vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 204 }));
@@ -111,6 +112,7 @@ describe("vendor API credentials", () => {
       },
       schemaId: "schema-should-not-leak",
       credentialDefinitionId: "cred-def-should-not-leak",
+      createdAt: new Date("2026-08-03T20:00:00.000Z"),
       expiresAt: new Date("2026-08-03T20:05:00.000Z"),
       completedAt: new Date("2026-08-03T20:02:00.000Z"),
       deliveries: [],
@@ -126,23 +128,30 @@ describe("vendor API credentials", () => {
 
     await deliverVendorWebhook("verification-row-001", "request-001");
 
-    const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string) as Record<string, unknown>;
-    expect(body).toMatchObject({
-      attributes: {
-        firstName: "Ada",
-        institution: "University of Cape Town",
-        lastName: "Lovelace",
-        studentNumber: "STU001",
-      },
-      isVerified: true,
-      student: {
-        id: "STU001",
-        name: "Ada Lovelace",
-        university: "University of Cape Town",
-      },
+    const request = vi.mocked(fetch).mock.calls[0][1];
+    const rawBody = request?.body as string;
+    const body = JSON.parse(rawBody) as Record<string, unknown>;
+    expect(body).toEqual({
+      eventId: "event-001",
+      verificationRequestId: "verification-001",
+      checkoutId: "cart-001",
+      status: "APPROVED",
+      failureCode: null,
+      failureReason: null,
+      createdAt: "2026-08-03T20:00:00.000Z",
+      expiresAt: "2026-08-03T20:05:00.000Z",
+      completedAt: "2026-08-03T20:02:00.000Z",
     });
-    expect(body).not.toHaveProperty("schemaId");
-    expect(body).not.toHaveProperty("credentialDefinitionId");
+    expect(body).not.toHaveProperty("isVerified");
+    expect(body).not.toHaveProperty("attributes");
+    expect(body).not.toHaveProperty("student");
+
+    const headers = new Headers(request?.headers);
+    expect(headers.get("X-Request-ID")).toBe("request-001");
+    expect(headers.get("X-Unify-Event-Id")).toBe("event-001");
+    expect(headers.get("X-Unify-Signature")).toBe(
+      `sha256=${createHmac("sha256", "vendor-webhook-secret").update(rawBody).digest("hex")}`,
+    );
     expect(database.vendorWebhookDelivery.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: "DELIVERED" }),
     }));

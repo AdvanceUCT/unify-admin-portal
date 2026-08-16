@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createVendorCheckoutSession,
   exportVendorVerificationEventsCsv,
+  getVendorCheckoutVerificationResult,
   getVendorVerificationResult,
   listRecentVendorVerifications,
   listVendorVerificationEvents,
@@ -190,7 +191,7 @@ describe("vendor checkout verification", () => {
     }));
   });
 
-  it("returns vendor-facing metadata without schema identifiers", async () => {
+  it("returns only minimal checkout fields even when identity data is stored", async () => {
     database.vendorVerification.findFirst.mockResolvedValue({
       id: "stored-verification-001",
       vendorProfileId: "vendor-001",
@@ -212,19 +213,59 @@ describe("vendor checkout verification", () => {
       expiresAt: new Date("2026-08-03T20:05:00.000Z"),
     });
 
-    const result = await getVendorVerificationResult("vendor-001", "verification-001");
+    const result = await getVendorCheckoutVerificationResult("vendor-001", "verification-001");
 
-    expect(result).toMatchObject({
-      attributes: completedEvent.attributes,
-      isVerified: true,
-      student: {
-        id: "STU001",
-        name: "Ada Lovelace",
-        university: "University of Cape Town",
+    expect(result).toEqual({
+      verificationRequestId: "verification-001",
+      checkoutId: "cart-001",
+      status: "APPROVED",
+      failureCode: null,
+      failureReason: null,
+      createdAt: "2026-08-03T20:00:00.000Z",
+      expiresAt: "2026-08-03T20:05:00.000Z",
+      completedAt: "2026-08-03T20:02:00.000Z",
+    });
+    expect(result).not.toHaveProperty("isVerified");
+    expect(result).not.toHaveProperty("attributes");
+    expect(result).not.toHaveProperty("student");
+    expect(database.vendorVerification.findFirst).toHaveBeenCalledWith({
+      where: {
+        vendorProfileId: "vendor-001",
+        verificationRequestId: "verification-001",
+        checkoutId: { not: null },
       },
     });
-    expect(result).not.toHaveProperty("schemaId");
-    expect(result).not.toHaveProperty("credentialDefinitionId");
+  });
+
+  it("preserves detailed attributes for branch-scoped in-person verification", async () => {
+    database.vendorVerification.findFirst.mockResolvedValue({
+      id: "stored-verification-001",
+      verificationRequestId: "verification-001",
+      checkoutId: null,
+      status: "APPROVED",
+      isVerified: true,
+      failureCode: null,
+      attributes: completedEvent.attributes,
+      createdAt: new Date("2026-08-03T20:00:00.000Z"),
+      completedAt: new Date("2026-08-03T20:02:00.000Z"),
+      expiresAt: new Date("2026-08-03T20:05:00.000Z"),
+    });
+
+    const result = await getVendorVerificationResult("vendor-001", "verification-001", ["branch-001"]);
+
+    expect(result).toMatchObject({
+      isVerified: true,
+      attributes: completedEvent.attributes,
+      student: { id: "STU001", name: "Ada Lovelace", university: "University of Cape Town" },
+    });
+    expect(database.vendorVerification.findFirst).toHaveBeenCalledWith({
+      where: {
+        vendorProfileId: "vendor-001",
+        verificationRequestId: "verification-001",
+        checkoutId: null,
+        branchId: { in: ["branch-001"] },
+      },
+    });
   });
 
   it("enriches recent in-person rows that do not have stored attributes", async () => {
