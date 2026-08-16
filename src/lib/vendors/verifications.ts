@@ -87,7 +87,7 @@ async function getAgentVerificationMetadata(
   }
 }
 
-function resultShape(verification: {
+type VendorVerificationResultRow = {
   verificationRequestId: string | null;
   checkoutId: string | null;
   status: string;
@@ -97,7 +97,28 @@ function resultShape(verification: {
   createdAt: Date;
   expiresAt: Date | null;
   completedAt: Date | null;
-}) {
+};
+
+/**
+ * Public checkout result. External systems only need the decision and the
+ * checkout correlation identifiers; disclosed credential data stays inside
+ * the portal's in-person verification boundary.
+ */
+function checkoutResultShape(verification: VendorVerificationResultRow) {
+  return {
+    verificationRequestId: verification.verificationRequestId,
+    checkoutId: verification.checkoutId,
+    status: verification.status,
+    failureCode: verification.failureCode,
+    failureReason: vendorVerificationFailureReason(verification.failureCode),
+    createdAt: verification.createdAt.toISOString(),
+    expiresAt: verification.expiresAt?.toISOString() ?? null,
+    completedAt: verification.completedAt?.toISOString() ?? null,
+  };
+}
+
+/** Detailed result used only by the authenticated, branch-scoped vendor portal. */
+function inPersonResultShape(verification: VendorVerificationResultRow) {
   const attributes = normalizedVerificationAttributes(verification.attributes);
   return {
     verificationRequestId: verification.verificationRequestId,
@@ -252,10 +273,10 @@ export async function createVendorCheckoutSession(vendorProfileId: string, check
     update: {},
   });
 
-  return { ...resultShape(verification), verificationUrl: agentResult.verificationUrl };
+  return { ...checkoutResultShape(verification), verificationUrl: agentResult.verificationUrl };
 }
 
-/** Returns a branch-scoped verification and refreshes pending state from the agent when needed. */
+/** Returns a branch-scoped in-person verification with its disclosed attributes. */
 export async function getVendorVerificationResult(
   vendorProfileId: string,
   verificationRequestId: string,
@@ -265,6 +286,7 @@ export async function getVendorVerificationResult(
     where: {
       vendorProfileId,
       verificationRequestId,
+      checkoutId: null,
       ...(allowedBranchIds ? { branchId: { in: allowedBranchIds } } : {}),
     },
   });
@@ -276,7 +298,28 @@ export async function getVendorVerificationResult(
     const agentResult = await getVerificationResult(verification.verificationRequestId);
     verification = await applyAgentResult(verification.id, agentResult);
   }
-  return resultShape(verification);
+  return inPersonResultShape(verification);
+}
+
+/** Returns the minimal external-checkout result and refreshes pending agent state. */
+export async function getVendorCheckoutVerificationResult(
+  vendorProfileId: string,
+  verificationRequestId: string,
+) {
+  let verification = await prisma.vendorVerification.findFirst({
+    where: {
+      vendorProfileId,
+      verificationRequestId,
+      checkoutId: { not: null },
+    },
+  });
+  if (!verification) return null;
+
+  if (verification.status === "PENDING" && verification.verificationRequestId) {
+    const agentResult = await getVerificationResult(verification.verificationRequestId);
+    verification = await applyAgentResult(verification.id, agentResult);
+  }
+  return checkoutResultShape(verification);
 }
 
 /** Validates webhook bindings before materializing the agent's completed verification result. */

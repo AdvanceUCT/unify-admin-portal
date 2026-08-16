@@ -12,7 +12,7 @@ import { prisma } from "@/lib/db/prisma";
 import { decryptVendorSecret, encryptVendorSecret, hashVendorApiKey } from "@/lib/vendors/integrationCrypto";
 import { assertSafeWebhookUrl } from "@/lib/vendors/webhookSafety";
 import { requestIdFrom } from "@/lib/requestId";
-import { normalizedVerificationAttributes, summarizeVerificationStudent } from "@/lib/vendors/verificationContract";
+import { vendorVerificationFailureReason } from "@/lib/vendors/verificationContract";
 
 export async function approvedVendorProfileForUser(userId: string) {
   return prisma.vendorProfile.findFirst({
@@ -116,21 +116,22 @@ export async function deliverVendorWebhook(vendorVerificationId: string, request
     include: { vendorProfile: { include: { webhookConfig: true } }, deliveries: true },
   });
   const config = verification?.vendorProfile.webhookConfig;
-  if (!verification || !config?.enabled || !verification.verificationRequestId) return { skipped: true } as const;
+  if (!verification || !config?.enabled || !verification.verificationRequestId || !verification.checkoutId) {
+    return { skipped: true } as const;
+  }
 
   const url = await assertSafeWebhookUrl(config.url);
-  const attributes = normalizedVerificationAttributes(verification.attributes);
+  const eventId = verification.eventId ?? `verification:${verification.verificationRequestId}`;
   const payload = {
-    eventId: verification.eventId ?? `verification:${verification.verificationRequestId}`,
+    eventId,
     verificationRequestId: verification.verificationRequestId,
-    checkoutId: verification.checkoutId ?? undefined,
+    checkoutId: verification.checkoutId,
     status: verification.status,
-    isVerified: verification.isVerified ?? null,
-    failureCode: verification.failureCode ?? undefined,
-    attributes,
-    student: summarizeVerificationStudent(attributes),
-    expiresAt: verification.expiresAt?.toISOString(),
-    completedAt: verification.completedAt?.toISOString(),
+    failureCode: verification.failureCode,
+    failureReason: vendorVerificationFailureReason(verification.failureCode),
+    createdAt: verification.createdAt.toISOString(),
+    expiresAt: verification.expiresAt?.toISOString() ?? null,
+    completedAt: verification.completedAt?.toISOString() ?? null,
   };
   const body = JSON.stringify(payload);
   const signature = `sha256=${createHmac("sha256", decryptVendorSecret(config.signingSecretCiphertext)).update(body).digest("hex")}`;
@@ -148,7 +149,7 @@ export async function deliverVendorWebhook(vendorVerificationId: string, request
       headers: {
         "Content-Type": "application/json",
         "X-Request-ID": correlationId,
-        "X-Unify-Event-Id": payload.eventId,
+        "X-Unify-Event-Id": eventId,
         "X-Unify-Signature": signature,
       },
       body,

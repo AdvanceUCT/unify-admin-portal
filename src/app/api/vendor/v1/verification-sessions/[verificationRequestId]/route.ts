@@ -6,7 +6,7 @@
 import { NextResponse } from "next/server";
 
 import { vendorFromApiRequest } from "@/lib/vendors/routeAuth";
-import { getVendorVerificationResult } from "@/lib/vendors/verifications";
+import { getVendorCheckoutVerificationResult } from "@/lib/vendors/verifications";
 
 /** Handles GET requests to `/api/vendor/v1/verification-sessions/[verificationRequestId]`. */
 export async function GET(
@@ -17,7 +17,7 @@ export async function GET(
   if (!vendor) return NextResponse.json({ error: { message: "Invalid vendor API key." } }, { status: 401 });
 
   const { verificationRequestId } = await context.params;
-  const result = await getVendorVerificationResult(vendor.id, verificationRequestId);
+  const result = await getVendorCheckoutVerificationResult(vendor.id, verificationRequestId);
   if (!result) return NextResponse.json({ error: { message: "Verification was not found." } }, { status: 404 });
   return NextResponse.json(result);
 }
