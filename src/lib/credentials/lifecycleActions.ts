@@ -10,6 +10,7 @@ import { changeCredentialLifecycle, type AgentCredentialLifecycleResult } from "
 import type { CredentialLifecycleChangedWebhookPayload } from "@/lib/credentials/statusMapping";
 import { toPublicCredentialStatus } from "@/lib/credentials/lifecycle";
 import { prisma } from "@/lib/db/prisma";
+import { removeStudentFromChain } from "@/lib/ethereum/ethereumService";
 
 export type CredentialLifecycleAction = "reactivate" | "revoke" | "suspend";
 
@@ -125,7 +126,29 @@ async function persistLifecycleChange(change: PersistedLifecycleChange) {
     }
   });
 
+  if (change.status === "REVOKED") {
+    await removeRevokedStudentFromChain(issuance.studentId);
+  }
+
   return { lifecycleState: change.status, updatedAt: occurredAt.toISOString() };
+}
+
+/**
+ * Best-effort mirror of a credential revocation onto the StudentRegistry
+ * contract. Never blocks or fails revocation — blockchain removal is an
+ * addition on top of the authoritative Postgres/agent state, not a requirement.
+ */
+async function removeRevokedStudentFromChain(studentId: string) {
+  try {
+    const student = await prisma.student.findFirst({
+      where: { OR: [{ studentNumber: studentId }, { id: studentId }] },
+    });
+    if (student?.ethAddress) {
+      await removeStudentFromChain(student.ethAddress);
+    }
+  } catch (error) {
+    console.error("Chain removal failed:", error);
+  }
 }
 
 function expectedStatusFor(action: CredentialLifecycleAction) {

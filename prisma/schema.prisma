@@ -389,6 +389,7 @@ model Student {
   programme     String?
   attributes    Json     @default("{}")
   source        String   @default("csv")
+  ethAddress    String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

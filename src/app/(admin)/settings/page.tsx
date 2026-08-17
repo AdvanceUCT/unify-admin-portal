@@ -3,17 +3,19 @@
  * @module app/(admin)/settings/page
  */
 
-import { Activity, Building, Clock, FileText, Link as LinkIcon, Webhook } from "lucide-react";
+import { Activity, Building, Clock, FileText, Link as LinkIcon, Webhook, Wallet } from "lucide-react";
 
 import { checkAgentHealth } from "@/lib/agentClient";
 import { ADMIN_ROLES, ROLE_LABELS, type AdminRole } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
 import { env } from "@/lib/config/env";
+import { getNetworkStatus } from "@/lib/ethereum/ethereumService";
 import { getDocumentSignedUrl } from "@/lib/storage/supabase";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfile } from "@/lib/university/profile";
 import { saveRenewalSettingsAction } from "./actions";
 import { AgentServiceHealthCard } from "./AgentServiceHealthCard";
+import { EthereumNetworkCard } from "./EthereumNetworkCard";
 import { SettingsCard, SettingsField } from "./SettingsCard";
 import { UniversityLogoUpload } from "./UniversityLogoUpload";
 import { UniversityProfileForm } from "./UniversityProfileForm";
@@ -33,6 +35,7 @@ export default async function SettingsPage() {
   const activeSchema = profile ? await getActiveCredentialSchema(profile.id) : null;
   const agentHealth = await checkAgentHealth();
   const webhookEndpoint = new URL("/api/webhooks/agent", env.APP_URL).toString();
+  const ethereumNetworkStatus = await getNetworkStatus();
 
   return (
     <div className="space-y-6">
@@ -195,6 +198,20 @@ export default async function SettingsPage() {
             value={webhookEndpoint}
           />
         </div>
+      </SettingsCard>
+
+      <SettingsCard
+        description="Sepolia testnet connection used for on-chain student verification and payments. Read only."
+        icon={Wallet}
+        title="Ethereum network"
+      >
+        <EthereumNetworkCard
+          adminKeyStatus={configuredStatus(process.env.ADMIN_ETH_PRIVATE_KEY)}
+          networkStatus={ethereumNetworkStatus}
+          studentPaymentAddress={process.env.STUDENT_PAYMENT_ADDRESS ?? "Not set"}
+          studentRegistryAddress={process.env.STUDENT_REGISTRY_ADDRESS ?? "Not set"}
+          walletBalanceAddress={process.env.WALLET_BALANCE_ADDRESS ?? "Not set"}
+        />
       </SettingsCard>
     </div>
   );

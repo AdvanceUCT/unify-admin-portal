@@ -1,0 +1,28 @@
+[
+  {
+    "type": "function",
+    "name": "getBalance",
+    "stateMutability": "view",
+    "inputs": [{ "name": "student", "type": "address" }],
+    "outputs": [{ "name": "", "type": "uint256" }]
+  },
+  {
+    "type": "event",
+    "name": "TopUp",
+    "inputs": [
+      { "name": "student", "type": "address", "indexed": true },
+      { "name": "amount", "type": "uint256", "indexed": false }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Spent",
+    "inputs": [
+      { "name": "student", "type": "address", "indexed": true },
+      { "name": "amount", "type": "uint256", "indexed": false },
+      { "name": "servicePointId", "type": "bytes32", "indexed": false }
+    ],
+    "anonymous": false
+  }
+]

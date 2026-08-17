@@ -1,0 +1,41 @@
+[
+  {
+    "type": "function",
+    "name": "registerStudent",
+    "stateMutability": "nonpayable",
+    "inputs": [
+      { "name": "studentAddress", "type": "address" },
+      { "name": "_studentNumberHash", "type": "bytes32" }
+    ],
+    "outputs": []
+  },
+  {
+    "type": "function",
+    "name": "removeStudent",
+    "stateMutability": "nonpayable",
+    "inputs": [{ "name": "studentAddress", "type": "address" }],
+    "outputs": []
+  },
+  {
+    "type": "function",
+    "name": "checkStudent",
+    "stateMutability": "view",
+    "inputs": [{ "name": "studentAddress", "type": "address" }],
+    "outputs": [{ "name": "", "type": "bool" }]
+  },
+  {
+    "type": "event",
+    "name": "StudentRegistered",
+    "inputs": [
+      { "name": "student", "type": "address", "indexed": true },
+      { "name": "studentNumberHash", "type": "bytes32", "indexed": false }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "StudentRemoved",
+    "inputs": [{ "name": "student", "type": "address", "indexed": true }],
+    "anonymous": false
+  }
+]

@@ -47,6 +47,12 @@ next-env.d.ts
 # Local dev
 /docs-local
 
+# hardhat
+deployments/sepolia.json
+artifacts/
+cache/hardhat/
+typechain-types/
+
 .claude
 .claude/settings.local.json
 .claude/settings.local.json

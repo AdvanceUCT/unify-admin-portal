@@ -18,6 +18,7 @@ function student(overrides: Partial<Student> = {}): Student {
     attributes: { cohort: "2026" },
     createdAt: new Date("2026-01-01"),
     email: "ada@example.edu",
+    ethAddress: null,
     faculty: "Science",
     firstName: "Ada",
     id: "student-1",

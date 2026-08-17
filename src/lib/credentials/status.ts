@@ -19,6 +19,7 @@ import type { CredentialEventLog, CredentialIssuance } from "@/generated/prisma/
 import type { CredentialActivityEvent, DashboardSummary, StudentRecord } from "@/lib/api/types";
 import { toPublicCredentialStatus, type CredentialLifecycleSource } from "@/lib/credentials/lifecycle";
 import { prisma } from "@/lib/db/prisma";
+import { registerStudentOnChain } from "@/lib/ethereum/ethereumService";
 import {
   derivedCredentialEventId,
   isRelevantCredentialStateChangedPayload,
@@ -188,6 +189,24 @@ export async function createCredentialIssuanceFromOffer(params: {
  * @param currentStatus - The status currently stored in the DB.
  * @returns `true` if it's safe to apply the new status.
  */
+/**
+ * Best-effort mirror of a freshly-issued credential onto the StudentRegistry
+ * contract. Never blocks or fails issuance — blockchain registration is an
+ * addition on top of the authoritative Postgres/agent state, not a requirement.
+ */
+async function registerIssuedStudentOnChain(studentId: string) {
+  try {
+    const student = await prisma.student.findFirst({
+      where: { OR: [{ studentNumber: studentId }, { id: studentId }] },
+    });
+    if (student?.ethAddress) {
+      await registerStudentOnChain(student.ethAddress, student.studentNumber);
+    }
+  } catch (error) {
+    console.error("Chain registration failed:", error);
+  }
+}
+
 function shouldApplyStatus(
   mappedStatus: CredentialIssuanceStatus,
   currentStatus?: CredentialIssuanceStatus | null,
@@ -351,6 +370,8 @@ export async function recordCredentialStateChangedEvent(payload: CredentialState
           },
           skipDuplicates: true,
         });
+
+        await registerIssuedStudentOnChain(existingIssuance.studentId);
       }
     }
   }
