@@ -4,6 +4,7 @@
  */
 
 import {
+  Banknote,
   Building2,
   ClipboardList,
   Gauge,
@@ -32,6 +33,7 @@ export const NAV_ICONS = {
   help: CircleHelp,
   integrations: KeyRound,
   overview: Gauge,
+  payments: Banknote,
   profile: UserCog,
   schemas: Layers3,
   settings: Settings,

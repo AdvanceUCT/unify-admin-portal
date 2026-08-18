@@ -19,6 +19,7 @@ import { checkVendorAgentHealthAction } from "./actions";
 const ownerNavItems: PortalNavItem[] = [
   { href: "/vendor", label: "Overview", icon: "overview" },
   { href: "/vendor/verifications", label: "Verifications", icon: "verifications" },
+  { href: "/vendor/payments", label: "Payments", icon: "payments" },
   { href: "/vendor/branches", label: "Branches", icon: "branches" },
   { href: "/vendor/staff", label: "Staff", icon: "staff" },
   { href: "/vendor/application", label: "Application", icon: "application" },
@@ -30,6 +31,7 @@ const ownerNavItems: PortalNavItem[] = [
 const staffNavItems: PortalNavItem[] = [
   { href: "/vendor", label: "Overview", icon: "overview" },
   { href: "/vendor/verifications", label: "Verifications", icon: "verifications" },
+  { href: "/vendor/payments", label: "Payments", icon: "payments" },
   { href: "/vendor/branches", label: "Branches", icon: "branches" },
   { href: "/vendor/help", label: "Help", icon: "help" },
 ];

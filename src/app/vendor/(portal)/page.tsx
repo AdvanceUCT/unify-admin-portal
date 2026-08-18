@@ -8,6 +8,7 @@ import { ChevronRight, Mail } from "lucide-react";
 
 import { Badge } from "@/components/ui/Badge";
 import { VendorApplicationLanding } from "@/features/vendors/VendorApplicationLanding";
+import { VendorPaymentQr } from "@/features/vendors/VendorPaymentQr";
 import { VendorVerificationOverview } from "@/features/vendors/VendorVerificationOverview";
 import { prisma } from "@/lib/db/prisma";
 import { requireVendorSession } from "@/lib/auth/session";
@@ -28,6 +29,13 @@ export default async function VendorDashboardPage() {
         branches: {
           where: context.role === "STAFF" ? { id: { in: context.branchIds } } : {},
           orderBy: { name: "asc" },
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            agentServicePointId: true,
+            verificationUrl: true,
+          },
         },
         defaultBranch: true,
       },
@@ -57,6 +65,13 @@ export default async function VendorDashboardPage() {
           liveCursor={encodeLiveVerificationCursor({ completedAt: new Date().toISOString(), id: "_" })}
           viewAllHref={viewAllHref}
         />
+        {displayBranch?.agentServicePointId && (
+          <VendorPaymentQr
+            vendorId={vendor.id}
+            agentServicePointId={displayBranch.agentServicePointId}
+            companyName={displayBranch ? `${vendor.companyName} · ${displayBranch.name}` : vendor.companyName}
+          />
+        )}
         <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
           <div className="border-b border-border px-5 py-4"><h2 className="text-section-title text-fg">Branches</h2></div>
           <div className="divide-y divide-border">
