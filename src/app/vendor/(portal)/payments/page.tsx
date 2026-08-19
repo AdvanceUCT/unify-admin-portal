@@ -3,6 +3,8 @@
  * @module app/vendor/(portal)/payments/page
  */
 
+import { VendorPaymentQr } from "@/features/vendors/VendorPaymentQr";
+import { prisma } from "@/lib/db/prisma";
 import { requireApprovedVendorContext } from "@/lib/vendors/context";
 
 const HOW_PAYMENTS_WORK = [
@@ -26,10 +28,36 @@ const HOW_PAYMENTS_WORK = [
 ];
 
 export default async function VendorPaymentsPage() {
-  await requireApprovedVendorContext();
+  const { context } = await requireApprovedVendorContext();
+
+  const vendor = await prisma.vendorProfile.findUnique({
+    where: { id: context.vendorProfileId },
+    include: {
+      branches: {
+        where: context.role === "STAFF" ? { id: { in: context.branchIds } } : {},
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, agentServicePointId: true },
+      },
+      defaultBranch: true,
+    },
+  });
+  if (!vendor) return null;
+
+  const displayBranch =
+    (vendor.defaultBranch && context.branchIds.includes(vendor.defaultBranch.id) ? vendor.defaultBranch : null) ??
+    vendor.branches[0] ??
+    null;
 
   return (
     <div className="space-y-6">
+      {displayBranch?.agentServicePointId && (
+        <VendorPaymentQr
+          vendorId={vendor.id}
+          agentServicePointId={displayBranch.agentServicePointId}
+          companyName={displayBranch ? `${vendor.companyName} · ${displayBranch.name}` : vendor.companyName}
+        />
+      )}
+
       <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
         <h2 className="text-section-title text-fg">Payment history</h2>
         <p className="mt-1 text-sm text-fg-muted">
