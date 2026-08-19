@@ -24,7 +24,7 @@ export async function VendorPaymentQr({
       <div className="border-b border-border px-5 py-4">
         <h2 className="text-section-title text-fg">Campus payment QR</h2>
         <p className="mt-1 text-sm text-fg-muted">
-          Display this at your service point so students can scan and pay instantly. Verified UCT students receive a
+          Display this at your service point so students can scan and pay instantly. Verified students receive a
           20% discount automatically.
         </p>
       </div>

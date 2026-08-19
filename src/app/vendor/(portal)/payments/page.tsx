@@ -19,7 +19,7 @@ const HOW_PAYMENTS_WORK = [
   {
     title: "Discount applied automatically",
     description:
-      "If they hold a valid UCT student credential, a 20% discount is applied on-chain. They pay R28.00 instead of R35.00.",
+      "If they hold a valid student credential, a 20% discount is applied on-chain. They pay R28.00 instead of R35.00.",
   },
   {
     title: "Transaction recorded on blockchain",
