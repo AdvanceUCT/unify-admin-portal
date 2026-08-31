@@ -37,35 +37,53 @@ function assertDocumentField(fieldKey: string): DocumentField {
   return fieldKey as DocumentField;
 }
 
-const step1Schema = z.object({
-  companyName: z.string().trim().min(1, "Company name is required").max(200, "Company name must be 200 characters or fewer"),
-  companyRegistrationNumber: z
-    .string()
-    .trim()
-    .regex(/^\d{4}\/\d{6}\/\d{2}$/, "Registration number must be in the format YYYY/NNNNNN/NN"),
-  serviceCategory: z.string().trim().min(1, "Service category is required"),
-  website: z
-    .string()
-    .trim()
-    .url("Website must be a valid URL")
-    .refine((value) => {
-      try {
-        return ["http:", "https:"].includes(new URL(value).protocol);
-      } catch {
-        return false;
-      }
-    }, "Website must start with http:// or https://")
-    .optional()
-    .or(z.literal("")),
-  tradingName: z.string().trim().max(200, "Trading name must be 200 characters or fewer").optional(),
-  organisationType: z.string().trim().min(1, "Organisation type is required"),
-  physicalAddress: z
-    .string()
-    .trim()
-    .min(1, "Physical address is required")
-    .max(500, "Physical address must be 500 characters or fewer"),
-  postalAddress: z.string().trim().max(500, "Postal address must be 500 characters or fewer").optional(),
-});
+const step1Schema = z
+  .object({
+    companyName: z.string().trim().min(1, "Company name is required").max(200, "Company name must be 200 characters or fewer"),
+    companyRegistrationNumber: z
+      .string()
+      .trim()
+      .regex(/^\d{4}\/\d{6}\/\d{2}$/, "Registration number must be in the format YYYY/NNNNNN/NN"),
+    serviceCategory: z.string().trim().min(1, "Service category is required"),
+    website: z
+      .string()
+      .trim()
+      .url("Website must be a valid URL")
+      .refine((value) => {
+        try {
+          return ["http:", "https:"].includes(new URL(value).protocol);
+        } catch {
+          return false;
+        }
+      }, "Website must start with http:// or https://")
+      .optional()
+      .or(z.literal("")),
+    tradingName: z.string().trim().max(200, "Trading name must be 200 characters or fewer").optional(),
+    organisationType: z.string().trim().min(1, "Organisation type is required"),
+    physicalAddress: z
+      .string()
+      .trim()
+      .min(1, "Physical address is required")
+      .max(500, "Physical address must be 500 characters or fewer"),
+    postalAddress: z.string().trim().max(500, "Postal address must be 500 characters or fewer").optional(),
+    // 1799 is the sentinel the year dropdown submits for its "Before 1800" bucket option.
+    yearOfIncorporation: z.coerce
+      .number()
+      .int("Year of incorporation must be a whole number")
+      .min(1799, "Year of incorporation must be 1799 or later")
+      .max(new Date().getFullYear(), "Year of incorporation cannot be in the future"),
+    city: z.string().trim().min(1, "City is required").max(100, "City must be 100 characters or fewer"),
+    country: z.string().trim().min(1, "Country is required"),
+    operatesInMultipleCountries: z.coerce.boolean(),
+    operatingCountries: z.array(z.string().trim().min(1)).optional(),
+  })
+  .refine(
+    (data) => !data.operatesInMultipleCountries || (data.operatingCountries?.length ?? 0) > 0,
+    {
+      message: "Select at least one country where the organisation operates",
+      path: ["operatingCountries"],
+    },
+  );
 
 const step2Schema = z.object({
   contactPersonName: z
@@ -625,6 +643,11 @@ export async function getOrCreateDraftApplication(userId: string) {
                 organisationType: previousDecision.organisationType,
                 physicalAddress: previousDecision.physicalAddress,
                 postalAddress: previousDecision.postalAddress,
+                yearOfIncorporation: previousDecision.yearOfIncorporation,
+                city: previousDecision.city,
+                country: previousDecision.country,
+                operatesInMultipleCountries: previousDecision.operatesInMultipleCountries,
+                operatingCountries: previousDecision.operatingCountries,
                 contactJobTitle: previousDecision.contactJobTitle,
                 contactPhone: previousDecision.contactPhone,
                 contactEmployeeNumber: previousDecision.contactEmployeeNumber,
@@ -680,6 +703,11 @@ export async function saveDraftApplication(
           organisationType: d.organisationType,
           physicalAddress: d.physicalAddress,
           postalAddress: d.postalAddress || null,
+          yearOfIncorporation: d.yearOfIncorporation,
+          city: d.city,
+          country: d.country,
+          operatesInMultipleCountries: d.operatesInMultipleCountries,
+          operatingCountries: d.operatesInMultipleCountries ? (d.operatingCountries ?? []) : [],
         },
       });
     }
@@ -867,6 +895,12 @@ export async function submitDraftApplication(applicationId: string, userId: stri
     if (!app.snapshotServiceCategory) missing.push("service category");
     if (!app.organisationType) missing.push("organisation type");
     if (!app.physicalAddress) missing.push("physical address");
+    if (!app.yearOfIncorporation) missing.push("year of incorporation");
+    if (!app.city) missing.push("city");
+    if (!app.country) missing.push("country");
+    if (app.operatesInMultipleCountries && app.operatingCountries.length === 0) {
+      missing.push("countries of operation");
+    }
     if (!app.snapshotContactPersonName) missing.push("contact name");
     if (!app.snapshotContactEmail) missing.push("contact email");
     if (!app.contactJobTitle) missing.push("job title");

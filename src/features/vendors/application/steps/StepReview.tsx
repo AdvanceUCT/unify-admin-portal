@@ -100,6 +100,26 @@ export function StepReview({
           <ReviewRow label="Website" value={initialData.website} />
           <ReviewRow label="Physical address" value={initialData.physicalAddress} />
           <ReviewRow label="Postal address" value={initialData.postalAddress} />
+          <ReviewRow
+            label="Year of incorporation"
+            value={
+              initialData.yearOfIncorporation === "1799"
+                ? "Before 1800"
+                : initialData.yearOfIncorporation
+            }
+          />
+          <ReviewRow label="City" value={initialData.city} />
+          <ReviewRow label="Country" value={initialData.country} />
+          <ReviewRow
+            label="Operates in multiple countries"
+            value={initialData.operatesInMultipleCountries ? "Yes" : "No"}
+          />
+          {initialData.operatesInMultipleCountries && (
+            <ReviewRow
+              label="Countries of operation"
+              value={initialData.operatingCountries.join(", ")}
+            />
+          )}
         </ReviewSection>
 
         <ReviewSection title="Authorised representative" step={2} onEditStep={onEditStep}>

@@ -53,6 +53,11 @@ export async function saveStep1Action(formData: FormData): Promise<Step1ActionRe
       organisationType: String(formData.get("organisationType") ?? ""),
       physicalAddress: String(formData.get("physicalAddress") ?? ""),
       postalAddress: String(formData.get("postalAddress") ?? ""),
+      yearOfIncorporation: String(formData.get("yearOfIncorporation") ?? ""),
+      city: String(formData.get("city") ?? ""),
+      country: String(formData.get("country") ?? ""),
+      operatesInMultipleCountries: formData.get("operatesInMultipleCountries") === "on",
+      operatingCountries: formData.getAll("operatingCountries").map(String),
     });
 
     for (const path of REVALIDATE_PATHS) revalidatePath(path);
