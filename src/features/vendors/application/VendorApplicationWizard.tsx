@@ -23,6 +23,11 @@ export type DraftApplicationData = {
   organisationType: string;
   physicalAddress: string;
   postalAddress: string;
+  yearOfIncorporation: string;
+  city: string;
+  country: string;
+  operatesInMultipleCountries: boolean;
+  operatingCountries: string[];
   contactPersonName: string;
   contactEmail: string;
   contactJobTitle: string;

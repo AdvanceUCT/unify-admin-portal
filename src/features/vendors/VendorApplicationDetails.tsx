@@ -39,6 +39,11 @@ type VendorApplicationDetailsProps = {
     organisationType: string | null;
     physicalAddress: string | null;
     postalAddress: string | null;
+    yearOfIncorporation: number | null;
+    city: string | null;
+    country: string | null;
+    operatesInMultipleCountries: boolean | null;
+    operatingCountries: string[];
     contactJobTitle: string | null;
     contactPhone: string | null;
     contactEmployeeNumber: string | null;
@@ -131,6 +136,26 @@ export function VendorApplicationDetails({
             <DetailRow label="Website" value={website} />
             <DetailRow label="Physical address" value={application.physicalAddress} />
             <DetailRow label="Postal address" value={application.postalAddress} />
+            <DetailRow
+              label="Year of incorporation"
+              value={
+                application.yearOfIncorporation === 1799
+                  ? "Before 1800"
+                  : application.yearOfIncorporation?.toString()
+              }
+            />
+            <DetailRow label="City" value={application.city} />
+            <DetailRow label="Country" value={application.country} />
+            <DetailRow
+              label="Operates in multiple countries"
+              value={application.operatesInMultipleCountries ? "Yes" : "No"}
+            />
+            {application.operatesInMultipleCountries && (
+              <DetailRow
+                label="Countries of operation"
+                value={application.operatingCountries.join(", ")}
+              />
+            )}
           </dl>
         </div>
 
