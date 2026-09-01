@@ -114,8 +114,8 @@ export default async function VendorApplicationPage({
       contactPhone: application?.contactPhone ?? "",
       contactEmployeeNumber: application?.contactEmployeeNumber ?? "",
       preferredContactMethod: application?.preferredContactMethod ?? "",
-      verificationReasons: application?.verificationReasons ?? [],
-      otherVerificationReason: application?.otherVerificationReason ?? "",
+      applicationReasons: application?.applicationReasons ?? [],
+      otherApplicationReason: application?.otherApplicationReason ?? "",
       additionalInfo: application?.additionalInfo ?? "",
 
       docRegistrationCertificate: application?.docRegistrationCertificate ?? null,
