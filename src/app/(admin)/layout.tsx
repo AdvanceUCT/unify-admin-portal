@@ -22,6 +22,12 @@ const navItems: (PortalNavItem & { allowedRoles?: readonly AdminRole[] })[] = [
   { href: "/", label: "Overview", icon: "overview" },
   { href: "/students", label: "Students", icon: "students" },
   {
+    href: "/credentials/schemas",
+    label: "Credential Schemas",
+    icon: "schemas",
+    allowedRoles: ["SUPER_ADMIN", "ADMIN"] as const,
+  },
+  {
     href: "/credentials/issuance",
     label: "Issue Credentials",
     icon: "application",
@@ -29,12 +35,6 @@ const navItems: (PortalNavItem & { allowedRoles?: readonly AdminRole[] })[] = [
       { href: "/credentials/issuance/batch", label: "Batch issuance" },
       { href: "/credentials/issuance/individual", label: "Individual issuance" },
     ],
-  },
-  {
-    href: "/credentials/schemas",
-    label: "Credential Schemas",
-    icon: "schemas",
-    allowedRoles: ["SUPER_ADMIN", "ADMIN"] as const,
   },
   { href: "/vendors", label: "Vendors", icon: "vendors" },
   { href: "/audit", label: "Audit", icon: "audit" },
