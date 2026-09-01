@@ -17,7 +17,7 @@ import { sendVendorApplicationRejectedEmail } from "@/lib/email/vendor-applicati
 import { sendVendorApplicationRevokedEmail } from "@/lib/email/vendor-application-revoked";
 import { sendVendorApplicationSubmittedEmail } from "@/lib/email/vendor-application-submitted";
 import { ensureDefaultVendorBranch } from "@/lib/vendors/branches";
-import { OTHER_VERIFICATION_REASON_VALUE, VERIFICATION_REASON_VALUES } from "@/lib/vendors/verification-reasons";
+import { APPLICATION_REASON_VALUES, OTHER_APPLICATION_REASON_VALUE } from "@/lib/vendors/application-reasons";
 
 const DOCUMENT_FIELDS = [
   "docRegistrationCertificate",
@@ -111,14 +111,14 @@ const step2Schema = z.object({
 
 const step3Schema = z
   .object({
-    verificationReasons: z
+    applicationReasons: z
       .array(z.string().trim().min(1))
       .min(1, "Select at least one reason for requesting verification access")
       .refine(
-        (values) => values.every((value) => VERIFICATION_REASON_VALUES.includes(value)),
+        (values) => values.every((value) => APPLICATION_REASON_VALUES.includes(value)),
         "Select a valid reason for requesting verification access",
       ),
-    otherVerificationReason: z
+    otherApplicationReason: z
       .string()
       .trim()
       .max(500, "Other reason must be 500 characters or fewer")
@@ -127,11 +127,11 @@ const step3Schema = z
   })
   .refine(
     (data) =>
-      !data.verificationReasons.includes(OTHER_VERIFICATION_REASON_VALUE) ||
-      Boolean(data.otherVerificationReason),
+      !data.applicationReasons.includes(OTHER_APPLICATION_REASON_VALUE) ||
+      Boolean(data.otherApplicationReason),
     {
       message: "Please describe your other reason for requesting verification access",
-      path: ["otherVerificationReason"],
+      path: ["otherApplicationReason"],
     },
   );
 
@@ -732,9 +732,9 @@ export async function saveDraftApplication(
       return await prisma.vendorApplication.update({
         where: { id: applicationId },
         data: {
-          verificationReasons: d.verificationReasons,
-          otherVerificationReason: d.verificationReasons.includes(OTHER_VERIFICATION_REASON_VALUE)
-            ? (d.otherVerificationReason ?? null)
+          applicationReasons: d.applicationReasons,
+          otherApplicationReason: d.applicationReasons.includes(OTHER_APPLICATION_REASON_VALUE)
+            ? (d.otherApplicationReason ?? null)
             : null,
           additionalInfo: d.additionalInfo || null,
         },
@@ -906,7 +906,7 @@ export async function submitDraftApplication(applicationId: string, userId: stri
     if (!app.contactJobTitle) missing.push("job title");
     if (!app.contactPhone) missing.push("phone number");
     if (!app.preferredContactMethod) missing.push("preferred contact method");
-    if (app.verificationReasons.length === 0) missing.push("reason for requesting verification access");
+    if (app.applicationReasons.length === 0) missing.push("reason for requesting verification access");
     if (!app.docRegistrationCertificate) missing.push("registration certificate");
     if (!app.docProofOfAddress) missing.push("proof of address");
     if (!app.docRepresentativeId) missing.push("representative ID");
@@ -963,7 +963,7 @@ export async function submitDraftApplication(applicationId: string, userId: stri
 export function computeDraftProgress(application: {
   snapshotCompanyName: string | null;
   snapshotContactPersonName: string | null;
-  verificationReasons: string[];
+  applicationReasons: string[];
   docRegistrationCertificate: string | null;
   docProofOfAddress: string | null;
   docRepresentativeId: string | null;
@@ -972,7 +972,7 @@ export function computeDraftProgress(application: {
 }): number {
   if (!application.snapshotCompanyName) return 1;
   if (!application.snapshotContactPersonName) return 2;
-  if (application.verificationReasons.length === 0) return 3;
+  if (application.applicationReasons.length === 0) return 3;
   if (
     !application.docRegistrationCertificate ||
     !application.docProofOfAddress ||

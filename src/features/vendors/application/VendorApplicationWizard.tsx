@@ -9,7 +9,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Step1OrgInfo } from "./steps/Step1OrgInfo";
 import { Step2Representative } from "./steps/Step2Representative";
-import { Step3VerificationRequirements } from "./steps/Step3VerificationRequirements";
+import { Step3Reason } from "./steps/Step3Reason";
 import { Step4Documents } from "./steps/Step4Documents";
 import { Step5Declaration } from "./steps/Step5Declaration";
 import { StepReview } from "./steps/StepReview";
@@ -34,8 +34,8 @@ export type DraftApplicationData = {
   contactPhone: string;
   contactEmployeeNumber: string;
   preferredContactMethod: string;
-  verificationReasons: string[];
-  otherVerificationReason: string;
+  applicationReasons: string[];
+  otherApplicationReason: string;
   additionalInfo: string;
 
   docRegistrationCertificate: string | null;
@@ -50,7 +50,7 @@ export type DraftApplicationData = {
 const STEP_LABELS = [
   "Organisation",
   "Representative",
-  "Verification",
+  "Reason",
   "Documents",
   "Declaration",
   "Review",
@@ -158,7 +158,7 @@ export function VendorApplicationWizard({
           />
         )}
         {currentStep === 3 && applicationId && (
-          <Step3VerificationRequirements
+          <Step3Reason
             applicationId={applicationId}
             initialData={initialData}
             onComplete={() => handleNext()}

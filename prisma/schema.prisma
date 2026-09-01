@@ -266,9 +266,9 @@ model VendorApplication {
   contactPhone                String?
   contactEmployeeNumber       String?
   preferredContactMethod      String?
-  // Step 3 — Verification Requirements
-  verificationReasons         String[]                @default([])
-  otherVerificationReason     String?
+  // Step 3 — Reason for Application
+  applicationReasons          String[]                @default([])
+  otherApplicationReason      String?
   additionalInfo              String?
   // Step 4 — Supporting Documents (Supabase Storage paths)
   docRegistrationCertificate  String?

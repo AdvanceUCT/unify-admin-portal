@@ -16,7 +16,7 @@ import {
   listDecidedVendorApplications,
   listVendorApplications,
 } from "@/lib/vendors/applications";
-import { verificationReasonLabels } from "@/lib/vendors/verification-reasons";
+import { applicationReasonLabels } from "@/lib/vendors/application-reasons";
 import {
   approveVendorApplicationAction,
   createVendorVerificationQrAction,
@@ -228,12 +228,12 @@ export default async function VendorsPage({
                             </p>
                             <div className="mt-3">
                               <p className="text-caption font-medium uppercase tracking-wide text-fg-subtle">
-                                Reasons for verification
+                                Reason for application
                               </p>
                               <ul className="mt-1.5 space-y-1">
-                                {verificationReasonLabels(
-                                  application.verificationReasons,
-                                  application.otherVerificationReason,
+                                {applicationReasonLabels(
+                                  application.applicationReasons,
+                                  application.otherApplicationReason,
                                 ).map((label) => (
                                   <li className="flex items-start gap-2 text-sm text-fg-muted" key={label}>
                                     <Check aria-hidden className="mt-0.5 size-3.5 shrink-0 text-success-fg" />
