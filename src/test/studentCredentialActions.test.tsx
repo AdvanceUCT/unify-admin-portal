@@ -80,6 +80,23 @@ describe("StudentCredentialActions", () => {
     );
   });
 
+  it("keeps focus in the lifecycle reason field while typing", () => {
+    if (!caleb) throw new Error("Caleb test record missing.");
+    const activeStudent = {
+      ...caleb,
+      credential: { ...caleb.credential, lifecycleState: "ACTIVE" as const },
+    };
+
+    render(<StudentCredentialActions student={activeStudent} />);
+    fireEvent.click(screen.getByRole("button", { name: "Suspend" }));
+
+    const reasonField = screen.getByLabelText("Reason");
+    reasonField.focus();
+    fireEvent.change(reasonField, { target: { value: "E" } });
+
+    expect(reasonField).toHaveFocus();
+  });
+
   it("requires a reason before permanently revoking an active credential", async () => {
     if (!caleb) throw new Error("Caleb test record missing.");
     const activeStudent = {

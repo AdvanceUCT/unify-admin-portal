@@ -34,6 +34,10 @@ export function Dialog({
     if (!isOpen) return;
 
     closeButtonRef.current?.focus();
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
