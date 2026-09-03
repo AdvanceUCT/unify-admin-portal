@@ -26,9 +26,16 @@ function hasCurrentModelDelegates(client: PrismaClient | undefined): client is P
   const candidate = client as PrismaClient & {
     batchIssuanceItem?: unknown;
     batchIssuanceRun?: unknown;
+    walletAccount?: unknown;
+    walletTransaction?: unknown;
   };
 
-  return Boolean(candidate?.batchIssuanceItem && candidate.batchIssuanceRun);
+  return Boolean(
+    candidate?.batchIssuanceItem &&
+      candidate.batchIssuanceRun &&
+      candidate.walletAccount &&
+      candidate.walletTransaction,
+  );
 }
 
 const prismaClient: PrismaClient = hasCurrentModelDelegates(globalForPrisma.prisma)
