@@ -19,7 +19,7 @@ export type PaymentWalletFoundationClient = Pick<
 >;
 
 type BootstrapPaymentWalletFoundationOptions = {
-  enablePaymentsForDevelopment?: boolean;
+  enablePaymentWalletForDevelopment?: boolean;
 };
 
 export async function provisionWalletSystemAccounts(
@@ -78,7 +78,7 @@ export async function bootstrapPaymentWalletFoundation(
       id: true,
       name: true,
       abbreviation: true,
-      paymentsEnabled: true,
+      paymentWalletEnabled: true,
     },
   });
 
@@ -95,15 +95,15 @@ export async function bootstrapPaymentWalletFoundation(
   }
 
   let university = profiles[0];
-  if (options.enablePaymentsForDevelopment && !university.paymentsEnabled) {
+  if (options.enablePaymentWalletForDevelopment && !university.paymentWalletEnabled) {
     university = await database.universityProfile.update({
       where: { id: university.id },
-      data: { paymentsEnabled: true },
+      data: { paymentWalletEnabled: true },
       select: {
         id: true,
         name: true,
         abbreviation: true,
-        paymentsEnabled: true,
+        paymentWalletEnabled: true,
       },
     });
   }

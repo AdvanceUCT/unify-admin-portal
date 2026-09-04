@@ -36,7 +36,7 @@ The command runs in one serializable database transaction and can be rerun safel
 - verifies both accounts are ZAR system accounts; and
 - verifies the migration trigger created a balance projection for each account.
 
-It does not change the current value of `UniversityProfile.paymentsEnabled`.
+It does not change the current value of `UniversityProfile.paymentWalletEnabled`.
 
 ## 3. Enable local posting when required
 
@@ -46,7 +46,7 @@ For development environments that need to exercise the posting boundary:
 npm run payments:bootstrap:dev
 ```
 
-This performs the same idempotent bootstrap and explicitly sets `paymentsEnabled` to `true`. It refuses this enablement when `NODE_ENV=production`. Production activation must eventually use a separately authorized operational workflow.
+This performs the same idempotent bootstrap and explicitly sets `paymentWalletEnabled` to `true`. It refuses this enablement when `NODE_ENV=production`. Production activation must eventually use a separately authorized operational workflow.
 
 Enabling the flag does not expose a payment feature by itself. Student sessions, payment routes, gateway webhooks, vendor payment approval handlers, and payout jobs still need to be implemented.
 

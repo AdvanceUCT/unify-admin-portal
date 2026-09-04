@@ -14,7 +14,7 @@
     "prepayments:bootstrap": "npm run prisma:generate",
     "payments:bootstrap": "tsx scripts/bootstrap-payment-wallet.ts",
     "prepayments:bootstrap:dev": "npm run prisma:generate",
-    "payments:bootstrap:dev": "tsx scripts/bootstrap-payment-wallet.ts --enable-payments",
+    "payments:bootstrap:dev": "tsx scripts/bootstrap-payment-wallet.ts --enable-payment-wallet",
     "typecheck": "tsc --noEmit",
     "pretypecheck": "npm run prisma:generate",
     "test": "vitest run",
