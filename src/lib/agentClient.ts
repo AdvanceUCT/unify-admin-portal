@@ -332,6 +332,7 @@ export async function createBatchActivationLinks(payload: {
     attributes: Array<{ name: string; value: string }>;
     email?: string;
     externalId?: string;
+    idempotencyKey?: string;
   }>;
 }): Promise<{
   failures: Array<{ email?: string; externalId?: string; message: string }>;

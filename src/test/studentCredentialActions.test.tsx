@@ -97,6 +97,29 @@ describe("StudentCredentialActions", () => {
     expect(reasonField).toHaveFocus();
   });
 
+  it("submits a UTC reactivation time for a timed suspension", async () => {
+    if (!caleb) throw new Error("Caleb test record missing.");
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ lifecycleState: "SUSPENDED" }), {
+      headers: { "Content-Type": "application/json" }, status: 200,
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<StudentCredentialActions student={{ ...caleb, credential: { ...caleb.credential, lifecycleState: "ACTIVE" as const } }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Suspend" }));
+    fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "Enrolment review" } });
+    fireEvent.click(screen.getByLabelText("Reactivate automatically"));
+    fireEvent.change(screen.getByLabelText("Suspension ends"), { target: { value: "2099-07-10T11:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const request = fetchMock.mock.calls[0][1];
+    expect(JSON.parse(request.body)).toEqual({
+      action: "suspend",
+      reactivateAt: new Date("2099-07-10T11:00").toISOString(),
+      reason: "Enrolment review",
+    });
+  });
+
   it("requires a reason before permanently revoking an active credential", async () => {
     if (!caleb) throw new Error("Caleb test record missing.");
     const activeStudent = {

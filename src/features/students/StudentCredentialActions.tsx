@@ -34,7 +34,7 @@ const lifecycleCopy: Record<LifecycleAction, { confirmClassName: string; descrip
   },
   suspend: {
     confirmClassName: "bg-warning-fg hover:opacity-90",
-    description: "Verification will fail until an administrator reactivates this credential.",
+    description: "Verification will fail until the scheduled time or an administrator reactivates this credential.",
     title: "Suspend credential",
   },
 };
@@ -61,6 +61,8 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
   const [lifecycleAction, setLifecycleAction] = useState<LifecycleAction | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  const [reactivateAutomatically, setReactivateAutomatically] = useState(false);
+  const [reactivationTime, setReactivationTime] = useState("");
 
   const canIssue = useMemo(() => {
     const stateAllowsIssue = ["NOT_ISSUED", "FAILED", "REVOKED"].includes(student.credential.lifecycleState);
@@ -179,6 +181,8 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
     setError(null);
     setMessage(null);
     setReason("");
+    setReactivateAutomatically(false);
+    setReactivationTime("");
     setLifecycleAction(action);
   }
 
@@ -196,7 +200,13 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
       const response = await fetch(
         `/api/students/${encodeURIComponent(student.profile.id)}/credentials/lifecycle`,
         {
-          body: JSON.stringify({ action: lifecycleAction, reason: reason.trim() }),
+          body: JSON.stringify({
+            action: lifecycleAction,
+            reason: reason.trim(),
+            ...(lifecycleAction === "suspend" && reactivateAutomatically
+              ? { reactivateAt: new Date(reactivationTime).toISOString() }
+              : {}),
+          }),
           headers: { "Content-Type": "application/json" },
           method: "POST",
         },
@@ -210,6 +220,22 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
       router.refresh();
     } catch (lifecycleError) {
       setError(lifecycleError instanceof Error ? lifecycleError.message : "Credential lifecycle request failed.");
+    } finally {
+      setIsChangingLifecycle(false);
+    }
+  }
+
+  async function retryAutomation() {
+    if (!student.credential.automation) return;
+    setError(null);
+    setIsChangingLifecycle(true);
+    try {
+      const response = await fetch(`/api/credentials/automation/${encodeURIComponent(student.credential.automation.id)}/retry`, { method: "POST" });
+      if (!response.ok) throw new Error(await readErrorMessage(response));
+      setMessage("Credential automation retry completed.");
+      router.refresh();
+    } catch (retryError) {
+      setError(retryError instanceof Error ? retryError.message : "Credential automation retry failed.");
     } finally {
       setIsChangingLifecycle(false);
     }
@@ -229,6 +255,23 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
           <p className="mt-4 rounded-md border border-danger-border bg-danger-bg px-3 py-2 text-sm text-danger-fg">
             {error}
           </p>
+        ) : null}
+
+        {student.credential.scheduledReactivationAt ? (
+          <p className="mt-4 rounded-md border border-warning-border bg-warning-bg px-3 py-2 text-sm text-warning-fg">
+            Scheduled to reactivate after {formatDateTime(student.credential.scheduledReactivationAt)}.
+          </p>
+        ) : student.credential.lifecycleState === "SUSPENDED" ? (
+          <p className="mt-4 text-sm text-fg-subtle">Suspended indefinitely.</p>
+        ) : null}
+        {student.credential.nextRenewalAt ? (
+          <p className="mt-3 text-sm text-fg-subtle">Next automatic renewal: {formatDateTime(student.credential.nextRenewalAt)}</p>
+        ) : null}
+        {student.credential.automation?.status === "FAILED" ? (
+          <div className="mt-4 rounded-md border border-danger-border bg-danger-bg px-3 py-2 text-sm text-danger-fg">
+            <p>{student.credential.automation.lastError ?? "Credential automation failed."}</p>
+            <button className="mt-2 rounded-md border border-danger-border px-3 py-1.5 font-medium disabled:opacity-50" disabled={isChangingLifecycle} onClick={retryAutomation} type="button">Retry now</button>
+          </div>
         ) : null}
 
         {canIssue || canRenew ? (
@@ -374,6 +417,20 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
                 value={reason}
               />
             </div>
+            {lifecycleAction === "suspend" ? (
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm font-medium text-fg">
+                  <input checked={reactivateAutomatically} disabled={isChangingLifecycle} onChange={(event) => setReactivateAutomatically(event.target.checked)} type="checkbox" />
+                  Reactivate automatically
+                </label>
+                {reactivateAutomatically ? (
+                  <label className="block text-sm font-medium text-fg" htmlFor="reactivation-time">
+                    Suspension ends
+                    <input className="mt-1.5 h-10 w-full rounded-md border border-border px-3 text-sm" disabled={isChangingLifecycle} id="reactivation-time" onChange={(event) => setReactivationTime(event.target.value)} required type="datetime-local" value={reactivationTime} />
+                  </label>
+                ) : <p className="text-sm text-fg-subtle">No end time: an administrator must reactivate it manually.</p>}
+              </div>
+            ) : null}
             <div className="flex flex-wrap justify-end gap-2">
               <button
                 className="inline-flex h-9 items-center justify-center rounded-md border border-border px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg disabled:opacity-50"
@@ -385,7 +442,7 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
               </button>
               <button
                 className={`inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${lifecycleCopy[lifecycleAction].confirmClassName}`}
-                disabled={isChangingLifecycle || !reason.trim()}
+                disabled={isChangingLifecycle || !reason.trim() || (lifecycleAction === "suspend" && reactivateAutomatically && !reactivationTime)}
                 onClick={submitLifecycleChange}
                 type="button"
               >

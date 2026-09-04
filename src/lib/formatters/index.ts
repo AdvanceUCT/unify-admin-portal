@@ -37,11 +37,15 @@ const activationDeliveryStatusLabels: Record<ActivationDeliveryStatus, string> =
 };
 
 const credentialAuditActionLabels: Record<CredentialAuditLogEntry["action"], string> = {
+  CREDENTIAL_AUTOMATION_CANCELLED: "Automation cancelled",
+  CREDENTIAL_AUTOMATION_FAILED: "Automation failed",
+  CREDENTIAL_AUTOMATION_RETRY_SCHEDULED: "Automation retry scheduled",
   CREDENTIAL_EXPIRED: "Expired",
   CREDENTIAL_LIFECYCLE_ACTIVATED: "Activated",
   CREDENTIAL_RENEWAL_FAILED: "Renewal failed",
   CREDENTIAL_RENEWAL_OFFER_CREATED: "Renewal offer created",
   CREDENTIAL_REACTIVATED: "Reactivated",
+  CREDENTIAL_REACTIVATION_SCHEDULED: "Reactivation scheduled",
   CREDENTIAL_RENEWAL_REQUESTED: "Renewal requested",
   CREDENTIAL_REVOKED: "Revoked",
   CREDENTIAL_SUSPENDED: "Suspended",

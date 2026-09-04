@@ -12,12 +12,15 @@ vi.mock("@/lib/db/prisma", () => ({
     credentialAuditLog: {
       createMany: vi.fn(),
     },
+    credentialAutomationJob: {
+      upsert: vi.fn(),
+    },
     credentialEventLog: {
       createMany: vi.fn(),
     },
     credentialIssuance: {
-      create: vi.fn(),
       findUnique: vi.fn(),
+      upsert: vi.fn(),
       update: vi.fn(),
     },
   },
@@ -26,6 +29,7 @@ vi.mock("@/lib/db/prisma", () => ({
 const credentialIssuance = vi.mocked(prisma.credentialIssuance);
 const credentialEventLog = vi.mocked(prisma.credentialEventLog);
 const credentialAuditLog = vi.mocked(prisma.credentialAuditLog);
+const credentialAutomationJob = vi.mocked(prisma.credentialAutomationJob);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -43,11 +47,11 @@ describe("credential issuance persistence", () => {
       wasDelivered: true,
     });
 
-    expect(credentialIssuance.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+    expect(credentialIssuance.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({
         credentialExpiresAt,
       }),
-    });
+    }));
   });
 
   it("updates issuedAt and lifecycle state from issued webhooks without changing stored expiry", async () => {
@@ -62,6 +66,7 @@ describe("credential issuance persistence", () => {
       lifecycleStatus: null,
       lifecycleStatusUpdatedAt: null,
       revocationRegistryDefinitionId: null,
+      renewedFromIssuanceId: "issuance-old",
       status: CredentialIssuanceStatus.OFFER_SENT,
       studentId: "WOOJOS100",
     } as never);
@@ -97,6 +102,12 @@ describe("credential issuance persistence", () => {
       }),
       skipDuplicates: true,
     });
+    expect(credentialAutomationJob.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({
+        credentialIssuanceId: "issuance-old",
+        type: "REVOKE_REPLACED",
+      }),
+    }));
     expect(credentialExpiresAt.toISOString()).toBe("2026-05-27T10:00:00.000Z");
   });
 

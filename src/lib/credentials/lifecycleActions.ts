@@ -5,7 +5,13 @@
 
 import "server-only";
 
-import { CredentialAuditAction, CredentialIssuanceStatus, CredentialLifecycleStatus } from "@/generated/prisma/enums";
+import {
+  CredentialAuditAction,
+  CredentialAutomationJobStatus,
+  CredentialAutomationJobType,
+  CredentialIssuanceStatus,
+  CredentialLifecycleStatus,
+} from "@/generated/prisma/enums";
 import { changeCredentialLifecycle, type AgentCredentialLifecycleResult } from "@/lib/agentClient";
 import type { CredentialLifecycleChangedWebhookPayload } from "@/lib/credentials/statusMapping";
 import { toPublicCredentialStatus } from "@/lib/credentials/lifecycle";
@@ -34,6 +40,7 @@ type PersistedLifecycleChange = {
   status: "ACTIVE" | "SUSPENDED" | "REVOKED";
   statusListTimestamp?: number;
   timestamp: string;
+  scheduledReactivationAt?: Date | null;
 };
 
 function auditActionFor(status: PersistedLifecycleChange["status"]) {
@@ -123,9 +130,73 @@ async function persistLifecycleChange(change: PersistedLifecycleChange) {
         where: { actorId: null, eventId: change.eventId },
       });
     }
+
+    if (change.status === "SUSPENDED" && change.scheduledReactivationAt) {
+      const deduplicationKey = `auto-reactivate:${issuance.id}:${change.eventId}`;
+      await transaction.credentialAutomationJob.upsert({
+        create: {
+          credentialIssuanceId: issuance.id,
+          deduplicationKey,
+          dueAt: change.scheduledReactivationAt,
+          metadata: { reason: change.reason ?? null },
+          requestedByActorId: change.actorId,
+          type: CredentialAutomationJobType.AUTO_REACTIVATE,
+        },
+        update: { dueAt: change.scheduledReactivationAt },
+        where: { deduplicationKey },
+      });
+      await transaction.credentialAuditLog.createMany({
+        data: {
+          action: CredentialAuditAction.CREDENTIAL_REACTIVATION_SCHEDULED,
+          actorId: change.actorId,
+          credentialDefinitionId: issuance.credentialDefinitionId,
+          credentialExchangeId: issuance.credentialExchangeId,
+          credentialIssuanceId: issuance.id,
+          eventId: `scheduled-reactivation:${change.eventId}`,
+          message: `Credential reactivation scheduled for ${change.scheduledReactivationAt.toISOString()}.`,
+          metadata: { reactivateAt: change.scheduledReactivationAt.toISOString() },
+          occurredAt,
+          studentId: issuance.studentId,
+        },
+        skipDuplicates: true,
+      });
+    }
+
+    if (change.status === "ACTIVE" || change.status === "REVOKED") {
+      const cancelled = await transaction.credentialAutomationJob.updateMany({
+        data: { completedAt: occurredAt, status: CredentialAutomationJobStatus.CANCELLED },
+        where: {
+          credentialIssuanceId: issuance.id,
+          status: { in: [CredentialAutomationJobStatus.PENDING, CredentialAutomationJobStatus.PROCESSING] },
+          type: CredentialAutomationJobType.AUTO_REACTIVATE,
+        },
+      });
+      if (change.actorId && (cancelled?.count ?? 0) > 0) {
+        await transaction.credentialAuditLog.createMany({
+          data: {
+            action: CredentialAuditAction.CREDENTIAL_AUTOMATION_CANCELLED,
+            actorId: change.actorId,
+            credentialDefinitionId: issuance.credentialDefinitionId,
+            credentialExchangeId: issuance.credentialExchangeId,
+            credentialIssuanceId: issuance.id,
+            eventId: `automation-cancelled:${change.eventId}`,
+            message: "Scheduled credential reactivation cancelled by a manual lifecycle change.",
+            occurredAt,
+            studentId: issuance.studentId,
+          },
+          skipDuplicates: true,
+        });
+      }
+    }
   });
 
-  return { lifecycleState: change.status, updatedAt: occurredAt.toISOString() };
+  return {
+    lifecycleState: change.status,
+    ...(change.scheduledReactivationAt
+      ? { scheduledReactivationAt: change.scheduledReactivationAt.toISOString() }
+      : {}),
+    updatedAt: occurredAt.toISOString(),
+  };
 }
 
 function expectedStatusFor(action: CredentialLifecycleAction) {
@@ -156,16 +227,27 @@ export async function requestCredentialLifecycleChange(params: {
   reason: string;
   studentId: string;
   studentLookupIds?: string[];
+  credentialIssuanceId?: string;
+  reactivateAt?: Date | null;
 }) {
   const reason = params.reason.trim();
   if (!reason) throw new CredentialLifecycleActionError("A reason is required for lifecycle changes.", 400);
   if (reason.length > 500) throw new CredentialLifecycleActionError("Reason must be 500 characters or fewer.", 400);
 
+  if (params.action !== "suspend" && params.reactivateAt) {
+    throw new CredentialLifecycleActionError("A reactivation time is only valid when suspending a credential.", 400);
+  }
+  if (params.reactivateAt && params.reactivateAt <= new Date()) {
+    throw new CredentialLifecycleActionError("The reactivation time must be in the future.", 400);
+  }
+
   const studentLookupIds = Array.from(new Set([params.studentId, ...(params.studentLookupIds ?? [])].filter(Boolean)));
-  const issuance = await prisma.credentialIssuance.findFirst({
-    orderBy: { createdAt: "desc" },
-    where: { credentialExchangeId: { not: null }, studentId: { in: studentLookupIds } },
-  });
+  const issuance = params.credentialIssuanceId
+    ? await prisma.credentialIssuance.findUnique({ where: { id: params.credentialIssuanceId } })
+    : await prisma.credentialIssuance.findFirst({
+        orderBy: { createdAt: "desc" },
+        where: { credentialExchangeId: { not: null }, studentId: { in: studentLookupIds } },
+      });
   if (!issuance?.credentialExchangeId) {
     throw new CredentialLifecycleActionError("No issued credential was found for this student.", 404);
   }
@@ -176,6 +258,7 @@ export async function requestCredentialLifecycleChange(params: {
     (params.action === "reactivate" && currentStatus === "SUSPENDED") ||
     (params.action === "revoke" &&
       (currentStatus === "ACTIVE" ||
+        currentStatus === "EXPIRED" ||
         currentStatus === "SUSPENDED" ||
         canRevokeRevocationBackedPendingCredential(currentStatus, issuance)));
   if (!allowed) {
@@ -212,6 +295,7 @@ export async function requestCredentialLifecycleChange(params: {
     status: result.status,
     statusListTimestamp: result.statusListTimestamp,
     timestamp: result.updatedAt,
+    scheduledReactivationAt: params.action === "suspend" ? params.reactivateAt : undefined,
   });
 }
 

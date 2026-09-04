@@ -9,6 +9,7 @@ import { getUniversityProfile, updateUniversityProfile } from "@/lib/university/
 const transactionClientMocks = vi.hoisted(() => ({
   auditLogCreate: vi.fn(),
   universityProfileUpdate: vi.fn(),
+  automationUpdateMany: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -30,6 +31,7 @@ vi.mock("@/lib/db/prisma", () => ({
     $transaction: vi.fn((operation: (client: unknown) => unknown) =>
       operation({
         auditLog: { create: transactionClientMocks.auditLogCreate },
+        credentialAutomationJob: { updateMany: transactionClientMocks.automationUpdateMany },
         universityProfile: { update: transactionClientMocks.universityProfileUpdate },
       }),
     ),
@@ -114,6 +116,7 @@ describe("updateUniversityProfileAction", () => {
 function renewalForm(overrides: Record<string, string> = {}) {
   const formData = new FormData();
   const values = {
+    automaticCredentialRenewalEnabled: "on",
     defaultCredentialValidityDays: "365",
     renewalCadenceMonths: "12",
     ...overrides,
@@ -138,14 +141,14 @@ describe("saveRenewalSettingsAction", () => {
     );
 
     expect(transactionClientMocks.universityProfileUpdate).toHaveBeenCalledWith({
-      data: { defaultCredentialValidityDays: 400, renewalCadenceMonths: 6 },
+      data: { automaticCredentialRenewalEnabled: true, defaultCredentialValidityDays: 400, renewalCadenceMonths: 6 },
       where: { id: "university_1" },
     });
     expect(transactionClientMocks.auditLogCreate).toHaveBeenCalledWith({
       data: {
         action: AuditAction.RENEWAL_SETTINGS_UPDATED,
         actorId: "admin_1",
-        meta: { defaultCredentialValidityDays: 400, renewalCadenceMonths: 6 },
+        meta: { automaticCredentialRenewalEnabled: true, defaultCredentialValidityDays: 400, renewalCadenceMonths: 6 },
         targetId: "university_1",
         targetType: "UniversityProfile",
       },

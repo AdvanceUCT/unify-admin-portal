@@ -43,6 +43,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ stu
     );
   }
 
+  let reactivateAt: Date | null | undefined;
+  if (record.reactivateAt === null || record.reactivateAt === "") {
+    reactivateAt = null;
+  } else if (typeof record.reactivateAt === "string") {
+    reactivateAt = new Date(record.reactivateAt);
+    if (Number.isNaN(reactivateAt.getTime())) {
+      return NextResponse.json({ error: { message: "reactivateAt must be a valid ISO date." } }, { status: 400 });
+    }
+  } else if (record.reactivateAt !== undefined) {
+    return NextResponse.json({ error: { message: "reactivateAt must be an ISO date or null." } }, { status: 400 });
+  }
+
   try {
     const [{ studentId }, auditSession] = await Promise.all([params, getSessionForAudit()]);
     const student = await getStudentById(studentId);
@@ -51,6 +63,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ stu
         action: record.action,
         actorId: auditSession.actorId,
         reason: record.reason,
+        reactivateAt,
         studentId,
         studentLookupIds: student ? [student.profile.id, student.credential.studentNumber] : undefined,
       }),
