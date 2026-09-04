@@ -434,6 +434,7 @@ describe("payment wallet PostgreSQL invariants", () => {
     try {
       const fixture = await createFixture(client, "unbalanced");
       const transactionId = `unbalanced-${randomUUID()}`;
+      const gatewayBalanceBefore = await readBalance(client, fixture.gatewayAccountId);
 
       await client.query("BEGIN");
       await client.query(
@@ -467,7 +468,7 @@ describe("payment wallet PostgreSQL invariants", () => {
       ).rejects.toThrow(/balanced entries/i);
       await client.query("ROLLBACK");
 
-      await expect(readBalance(client, fixture.gatewayAccountId)).resolves.toBe("0");
+      await expect(readBalance(client, fixture.gatewayAccountId)).resolves.toBe(gatewayBalanceBefore);
       await expect(readBalance(client, fixture.studentAccountId)).resolves.toBe("0");
       const transaction = await client.query(
         'SELECT 1 FROM "wallet_transaction" WHERE "id" = $1',
