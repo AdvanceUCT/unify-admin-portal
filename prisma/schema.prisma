@@ -411,27 +411,27 @@ model Student {
 }
 
 model UniversityProfile {
-  id                                String                  @id @default(cuid())
-  name                              String
-  abbreviation                      String
-  logoPath                          String?
-  contactEmail                      String
-  websiteUrl                        String?
-  issuerDid                         String?
-  setupStatus                       SetupStatus             @default(PENDING)
-  setupCompletedAt                  DateTime?
-  defaultCredentialValidityDays     Int                     @default(365)
-  renewalCadenceMonths              Int                     @default(12)
-  automaticCredentialRenewalEnabled Boolean                 @default(false)
-  paymentsEnabled                   Boolean                 @default(false)
-  paymentRefundWindowSeconds        Int                     @default(600)
-  paymentSettlementDelaySeconds     Int                     @default(600)
-  createdAt                         DateTime                @default(now())
-  updatedAt                         DateTime                @updatedAt
-  credentialSchemas                 CredentialSchema[]
-  importMapping                     ImportMapping?
-  importRuns                        ImportRun[]
-  customFieldDefinitions            CustomFieldDefinition[]
+  id                                  String                  @id @default(cuid())
+  name                                String
+  abbreviation                        String
+  logoPath                            String?
+  contactEmail                        String
+  websiteUrl                          String?
+  issuerDid                           String?
+  setupStatus                         SetupStatus             @default(PENDING)
+  setupCompletedAt                    DateTime?
+  defaultCredentialValidityDays       Int                     @default(365)
+  renewalCadenceMonths                Int                     @default(12)
+  automaticCredentialRenewalEnabled   Boolean                 @default(false)
+  paymentWalletEnabled                Boolean                 @default(false)
+  paymentWalletRefundWindowSeconds    Int                     @default(600)
+  paymentWalletSettlementDelaySeconds Int                     @default(600)
+  createdAt                           DateTime                @default(now())
+  updatedAt                           DateTime                @updatedAt
+  credentialSchemas                   CredentialSchema[]
+  importMapping                       ImportMapping?
+  importRuns                          ImportRun[]
+  customFieldDefinitions              CustomFieldDefinition[]
 
   @@map("university_profile")
 }

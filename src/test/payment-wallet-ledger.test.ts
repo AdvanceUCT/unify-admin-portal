@@ -17,7 +17,10 @@ import {
   WALLET_SYSTEM_ACCOUNTS,
 } from "@/lib/payments/accounts";
 import { getStudentWalletBalance, getWalletAccountBalance } from "@/lib/payments/balance";
-import { getUniversityPaymentSettings, requireEnabledUniversityPayments } from "@/lib/payments/config";
+import {
+  getUniversityPaymentWalletSettings,
+  requireEnabledUniversityPaymentWallet,
+} from "@/lib/payments/config";
 import { postRefund, postSpend, postTopup } from "@/lib/payments/posting";
 
 vi.mock("server-only", () => ({}));
@@ -119,9 +122,9 @@ beforeEach(() => {
   database.transaction.universityProfile.findMany.mockResolvedValue([
     {
       id: "university-1",
-      paymentsEnabled: true,
-      paymentRefundWindowSeconds: 600,
-      paymentSettlementDelaySeconds: 900,
+      paymentWalletEnabled: true,
+      paymentWalletRefundWindowSeconds: 600,
+      paymentWalletSettlementDelaySeconds: 900,
     },
   ]);
   database.transaction.vendorBranch.findUnique.mockResolvedValue({
@@ -191,15 +194,20 @@ describe("wallet account provisioning and reads", () => {
   });
 });
 
-describe("university payment settings", () => {
+describe("university payment-wallet settings", () => {
   it("fails closed when the university profile is absent", async () => {
     database.universityProfile.findFirst.mockResolvedValue(null);
-    await expect(requireEnabledUniversityPayments()).rejects.toMatchObject({ code: "PAYMENTS_DISABLED" });
+    await expect(requireEnabledUniversityPaymentWallet()).rejects.toMatchObject({
+      code: "PAYMENT_WALLET_DISABLED",
+    });
   });
 
   it("reads settings from the singleton profile", async () => {
-    database.universityProfile.findFirst.mockResolvedValue({ id: "university-1", paymentsEnabled: false });
-    await getUniversityPaymentSettings();
+    database.universityProfile.findFirst.mockResolvedValue({
+      id: "university-1",
+      paymentWalletEnabled: false,
+    });
+    await getUniversityPaymentWalletSettings();
     expect(database.universityProfile.findFirst).toHaveBeenCalled();
   });
 });
@@ -207,7 +215,9 @@ describe("university payment settings", () => {
 describe("typed wallet posting", () => {
   it("fails closed unless exactly one enabled university exists", async () => {
     database.transaction.universityProfile.findMany.mockResolvedValue([]);
-    await expect(postSpend(spendInput())).rejects.toMatchObject({ code: "PAYMENTS_DISABLED" });
+    await expect(postSpend(spendInput())).rejects.toMatchObject({
+      code: "PAYMENT_WALLET_DISABLED",
+    });
     expect(database.transaction.walletTransaction.create).not.toHaveBeenCalled();
   });
 

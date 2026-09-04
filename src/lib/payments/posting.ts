@@ -178,19 +178,19 @@ function sameIdempotentRequest(
   );
 }
 
-async function getPaymentSettings(transaction: Prisma.TransactionClient) {
+async function getPaymentWalletSettings(transaction: Prisma.TransactionClient) {
   const profiles = await transaction.universityProfile.findMany({
     take: 2,
     select: {
       id: true,
-      paymentsEnabled: true,
-      paymentRefundWindowSeconds: true,
-      paymentSettlementDelaySeconds: true,
+      paymentWalletEnabled: true,
+      paymentWalletRefundWindowSeconds: true,
+      paymentWalletSettlementDelaySeconds: true,
     },
   });
 
   if (profiles.length !== 1) {
-    throw new WalletDomainError("PAYMENTS_DISABLED", "Payment wallet functionality is disabled.");
+    throw new WalletDomainError("PAYMENT_WALLET_DISABLED", "Payment wallet functionality is disabled.");
   }
   return profiles[0];
 }
@@ -198,7 +198,7 @@ async function getPaymentSettings(transaction: Prisma.TransactionClient) {
 async function preparePosting(
   transaction: Prisma.TransactionClient,
   operation: WalletOperation,
-  settings: Awaited<ReturnType<typeof getPaymentSettings>>,
+  settings: Awaited<ReturnType<typeof getPaymentWalletSettings>>,
 ): Promise<PreparedPosting> {
   const common = validateBase(operation.input);
 
@@ -267,8 +267,8 @@ async function preparePosting(
       branch.vendorProfile.paymentProfile?.status === VendorPaymentProfileStatus.APPROVED;
 
     const completedAt = new Date();
-    const refundableUntil = addSeconds(completedAt, settings.paymentRefundWindowSeconds);
-    const settlementAt = addSeconds(completedAt, settings.paymentSettlementDelaySeconds);
+    const refundableUntil = addSeconds(completedAt, settings.paymentWalletRefundWindowSeconds);
+    const settlementAt = addSeconds(completedAt, settings.paymentWalletSettlementDelaySeconds);
 
     return {
       ...common,
@@ -362,7 +362,7 @@ async function postWalletOperation(operation: WalletOperation) {
   validateBase(operation.input);
 
   return runSerializableTransaction(async (transaction) => {
-    const settings = await getPaymentSettings(transaction);
+  const settings = await getPaymentWalletSettings(transaction);
     const posting = await preparePosting(transaction, operation, settings);
     const accountIds = posting.entries.map((entry) => entry.accountId).sort((a, b) => a.localeCompare(b));
 
@@ -401,8 +401,8 @@ async function postWalletOperation(operation: WalletOperation) {
       return existing;
     }
 
-    if (!settings.paymentsEnabled) {
-      throw new WalletDomainError("PAYMENTS_DISABLED", "Payment wallet functionality is disabled.");
+    if (!settings.paymentWalletEnabled) {
+      throw new WalletDomainError("PAYMENT_WALLET_DISABLED", "Payment wallet functionality is disabled.");
     }
     if (posting.eligibilityError) throw posting.eligibilityError;
     assertAccountStatuses(posting, accounts);
@@ -420,8 +420,8 @@ async function postWalletOperation(operation: WalletOperation) {
 
     const completedAt = new Date();
     if (posting.type === WalletTransactionType.SPEND) {
-      posting.refundableUntil = addSeconds(completedAt, settings.paymentRefundWindowSeconds);
-      const settlementAt = addSeconds(completedAt, settings.paymentSettlementDelaySeconds);
+      posting.refundableUntil = addSeconds(completedAt, settings.paymentWalletRefundWindowSeconds);
+      const settlementAt = addSeconds(completedAt, settings.paymentWalletSettlementDelaySeconds);
       posting.availableForPayoutAt = settlementAt > posting.refundableUntil
         ? settlementAt
         : posting.refundableUntil;
