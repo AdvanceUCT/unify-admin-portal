@@ -1047,6 +1047,8 @@ Once a gateway is selected:
 8. Add PostgreSQL-backed invariant and concurrency tests.
 9. Keep `UniversityProfile.paymentsEnabled` false.
 
+The PostgreSQL suite is implemented as `npm run test:payments:db`. It runs separately from ordinary unit tests, verifies the applied migration record on `DIRECT_URL`, and cleans up its disposable test objects after exercising the real triggers and concurrency paths.
+
 No production gateway or user-facing payment feature is enabled in this phase.
 
 ### Phase 2 — Vendor payment onboarding

@@ -58,6 +58,18 @@ Enabling the flag does not expose a payment feature by itself. Student sessions,
 
 Unit tests can use mocked accounts. Database-backed integration fixtures should create student/vendor records and zero-balance wallet accounts for the duration of a test, then post balanced transactions through the server-only posting boundary.
 
+## Run the PostgreSQL invariant suite
+
+The database suite uses the migrated test database configured by `DIRECT_URL`:
+
+```powershell
+npm run test:payments:db
+```
+
+The command refuses production, verifies that the wallet migration is recorded as applied, creates uniquely named disposable test objects, runs the real migration SQL and concurrency cases, and removes those objects afterward. It does not reset or alter the application's normal wallet tables.
+
+This suite is deliberately excluded from ordinary `npm test` runs so unit tests remain database-independent. Run it whenever the wallet schema, migration SQL, posting invariants, or concurrency behavior changes.
+
 ## Expected output
 
 The bootstrap prints the university, current enabled state, and both clearing-account IDs and balances. Existing non-zero clearing balances are preserved; rerunning the bootstrap never resets them.

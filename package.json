@@ -18,6 +18,7 @@
     "typecheck": "tsc --noEmit",
     "pretypecheck": "npm run prisma:generate",
     "test": "vitest run",
+    "test:payments:db": "vitest run --config vitest.integration.config.ts",
     "pretest": "npm run prisma:generate"
   },
   "dependencies": {

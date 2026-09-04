@@ -330,6 +330,14 @@ npm run payments:bootstrap:dev
 
 The development command refuses to enable payments when `NODE_ENV=production`. Neither command creates student or vendor wallets; those remain lifecycle-driven. See [Payment wallet development setup](./docs/payment-wallet-development-setup.md) for the full workflow and troubleshooting guidance.
 
+Run the real PostgreSQL wallet invariant and concurrency suite explicitly against the migrated test database configured by `DIRECT_URL`:
+
+```powershell
+npm run test:payments:db
+```
+
+This database suite is intentionally separate from ordinary `npm test` runs.
+
 ## Database migrations and deployment
 
 Every Prisma schema change must include its generated directory under `prisma/migrations/`.

@@ -1,7 +1,7 @@
 # Payment wallet implementation status
 
 **Status date:** 4 September 2026  
-**Current milestone:** Ledger foundation implemented in code; database application and PostgreSQL-backed integration testing remain outstanding.
+**Current milestone:** Ledger foundation implemented and verified against the migrated test database; ready for the first sandbox vertical slice.
 
 This document is the concise companion to [Payment wallet implementation handoff](./payment-wallet-implementation-handoff.md). It records what now exists in the repository, what is only represented in the schema, and what should be built next. For setup commands, see [Payment wallet development setup](./payment-wallet-development-setup.md).
 
@@ -19,7 +19,7 @@ The implemented code provides:
 - an idempotent development bootstrap; and
 - a server-only posting primitive with concurrency and idempotency handling.
 
-The migration has not been applied to the configured database by this implementation work. No real or test funds have been created.
+The migration has been applied to the current test database by the development team and its migration record has been verified by the PostgreSQL suite. No production deployment or real funds are implied.
 
 ## Important decisions reflected in the code
 
@@ -161,17 +161,18 @@ The current implementation has passed:
 - Prisma migration rendering from the schema;
 - TypeScript type checking;
 - ESLint with zero errors and six pre-existing unrelated warnings;
-- focused wallet foundation, posting, and migration tests; and
-- the complete repository suite: 71 test files and 415 tests.
+- focused wallet foundation, posting, and migration tests;
+- the complete repository suite: 71 test files and 415 tests; and
+- eight PostgreSQL-backed wallet tests covering real triggers, rollback, immutability, idempotency, refunds, and concurrent posting.
 
-Current wallet tests verify service behavior and inspect the hand-written migration. They do not yet execute that migration and its triggers against a real PostgreSQL test database.
+The PostgreSQL suite runs separately through `npm run test:payments:db`. It verifies the applied migration record, executes the real wallet migration and triggers in disposable test objects, and cleans those objects up afterward.
 
 ## Handoff phase status
 
 | Handoff phase | Status | Notes |
 |---|---|---|
 | Phase 0 — Architecture decisions | Substantially complete | Remaining product/provider decisions are listed below. |
-| Phase 1 — Ledger foundation | Code complete; database proof pending | Migration is authored but unapplied here. PostgreSQL-backed invariant and concurrency tests remain required. |
+| Phase 1 — Ledger foundation | Complete for development | Migration is applied to the current test database and the real PostgreSQL invariant/concurrency suite passes. Production deployment remains a later operational step. |
 | Phase 2 — Vendor payment onboarding | Schema only | Models exist; application services, authorization, routes, UI, approval side effects, and QR generation are not implemented. |
 | Phase 3 — Student activation and reads | Not implemented | No OTP challenge, wallet session, balance API, or history API exists. |
 | Phase 4 — Gateway and top-up | Foundation only | Attribution schema and posting rules exist; no provider adapter, checkout, webhook, or reconciliation worker exists. |
@@ -182,21 +183,20 @@ Current wallet tests verify service behavior and inspect the hand-written migrat
 
 ## Required next work
 
-### 1. Prove the foundation against PostgreSQL
+### 1. Keep PostgreSQL proof in the development workflow
 
-Before building public payment routes:
+The foundation has passed its first real PostgreSQL run. Going forward:
 
-1. Review and apply the committed migration to an isolated development database.
-2. Complete the university setup wizard if the database has no profile.
-3. Run `npm run payments:bootstrap` or the explicit development variant.
-4. Add database-backed tests that execute the real triggers and constraints.
-5. Test concurrent spends, concurrent refunds, duplicate idempotency keys, transaction rollback, and projection rebuilding against PostgreSQL.
+1. Run `npm run test:payments:db` whenever wallet migration or posting behavior changes.
+2. Add this command to CI once CI has a dedicated PostgreSQL test service and direct connection.
+3. Keep ordinary `npm test` database-independent.
+4. Apply and bootstrap each additional development environment explicitly.
 
-This is the most important outstanding foundation work. Unit tests cannot prove trigger or row-lock behavior.
+The suite proves projection creation and protection, balanced posting, rollback, pending-transaction rejection, immutable history, scoped idempotency, refund limits, concurrent overdraft protection, and concurrent refund aggregation.
 
 ### 2. Build a sandbox vertical slice
 
-After the PostgreSQL tests pass, the recommended first usable slice is:
+With the PostgreSQL foundation tests passing, the recommended first usable slice is:
 
 1. Development fixtures for one approved student, vendor, branch, and zero-balance wallet accounts.
 2. Authenticated balance and transaction-history reads.
