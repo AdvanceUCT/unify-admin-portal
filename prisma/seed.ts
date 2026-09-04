@@ -64,40 +64,46 @@ async function main() {
       }
 
       console.log(`Bootstrap SUPER_ADMIN already exists: ${bootstrapEmail}`);
-      return;
+    } else {
+      const passwordHash = await hashPassword(env.BOOTSTRAP_ADMIN_PASSWORD);
+      const now = new Date();
+      const userId = randomUUID();
+
+      await prisma.$transaction([
+        prisma.user.create({
+          data: {
+            id: userId,
+            email: bootstrapEmail,
+            name: env.BOOTSTRAP_ADMIN_NAME,
+            emailVerified: true,
+            role: BOOTSTRAP_ROLE,
+            userType: "ADMIN",
+            createdAt: now,
+            updatedAt: now,
+          },
+        }),
+        prisma.account.create({
+          data: {
+            id: randomUUID(),
+            accountId: userId,
+            providerId: "credential",
+            userId,
+            password: passwordHash,
+            createdAt: now,
+            updatedAt: now,
+          },
+        }),
+      ]);
+
+      console.log(`Created bootstrap SUPER_ADMIN: ${bootstrapEmail}`);
     }
 
-    const passwordHash = await hashPassword(env.BOOTSTRAP_ADMIN_PASSWORD);
-    const now = new Date();
-    const userId = randomUUID();
-
-    await prisma.$transaction([
-      prisma.user.create({
-        data: {
-          id: userId,
-          email: bootstrapEmail,
-          name: env.BOOTSTRAP_ADMIN_NAME,
-          emailVerified: true,
-          role: BOOTSTRAP_ROLE,
-          userType: "ADMIN",
-          createdAt: now,
-          updatedAt: now,
-        },
-      }),
-      prisma.account.create({
-        data: {
-          id: randomUUID(),
-          accountId: userId,
-          providerId: "credential",
-          userId,
-          password: passwordHash,
-          createdAt: now,
-          updatedAt: now,
-        },
-      }),
-    ]);
-
-    console.log(`Created bootstrap SUPER_ADMIN: ${bootstrapEmail}`);
+    await prisma.systemConfig.upsert({
+      where: { key: "VERIFICATION_RATE_CENTS" },
+      create: { key: "VERIFICATION_RATE_CENTS", value: "500" },
+      update: {}, // do not overwrite if already set
+    });
+    console.log("Default verification rate: R5.00");
   } finally {
     await prisma.$disconnect();
   }

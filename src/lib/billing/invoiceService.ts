@@ -11,6 +11,7 @@ import { prisma } from "@/lib/db/prisma";
 
 const VERIFICATION_RATE_CENTS_KEY = "VERIFICATION_RATE_CENTS";
 const DEFAULT_VERIFICATION_RATE_CENTS = 500;
+const MAX_VERIFICATION_RATE_CENTS = 100_000;
 const INVOICE_DUE_DAYS = 30;
 
 /** Cents charged per verification, configurable via SystemConfig. */
@@ -21,6 +22,37 @@ export async function getVerificationRateCents(): Promise<number> {
 
   const parsed = config ? Number.parseInt(config.value, 10) : NaN;
   return Number.isFinite(parsed) ? parsed : DEFAULT_VERIFICATION_RATE_CENTS;
+}
+
+/** Updates the configured per-verification rate. Only affects invoices generated after this call. */
+export async function setVerificationRateCents(rateCents: number, adminUserId: string): Promise<void> {
+  if (!Number.isFinite(rateCents) || rateCents <= 0) {
+    throw new Error("Rate must be greater than zero.");
+  }
+  if (rateCents > MAX_VERIFICATION_RATE_CENTS) {
+    throw new Error("Rate must not exceed R1000 per verification.");
+  }
+
+  const oldRate = await getVerificationRateCents();
+
+  await prisma.$transaction(async (transaction) => {
+    await transaction.systemConfig.upsert({
+      where: { key: VERIFICATION_RATE_CENTS_KEY },
+      create: { key: VERIFICATION_RATE_CENTS_KEY, value: rateCents.toString() },
+      update: { value: rateCents.toString() },
+    });
+
+    await writeAuditLog(
+      {
+        action: AuditAction.VERIFICATION_RATE_CHANGED,
+        actorId: adminUserId,
+        targetType: "system_config",
+        targetId: VERIFICATION_RATE_CENTS_KEY,
+        meta: { oldRate, newRate: rateCents },
+      },
+      transaction,
+    );
+  });
 }
 
 const VENDOR_SUSPENSION_INCLUDE = {

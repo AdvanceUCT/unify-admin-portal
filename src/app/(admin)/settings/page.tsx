@@ -3,11 +3,13 @@
  * @module app/(admin)/settings/page
  */
 
-import { Activity, Building, Clock, FileText, Link as LinkIcon, Webhook } from "lucide-react";
+import { Activity, Building, Clock, CreditCard, FileText, Link as LinkIcon, Webhook } from "lucide-react";
 
+import { BillingRateForm } from "@/features/settings/BillingRateForm";
 import { checkAgentHealth } from "@/lib/agentClient";
 import { ADMIN_ROLES, ROLE_LABELS, type AdminRole } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
+import { getVerificationRateCents } from "@/lib/billing/invoiceService";
 import { env } from "@/lib/config/env";
 import { getDocumentSignedUrl } from "@/lib/storage/supabase";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
@@ -33,6 +35,8 @@ export default async function SettingsPage() {
   const activeSchema = profile ? await getActiveCredentialSchema(profile.id) : null;
   const agentHealth = await checkAgentHealth();
   const webhookEndpoint = new URL("/api/webhooks/agent", env.APP_URL).toString();
+  const rateCents = await getVerificationRateCents();
+  const rateZar = rateCents / 100;
 
   return (
     <div className="space-y-6">
@@ -196,6 +200,16 @@ export default async function SettingsPage() {
           />
         </div>
       </SettingsCard>
+
+      {role === "SUPER_ADMIN" && (
+        <SettingsCard
+          description="Set the rate charged to vendors per student credential verification."
+          icon={CreditCard}
+          title="Billing Configuration"
+        >
+          <BillingRateForm currentRateZar={rateZar} />
+        </SettingsCard>
+      )}
     </div>
   );
 }

@@ -13,6 +13,7 @@ import { checkAgentHealth } from "@/lib/agentClient";
 import { writeAuditLog } from "@/lib/audit/audit";
 import { ADMIN_ROLES } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
+import { setVerificationRateCents } from "@/lib/billing/invoiceService";
 import { prisma } from "@/lib/db/prisma";
 import { validateLogoFile } from "@/lib/images/logoValidation";
 import { deleteVendorDocument, uploadUniversityLogo } from "@/lib/storage/supabase";
@@ -233,4 +234,32 @@ export async function saveRenewalSettingsAction(formData: FormData) {
   });
 
   revalidatePath("/settings");
+}
+
+export async function updateVerificationRateAction(
+  rateZar: number,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await requireRole(["SUPER_ADMIN"]);
+
+  if (!Number.isFinite(rateZar) || rateZar <= 0) {
+    return { ok: false, error: "Rate must be greater than R0." };
+  }
+  if (rateZar > 1000) {
+    return { ok: false, error: "Rate must not exceed R1000." };
+  }
+
+  const rateCents = Math.round(rateZar * 100);
+
+  try {
+    await setVerificationRateCents(rateCents, session.user.id);
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Unable to update the verification rate.",
+    };
+  }
+
+  revalidatePath("/settings");
+  revalidatePath("/billing");
+  return { ok: true };
 }
