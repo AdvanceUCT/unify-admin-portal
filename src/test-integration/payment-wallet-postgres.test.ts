@@ -12,10 +12,12 @@ config({ path: ".env.local" });
 config({ path: ".env" });
 
 const MIGRATION_NAME = "20260904120000_add_payment_wallet_ledger_foundation";
-const migrationSql = readFileSync(
-  resolve(process.cwd(), "prisma/migrations", MIGRATION_NAME, "migration.sql"),
-  "utf8",
-);
+const HARDENING_MIGRATION_NAME = "20260904150000_harden_payment_wallet_invariants";
+const migrationSql = [MIGRATION_NAME, HARDENING_MIGRATION_NAME]
+  .map((name) =>
+    readFileSync(resolve(process.cwd(), "prisma/migrations", name, "migration.sql"), "utf8"),
+  )
+  .join("\n");
 const schemaName = `unify_wallet_it_${randomUUID().replaceAll("-", "")}`;
 
 let pool: Pool;
@@ -61,7 +63,7 @@ async function createFixture(client: PoolClient, label: string): Promise<WalletF
   const suffix = `${label}-${randomUUID()}`;
   const fixture = {
     branchId: `branch-${suffix}`,
-    gatewayAccountId: `gateway-account-${suffix}`,
+    gatewayAccountId: "gateway-account",
     studentAccountId: `student-account-${suffix}`,
     studentId: `student-${suffix}`,
     vendorAccountId: `vendor-account-${suffix}`,
@@ -86,8 +88,34 @@ async function createFixture(client: PoolClient, label: string): Promise<WalletF
   );
   await client.query(
     `INSERT INTO "wallet_account" ("id", "type", "systemCode")
-     VALUES ($1, 'SYSTEM', $2)`,
-    [fixture.gatewayAccountId, `GATEWAY_${suffix}`],
+     VALUES ($1, 'SYSTEM', 'GATEWAY_CLEARING')
+     ON CONFLICT ("systemCode") DO NOTHING`,
+    [fixture.gatewayAccountId],
+  );
+  await client.query(
+    `INSERT INTO "vendor_application" ("id", "vendorProfileId", "status")
+     VALUES ($1, $2, 'APPROVED')`,
+    [`vendor-application-${suffix}`, fixture.vendorId],
+  );
+  await client.query(
+    `INSERT INTO "vendor_payment_profile" (
+      "id", "vendorProfileId", "status", "updatedAt"
+    ) VALUES ($1, $2, 'APPROVED', CURRENT_TIMESTAMP)`,
+    [`payment-profile-${suffix}`, fixture.vendorId],
+  );
+  const paymentApplicationId = `payment-application-${suffix}`;
+  await client.query(
+    `INSERT INTO "vendor_branch_payment_application" (
+      "id", "vendorBranchId", "status", "updatedAt"
+    ) VALUES ($1, $2, 'APPROVED', CURRENT_TIMESTAMP)`,
+    [paymentApplicationId, fixture.branchId],
+  );
+  await client.query(
+    `INSERT INTO "vendor_branch_payment_acceptance" (
+      "id", "vendorBranchId", "approvedApplicationId", "status", "qrIdentifier",
+      "approvedAt", "updatedAt"
+    ) VALUES ($1, $2, $3, 'ACTIVE', $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+    [`payment-acceptance-${suffix}`, fixture.branchId, paymentApplicationId, `qr-${suffix}`],
   );
 
   return fixture;
@@ -149,7 +177,9 @@ async function postSpend(
   expired = false,
 ) {
   const transactionId = `spend-${label}-${randomUUID()}`;
-  const refundInterval = expired ? "-1 second" : "10 minutes";
+  const completedAtExpression = expired
+    ? "CURRENT_TIMESTAMP - INTERVAL '11 minutes'"
+    : "CURRENT_TIMESTAMP";
 
   await runInTransaction(client, async () => {
     await client.query(
@@ -158,8 +188,8 @@ async function postSpend(
         "idempotencyKey", "refundableUntil", "availableForPayoutAt"
       ) VALUES (
         $1, 'SPEND', $2, $3, $4, $5,
-        CURRENT_TIMESTAMP + INTERVAL '${refundInterval}',
-        CURRENT_TIMESTAMP + INTERVAL '10 minutes'
+        ${completedAtExpression} + INTERVAL '10 minutes',
+        ${completedAtExpression} + INTERVAL '10 minutes'
       )`,
       [
         transactionId,
@@ -186,7 +216,7 @@ async function postSpend(
     );
     await client.query(
       `UPDATE "wallet_transaction"
-       SET "status" = 'COMPLETED', "completedAt" = CURRENT_TIMESTAMP
+       SET "status" = 'COMPLETED', "completedAt" = ${completedAtExpression}
        WHERE "id" = $1`,
       [transactionId],
     );
@@ -270,17 +300,17 @@ beforeAll(async () => {
   const client = await pool.connect();
 
   try {
-    const appliedMigration = await client.query(
+    const appliedMigrations = await client.query(
       `SELECT 1
        FROM "public"."_prisma_migrations"
-       WHERE "migration_name" = $1
+       WHERE "migration_name" = ANY($1::text[])
          AND "finished_at" IS NOT NULL
          AND "rolled_back_at" IS NULL`,
-      [MIGRATION_NAME],
+      [[MIGRATION_NAME, HARDENING_MIGRATION_NAME]],
     );
-    if (appliedMigration.rowCount !== 1) {
+    if (appliedMigrations.rowCount !== 2) {
       throw new Error(
-        `Migration ${MIGRATION_NAME} is not recorded as applied on DIRECT_URL.`,
+        "Payment-wallet migrations are not recorded as applied on DIRECT_URL.",
       );
     }
 
@@ -292,7 +322,14 @@ beforeAll(async () => {
       CREATE TABLE "vendor_profile" ("id" TEXT PRIMARY KEY);
       CREATE TABLE "vendor_branch" (
         "id" TEXT PRIMARY KEY,
-        "vendorProfileId" TEXT NOT NULL REFERENCES "vendor_profile"("id")
+        "vendorProfileId" TEXT NOT NULL REFERENCES "vendor_profile"("id"),
+        "active" BOOLEAN NOT NULL DEFAULT true,
+        "status" TEXT NOT NULL DEFAULT 'ACTIVE'
+      );
+      CREATE TABLE "vendor_application" (
+        "id" TEXT PRIMARY KEY,
+        "vendorProfileId" TEXT NOT NULL REFERENCES "vendor_profile"("id"),
+        "status" TEXT NOT NULL
       );
       CREATE TABLE "university_profile" ("id" TEXT PRIMARY KEY);
     `);
@@ -300,6 +337,10 @@ beforeAll(async () => {
     await client.query('INSERT INTO "university_profile" ("id") VALUES ($1)', [
       "integration-university",
     ]);
+    await client.query(
+      'UPDATE "university_profile" SET "paymentsEnabled" = true WHERE "id" = $1',
+      ["integration-university"],
+    );
   } finally {
     client.release();
   }
@@ -327,6 +368,39 @@ describe("payment wallet PostgreSQL invariants", () => {
         ),
       ).rejects.toThrow(/only be updated by ledger posting/i);
       await expect(readBalance(client, fixture.studentAccountId)).resolves.toBe("0");
+    } finally {
+      client.release();
+    }
+  });
+
+  it("makes wallet account identity immutable and closed status terminal", async () => {
+    const client = await getClient();
+    try {
+      const fixture = await createFixture(client, "account-identity");
+
+      await expect(
+        client.query(
+          `UPDATE "wallet_account"
+           SET "type" = 'VENDOR', "studentId" = NULL, "vendorProfileId" = $2
+           WHERE "id" = $1`,
+          [fixture.studentAccountId, fixture.vendorId],
+        ),
+      ).rejects.toThrow(/identity fields are immutable/i);
+
+      await client.query(
+        `UPDATE "wallet_account"
+         SET "status" = 'CLOSED', "closedAt" = CURRENT_TIMESTAMP
+         WHERE "id" = $1`,
+        [fixture.studentAccountId],
+      );
+      await expect(
+        client.query(
+          `UPDATE "wallet_account"
+           SET "status" = 'ACTIVE', "closedAt" = NULL
+           WHERE "id" = $1`,
+          [fixture.studentAccountId],
+        ),
+      ).rejects.toThrow(/cannot be reopened/i);
     } finally {
       client.release();
     }
@@ -400,6 +474,95 @@ describe("payment wallet PostgreSQL invariants", () => {
         [transactionId],
       );
       expect(transaction.rowCount).toBe(0);
+    } finally {
+      client.release();
+    }
+  });
+
+  it("rejects balanced entries whose accounts do not match the transaction type", async () => {
+    const client = await getClient();
+    try {
+      const fixture = await createFixture(client, "invalid-topology");
+      const transactionId = `invalid-topology-${randomUUID()}`;
+
+      await expect(
+        runInTransaction(client, async () => {
+          await client.query(
+            `INSERT INTO "wallet_transaction" (
+              "id", "type", "amountMinor", "initiatorAccountId", "idempotencyKey",
+              "paymentProvider", "providerPaymentId"
+            ) VALUES ($1, 'TOPUP', 500, $2, $3, 'PAYFAST_SANDBOX', $4)`,
+            [transactionId, fixture.studentAccountId, randomUUID(), randomUUID()],
+          );
+          await client.query(
+            `INSERT INTO "ledger_entry" (
+              "id", "walletTransactionId", "accountId", "sequence", "direction", "amountMinor", "currency"
+            ) VALUES
+              ($1, $2, $3, 0, 'DEBIT', 500, 'ZAR'),
+              ($4, $2, $5, 1, 'CREDIT', 500, 'ZAR')`,
+            [
+              `entry-${randomUUID()}`,
+              transactionId,
+              fixture.gatewayAccountId,
+              `entry-${randomUUID()}`,
+              fixture.vendorAccountId,
+            ],
+          );
+          await client.query(
+            `UPDATE "wallet_transaction"
+             SET "status" = 'COMPLETED', "completedAt" = CURRENT_TIMESTAMP
+             WHERE "id" = $1`,
+            [transactionId],
+          );
+        }),
+      ).rejects.toThrow(/top-up ledger topology is invalid/i);
+    } finally {
+      client.release();
+    }
+  });
+
+  it("rejects spend timestamps that do not match university policy", async () => {
+    const client = await getClient();
+    try {
+      const fixture = await createFixture(client, "invalid-policy-time");
+      await postTopup(client, fixture, 1_000, "invalid-policy-time-funds");
+      const transactionId = `invalid-policy-time-${randomUUID()}`;
+
+      await expect(
+        runInTransaction(client, async () => {
+          await client.query(
+            `INSERT INTO "wallet_transaction" (
+              "id", "type", "amountMinor", "initiatorAccountId", "vendorBranchId",
+              "idempotencyKey", "refundableUntil", "availableForPayoutAt"
+            ) VALUES (
+              $1, 'SPEND', 500, $2, $3, $4,
+              CURRENT_TIMESTAMP + INTERVAL '1 hour',
+              CURRENT_TIMESTAMP + INTERVAL '1 hour'
+            )`,
+            [transactionId, fixture.studentAccountId, fixture.branchId, randomUUID()],
+          );
+          await client.query(
+            `INSERT INTO "ledger_entry" (
+              "id", "walletTransactionId", "accountId", "sequence", "direction", "amountMinor", "currency"
+            ) VALUES
+              ($1, $2, $3, 0, 'DEBIT', 500, 'ZAR'),
+              ($4, $2, $5, 1, 'CREDIT', 500, 'ZAR')`,
+            [
+              `entry-${randomUUID()}`,
+              transactionId,
+              fixture.studentAccountId,
+              `entry-${randomUUID()}`,
+              fixture.vendorAccountId,
+            ],
+          );
+          await client.query(
+            `UPDATE "wallet_transaction"
+             SET "status" = 'COMPLETED', "completedAt" = CURRENT_TIMESTAMP
+             WHERE "id" = $1`,
+            [transactionId],
+          );
+        }),
+      ).rejects.toThrow(/do not match university policy/i);
     } finally {
       client.release();
     }
@@ -500,6 +663,31 @@ describe("payment wallet PostgreSQL invariants", () => {
         [originalSpendId],
       );
       expect(refundTotal.rows[0].total).toBe("600");
+    } finally {
+      client.release();
+    }
+  });
+
+  it("allows an eligible refund while the student and vendor accounts are suspended", async () => {
+    const client = await getClient();
+    try {
+      const fixture = await createFixture(client, "suspended-refund");
+      await postTopup(client, fixture, 1_000, "suspended-refund-funds");
+      const spendId = await postSpend(client, fixture, 600, "suspended-refund-spend");
+
+      await client.query(
+        `UPDATE "wallet_account"
+         SET "status" = 'SUSPENDED'
+         WHERE "id" IN ($1, $2)`,
+        [fixture.studentAccountId, fixture.vendorAccountId],
+      );
+      await postRefund(client, fixture, spendId, 200, "suspended-refund-success");
+
+      await expect(readBalance(client, fixture.studentAccountId)).resolves.toBe("600");
+      await expect(readBalance(client, fixture.vendorAccountId)).resolves.toBe("400");
+      await expect(postSpend(client, fixture, 100, "suspended-spend-rejected")).rejects.toThrow(
+        /suspended wallet accounts/i,
+      );
     } finally {
       client.release();
     }

@@ -21,6 +21,8 @@ The implemented code provides:
 
 The migration has been applied to the current test database by the development team and its migration record has been verified by the PostgreSQL suite. No production deployment or real funds are implied.
 
+The proof of concept uses Payfast sandbox credentials for external top-ups. Student-to-vendor value moves only through this internal ledger, vendor payouts are simulated records rather than provider disbursements, and cryptocurrency or Ethereum integrations are explicitly out of scope.
+
 ## Important decisions reflected in the code
 
 - Each deployment/database represents one university.
@@ -123,14 +125,15 @@ The following reusable modules exist under `src/lib/payments/`:
 - `foundation.ts` — transaction-scoped bootstrap and integrity verification; and
 - `posting.ts` — the only current application-level balanced posting boundary.
 
-The posting boundary:
+The typed posting boundary:
 
-- validates balanced requests before opening a database transaction;
+- exposes semantic top-up, spend, and refund operations rather than accepting caller-built entries;
 - checks `UniversityProfile.paymentsEnabled`;
 - uses serializable Prisma transactions with retry handling;
 - locks participating balance rows in deterministic order;
-- validates account existence, status, currency, and funds;
+- derives and validates account ownership, status, currency, branch/vendor eligibility, and funds;
 - provides account-scoped idempotency and conflict detection;
+- calculates refund and payout-eligibility timestamps from server time and university policy;
 - creates pending transaction and immutable entries atomically;
 - completes the transaction only after entries have been written; and
 - relies on database triggers as the final invariant and overdraft guard.
@@ -162,8 +165,8 @@ The current implementation has passed:
 - TypeScript type checking;
 - ESLint with zero errors and six pre-existing unrelated warnings;
 - focused wallet foundation, posting, and migration tests;
-- the complete repository suite: 71 test files and 415 tests; and
-- eight PostgreSQL-backed wallet tests covering real triggers, rollback, immutability, idempotency, refunds, and concurrent posting.
+- the complete repository unit suite; and
+- PostgreSQL-backed wallet tests covering real triggers, semantic topology, rollback, immutability, idempotency, refunds, and concurrent posting.
 
 The PostgreSQL suite runs separately through `npm run test:payments:db`. It verifies the applied migration record, executes the real wallet migration and triggers in disposable test objects, and cleans those objects up afterward.
 
@@ -200,7 +203,7 @@ With the PostgreSQL foundation tests passing, the recommended first usable slice
 
 1. Development fixtures for one approved student, vendor, branch, and zero-balance wallet accounts.
 2. Authenticated balance and transaction-history reads.
-3. A controlled fake-provider top-up that still supplies unique provider attribution.
+3. A Payfast sandbox top-up with verified notification data and unique provider attribution.
 4. One branch QR lookup and student-to-vendor spend.
 5. Vendor transaction visibility and an eligible refund.
 6. Reconciliation assertions showing ledger totals equal projections.
@@ -216,22 +219,20 @@ Fixtures must call the same account and posting services as production code. The
 - Explicit payment capabilities in the existing authorization map.
 - Proxy exceptions for narrowly scoped wallet APIs and provider webhooks, with authoritative authentication inside each handler.
 
-### 4. Select and integrate providers
+### 4. Integrate the selected sandbox provider
 
-- Choose a gateway with suitable custody, webhook, refund, chargeback, and reconciliation capabilities.
-- Define a provider adapter rather than coupling routes directly to one SDK.
+- Implement a narrow Payfast sandbox adapter rather than coupling routes directly to provider-specific details.
 - Store secrets outside public university settings.
-- Verify webhook signatures from the exact raw body.
+- Verify Payfast notifications from the exact request payload and server-side validation flow.
 - Treat provider timeouts as unknown outcomes and reconcile before retrying.
-- Build payout reservation, submission, confirmation, and reconciliation flows.
+- Keep vendor payout completion simulated for the proof of concept; do not call a disbursement provider.
 
 ## Product decisions still needed
 
-- Payment gateway and payout provider.
 - Student OTP channel, expiry, rate limits, and session lifetimes.
 - Whether vendor staff may issue refunds or only vendor owners may do so.
 - Minimum and maximum top-up, spend, and refund amounts.
-- Payout cadence and minimum payout threshold.
+- Simulated payout cadence and minimum threshold.
 - Provider-fee treatment.
 - Exact chargeback and reversal policy.
 - Financial-record retention and anonymization rules.

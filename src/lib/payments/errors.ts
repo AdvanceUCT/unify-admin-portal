@@ -6,11 +6,14 @@
 export type WalletErrorCode =
   | "ACCOUNT_CLOSED"
   | "ACCOUNT_NOT_FOUND"
+  | "ACCOUNT_SUSPENDED"
+  | "BRANCH_NOT_PAYMENT_ENABLED"
   | "IDEMPOTENCY_CONFLICT"
   | "INSUFFICIENT_FUNDS"
   | "INVALID_POSTING"
   | "PAYMENTS_DISABLED"
-  | "UNSUPPORTED_CURRENCY";
+  | "UNSUPPORTED_CURRENCY"
+  | "VENDOR_NOT_PAYMENT_ENABLED";
 
 export class WalletDomainError extends Error {
   constructor(

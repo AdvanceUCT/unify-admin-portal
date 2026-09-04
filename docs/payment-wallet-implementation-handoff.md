@@ -10,7 +10,9 @@ The immediate implementation target is deliberately narrow:
 
 > Add a correct, durable wallet-ledger schema, its database invariants, a fast balance projection, and a server-only posting boundary.
 
-Gateway integration, wallet UI, production OTP delivery, payouts, realtime updates, and verification billing are later phases. The schema must nevertheless leave a clear path to those features without requiring the financial ledger to be redesigned.
+Payfast sandbox integration, wallet UI, production OTP delivery, simulated payouts, realtime updates, and verification billing are later phases. The schema must nevertheless leave a clear path to those features without requiring the financial ledger to be redesigned.
+
+For this proof of concept, Payfast sandbox is the selected external top-up provider. Student-to-vendor value moves inside the internal ledger, vendor payouts do not call a real disbursement provider, and all cryptocurrency or Ethereum branches are out of scope.
 
 This is a technical design, not legal, banking, tax, or regulatory advice. Before real funds are accepted, the selected payment provider and the university should confirm the custodial, settlement, refund, chargeback, KYC/KYB, and reconciliation obligations.
 
@@ -566,7 +568,7 @@ model PayoutBatch {
 }
 ```
 
-`payoutDestinationReference` is an immutable safe snapshot of the destination used for that batch; it must not contain raw bank credentials. `initiationSource = MANUAL` requires `initiatedByUserId`. Provider and ledger references may be attached once during processing but cannot later be replaced.
+`payoutDestinationReference` is an immutable safe snapshot of the destination used for that batch; it must not contain raw bank credentials. `initiationSource = MANUAL` requires `initiatedByUserId`. In the proof of concept, payout batches are completed by the simulator and do not initiate an external transfer.
 
 Pending or processing payout batches reserve their amount so concurrent jobs cannot schedule it twice. A provider timeout after submission is an unknown outcome, not an automatic failure: query the provider with the idempotency key before retrying.
 
@@ -755,7 +757,7 @@ vendor posted balance
 = amount available for a new payout batch
 ```
 
-On confirmed provider success, post vendor debit and payout-clearing credit, then complete the batch atomically. Branch-level payout reporting is derived from source spend/refund transactions even though the payout destination and ledger account are vendor-level.
+On confirmed simulated success, post vendor debit and payout-clearing credit, then complete the batch atomically. Branch-level payout reporting is derived from source spend/refund transactions even though the payout destination and ledger account are vendor-level.
 
 ---
 
@@ -1013,7 +1015,7 @@ These must run against PostgreSQL, not only mocked Prisma delegates:
 
 ### 14.4 Provider contract tests
 
-Once a gateway is selected:
+For the selected Payfast sandbox adapter:
 
 - raw-body signature fixtures;
 - duplicate event handling;
@@ -1067,10 +1069,9 @@ No production gateway or user-facing payment feature is enabled in this phase.
 - Authenticated balance and transaction-history endpoints.
 - Wallet account provisioning after successful activation.
 
-### Phase 4 — Gateway configuration and top-up
+### Phase 4 — Payfast sandbox configuration and top-up
 
-- Select gateway.
-- Provider adapter interface.
+- Payfast sandbox adapter interface.
 - Encrypted configuration.
 - Hosted checkout.
 - Signed, idempotent webhooks.
@@ -1131,7 +1132,7 @@ The first implementation milestone is complete when:
 
 These decisions do not block the core ledger schema unless noted:
 
-1. Payment gateway and its custody/settlement capabilities.
+1. Payfast sandbox notification and reconciliation behavior required for the demo.
 2. Exact student OTP channel and whether the student must enter both student number and matching email.
 3. OTP expiry, rate limits, and payment-session lifetimes.
 4. Whether assigned vendor staff may initiate refunds or only vendor owners may do so.

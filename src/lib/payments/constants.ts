@@ -4,6 +4,7 @@
  */
 
 export const WALLET_CURRENCY = "ZAR" as const;
+export const PAYFAST_SANDBOX_PROVIDER = "PAYFAST_SANDBOX" as const;
 
 export const WALLET_SYSTEM_ACCOUNTS = [
   "GATEWAY_CLEARING",

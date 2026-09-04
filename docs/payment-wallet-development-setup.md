@@ -2,6 +2,8 @@
 
 This guide prepares a migrated database for payment-wallet development without creating fictional student or vendor funds.
 
+The proof of concept uses Payfast sandbox top-ups only. Vendor payouts are simulated, and no cryptocurrency or Ethereum path is part of this system.
+
 ## Prerequisites
 
 - Install the repository dependencies.
@@ -53,7 +55,7 @@ Enabling the flag does not expose a payment feature by itself. Student sessions,
 - Student wallet accounts are created only after payment-wallet activation.
 - Vendor wallet accounts are created only after approved payment onboarding.
 - Wallet balances are never seeded or edited directly.
-- Gateway top-ups must carry a provider and immutable provider payment ID.
+- Payfast sandbox top-ups must carry an immutable provider payment ID.
 - Payouts must carry their payout batch and destination attribution.
 
 Unit tests can use mocked accounts. Database-backed integration fixtures should create student/vendor records and zero-balance wallet accounts for the duration of a test, then post balanced transactions through the server-only posting boundary.

@@ -8,6 +8,13 @@ const migrationPath = resolve(
   "prisma/migrations/20260904120000_add_payment_wallet_ledger_foundation/migration.sql",
 );
 const migration = readFileSync(migrationPath, "utf8");
+const hardeningMigration = readFileSync(
+  resolve(
+    process.cwd(),
+    "prisma/migrations/20260904150000_harden_payment_wallet_invariants/migration.sql",
+  ),
+  "utf8",
+);
 
 describe("payment wallet foundation migration", () => {
   it("creates the immutable ledger and rebuildable balance projection", () => {
@@ -47,5 +54,14 @@ describe("payment wallet foundation migration", () => {
     expect(migration).toContain('"payoutDestinationReference" TEXT NOT NULL');
     expect(migration).toContain('CONSTRAINT "payout_batch_manual_initiator_check"');
     expect(migration).toContain("CREATE TRIGGER payout_batch_traceability_guard");
+  });
+
+  it("makes wallet identity immutable and enforces semantic postings", () => {
+    expect(hardeningMigration).toContain("CREATE TRIGGER wallet_account_identity_guard");
+    expect(hardeningMigration).toContain("CREATE TRIGGER ledger_entry_account_status_guard");
+    expect(hardeningMigration).toContain("CREATE TRIGGER wallet_transaction_semantic_guard");
+    expect(hardeningMigration).toContain("Spend refund and settlement timestamps do not match university policy");
+    expect(hardeningMigration).toContain("Top-up ledger topology is invalid");
+    expect(hardeningMigration).toContain("Refund ledger topology is invalid");
   });
 });
