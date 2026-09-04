@@ -17,7 +17,7 @@ import { sendVendorApplicationRejectedEmail } from "@/lib/email/vendor-applicati
 import { sendVendorApplicationRevokedEmail } from "@/lib/email/vendor-application-revoked";
 import { sendVendorApplicationSubmittedEmail } from "@/lib/email/vendor-application-submitted";
 import { ensureDefaultVendorBranch } from "@/lib/vendors/branches";
-import { OTHER_VERIFICATION_REASON_VALUE, VERIFICATION_REASON_VALUES } from "@/lib/vendors/verification-reasons";
+import { APPLICATION_REASON_VALUES, OTHER_APPLICATION_REASON_VALUE } from "@/lib/vendors/application-reasons";
 
 const DOCUMENT_FIELDS = [
   "docRegistrationCertificate",
@@ -37,35 +37,53 @@ function assertDocumentField(fieldKey: string): DocumentField {
   return fieldKey as DocumentField;
 }
 
-const step1Schema = z.object({
-  companyName: z.string().trim().min(1, "Company name is required").max(200, "Company name must be 200 characters or fewer"),
-  companyRegistrationNumber: z
-    .string()
-    .trim()
-    .regex(/^\d{4}\/\d{6}\/\d{2}$/, "Registration number must be in the format YYYY/NNNNNN/NN"),
-  serviceCategory: z.string().trim().min(1, "Service category is required"),
-  website: z
-    .string()
-    .trim()
-    .url("Website must be a valid URL")
-    .refine((value) => {
-      try {
-        return ["http:", "https:"].includes(new URL(value).protocol);
-      } catch {
-        return false;
-      }
-    }, "Website must start with http:// or https://")
-    .optional()
-    .or(z.literal("")),
-  tradingName: z.string().trim().max(200, "Trading name must be 200 characters or fewer").optional(),
-  organisationType: z.string().trim().min(1, "Organisation type is required"),
-  physicalAddress: z
-    .string()
-    .trim()
-    .min(1, "Physical address is required")
-    .max(500, "Physical address must be 500 characters or fewer"),
-  postalAddress: z.string().trim().max(500, "Postal address must be 500 characters or fewer").optional(),
-});
+const step1Schema = z
+  .object({
+    companyName: z.string().trim().min(1, "Company name is required").max(200, "Company name must be 200 characters or fewer"),
+    companyRegistrationNumber: z
+      .string()
+      .trim()
+      .regex(/^\d{4}\/\d{6}\/\d{2}$/, "Registration number must be in the format YYYY/NNNNNN/NN"),
+    serviceCategory: z.string().trim().min(1, "Service category is required"),
+    website: z
+      .string()
+      .trim()
+      .url("Website must be a valid URL")
+      .refine((value) => {
+        try {
+          return ["http:", "https:"].includes(new URL(value).protocol);
+        } catch {
+          return false;
+        }
+      }, "Website must start with http:// or https://")
+      .optional()
+      .or(z.literal("")),
+    tradingName: z.string().trim().max(200, "Trading name must be 200 characters or fewer").optional(),
+    organisationType: z.string().trim().min(1, "Organisation type is required"),
+    physicalAddress: z
+      .string()
+      .trim()
+      .min(1, "Physical address is required")
+      .max(500, "Physical address must be 500 characters or fewer"),
+    postalAddress: z.string().trim().max(500, "Postal address must be 500 characters or fewer").optional(),
+    // 1799 is the sentinel the year dropdown submits for its "Before 1800" bucket option.
+    yearOfIncorporation: z.coerce
+      .number()
+      .int("Year of incorporation must be a whole number")
+      .min(1799, "Year of incorporation must be 1799 or later")
+      .max(new Date().getFullYear(), "Year of incorporation cannot be in the future"),
+    city: z.string().trim().min(1, "City is required").max(100, "City must be 100 characters or fewer"),
+    country: z.string().trim().min(1, "Country is required"),
+    operatesInMultipleCountries: z.coerce.boolean(),
+    operatingCountries: z.array(z.string().trim().min(1)).optional(),
+  })
+  .refine(
+    (data) => !data.operatesInMultipleCountries || (data.operatingCountries?.length ?? 0) > 0,
+    {
+      message: "Select at least one country where the organisation operates",
+      path: ["operatingCountries"],
+    },
+  );
 
 const step2Schema = z.object({
   contactPersonName: z
@@ -93,14 +111,14 @@ const step2Schema = z.object({
 
 const step3Schema = z
   .object({
-    verificationReasons: z
+    applicationReasons: z
       .array(z.string().trim().min(1))
       .min(1, "Select at least one reason for requesting verification access")
       .refine(
-        (values) => values.every((value) => VERIFICATION_REASON_VALUES.includes(value)),
+        (values) => values.every((value) => APPLICATION_REASON_VALUES.includes(value)),
         "Select a valid reason for requesting verification access",
       ),
-    otherVerificationReason: z
+    otherApplicationReason: z
       .string()
       .trim()
       .max(500, "Other reason must be 500 characters or fewer")
@@ -109,11 +127,11 @@ const step3Schema = z
   })
   .refine(
     (data) =>
-      !data.verificationReasons.includes(OTHER_VERIFICATION_REASON_VALUE) ||
-      Boolean(data.otherVerificationReason),
+      !data.applicationReasons.includes(OTHER_APPLICATION_REASON_VALUE) ||
+      Boolean(data.otherApplicationReason),
     {
       message: "Please describe your other reason for requesting verification access",
-      path: ["otherVerificationReason"],
+      path: ["otherApplicationReason"],
     },
   );
 
@@ -625,6 +643,11 @@ export async function getOrCreateDraftApplication(userId: string) {
                 organisationType: previousDecision.organisationType,
                 physicalAddress: previousDecision.physicalAddress,
                 postalAddress: previousDecision.postalAddress,
+                yearOfIncorporation: previousDecision.yearOfIncorporation,
+                city: previousDecision.city,
+                country: previousDecision.country,
+                operatesInMultipleCountries: previousDecision.operatesInMultipleCountries,
+                operatingCountries: previousDecision.operatingCountries,
                 contactJobTitle: previousDecision.contactJobTitle,
                 contactPhone: previousDecision.contactPhone,
                 contactEmployeeNumber: previousDecision.contactEmployeeNumber,
@@ -680,6 +703,11 @@ export async function saveDraftApplication(
           organisationType: d.organisationType,
           physicalAddress: d.physicalAddress,
           postalAddress: d.postalAddress || null,
+          yearOfIncorporation: d.yearOfIncorporation,
+          city: d.city,
+          country: d.country,
+          operatesInMultipleCountries: d.operatesInMultipleCountries,
+          operatingCountries: d.operatesInMultipleCountries ? (d.operatingCountries ?? []) : [],
         },
       });
     }
@@ -704,9 +732,9 @@ export async function saveDraftApplication(
       return await prisma.vendorApplication.update({
         where: { id: applicationId },
         data: {
-          verificationReasons: d.verificationReasons,
-          otherVerificationReason: d.verificationReasons.includes(OTHER_VERIFICATION_REASON_VALUE)
-            ? (d.otherVerificationReason ?? null)
+          applicationReasons: d.applicationReasons,
+          otherApplicationReason: d.applicationReasons.includes(OTHER_APPLICATION_REASON_VALUE)
+            ? (d.otherApplicationReason ?? null)
             : null,
           additionalInfo: d.additionalInfo || null,
         },
@@ -867,12 +895,18 @@ export async function submitDraftApplication(applicationId: string, userId: stri
     if (!app.snapshotServiceCategory) missing.push("service category");
     if (!app.organisationType) missing.push("organisation type");
     if (!app.physicalAddress) missing.push("physical address");
+    if (!app.yearOfIncorporation) missing.push("year of incorporation");
+    if (!app.city) missing.push("city");
+    if (!app.country) missing.push("country");
+    if (app.operatesInMultipleCountries && app.operatingCountries.length === 0) {
+      missing.push("countries of operation");
+    }
     if (!app.snapshotContactPersonName) missing.push("contact name");
     if (!app.snapshotContactEmail) missing.push("contact email");
     if (!app.contactJobTitle) missing.push("job title");
     if (!app.contactPhone) missing.push("phone number");
     if (!app.preferredContactMethod) missing.push("preferred contact method");
-    if (app.verificationReasons.length === 0) missing.push("reason for requesting verification access");
+    if (app.applicationReasons.length === 0) missing.push("reason for requesting verification access");
     if (!app.docRegistrationCertificate) missing.push("registration certificate");
     if (!app.docProofOfAddress) missing.push("proof of address");
     if (!app.docRepresentativeId) missing.push("representative ID");
@@ -929,7 +963,7 @@ export async function submitDraftApplication(applicationId: string, userId: stri
 export function computeDraftProgress(application: {
   snapshotCompanyName: string | null;
   snapshotContactPersonName: string | null;
-  verificationReasons: string[];
+  applicationReasons: string[];
   docRegistrationCertificate: string | null;
   docProofOfAddress: string | null;
   docRepresentativeId: string | null;
@@ -938,7 +972,7 @@ export function computeDraftProgress(application: {
 }): number {
   if (!application.snapshotCompanyName) return 1;
   if (!application.snapshotContactPersonName) return 2;
-  if (application.verificationReasons.length === 0) return 3;
+  if (application.applicationReasons.length === 0) return 3;
   if (
     !application.docRegistrationCertificate ||
     !application.docProofOfAddress ||
