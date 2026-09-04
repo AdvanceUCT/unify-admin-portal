@@ -9,24 +9,26 @@ datasource db {
 }
 
 model User {
-  id                        String              @id
-  name                      String
-  email                     String
-  emailVerified             Boolean             @default(false)
-  image                     String?
-  createdAt                 DateTime            @default(now())
-  updatedAt                 DateTime            @updatedAt
-  role                      String?
-  userType                  String              @default("ADMIN")
-  banned                    Boolean?            @default(false)
-  banReason                 String?
-  banExpires                DateTime?
-  sessions                  Session[]
-  accounts                  Account[]
-  vendorProfile             VendorProfile?
-  vendorMemberships         VendorMembership[]
-  createdVendorBranches     VendorBranch[]      @relation("VendorBranchCreator")
-  createdVendorStaffInvites VendorStaffInvite[] @relation("VendorStaffInviteCreator")
+  id                          String              @id
+  name                        String
+  email                       String
+  emailVerified               Boolean             @default(false)
+  image                       String?
+  createdAt                   DateTime            @default(now())
+  updatedAt                   DateTime            @updatedAt
+  role                        String?
+  userType                    String              @default("ADMIN")
+  banned                      Boolean?            @default(false)
+  banReason                   String?
+  banExpires                  DateTime?
+  sessions                    Session[]
+  accounts                    Account[]
+  vendorProfile               VendorProfile?
+  vendorMemberships           VendorMembership[]
+  createdVendorBranches       VendorBranch[]      @relation("VendorBranchCreator")
+  createdVendorStaffInvites   VendorStaffInvite[] @relation("VendorStaffInviteCreator")
+  initiatedWalletTransactions WalletTransaction[] @relation("WalletTransactionInitiatorUser")
+  initiatedPayoutBatches      PayoutBatch[]       @relation("PayoutBatchInitiatorUser")
 
   @@unique([email])
   @@map("user")
@@ -102,52 +104,57 @@ model AdminInvite {
 }
 
 model VendorProfile {
-  id                        String              @id @default(cuid())
-  userId                    String              @unique
-  user                      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  companyName               String
-  serviceCategory           String
-  contactPersonName         String?
-  contactEmail              String
-  website                   String?
-  description               String?
-  verificationUrl           String?
-  logoPath                  String?
-  agentServicePointId       String?
-  defaultBranchId           String?             @unique
-  defaultBranch             VendorBranch?       @relation("VendorDefaultBranch", fields: [defaultBranchId], references: [id], onDelete: SetNull)
-  createdAt                 DateTime            @default(now())
-  updatedAt                 DateTime            @updatedAt
-  applications              VendorApplication[]
-  verifications             VendorVerification[]
-  apiCredentials            VendorApiCredential[]
-  webhookConfig             VendorWebhookConfig?
-  branches                  VendorBranch[]      @relation("VendorBranches")
-  memberships               VendorMembership[]
-  staffInvites              VendorStaffInvite[]
+  id                  String                @id @default(cuid())
+  userId              String                @unique
+  user                User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName         String
+  serviceCategory     String
+  contactPersonName   String?
+  contactEmail        String
+  website             String?
+  description         String?
+  verificationUrl     String?
+  logoPath            String?
+  agentServicePointId String?
+  defaultBranchId     String?               @unique
+  defaultBranch       VendorBranch?         @relation("VendorDefaultBranch", fields: [defaultBranchId], references: [id], onDelete: SetNull)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  applications        VendorApplication[]
+  verifications       VendorVerification[]
+  apiCredentials      VendorApiCredential[]
+  webhookConfig       VendorWebhookConfig?
+  branches            VendorBranch[]        @relation("VendorBranches")
+  memberships         VendorMembership[]
+  staffInvites        VendorStaffInvite[]
+  paymentProfile      VendorPaymentProfile?
+  walletAccount       WalletAccount?
 
   @@map("vendor_profile")
 }
 
 model VendorBranch {
-  id                  String                    @id @default(cuid())
+  id                  String                           @id @default(cuid())
   vendorProfileId     String
-  vendorProfile       VendorProfile             @relation("VendorBranches", fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  vendorProfile       VendorProfile                    @relation("VendorBranches", fields: [vendorProfileId], references: [id], onDelete: Cascade)
   name                String
   normalizedName      String
   address             String?
-  agentServicePointId String?                   @unique
+  agentServicePointId String?                          @unique
   verificationUrl     String?
-  status              VendorBranchStatus        @default(PROVISIONING)
-  active              Boolean                   @default(true)
+  status              VendorBranchStatus               @default(PROVISIONING)
+  active              Boolean                          @default(true)
   createdByUserId     String?
-  createdBy           User?                     @relation("VendorBranchCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  createdAt           DateTime                  @default(now())
-  updatedAt           DateTime                  @updatedAt
-  defaultFor          VendorProfile?            @relation("VendorDefaultBranch")
+  createdBy           User?                            @relation("VendorBranchCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt           DateTime                         @default(now())
+  updatedAt           DateTime                         @updatedAt
+  defaultFor          VendorProfile?                   @relation("VendorDefaultBranch")
   memberships         VendorBranchMembership[]
   inviteAssignments   VendorStaffInviteBranch[]
   verifications       VendorVerification[]
+  paymentApplications VendorBranchPaymentApplication[]
+  paymentAcceptance   VendorBranchPaymentAcceptance?
+  walletTransactions  WalletTransaction[]
 
   @@unique([vendorProfileId, normalizedName])
   @@index([vendorProfileId, active])
@@ -380,17 +387,18 @@ enum VendorVerificationStatus {
 }
 
 model Student {
-  id            String   @id @default(cuid())
-  studentNumber String   @unique
+  id            String         @id @default(cuid())
+  studentNumber String         @unique
   email         String
   firstName     String
   lastName      String
   faculty       String?
   programme     String?
-  attributes    Json     @default("{}")
-  source        String   @default("csv")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  attributes    Json           @default("{}")
+  source        String         @default("csv")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  walletAccount WalletAccount?
 
   @@index([faculty])
   @@index([programme])
@@ -398,26 +406,287 @@ model Student {
 }
 
 model UniversityProfile {
-  id                 String             @id @default(cuid())
-  name               String
-  abbreviation       String
-  logoPath           String?
-  contactEmail       String
-  websiteUrl         String?
-  issuerDid          String?
-  setupStatus        SetupStatus        @default(PENDING)
-  setupCompletedAt   DateTime?
-  defaultCredentialValidityDays Int      @default(365)
-  renewalCadenceMonths          Int      @default(12)
-  automaticCredentialRenewalEnabled Boolean @default(false)
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  credentialSchemas       CredentialSchema[]
-  importMapping           ImportMapping?
-  importRuns              ImportRun[]
-  customFieldDefinitions  CustomFieldDefinition[]
+  id                                String                  @id @default(cuid())
+  name                              String
+  abbreviation                      String
+  logoPath                          String?
+  contactEmail                      String
+  websiteUrl                        String?
+  issuerDid                         String?
+  setupStatus                       SetupStatus             @default(PENDING)
+  setupCompletedAt                  DateTime?
+  defaultCredentialValidityDays     Int                     @default(365)
+  renewalCadenceMonths              Int                     @default(12)
+  automaticCredentialRenewalEnabled Boolean                 @default(false)
+  paymentsEnabled                   Boolean                 @default(false)
+  paymentRefundWindowSeconds        Int                     @default(600)
+  paymentSettlementDelaySeconds     Int                     @default(600)
+  createdAt                         DateTime                @default(now())
+  updatedAt                         DateTime                @updatedAt
+  credentialSchemas                 CredentialSchema[]
+  importMapping                     ImportMapping?
+  importRuns                        ImportRun[]
+  customFieldDefinitions            CustomFieldDefinition[]
 
   @@map("university_profile")
+}
+
+model WalletAccount {
+  id                    String                @id @default(cuid())
+  type                  WalletAccountType
+  status                WalletAccountStatus   @default(ACTIVE)
+  currency              String                @default("ZAR")
+  studentId             String?               @unique
+  student               Student?              @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  vendorProfileId       String?               @unique
+  vendorProfile         VendorProfile?        @relation(fields: [vendorProfileId], references: [id], onDelete: Restrict)
+  systemCode            String?               @unique
+  createdAt             DateTime              @default(now())
+  closedAt              DateTime?
+  balance               WalletAccountBalance?
+  entries               LedgerEntry[]
+  initiatedTransactions WalletTransaction[]   @relation("WalletTransactionInitiator")
+
+  @@index([type, status])
+  @@map("wallet_account")
+}
+
+model WalletAccountBalance {
+  accountId          String        @id
+  account            WalletAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  postedBalanceMinor BigInt        @default(0)
+  version            BigInt        @default(0)
+  updatedAt          DateTime      @updatedAt
+
+  @@map("wallet_account_balance")
+}
+
+model WalletTransaction {
+  id                     String                  @id @default(cuid())
+  type                   WalletTransactionType
+  status                 WalletTransactionStatus @default(PENDING)
+  amountMinor            BigInt
+  currency               String                  @default("ZAR")
+  initiatorAccountId     String?
+  initiatorAccount       WalletAccount?          @relation("WalletTransactionInitiator", fields: [initiatorAccountId], references: [id], onDelete: Restrict)
+  initiatedByUserId      String?
+  initiatedByUser        User?                   @relation("WalletTransactionInitiatorUser", fields: [initiatedByUserId], references: [id], onDelete: Restrict)
+  vendorBranchId         String?
+  vendorBranch           VendorBranch?           @relation(fields: [vendorBranchId], references: [id], onDelete: Restrict)
+  linkedTransactionId    String?
+  linkedTransaction      WalletTransaction?      @relation("WalletTransactionLinks", fields: [linkedTransactionId], references: [id], onDelete: Restrict)
+  linkedTransactions     WalletTransaction[]     @relation("WalletTransactionLinks")
+  idempotencyKey         String?
+  reference              String?
+  paymentProvider        String?
+  providerPaymentId      String?
+  providerPayerReference String?
+  refundableUntil        DateTime?
+  availableForPayoutAt   DateTime?
+  completedAt            DateTime?
+  failedAt               DateTime?
+  failureCode            String?
+  createdAt              DateTime                @default(now())
+  entries                LedgerEntry[]
+  gatewayEvents          PaymentGatewayEvent[]
+  payoutBatch            PayoutBatch?
+
+  @@unique([initiatorAccountId, type, idempotencyKey], map: "wallet_transaction_idempotency_key", where: raw("\"idempotencyKey\" IS NOT NULL"))
+  @@unique([paymentProvider, providerPaymentId], map: "wallet_transaction_provider_payment_key", where: raw("\"providerPaymentId\" IS NOT NULL"))
+  @@index([type, status, createdAt])
+  @@index([vendorBranchId, createdAt])
+  @@index([linkedTransactionId])
+  @@index([initiatedByUserId, createdAt])
+  @@map("wallet_transaction")
+}
+
+model LedgerEntry {
+  id                  String            @id @default(cuid())
+  walletTransactionId String
+  walletTransaction   WalletTransaction @relation(fields: [walletTransactionId], references: [id], onDelete: Restrict)
+  accountId           String
+  account             WalletAccount     @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  sequence            Int
+  direction           LedgerDirection
+  amountMinor         BigInt
+  currency            String
+  createdAt           DateTime          @default(now())
+
+  @@unique([walletTransactionId, sequence])
+  @@unique([walletTransactionId, accountId])
+  @@index([accountId, createdAt, id])
+  @@map("ledger_entry")
+}
+
+model VendorPaymentProfile {
+  id                          String                     @id @default(cuid())
+  vendorProfileId             String                     @unique
+  vendorProfile               VendorProfile              @relation(fields: [vendorProfileId], references: [id], onDelete: Restrict)
+  status                      VendorPaymentProfileStatus @default(PENDING)
+  payoutProvider              String?
+  payoutDestinationReference  String?
+  payoutDestinationCiphertext String?
+  approvedAt                  DateTime?
+  approvedByUserId            String?
+  suspendedAt                 DateTime?
+  suspensionReason            String?
+  createdAt                   DateTime                   @default(now())
+  updatedAt                   DateTime                   @updatedAt
+  payoutBatches               PayoutBatch[]
+
+  @@index([status])
+  @@map("vendor_payment_profile")
+}
+
+model VendorBranchPaymentApplication {
+  id                 String                         @id @default(cuid())
+  vendorBranchId     String
+  vendorBranch       VendorBranch                   @relation(fields: [vendorBranchId], references: [id], onDelete: Restrict)
+  status             BranchPaymentApplicationStatus @default(DRAFT)
+  submittedAt        DateTime?
+  reviewedAt         DateTime?
+  reviewedByUserId   String?
+  reviewNotes        String?
+  withdrawnAt        DateTime?
+  createdAt          DateTime                       @default(now())
+  updatedAt          DateTime                       @updatedAt
+  approvedAcceptance VendorBranchPaymentAcceptance? @relation("ApprovedBranchPaymentApplication")
+
+  @@unique([id, vendorBranchId])
+  @@unique([vendorBranchId], map: "vendor_branch_payment_application_one_active", where: raw("\"status\" IN ('DRAFT', 'PENDING', 'APPROVED')"))
+  @@index([vendorBranchId, createdAt])
+  @@index([status])
+  @@map("vendor_branch_payment_application")
+}
+
+model VendorBranchPaymentAcceptance {
+  id                    String                         @id @default(cuid())
+  vendorBranchId        String                         @unique
+  vendorBranch          VendorBranch                   @relation(fields: [vendorBranchId], references: [id], onDelete: Restrict)
+  approvedApplicationId String                         @unique
+  approvedApplication   VendorBranchPaymentApplication @relation("ApprovedBranchPaymentApplication", fields: [approvedApplicationId, vendorBranchId], references: [id, vendorBranchId], onDelete: Restrict)
+  status                BranchPaymentAcceptanceStatus  @default(ACTIVE)
+  qrIdentifier          String                         @unique
+  approvedAt            DateTime
+  suspendedAt           DateTime?
+  suspensionReason      String?
+  createdAt             DateTime                       @default(now())
+  updatedAt             DateTime                       @updatedAt
+
+  @@unique([approvedApplicationId, vendorBranchId])
+  @@index([status])
+  @@map("vendor_branch_payment_acceptance")
+}
+
+model PaymentGatewayEvent {
+  id                  String             @id @default(cuid())
+  provider            String
+  externalEventId     String
+  eventType           String
+  payloadHash         String
+  walletTransactionId String?
+  walletTransaction   WalletTransaction? @relation(fields: [walletTransactionId], references: [id], onDelete: Restrict)
+  receivedAt          DateTime           @default(now())
+  processedAt         DateTime?
+  processingError     String?
+
+  @@unique([provider, externalEventId])
+  @@index([walletTransactionId])
+  @@map("payment_gateway_event")
+}
+
+model PayoutBatch {
+  id                         String                 @id @default(cuid())
+  vendorPaymentProfileId     String
+  vendorPaymentProfile       VendorPaymentProfile   @relation(fields: [vendorPaymentProfileId], references: [id], onDelete: Restrict)
+  status                     PayoutBatchStatus      @default(PENDING)
+  amountMinor                BigInt
+  currency                   String                 @default("ZAR")
+  cutoffAt                   DateTime
+  provider                   String
+  providerIdempotencyKey     String                 @unique
+  providerPayoutId           String?
+  payoutDestinationReference String
+  initiationSource           PayoutInitiationSource @default(SCHEDULED)
+  initiatedByUserId          String?
+  initiatedByUser            User?                  @relation("PayoutBatchInitiatorUser", fields: [initiatedByUserId], references: [id], onDelete: Restrict)
+  payoutTransactionId        String?                @unique
+  payoutTransaction          WalletTransaction?     @relation(fields: [payoutTransactionId], references: [id], onDelete: Restrict)
+  attemptCount               Int                    @default(0)
+  lastAttemptAt              DateTime?
+  completedAt                DateTime?
+  failureCode                String?
+  createdAt                  DateTime               @default(now())
+  updatedAt                  DateTime               @updatedAt
+
+  @@unique([provider, providerPayoutId], map: "payout_batch_provider_payout_key", where: raw("\"providerPayoutId\" IS NOT NULL"))
+  @@index([vendorPaymentProfileId, status])
+  @@index([initiatedByUserId, createdAt])
+  @@map("payout_batch")
+}
+
+enum WalletAccountType {
+  STUDENT
+  VENDOR
+  SYSTEM
+}
+
+enum WalletAccountStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum WalletTransactionType {
+  TOPUP
+  SPEND
+  REFUND
+  PAYOUT
+}
+
+enum WalletTransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum LedgerDirection {
+  DEBIT
+  CREDIT
+}
+
+enum VendorPaymentProfileStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+  CLOSED
+}
+
+enum BranchPaymentApplicationStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+enum BranchPaymentAcceptanceStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum PayoutBatchStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REQUIRES_RECONCILIATION
+}
+
+enum PayoutInitiationSource {
+  SCHEDULED
+  MANUAL
 }
 
 model ImportMapping {
@@ -549,7 +818,7 @@ model CredentialIssuance {
   createdAt                      DateTime                   @default(now())
   updatedAt                      DateTime                   @updatedAt
   batchItem                      BatchIssuanceItem?
-  automationJobs                CredentialAutomationJob[]
+  automationJobs                 CredentialAutomationJob[]
 
   @@unique([revocationRegistryDefinitionId, credentialRevocationId])
   @@index([studentId])
