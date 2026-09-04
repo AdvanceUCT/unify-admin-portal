@@ -6,6 +6,7 @@
 import "server-only";
 
 import { CredentialAuditAction, CredentialDeliveryStatus, CredentialRenewalStatus } from "@/generated/prisma/enums";
+import type { CredentialIssuance } from "@/generated/prisma/client";
 import { mockBatchIssuancePreview } from "@/lib/api/mockData";
 import { recordBatchIssuanceResult } from "@/lib/api/mockActivationStore";
 import { toPublicWalletActivationLink } from "@/lib/api/activationLinks";
@@ -21,6 +22,7 @@ import { recordCredentialOfferSentAudit } from "@/lib/credentials/audit";
 import {
   assertCredentialIssuanceAllowed,
   createCredentialIssuanceFromOffer,
+  overlayCredentialStatus,
   overlayCredentialStatusForStudent,
   reconcileCredentialEventLogs,
 } from "@/lib/credentials/status";
@@ -280,6 +282,7 @@ async function issueStudentActivationLinks(
   actorId?: string | null,
   includeBatchIdInAudit = false,
   options: {
+    idempotencyKey?: string;
     renewedFromIssuanceId?: string;
     skipActiveIssuanceCheck?: boolean;
   } = {},
@@ -315,6 +318,7 @@ async function issueStudentActivationLinks(
       attributes: attributesForStudent(student, activeSchema.schemaAttributes, validityWindow),
       email: student.profile.email,
       externalId: student.profile.id,
+      ...(options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : {}),
     })),
   });
   const deliveries: ActivationDelivery[] = [];
@@ -325,7 +329,6 @@ async function issueStudentActivationLinks(
     const persistedStudentId = student?.credential.studentNumber ?? offer.externalId ?? offer.activationId;
     const publicActivationUrl = toPublicWalletActivationLink(offer.activationUrl);
     const publicOffer = { ...offer, activationUrl: publicActivationUrl };
-    const emailDelivery = await emailDeliveryForOffer(student, publicOffer);
     const issuance = await createCredentialIssuanceFromOffer({
       activationId: offer.activationId,
       activationUrl: publicActivationUrl,
@@ -335,14 +338,34 @@ async function issueStudentActivationLinks(
       credentialRevocationId: offer.credentialRevocationId,
       email: offer.email,
       expiresAt: offer.expiresAt,
-      failureReason: emailDelivery.status === "Failed" ? emailDelivery.failureReason : undefined,
+      deliveryStatus: CredentialDeliveryStatus.PENDING,
       revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId,
       schemaVersion: activeSchema.schemaVersion,
       studentId: persistedStudentId,
       renewedFromIssuanceId: options.renewedFromIssuanceId,
-      wasDelivered: emailDelivery.status === "Delivered",
+      wasDelivered: false,
+    });
+    await prisma.credentialIssuance.updateMany({
+      data: { status: "OFFER_SENT" },
+      where: { id: issuance.id, status: "FAILED" },
     });
     await reconcileCredentialEventLogs(offer.credentialExchangeId);
+    const emailDelivery = await emailDeliveryForOffer(student, publicOffer);
+    await prisma.credentialIssuance.update({
+      data: {
+        deliveryStatus: emailDelivery.status === "Delivered"
+          ? CredentialDeliveryStatus.DELIVERED
+          : CredentialDeliveryStatus.FAILED,
+        failureReason: emailDelivery.status === "Failed" ? emailDelivery.failureReason : null,
+      },
+      where: { id: issuance.id },
+    });
+    if (emailDelivery.status === "Failed") {
+      await prisma.credentialIssuance.updateMany({
+        data: { status: "FAILED" },
+        where: { id: issuance.id, status: "OFFER_SENT" },
+      });
+    }
 
     await recordCredentialOfferSentAudit({
       actorId,
@@ -461,28 +484,30 @@ export async function queueRealStudentIssuance(
   return issueStudentActivationLinks([studentWithCredentialStatus], now, 1, {}, actorId, false);
 }
 
-/** Issues a replacement offer using the active schema and current student attributes. */
-export async function queueRealStudentRenewal(
-  studentId: string,
+/** Issues a replacement offer for one exact issuance using the active schema and current student attributes. */
+export async function queueCredentialIssuanceRenewal(
+  issuanceId: string,
   now = new Date(),
   actorId?: string | null,
+  idempotencyKey?: string,
+  existingIssuance?: CredentialIssuance,
 ): Promise<BatchIssuanceResult> {
-  const student = await getStudentById(studentId);
+  const existing = existingIssuance ?? await prisma.credentialIssuance.findUnique({ where: { id: issuanceId } });
+  if (!existing) {
+    throw new StudentIssuanceError("No credential exists to renew for this student.", 404);
+  }
+
+  const directStudent = await getStudentById(existing.studentId);
+  const student = directStudent ?? (await getAllStudents()).find(
+    (candidate) => candidate.credential.studentNumber === existing.studentId,
+  );
 
   if (!student) {
     throw new StudentIssuanceError("Student record was not found.", 404);
   }
 
-  const existing = await prisma.credentialIssuance.findFirst({
-    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    where: { studentId: { in: [student.credential.studentNumber, student.profile.id] } },
-  });
-  const studentWithCredentialStatus = await overlayCredentialStatusForStudent(student);
+  const studentWithCredentialStatus = overlayCredentialStatus(student, existing);
   const status = studentWithCredentialStatus.credential.lifecycleState;
-
-  if (!existing) {
-    throw new StudentIssuanceError("No credential exists to renew for this student.", 404);
-  }
   if (status === "REVOKED" || status === "SUSPENDED" || status === "LEGACY_NON_REVOCABLE") {
     throw new StudentIssuanceError(`Credential cannot be renewed while its status is ${status}.`, 409);
   }
@@ -490,14 +515,21 @@ export async function queueRealStudentRenewal(
     throw new StudentIssuanceError("Credential is not ready for renewal in its current lifecycle state.", 409);
   }
 
-  await prisma.credentialIssuance.update({
+  const claim = await prisma.credentialIssuance.updateMany({
     data: {
       renewalFailureReason: null,
       renewalRequestedAt: now,
       renewalStatus: CredentialRenewalStatus.PENDING,
     },
-    where: { id: existing.id },
+    where: {
+      id: existing.id,
+      renewedIntoIssuanceId: null,
+      renewalStatus: { in: [CredentialRenewalStatus.NONE, CredentialRenewalStatus.FAILED] },
+    },
   });
+  if (claim.count !== 1) {
+    throw new StudentIssuanceError("Credential renewal is already pending or completed.", 409);
+  }
 
   try {
     const result = await issueStudentActivationLinks(
@@ -507,9 +539,19 @@ export async function queueRealStudentRenewal(
       { cohortId: "renewal" },
       actorId,
       false,
-      { renewedFromIssuanceId: existing.id, skipActiveIssuanceCheck: true },
+      { idempotencyKey, renewedFromIssuanceId: existing.id, skipActiveIssuanceCheck: true },
     );
     const replacementId = result.activationDeliveries[0]?.credentialId;
+    if (!replacementId) {
+      throw new StudentIssuanceError(result.failures?.[0]?.message ?? "Credential renewal offer was not created.", 502);
+    }
+    const failedDelivery = result.activationDeliveries.find((delivery) => delivery.status === "Failed");
+    if (failedDelivery) {
+      throw new StudentIssuanceError(
+        failedDelivery.failureReason ?? "Credential renewal activation email could not be delivered.",
+        502,
+      );
+    }
 
     await prisma.$transaction(async (transaction) => {
       await transaction.credentialIssuance.update({
@@ -562,4 +604,22 @@ export async function queueRealStudentRenewal(
 
     throw error;
   }
+}
+
+/** Issues a replacement offer for the latest credential belonging to a student. */
+export async function queueRealStudentRenewal(
+  studentId: string,
+  now = new Date(),
+  actorId?: string | null,
+): Promise<BatchIssuanceResult> {
+  const student = await getStudentById(studentId);
+  if (!student) throw new StudentIssuanceError("Student record was not found.", 404);
+
+  const existing = await prisma.credentialIssuance.findFirst({
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+    where: { studentId: { in: [student.credential.studentNumber, student.profile.id] } },
+  });
+  if (!existing) throw new StudentIssuanceError("No credential exists to renew for this student.", 404);
+
+  return queueCredentialIssuanceRenewal(existing.id, now, actorId, undefined, existing);
 }

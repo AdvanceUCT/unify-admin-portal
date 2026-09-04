@@ -36,6 +36,16 @@ export type StudentCredential = {
   studentNumber: string;
   validFrom: string;
   expiresAt: string;
+  nextRenewalAt?: string;
+  scheduledReactivationAt?: string;
+  automation?: {
+    attemptCount: number;
+    dueAt: string;
+    id: string;
+    lastError?: string;
+    status: "PENDING" | "PROCESSING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+    type: "AUTO_RENEW" | "AUTO_REACTIVATE" | "REVOKE_REPLACED";
+  };
   /** Raw schema-attribute values sourced from the student's stored `attributes` bag, used as a fallback when resolving credential attributes that aren't one of the fixed platform fields. */
   attributes?: Record<string, string | undefined>;
 };
@@ -189,7 +199,11 @@ export type CredentialAuditLogEntry = {
     | "CREDENTIAL_EXPIRED"
     | "CREDENTIAL_RENEWAL_REQUESTED"
     | "CREDENTIAL_RENEWAL_OFFER_CREATED"
-    | "CREDENTIAL_RENEWAL_FAILED";
+    | "CREDENTIAL_RENEWAL_FAILED"
+    | "CREDENTIAL_REACTIVATION_SCHEDULED"
+    | "CREDENTIAL_AUTOMATION_RETRY_SCHEDULED"
+    | "CREDENTIAL_AUTOMATION_CANCELLED"
+    | "CREDENTIAL_AUTOMATION_FAILED";
   actorId?: string | null;
   actorName?: string | null;
   batchId?: string | null;

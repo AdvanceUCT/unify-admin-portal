@@ -12,7 +12,7 @@ import { env } from "@/lib/config/env";
 import { getDocumentSignedUrl } from "@/lib/storage/supabase";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfile } from "@/lib/university/profile";
-import { saveRenewalSettingsAction } from "./actions";
+import { RenewalSettingsForm } from "./RenewalSettingsForm";
 import { AgentServiceHealthCard } from "./AgentServiceHealthCard";
 import { SettingsCard, SettingsField } from "./SettingsCard";
 import { UniversityLogoUpload } from "./UniversityLogoUpload";
@@ -88,38 +88,11 @@ export default async function SettingsPage() {
         title="Validity & renewal"
       >
         {profile ? (
-          <form action={saveRenewalSettingsAction} className="grid gap-4 sm:grid-cols-2">
-            <label className="block text-sm">
-              <span className="font-medium text-fg-muted">Default validity days</span>
-              <input
-                className="mt-1.5 h-10 w-full rounded-md border border-border px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-                defaultValue={profile.defaultCredentialValidityDays}
-                max={3650}
-                min={1}
-                name="defaultCredentialValidityDays"
-                type="number"
-              />
-            </label>
-            <label className="block text-sm">
-              <span className="font-medium text-fg-muted">Renewal cadence months</span>
-              <input
-                className="mt-1.5 h-10 w-full rounded-md border border-border px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-                defaultValue={profile.renewalCadenceMonths}
-                max={120}
-                min={1}
-                name="renewalCadenceMonths"
-                type="number"
-              />
-            </label>
-            <div className="sm:col-span-2">
-              <button
-                className="h-10 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700"
-                type="submit"
-              >
-                Save settings
-              </button>
-            </div>
-          </form>
+          <RenewalSettingsForm
+            cadenceMonths={profile.renewalCadenceMonths}
+            enabled={profile.automaticCredentialRenewalEnabled}
+            validityDays={profile.defaultCredentialValidityDays}
+          />
         ) : (
           <p className="text-sm text-fg-subtle">
             No university profile exists yet. Complete the setup wizard first.

@@ -411,26 +411,27 @@ model Student {
 }
 
 model UniversityProfile {
-  id                            String                  @id @default(cuid())
-  name                          String
-  abbreviation                  String
-  logoPath                      String?
-  contactEmail                  String
-  websiteUrl                    String?
-  issuerDid                     String?
-  setupStatus                   SetupStatus             @default(PENDING)
-  setupCompletedAt              DateTime?
-  defaultCredentialValidityDays Int                     @default(365)
-  renewalCadenceMonths          Int                     @default(12)
-  paymentsEnabled               Boolean                 @default(false)
-  paymentRefundWindowSeconds    Int                     @default(600)
-  paymentSettlementDelaySeconds Int                     @default(600)
-  createdAt                     DateTime                @default(now())
-  updatedAt                     DateTime                @updatedAt
-  credentialSchemas             CredentialSchema[]
-  importMapping                 ImportMapping?
-  importRuns                    ImportRun[]
-  customFieldDefinitions        CustomFieldDefinition[]
+  id                                String                  @id @default(cuid())
+  name                              String
+  abbreviation                      String
+  logoPath                          String?
+  contactEmail                      String
+  websiteUrl                        String?
+  issuerDid                         String?
+  setupStatus                       SetupStatus             @default(PENDING)
+  setupCompletedAt                  DateTime?
+  defaultCredentialValidityDays     Int                     @default(365)
+  renewalCadenceMonths              Int                     @default(12)
+  automaticCredentialRenewalEnabled Boolean                 @default(false)
+  paymentsEnabled                   Boolean                 @default(false)
+  paymentRefundWindowSeconds        Int                     @default(600)
+  paymentSettlementDelaySeconds     Int                     @default(600)
+  createdAt                         DateTime                @default(now())
+  updatedAt                         DateTime                @updatedAt
+  credentialSchemas                 CredentialSchema[]
+  importMapping                     ImportMapping?
+  importRuns                        ImportRun[]
+  customFieldDefinitions            CustomFieldDefinition[]
 
   @@map("university_profile")
 }
@@ -822,18 +823,44 @@ model CredentialIssuance {
   createdAt                      DateTime                   @default(now())
   updatedAt                      DateTime                   @updatedAt
   batchItem                      BatchIssuanceItem?
+  automationJobs                 CredentialAutomationJob[]
 
   @@unique([revocationRegistryDefinitionId, credentialRevocationId])
   @@index([studentId])
   @@index([credentialDefinitionId])
   @@index([revocationRegistryDefinitionId])
   @@index([status])
+  @@index([status, lifecycleStatus, issuedAt])
   @@index([lifecycleStatus])
   @@index([renewalStatus])
   @@index([renewedFromIssuanceId])
   @@index([renewedIntoIssuanceId])
   @@index([createdAt])
   @@map("credential_issuance")
+}
+
+model CredentialAutomationJob {
+  id                   String                        @id @default(cuid())
+  deduplicationKey     String                        @unique
+  type                 CredentialAutomationJobType
+  status               CredentialAutomationJobStatus @default(PENDING)
+  credentialIssuanceId String
+  credentialIssuance   CredentialIssuance            @relation(fields: [credentialIssuanceId], references: [id], onDelete: Cascade)
+  dueAt                DateTime
+  attemptCount         Int                           @default(0)
+  processingStartedAt  DateTime?
+  leaseExpiresAt       DateTime?
+  lastAttemptAt        DateTime?
+  completedAt          DateTime?
+  lastError            String?
+  requestedByActorId   String?
+  metadata             Json?
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
+
+  @@index([status, dueAt])
+  @@index([credentialIssuanceId, type, createdAt])
+  @@map("credential_automation_job")
 }
 
 model CredentialEventLog {
@@ -980,6 +1007,20 @@ enum CredentialRenewalStatus {
   SKIPPED
 }
 
+enum CredentialAutomationJobType {
+  AUTO_RENEW
+  AUTO_REACTIVATE
+  REVOKE_REPLACED
+}
+
+enum CredentialAutomationJobStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
 enum CredentialDeliveryStatus {
   PENDING
   DELIVERED
@@ -1004,6 +1045,10 @@ enum CredentialAuditAction {
   CREDENTIAL_RENEWAL_REQUESTED
   CREDENTIAL_RENEWAL_OFFER_CREATED
   CREDENTIAL_RENEWAL_FAILED
+  CREDENTIAL_REACTIVATION_SCHEDULED
+  CREDENTIAL_AUTOMATION_RETRY_SCHEDULED
+  CREDENTIAL_AUTOMATION_CANCELLED
+  CREDENTIAL_AUTOMATION_FAILED
 }
 
 enum SetupStatus {

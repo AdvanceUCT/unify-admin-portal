@@ -8,12 +8,13 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { AuditAction } from "@/generated/prisma/enums";
+import { AuditAction, CredentialAutomationJobStatus, CredentialAutomationJobType } from "@/generated/prisma/enums";
 import { checkAgentHealth } from "@/lib/agentClient";
 import { writeAuditLog } from "@/lib/audit/audit";
 import { ADMIN_ROLES } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
+import { countCredentialsDueForRenewal } from "@/lib/credentials/renewalPolicy";
 import { validateLogoFile } from "@/lib/images/logoValidation";
 import { deleteVendorDocument, uploadUniversityLogo } from "@/lib/storage/supabase";
 import {
@@ -198,13 +199,18 @@ export async function removeUniversityLogoAction(): Promise<LogoActionResult> {
 }
 
 const renewalSettingsSchema = z.object({
+  automaticCredentialRenewalEnabled: z.boolean(),
   defaultCredentialValidityDays: z.coerce.number().int().min(1).max(3650),
   renewalCadenceMonths: z.coerce.number().int().min(1).max(120),
 });
 
 export async function saveRenewalSettingsAction(formData: FormData) {
   const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
-  const parsed = renewalSettingsSchema.safeParse(Object.fromEntries(formData.entries()));
+  const parsed = renewalSettingsSchema.safeParse({
+    automaticCredentialRenewalEnabled: formData.get("automaticCredentialRenewalEnabled") === "on",
+    defaultCredentialValidityDays: formData.get("defaultCredentialValidityDays"),
+    renewalCadenceMonths: formData.get("renewalCadenceMonths"),
+  });
 
   if (!parsed.success) {
     throw new Error("Validity days and renewal cadence must be valid positive numbers.");
@@ -221,6 +227,13 @@ export async function saveRenewalSettingsAction(formData: FormData) {
       where: { id: profile.id },
     });
 
+    if (!parsed.data.automaticCredentialRenewalEnabled) {
+      await transaction.credentialAutomationJob.updateMany({
+        data: { completedAt: new Date(), status: CredentialAutomationJobStatus.CANCELLED },
+        where: { status: CredentialAutomationJobStatus.PENDING, type: CredentialAutomationJobType.AUTO_RENEW },
+      });
+    }
+
     await transaction.auditLog.create({
       data: {
         action: AuditAction.RENEWAL_SETTINGS_UPDATED,
@@ -233,4 +246,10 @@ export async function saveRenewalSettingsAction(formData: FormData) {
   });
 
   revalidatePath("/settings");
+}
+
+export async function getRenewalSettingsPreviewAction(cadenceMonths: number) {
+  await requireRole(["SUPER_ADMIN", "ADMIN"]);
+  if (!Number.isInteger(cadenceMonths) || cadenceMonths < 1 || cadenceMonths > 120) return 0;
+  return countCredentialsDueForRenewal(cadenceMonths);
 }

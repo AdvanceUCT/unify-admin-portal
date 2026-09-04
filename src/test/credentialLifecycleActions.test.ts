@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   issuanceFindFirst: vi.fn(),
   issuanceFindUnique: vi.fn(),
   issuanceUpdate: vi.fn(),
+  automationUpdateMany: vi.fn(),
+  automationUpsert: vi.fn(),
 }));
 
 vi.mock("@/lib/agentClient", () => ({
@@ -21,6 +23,10 @@ vi.mock("@/lib/db/prisma", () => {
     },
     credentialIssuance: {
       update: mocks.issuanceUpdate,
+    },
+    credentialAutomationJob: {
+      updateMany: mocks.automationUpdateMany,
+      upsert: mocks.automationUpsert,
     },
   };
   return {
@@ -100,6 +106,29 @@ describe("credential lifecycle actions", () => {
     );
   });
 
+  it("creates a durable reactivation job for a timed suspension", async () => {
+    const reactivateAt = new Date("2099-07-10T09:00:00.000Z");
+    await requestCredentialLifecycleChange({
+      action: "suspend",
+      actorId: "admin-1",
+      reactivateAt,
+      reason: "Enrolment review",
+      studentId: "STU001",
+    });
+
+    expect(mocks.automationUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({
+        credentialIssuanceId: "issuance-1",
+        dueAt: reactivateAt,
+        requestedByActorId: "admin-1",
+        type: "AUTO_REACTIVATE",
+      }),
+    }));
+    expect(mocks.auditCreateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ action: "CREDENTIAL_REACTIVATION_SCHEDULED" }),
+    }));
+  });
+
   it("allows revoking an offer-sent issuance when revocation metadata already exists", async () => {
     mocks.issuanceFindFirst.mockResolvedValue({
       ...issuance,
@@ -139,6 +168,28 @@ describe("credential lifecycle actions", () => {
         }),
       }),
     );
+  });
+
+  it("allows a replacement workflow to revoke an expired issuance", async () => {
+    mocks.issuanceFindUnique.mockResolvedValue({
+      ...issuance,
+      credentialExpiresAt: new Date("2020-01-01T00:00:00.000Z"),
+    });
+    mocks.changeCredentialLifecycle.mockResolvedValue({
+      credentialExchangeId: "exchange-1",
+      credentialRevocationId: "7",
+      eventId: "event-expired-revoked",
+      revocationRegistryDefinitionId: "rev-reg-1",
+      status: "REVOKED",
+      updatedAt: "2026-07-08T09:05:00.000Z",
+    });
+
+    await expect(requestCredentialLifecycleChange({
+      action: "revoke",
+      credentialIssuanceId: "issuance-1",
+      reason: "Replacement credential activated.",
+      studentId: "STU001",
+    })).resolves.toMatchObject({ lifecycleState: "REVOKED" });
   });
 
   it("looks up lifecycle issuances by both profile id and student number", async () => {

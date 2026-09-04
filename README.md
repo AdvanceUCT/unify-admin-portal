@@ -4,6 +4,8 @@ The administration, governance, and vendor portal for the UNIFY student digital 
 
 UNIFY is a proof of concept. It demonstrates privacy-preserving credential workflows; it is not a production student-records or payment platform.
 
+For the organisation-wide architecture, repository/branch inventory, live-service snapshot, and prioritized risk register captured on 2026-09-04, see [docs/system/README.md](docs/system/README.md).
+
 # Admin Portal
 ## Current capabilities
 

@@ -11,7 +11,9 @@ import { getUniversityProfile } from "@/lib/university/profile";
 const prismaMocks = vi.hoisted(() => ({
   auditCreate: vi.fn(),
   issuanceFindFirst: vi.fn(),
+  issuanceFindUnique: vi.fn(),
   issuanceUpdate: vi.fn(),
+  issuanceUpdateMany: vi.fn(),
   transaction: vi.fn(),
 }));
 
@@ -36,6 +38,10 @@ vi.mock("@/lib/credentials/status", () => ({
         ? "credential-demo-100"
         : "credential-demo-001",
   })),
+  overlayCredentialStatus: vi.fn((student) => ({
+    ...student,
+    credential: { ...student.credential, lifecycleState: "ACTIVE" },
+  })),
   overlayCredentialStatuses: vi.fn(async (students) => students),
   overlayCredentialStatusForStudent: vi.fn(async (student) => student),
   reconcileCredentialEventLogs: vi.fn(async () => undefined),
@@ -58,7 +64,9 @@ vi.mock("@/lib/db/prisma", () => {
       ),
       credentialIssuance: {
         findFirst: prismaMocks.issuanceFindFirst,
+        findUnique: prismaMocks.issuanceFindUnique,
         update: prismaMocks.issuanceUpdate,
+        updateMany: prismaMocks.issuanceUpdateMany,
       },
     },
   };
@@ -114,7 +122,10 @@ describe("real batch issuance orchestration", () => {
     } as never);
     prismaMocks.auditCreate.mockReset();
     prismaMocks.issuanceFindFirst.mockReset();
+    prismaMocks.issuanceFindUnique.mockReset();
     prismaMocks.issuanceUpdate.mockReset();
+    prismaMocks.issuanceUpdateMany.mockReset();
+    prismaMocks.issuanceUpdateMany.mockResolvedValue({ count: 1 });
     prismaMocks.transaction.mockClear();
     prismaMocks.transaction.mockImplementation((operation) =>
       operation({
@@ -338,7 +349,7 @@ describe("real batch issuance orchestration", () => {
     expect(prismaMocks.issuanceUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ renewalStatus: "COMPLETED", renewedIntoIssuanceId: "credential-renewal-100" }),
-        where: { id: "issuance-old" },
+        where: expect.objectContaining({ id: "issuance-old" }),
       }),
     );
     expect(prismaMocks.auditCreate).toHaveBeenCalledWith(
@@ -349,6 +360,39 @@ describe("real batch issuance orchestration", () => {
         }),
       }),
     );
+  });
+
+  it("keeps a renewal retryable when activation email delivery fails", async () => {
+    prismaMocks.issuanceFindFirst.mockResolvedValue({
+      credentialDefinitionId: "cred-def-id",
+      credentialExchangeId: "credential-exchange-old",
+      id: "issuance-old",
+      studentId: "WOOJOS100",
+    });
+    vi.mocked(createBatchActivationLinks).mockResolvedValue({
+      failures: [],
+      offers: [{
+        activationId: "activation-renewal",
+        activationUrl: "unifywallet://activate?token=renewal-token",
+        credentialExchangeId: "credential-exchange-renewal",
+        email: "joshuawood.dc@gmail.com",
+        expiresAt: "2026-04-28T10:00:00.000Z",
+        externalId: "student-demo-100",
+      }],
+    });
+    vi.mocked(sendCredentialActivationEmail).mockRejectedValueOnce(new Error("Email provider unavailable."));
+
+    await expect(
+      queueRealStudentRenewal("student-demo-100", new Date("2026-04-27T10:00:00Z"), "admin-1"),
+    ).rejects.toThrow("Email provider unavailable.");
+
+    expect(prismaMocks.issuanceUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        renewalFailureReason: "Email provider unavailable.",
+        renewalStatus: "FAILED",
+      }),
+      where: { id: "issuance-old" },
+    }));
   });
 
   it("records a failed renewal reason when the agent activation-link call times out", async () => {
@@ -370,13 +414,13 @@ describe("real batch issuance orchestration", () => {
       queueRealStudentRenewal("student-demo-100", new Date("2026-04-27T10:00:00Z"), "admin-1"),
     ).rejects.toThrow("Agent service request timed out after 60000ms.");
 
-    expect(prismaMocks.issuanceUpdate).toHaveBeenCalledWith(
+    expect(prismaMocks.issuanceUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           renewalFailureReason: null,
           renewalStatus: "PENDING",
         }),
-        where: { id: "issuance-old" },
+        where: expect.objectContaining({ id: "issuance-old" }),
       }),
     );
     expect(prismaMocks.issuanceUpdate).toHaveBeenCalledWith(
