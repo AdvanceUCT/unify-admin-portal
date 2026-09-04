@@ -13,6 +13,7 @@ const transactionClientMocks = vi.hoisted(() => ({
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/agentClient", () => ({ checkAgentHealth: vi.fn() }));
+vi.mock("@/lib/billing/invoiceService", () => ({ setVerificationRateCents: vi.fn() }));
 vi.mock("@/lib/audit/audit", () => ({ writeAuditLog: vi.fn() }));
 vi.mock("@/lib/auth/session", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/storage/supabase", () => ({

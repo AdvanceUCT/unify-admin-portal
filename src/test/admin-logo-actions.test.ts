@@ -19,6 +19,10 @@ vi.mock("@/lib/agentClient", () => ({
   checkAgentHealth: vi.fn(),
 }));
 
+vi.mock("@/lib/billing/invoiceService", () => ({
+  setVerificationRateCents: vi.fn(),
+}));
+
 vi.mock("@/lib/audit/audit", () => ({
   writeAuditLog: vi.fn(),
 }));

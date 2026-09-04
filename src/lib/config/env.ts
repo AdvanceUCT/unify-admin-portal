@@ -94,6 +94,7 @@ const envSchema = z.object({
   VENDOR_WEBHOOK_ENCRYPTION_KEY: optionalNonEmptyString,
   SUPABASE_URL: optionalUrl,
   SUPABASE_SERVICE_ROLE_KEY: optionalNonEmptyString,
+  PAYSTACK_SECRET_KEY: optionalNonEmptyString,
 });
 
 export const env = envSchema.parse(process.env);
