@@ -314,6 +314,30 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000). On a fresh database, the setup wizard collects the university profile and asks the agent service to create the issuer DID, schema, and credential definition. `SETUP_BYPASS=true` is for local troubleshooting only and does not create missing setup data.
 
+### 6. Prepare the payment-wallet foundation when needed
+
+After migrations are applied and the setup wizard has created the single university profile, provision the two internal clearing accounts:
+
+```powershell
+npm run payments:bootstrap
+```
+
+This command is idempotent and leaves `UniversityProfile.paymentsEnabled` unchanged. To enable posting while developing locally, use the explicit development command:
+
+```powershell
+npm run payments:bootstrap:dev
+```
+
+The development command refuses to enable payments when `NODE_ENV=production`. Neither command creates student or vendor wallets; those remain lifecycle-driven. See [Payment wallet development setup](./docs/payment-wallet-development-setup.md) for the full workflow and troubleshooting guidance.
+
+Run the real PostgreSQL wallet invariant and concurrency suite explicitly against the migrated test database configured by `DIRECT_URL`:
+
+```powershell
+npm run test:payments:db
+```
+
+This database suite is intentionally separate from ordinary `npm test` runs.
+
 ## Database migrations and deployment
 
 Every Prisma schema change must include its generated directory under `prisma/migrations/`.
