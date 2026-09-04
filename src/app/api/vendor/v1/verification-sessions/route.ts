@@ -20,6 +20,18 @@ export async function POST(request: Request) {
     }
     return NextResponse.json(await createVendorCheckoutSession(vendor.id, body.checkoutId), { status: 201 });
   } catch (error) {
+    if (error instanceof Error && error.message === "VENDOR_SUSPENDED_FOR_BILLING") {
+      return NextResponse.json(
+        {
+          error: {
+            message:
+              "Verification access suspended due to unpaid invoice. Please settle your account.",
+          },
+        },
+        { status: 403 },
+      );
+    }
+
     return NextResponse.json(
       { error: { message: error instanceof Error ? error.message : "Unable to create verification session." } },
       { status: 400 },

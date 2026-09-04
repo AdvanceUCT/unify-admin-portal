@@ -246,8 +246,11 @@ export async function createVendorCheckoutSession(vendorProfileId: string, check
     where: { id: vendorProfileId },
     include: { defaultBranch: true },
   });
-  const branch = vendor?.defaultBranch;
-  if (!vendor || !branch?.agentServicePointId) throw new Error("Vendor verification service point is not configured.");
+  if (!vendor) throw new Error("Vendor verification service point is not configured.");
+  if (vendor.suspendedForBilling) throw new Error("VENDOR_SUSPENDED_FOR_BILLING");
+
+  const branch = vendor.defaultBranch;
+  if (!branch?.agentServicePointId) throw new Error("Vendor verification service point is not configured.");
 
   const agentResult = await createCheckoutVerificationSession({
     vendorId: vendor.id,

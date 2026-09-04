@@ -37,6 +37,12 @@ const navItems: (PortalNavItem & { allowedRoles?: readonly AdminRole[] })[] = [
     ],
   },
   { href: "/vendors", label: "Vendors", icon: "vendors" },
+  {
+    href: "/billing",
+    label: "Billing",
+    icon: "billing",
+    allowedRoles: ["SUPER_ADMIN", "ADMIN"] as const,
+  },
   { href: "/audit", label: "Audit", icon: "audit" },
   { href: "/users", label: "Users", icon: "users" },
   { href: "/settings", label: "Settings", icon: "settings" },

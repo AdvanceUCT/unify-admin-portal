@@ -116,6 +116,8 @@ model VendorProfile {
   agentServicePointId       String?
   defaultBranchId           String?             @unique
   defaultBranch             VendorBranch?       @relation("VendorDefaultBranch", fields: [defaultBranchId], references: [id], onDelete: SetNull)
+  paymentStatus             String              @default("GOOD_STANDING")
+  suspendedForBilling       Boolean             @default(false)
   createdAt                 DateTime            @default(now())
   updatedAt                 DateTime            @updatedAt
   applications              VendorApplication[]
@@ -125,6 +127,7 @@ model VendorProfile {
   branches                  VendorBranch[]      @relation("VendorBranches")
   memberships               VendorMembership[]
   staffInvites              VendorStaffInvite[]
+  invoices                  VendorInvoice[]
 
   @@map("vendor_profile")
 }
@@ -377,6 +380,32 @@ enum VendorVerificationStatus {
   DECLINED
   EXPIRED
   FAILED
+}
+
+model VendorInvoice {
+  id                  String        @id @default(cuid())
+  vendorProfileId     String
+  vendorProfile       VendorProfile @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  vendorName          String
+  periodStart         DateTime
+  periodEnd           DateTime
+  verificationCount   Int           @default(0)
+  ratePerVerification Int           @default(500)
+  totalCents          Int           @default(0)
+  status              String        @default("UNPAID")
+  dueDate             DateTime
+  paidAt              DateTime?
+  paystackReference   String?
+  flaggedAt           DateTime?
+  flaggedByUserId     String?
+  flagNotes           String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@index([vendorProfileId])
+  @@index([status])
+  @@index([dueDate])
+  @@map("vendor_invoice")
 }
 
 model Student {
@@ -739,6 +768,15 @@ enum SetupStatus {
   COMPLETE
 }
 
+model SystemConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("system_config")
+}
+
 model AuditLog {
   id         String      @id @default(cuid())
   actorId    String?
@@ -793,4 +831,7 @@ enum AuditAction {
   SCHEMA_PUBLISHED
   SCHEMA_VERSION_DELETED
   RENEWAL_SETTINGS_UPDATED
+  VENDOR_INVOICE_FLAGGED
+  VENDOR_SUSPENDED_FOR_BILLING
+  VENDOR_BILLING_REINSTATED
 }

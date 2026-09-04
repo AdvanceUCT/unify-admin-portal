@@ -10,6 +10,7 @@ import {
   KeyRound,
   Layers3,
   CircleHelp,
+  Receipt,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -28,6 +29,7 @@ import {
 export const NAV_ICONS = {
   application: ClipboardList,
   audit: ScrollText,
+  billing: Receipt,
   branches: Building2,
   help: CircleHelp,
   integrations: KeyRound,
