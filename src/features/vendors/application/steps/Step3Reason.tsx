@@ -1,6 +1,6 @@
 /**
- * @fileoverview Captures the credential attributes a vendor needs to verify.
- * @module features/vendors/application/steps/Step3VerificationRequirements
+ * @fileoverview Captures why a vendor is applying for credential verification access.
+ * @module features/vendors/application/steps/Step3Reason
  */
 
 "use client";
@@ -9,9 +9,9 @@ import { useState } from "react";
 import { saveDraftStepAction } from "@/app/vendor/(portal)/application/actions";
 import { useUnsavedChangesWarning } from "@/hooks/useUnsavedChangesWarning";
 import {
-  OTHER_VERIFICATION_REASON_VALUE,
-  VERIFICATION_REASONS,
-} from "@/lib/vendors/verification-reasons";
+  APPLICATION_REASONS,
+  OTHER_APPLICATION_REASON_VALUE,
+} from "@/lib/vendors/application-reasons";
 import type { DraftApplicationData } from "../VendorApplicationWizard";
 
 const TEXTAREA =
@@ -19,7 +19,7 @@ const TEXTAREA =
 const LABEL = "block text-body font-medium text-fg";
 const OPTIONAL = "ml-1 font-normal text-fg-subtle";
 
-export function Step3VerificationRequirements({
+export function Step3Reason({
   applicationId,
   initialData,
   onComplete,
@@ -33,7 +33,7 @@ export function Step3VerificationRequirements({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOtherInput, setShowOtherInput] = useState(
-    initialData.verificationReasons.includes(OTHER_VERIFICATION_REASON_VALUE),
+    initialData.applicationReasons.includes(OTHER_APPLICATION_REASON_VALUE),
   );
   const [dirty, setDirty] = useState(false);
 
@@ -64,7 +64,7 @@ export function Step3VerificationRequirements({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-section-title text-fg">Verification requirements</h2>
+        <h2 className="text-section-title text-fg">Reason for application</h2>
         <p className="mt-1 text-body text-fg-muted">
           Select every reason your organisation needs access to student credential verification.
         </p>
@@ -76,17 +76,17 @@ export function Step3VerificationRequirements({
             Reason for requesting verification access <span className="text-danger-fg">*</span>
           </legend>
           <div className="mt-2 divide-y divide-border rounded-md border border-border">
-            {VERIFICATION_REASONS.map((reason) => (
+            {APPLICATION_REASONS.map((reason) => (
               <label
                 key={reason.value}
                 className="flex items-center gap-3 px-3 py-2.5 text-body text-fg-muted"
               >
                 <input
                   className="accent-brand-600"
-                  defaultChecked={initialData.verificationReasons.includes(reason.value)}
-                  name="verificationReasons"
+                  defaultChecked={initialData.applicationReasons.includes(reason.value)}
+                  name="applicationReasons"
                   onChange={
-                    reason.value === OTHER_VERIFICATION_REASON_VALUE
+                    reason.value === OTHER_APPLICATION_REASON_VALUE
                       ? (event) => setShowOtherInput(event.currentTarget.checked)
                       : undefined
                   }
@@ -101,15 +101,15 @@ export function Step3VerificationRequirements({
 
         {showOtherInput && (
           <div>
-            <label className={LABEL} htmlFor="otherVerificationReason">
+            <label className={LABEL} htmlFor="otherApplicationReason">
               Please describe your other reason <span className="text-danger-fg">*</span>
             </label>
             <input
               className="mt-2 h-11 w-full rounded-md border border-border px-3 text-body text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-              defaultValue={initialData.otherVerificationReason}
-              id="otherVerificationReason"
+              defaultValue={initialData.otherApplicationReason}
+              id="otherApplicationReason"
               maxLength={500}
-              name="otherVerificationReason"
+              name="otherApplicationReason"
               required={showOtherInput}
               type="text"
             />

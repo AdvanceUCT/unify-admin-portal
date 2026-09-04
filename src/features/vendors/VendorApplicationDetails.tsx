@@ -6,7 +6,7 @@
 import { Badge } from "@/components/ui/Badge";
 import { formatDateTime } from "@/lib/formatters";
 import { filenameFromStoragePath } from "@/lib/storage/supabase";
-import { formatVerificationReasons } from "@/lib/vendors/verification-reasons";
+import { formatApplicationReasons } from "@/lib/vendors/application-reasons";
 
 type DocumentUrls = Partial<Record<
   | "docRegistrationCertificate"
@@ -23,8 +23,8 @@ type VendorApplicationDetailsProps = {
     id: string;
     status: "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "REVOKED";
     companyRegistrationNumber: string | null;
-    verificationReasons: string[];
-    otherVerificationReason: string | null;
+    applicationReasons: string[];
+    otherApplicationReason: string | null;
     createdAt: Date;
     updatedAt: Date;
     reviewedAt: Date | null;
@@ -39,6 +39,11 @@ type VendorApplicationDetailsProps = {
     organisationType: string | null;
     physicalAddress: string | null;
     postalAddress: string | null;
+    yearOfIncorporation: number | null;
+    city: string | null;
+    country: string | null;
+    operatesInMultipleCountries: boolean | null;
+    operatingCountries: string[];
     contactJobTitle: string | null;
     contactPhone: string | null;
     contactEmployeeNumber: string | null;
@@ -131,6 +136,26 @@ export function VendorApplicationDetails({
             <DetailRow label="Website" value={website} />
             <DetailRow label="Physical address" value={application.physicalAddress} />
             <DetailRow label="Postal address" value={application.postalAddress} />
+            <DetailRow
+              label="Year of incorporation"
+              value={
+                application.yearOfIncorporation === 1799
+                  ? "Before 1800"
+                  : application.yearOfIncorporation?.toString()
+              }
+            />
+            <DetailRow label="City" value={application.city} />
+            <DetailRow label="Country" value={application.country} />
+            <DetailRow
+              label="Operates in multiple countries"
+              value={application.operatesInMultipleCountries ? "Yes" : "No"}
+            />
+            {application.operatesInMultipleCountries && (
+              <DetailRow
+                label="Countries of operation"
+                value={application.operatingCountries.join(", ")}
+              />
+            )}
           </dl>
         </div>
 
@@ -185,12 +210,12 @@ export function VendorApplicationDetails({
         </div>
       )}
 
-      {/* Verification requirements */}
-      {application.verificationReasons.length > 0 && (
+      {/* Reason for application */}
+      {application.applicationReasons.length > 0 && (
         <div className="rounded-lg border border-border bg-surface p-4">
-          <h3 className="mb-2 text-sm font-semibold text-fg">Reasons for verification</h3>
+          <h3 className="mb-2 text-sm font-semibold text-fg">Reason for application</h3>
           <p className="whitespace-pre-line text-sm text-fg-muted">
-            {formatVerificationReasons(application.verificationReasons, application.otherVerificationReason)}
+            {formatApplicationReasons(application.applicationReasons, application.otherApplicationReason)}
           </p>
         </div>
       )}

@@ -9,6 +9,7 @@ import { useState } from "react";
 import { saveStep1Action } from "@/app/vendor/(portal)/application/actions";
 import { useUnsavedChangesWarning } from "@/hooks/useUnsavedChangesWarning";
 import type { DraftApplicationData } from "../VendorApplicationWizard";
+import { CountryCombobox, CountryMultiSelect } from "./CountryCombobox";
 
 const SERVICE_CATEGORIES = [
   "Food",
@@ -40,6 +41,14 @@ const TEXTAREA =
 const LABEL = "block text-body font-medium text-fg";
 const OPTIONAL = "ml-1 font-normal text-fg-subtle";
 
+const CURRENT_YEAR = new Date().getFullYear();
+const INCORPORATION_YEARS = Array.from(
+  { length: CURRENT_YEAR - 1800 + 1 },
+  (_, index) => CURRENT_YEAR - index,
+);
+// Sentinel stored for organisations founded before the dropdown's floor year.
+const BEFORE_1800_VALUE = 1799;
+
 export function Step1OrgInfo({
   initialData,
   onComplete,
@@ -50,12 +59,20 @@ export function Step1OrgInfo({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [operatesInMultipleCountries, setOperatesInMultipleCountries] = useState(
+    initialData.operatesInMultipleCountries,
+  );
+  const [operatingCountries, setOperatingCountries] = useState(initialData.operatingCountries);
 
   useUnsavedChangesWarning(dirty);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    if (operatesInMultipleCountries && operatingCountries.length === 0) {
+      setError("Select at least one country where the organisation operates.");
+      return;
+    }
     setSaving(true);
     try {
       const formData = new FormData(event.currentTarget);
@@ -216,6 +233,76 @@ export function Step1OrgInfo({
               name="postalAddress"
             />
           </div>
+          <div>
+            <label className={LABEL} htmlFor="yearOfIncorporation">
+              Year of incorporation <span className="text-danger-fg">*</span>
+            </label>
+            <select
+              className={SELECT}
+              defaultValue={initialData.yearOfIncorporation}
+              id="yearOfIncorporation"
+              name="yearOfIncorporation"
+              required
+            >
+              <option value="">Select a year</option>
+              {INCORPORATION_YEARS.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+              <option value={BEFORE_1800_VALUE}>Before 1800</option>
+            </select>
+          </div>
+          <div>
+            <label className={LABEL} htmlFor="city">
+              City <span className="text-danger-fg">*</span>
+            </label>
+            <input
+              className={INPUT}
+              defaultValue={initialData.city}
+              id="city"
+              maxLength={100}
+              name="city"
+              required
+              type="text"
+            />
+          </div>
+          <div>
+            <label className={LABEL} htmlFor="country">
+              Country <span className="text-danger-fg">*</span>
+            </label>
+            <CountryCombobox
+              defaultValue={initialData.country}
+              id="country"
+              name="country"
+              required
+            />
+          </div>
+          <div className="flex items-end pb-2.5">
+            <label className="flex items-center gap-2 text-body text-fg" htmlFor="operatesInMultipleCountries">
+              <input
+                checked={operatesInMultipleCountries}
+                className="size-4 rounded border-border"
+                id="operatesInMultipleCountries"
+                name="operatesInMultipleCountries"
+                onChange={(event) => setOperatesInMultipleCountries(event.target.checked)}
+                type="checkbox"
+              />
+              Operates in multiple countries
+            </label>
+          </div>
+          {operatesInMultipleCountries && (
+            <div className="sm:col-span-2">
+              <label className={LABEL} htmlFor="operatingCountries">
+                Countries of operation <span className="text-danger-fg">*</span>
+              </label>
+              <CountryMultiSelect
+                defaultValue={initialData.operatingCountries}
+                name="operatingCountries"
+                onChange={setOperatingCountries}
+              />
+            </div>
+          )}
         </div>
 
         {error && (

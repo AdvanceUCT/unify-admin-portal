@@ -1,9 +1,9 @@
 /**
- * @fileoverview Normalizes safe user-facing explanations for failed verifications.
- * @module lib/vendors/verification-reasons
+ * @fileoverview Normalizes safe user-facing explanations for a vendor's reason for application.
+ * @module lib/vendors/application-reasons
  */
 
-export const VERIFICATION_REASONS = [
+export const APPLICATION_REASONS = [
   { value: "student_discounts", label: "Verify student eligibility for discounts" },
   { value: "student_exclusive_products", label: "Provide student-exclusive products or services" },
   { value: "student_accommodation", label: "Verify eligibility for student accommodation" },
@@ -22,32 +22,32 @@ export const VERIFICATION_REASONS = [
   { value: "other", label: "Other" },
 ] as const;
 
-export type VerificationReasonValue = (typeof VERIFICATION_REASONS)[number]["value"];
+export type ApplicationReasonValue = (typeof APPLICATION_REASONS)[number]["value"];
 
-export const VERIFICATION_REASON_VALUES: string[] = VERIFICATION_REASONS.map((reason) => reason.value);
+export const APPLICATION_REASON_VALUES: string[] = APPLICATION_REASONS.map((reason) => reason.value);
 
-export const OTHER_VERIFICATION_REASON_VALUE: VerificationReasonValue = "other";
+export const OTHER_APPLICATION_REASON_VALUE: ApplicationReasonValue = "other";
 
-const VERIFICATION_REASON_LABELS = new Map<string, string>(
-  VERIFICATION_REASONS.map((reason) => [reason.value, reason.label]),
+const APPLICATION_REASON_LABELS = new Map<string, string>(
+  APPLICATION_REASONS.map((reason) => [reason.value, reason.label]),
 );
 
-/** Resolves selected verification reason values to their human-readable labels. */
-export function verificationReasonLabels(
+/** Resolves selected application reason values to their human-readable labels. */
+export function applicationReasonLabels(
   values: string[],
   otherText?: string | null,
 ): string[] {
   return values.map((value) =>
-    value === OTHER_VERIFICATION_REASON_VALUE && otherText
+    value === OTHER_APPLICATION_REASON_VALUE && otherText
       ? `Other: ${otherText}`
-      : (VERIFICATION_REASON_LABELS.get(value) ?? value),
+      : (APPLICATION_REASON_LABELS.get(value) ?? value),
   );
 }
 
-/** Renders selected verification reason values as a human-readable, comma-separated summary. */
-export function formatVerificationReasons(
+/** Renders selected application reason values as a human-readable, comma-separated summary. */
+export function formatApplicationReasons(
   values: string[],
   otherText?: string | null,
 ): string {
-  return verificationReasonLabels(values, otherText).join(", ");
+  return applicationReasonLabels(values, otherText).join(", ");
 }

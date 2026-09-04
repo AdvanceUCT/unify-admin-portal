@@ -237,53 +237,58 @@ model VendorStaffInviteBranch {
 }
 
 model VendorApplication {
-  id                         String                  @id @default(cuid())
-  vendorProfileId            String
-  vendorProfile              VendorProfile           @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
-  status                     VendorApplicationStatus @default(DRAFT)
-  justification              String?
-  companyRegistrationNumber  String?
+  id                          String                  @id @default(cuid())
+  vendorProfileId             String
+  vendorProfile               VendorProfile           @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  status                      VendorApplicationStatus @default(DRAFT)
+  justification               String?
+  companyRegistrationNumber   String?
   // Original review decision fields — immutable after approval/rejection
-  reviewedByUserId           String?
-  reviewedAt                 DateTime?
-  reviewNotes                String?
+  reviewedByUserId            String?
+  reviewedAt                  DateTime?
+  reviewNotes                 String?
   // Revocation fields — populated only when status transitions to REVOKED
-  revokedByUserId            String?
-  revokedAt                  DateTime?
-  revokedNotes               String?
-  viewedByAdminAt            DateTime?
+  revokedByUserId             String?
+  revokedAt                   DateTime?
+  revokedNotes                String?
+  viewedByAdminAt             DateTime?
   // Immutable snapshot of vendor profile at time of submission
-  snapshotCompanyName        String?
-  snapshotServiceCategory    String?
-  snapshotContactEmail       String?
-  snapshotContactPersonName  String?
-  snapshotWebsite            String?
+  snapshotCompanyName         String?
+  snapshotServiceCategory     String?
+  snapshotContactEmail        String?
+  snapshotContactPersonName   String?
+  snapshotWebsite             String?
   // Step 1 — Organisation Information
-  tradingName                String?
-  organisationType           String?
-  physicalAddress            String?
-  postalAddress              String?
+  tradingName                 String?
+  organisationType            String?
+  physicalAddress             String?
+  postalAddress               String?
+  yearOfIncorporation         Int?
+  city                        String?
+  country                     String?
+  operatesInMultipleCountries Boolean?                @default(false)
+  operatingCountries          String[]                @default([])
   // Step 2 — Authorised Representative
-  contactJobTitle            String?
-  contactPhone               String?
-  contactEmployeeNumber      String?
-  preferredContactMethod     String?
-  // Step 3 — Verification Requirements
-  verificationReasons        String[]                @default([])
-  otherVerificationReason    String?
-  additionalInfo             String?
+  contactJobTitle             String?
+  contactPhone                String?
+  contactEmployeeNumber       String?
+  preferredContactMethod      String?
+  // Step 3 — Reason for Application
+  applicationReasons          String[]                @default([])
+  otherApplicationReason      String?
+  additionalInfo              String?
   // Step 4 — Supporting Documents (Supabase Storage paths)
-  docRegistrationCertificate String?
-  docProofOfAddress          String?
-  docRepresentativeId        String?
-  docLetterOfAuthorisation   String?
-  docTaxCompliance           String?
-  docBusinessLicence         String?
+  docRegistrationCertificate  String?
+  docProofOfAddress           String?
+  docRepresentativeId         String?
+  docLetterOfAuthorisation    String?
+  docTaxCompliance            String?
+  docBusinessLicence          String?
   // Step 5 — Declaration
-  declarationAccepted        Boolean?
-  declarationAcceptedAt      DateTime?
-  createdAt                  DateTime                @default(now())
-  updatedAt                  DateTime                @updatedAt
+  declarationAccepted         Boolean?
+  declarationAcceptedAt       DateTime?
+  createdAt                   DateTime                @default(now())
+  updatedAt                   DateTime                @updatedAt
 
   @@unique([vendorProfileId], map: "vendor_application_one_active_per_profile", where: raw("\"status\" IN ('DRAFT', 'PENDING', 'APPROVED')"))
   @@index([vendorProfileId])
