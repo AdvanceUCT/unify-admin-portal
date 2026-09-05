@@ -9,6 +9,7 @@ import { AuditAction } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit/audit";
 import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
+import { sendVendorInvoiceNotificationEmail } from "@/lib/email/vendor-invoice-notification";
 import { initializeTransaction } from "@/lib/payments/paystackService";
 
 const VERIFICATION_RATE_CENTS_KEY = "VERIFICATION_RATE_CENTS";
@@ -73,12 +74,19 @@ export async function getOverdueInvoices() {
   });
 }
 
-/** All invoices, optionally filtered by status and/or vendor, most recently created first. */
-export async function getAllInvoices(filters: { status?: string; vendorProfileId?: string } = {}) {
+/** All invoices, optionally filtered by status, vendor, and/or a vendor-name search, most recently created first. */
+export async function getAllInvoices(
+  filters: { status?: string; vendorProfileId?: string; vendorNameQuery?: string } = {},
+) {
+  const vendorNameQuery = filters.vendorNameQuery?.trim();
+
   return prisma.vendorInvoice.findMany({
     where: {
       ...(filters.status ? { status: filters.status } : {}),
       ...(filters.vendorProfileId ? { vendorProfileId: filters.vendorProfileId } : {}),
+      ...(vendorNameQuery
+        ? { vendorName: { contains: vendorNameQuery, mode: "insensitive" } }
+        : {}),
     },
     include: VENDOR_SUSPENSION_INCLUDE,
     orderBy: { createdAt: "desc" },
@@ -207,6 +215,45 @@ export async function flagVendorInvoice(invoiceId: string, adminUserId: string, 
   });
 }
 
+function invoicePeriodLabel(periodStart: Date, periodEnd: Date) {
+  const format = (date: Date, withYear: boolean) =>
+    date.toLocaleDateString("en-GB", { day: "numeric", month: "short", ...(withYear ? { year: "numeric" } : {}) });
+  return `${format(new Date(periodStart), false)} – ${format(new Date(periodEnd), true)}`;
+}
+
+/** Emails the vendor's contact with the invoice amount, period, and due date, and a link to pay it. */
+export async function sendInvoiceToVendor(invoiceId: string, adminUserId: string): Promise<void> {
+  const invoice = await prisma.vendorInvoice.findUnique({
+    where: { id: invoiceId },
+    include: { vendorProfile: { select: { contactEmail: true, contactPersonName: true, companyName: true } } },
+  });
+  if (!invoice) {
+    throw new Error("Invoice not found.");
+  }
+
+  await sendVendorInvoiceNotificationEmail({
+    to: invoice.vendorProfile.contactEmail,
+    contactName: invoice.vendorProfile.contactPersonName ?? invoice.vendorProfile.companyName,
+    companyName: invoice.vendorProfile.companyName,
+    periodLabel: invoicePeriodLabel(invoice.periodStart, invoice.periodEnd),
+    amountZar: `R ${(invoice.totalCents / 100).toFixed(2)}`,
+    dueDateLabel: new Date(invoice.dueDate).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    }),
+    portalUrl: new URL("/vendor/invoices", env.APP_URL).toString(),
+  });
+
+  await writeAuditLog({
+    action: AuditAction.VENDOR_INVOICE_SENT,
+    actorId: adminUserId,
+    targetType: "vendor_invoice",
+    targetId: invoiceId,
+    meta: { vendorProfileId: invoice.vendorProfileId },
+  });
+}
+
 /** Suspends a vendor's verification access for non-payment and flags the triggering invoice. */
 export async function suspendVendorForBilling(
   vendorProfileId: string,
@@ -267,15 +314,51 @@ export async function reinstateVendorBilling(vendorProfileId: string, adminUserI
   });
 }
 
-/** Creates an invoice for a billing period, priced at the current configured verification rate. */
+/**
+ * Counts the verifications that count toward billing for a vendor in a period.
+ * Matches the same definition of a "successful verification" already used for
+ * the vendor-facing monthly history (see getVendorMonthlyVerificationHistory):
+ * approved, confirmed-verified, and completed.
+ */
+async function countBillableVerifications(vendorProfileId: string, periodStart: Date, periodEnd: Date) {
+  return prisma.vendorVerification.count({
+    where: {
+      vendorProfileId,
+      status: "APPROVED",
+      isVerified: true,
+      completedAt: { gte: periodStart, lte: periodEnd },
+    },
+  });
+}
+
+/** The most recently completed full calendar month, in UTC. */
+function previousCalendarMonthRange(referenceDate = new Date()) {
+  const year = referenceDate.getUTCFullYear();
+  const month = referenceDate.getUTCMonth();
+
+  return {
+    periodStart: new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0)),
+    // Day 0 of the current month is the last day of the previous month.
+    periodEnd: new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)),
+  };
+}
+
+/**
+ * Creates an invoice for a billing period, automatically counting the vendor's
+ * billable verifications in that period and pricing at the current configured
+ * verification rate. The verification count is never taken as input — it is
+ * always derived from actual verification activity so it can't drift from reality.
+ */
 export async function generateInvoiceForVendor(
   vendorProfileId: string,
   vendorName: string,
-  verificationCount: number,
   periodStart: Date,
   periodEnd: Date,
 ) {
-  const rateCents = await getVerificationRateCents();
+  const [verificationCount, rateCents] = await Promise.all([
+    countBillableVerifications(vendorProfileId, periodStart, periodEnd),
+    getVerificationRateCents(),
+  ]);
   const totalCents = verificationCount * rateCents;
   const dueDate = new Date(periodEnd);
   dueDate.setDate(dueDate.getDate() + INVOICE_DUE_DAYS);
@@ -293,6 +376,59 @@ export async function generateInvoiceForVendor(
       dueDate,
     },
   });
+}
+
+export type MonthlyInvoiceGenerationResult = {
+  periodStart: Date;
+  periodEnd: Date;
+  generatedVendorProfileIds: string[];
+  skippedVendorProfileIds: string[];
+};
+
+/**
+ * Generates invoices for every approved vendor for one billing period — the
+ * automated replacement for manually generating invoices one vendor at a
+ * time. Each vendor's verification count is always counted, never entered.
+ *
+ * Safe to run more than once for the same period: a vendor that already has
+ * an invoice for it, or that had zero billable verifications, is skipped.
+ * Intended to run on a schedule (see /api/cron/generate-invoices) shortly
+ * after each month ends, but can also be triggered on demand.
+ */
+export async function generateMonthlyInvoicesForVendors(
+  period?: { periodStart: Date; periodEnd: Date },
+): Promise<MonthlyInvoiceGenerationResult> {
+  const { periodStart, periodEnd } = period ?? previousCalendarMonthRange();
+
+  const approvedVendors = await prisma.vendorProfile.findMany({
+    where: { applications: { some: { status: "APPROVED" } } },
+    select: { id: true, companyName: true },
+  });
+
+  const generatedVendorProfileIds: string[] = [];
+  const skippedVendorProfileIds: string[] = [];
+
+  for (const vendor of approvedVendors) {
+    const existingInvoiceForPeriod = await prisma.vendorInvoice.findFirst({
+      where: { vendorProfileId: vendor.id, periodStart, periodEnd },
+      select: { id: true },
+    });
+    if (existingInvoiceForPeriod) {
+      skippedVendorProfileIds.push(vendor.id);
+      continue;
+    }
+
+    const verificationCount = await countBillableVerifications(vendor.id, periodStart, periodEnd);
+    if (verificationCount === 0) {
+      skippedVendorProfileIds.push(vendor.id);
+      continue;
+    }
+
+    await generateInvoiceForVendor(vendor.id, vendor.companyName, periodStart, periodEnd);
+    generatedVendorProfileIds.push(vendor.id);
+  }
+
+  return { periodStart, periodEnd, generatedVendorProfileIds, skippedVendorProfileIds };
 }
 
 /**

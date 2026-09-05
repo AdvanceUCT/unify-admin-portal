@@ -11,9 +11,8 @@ import {
   getOverdueInvoices,
   getSuspendedVendorCount,
 } from "@/lib/billing/invoiceService";
-import { listVendorApplications } from "@/lib/vendors/applications";
-import { GenerateInvoiceForm } from "./GenerateInvoiceForm";
 import { InvoiceTable } from "./InvoiceTable";
+import { RunInvoiceGenerationButton } from "./RunInvoiceGenerationButton";
 
 const STATUS_TABS = [
   { label: "All", value: undefined },
@@ -22,29 +21,33 @@ const STATUS_TABS = [
   { label: "Paid", value: "PAID" },
 ] as const;
 
+function billingHref(status: string | undefined, query: string | undefined) {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (query) params.set("q", query);
+  const search = params.toString();
+  return search ? `/billing?${search}` : "/billing";
+}
+
 export default async function BillingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; q?: string }>;
 }) {
   const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
   const isSuperAdmin = session.user.role === "SUPER_ADMIN";
 
-  const { status } = await searchParams;
+  const { status, q } = await searchParams;
   const activeStatus = STATUS_TABS.some((tab) => tab.value === status) ? status : undefined;
+  const query = q?.trim() || undefined;
 
-  const [overdueInvoices, allInvoices, suspendedVendorCount, approvedApplications] = await Promise.all([
+  const [overdueInvoices, allInvoices, suspendedVendorCount] = await Promise.all([
     getOverdueInvoices(),
-    getAllInvoices({ status: activeStatus }),
+    getAllInvoices({ status: activeStatus, vendorNameQuery: query }),
     getSuspendedVendorCount(),
-    isSuperAdmin ? listVendorApplications({ status: "APPROVED" }) : Promise.resolve([]),
   ]);
 
   const totalOverdueAmountCents = overdueInvoices.reduce((sum, invoice) => sum + invoice.totalCents, 0);
-  const vendors = approvedApplications.map((application) => ({
-    id: application.vendorProfileId,
-    companyName: application.vendorProfile.companyName,
-  }));
 
   return (
     <div className="space-y-6">
@@ -83,20 +86,40 @@ export default async function BillingPage({
       </section>
 
       <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
-          <h2 className="text-section-title text-fg">All Invoices</h2>
-          <PageTabs
-            tabs={STATUS_TABS.map((tab) => ({
-              href: tab.value ? `/billing?status=${tab.value}` : "/billing",
-              isActive: activeStatus === tab.value,
-              label: tab.label,
-            }))}
-          />
+        <div className="space-y-3 border-b border-border px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-section-title text-fg">All Invoices</h2>
+              <p className="mt-0.5 text-xs text-fg-subtle">
+                Generated automatically on the 1st of each month from each vendor&apos;s actual
+                verification count.
+              </p>
+            </div>
+            {isSuperAdmin && <RunInvoiceGenerationButton />}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <form action="/billing" className="flex items-center gap-2" method="get">
+              {activeStatus && <input name="status" type="hidden" value={activeStatus} />}
+              <input
+                className="h-9 w-56 rounded-md border border-border px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+                defaultValue={query ?? ""}
+                name="q"
+                placeholder="Search vendor name..."
+                type="search"
+              />
+            </form>
+            <PageTabs
+              tabs={STATUS_TABS.map((tab) => ({
+                href: billingHref(tab.value, query),
+                isActive: activeStatus === tab.value,
+                label: tab.label,
+              }))}
+            />
+          </div>
         </div>
         <InvoiceTable invoices={allInvoices} />
       </section>
-
-      {isSuperAdmin && <GenerateInvoiceForm vendors={vendors} />}
     </div>
   );
 }

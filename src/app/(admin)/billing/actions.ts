@@ -11,11 +11,10 @@ import { assertCan } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
 import {
   flagVendorInvoice,
-  generateInvoiceForVendor,
+  generateMonthlyInvoicesForVendors,
   reinstateVendorBilling,
   suspendVendorForBilling,
 } from "@/lib/billing/invoiceService";
-import { prisma } from "@/lib/db/prisma";
 
 export async function flagInvoiceAction(formData: FormData) {
   const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
@@ -56,33 +55,16 @@ export async function reinstateVendorAction(formData: FormData) {
   revalidatePath("/billing");
 }
 
-export async function generateInvoiceAction(formData: FormData) {
+/**
+ * Manually triggers the automated monthly invoice run — the same
+ * verification-count-driven generation the cron job runs on the 1st of each
+ * month — for backfills or testing. Takes no input: there is nothing to
+ * enter, since every vendor's count and rate are always computed.
+ */
+export async function runInvoiceGenerationAction() {
   const session = await requireRole(["SUPER_ADMIN"]);
   assertCan("billing:generate", session);
 
-  const vendorProfileId = String(formData.get("vendorProfileId") ?? "");
-  const verificationCount = Number(formData.get("verificationCount") ?? "");
-  const periodStart = String(formData.get("periodStart") ?? "");
-  const periodEnd = String(formData.get("periodEnd") ?? "");
-
-  if (!vendorProfileId || !Number.isFinite(verificationCount) || verificationCount < 0 || !periodStart || !periodEnd) {
-    throw new Error("All fields are required to generate an invoice.");
-  }
-
-  const vendorProfile = await prisma.vendorProfile.findUnique({
-    where: { id: vendorProfileId },
-    select: { companyName: true },
-  });
-  if (!vendorProfile) {
-    throw new Error("Vendor not found.");
-  }
-
-  await generateInvoiceForVendor(
-    vendorProfileId,
-    vendorProfile.companyName,
-    verificationCount,
-    new Date(periodStart),
-    new Date(periodEnd),
-  );
+  await generateMonthlyInvoicesForVendors();
   revalidatePath("/billing");
 }

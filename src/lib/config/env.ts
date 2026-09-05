@@ -95,6 +95,7 @@ const envSchema = z.object({
   SUPABASE_URL: optionalUrl,
   SUPABASE_SERVICE_ROLE_KEY: optionalNonEmptyString,
   PAYSTACK_SECRET_KEY: optionalNonEmptyString,
+  CRON_SECRET: optionalNonEmptyString,
 });
 
 export const env = envSchema.parse(process.env);

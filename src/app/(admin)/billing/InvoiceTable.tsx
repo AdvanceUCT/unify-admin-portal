@@ -3,10 +3,13 @@
  * @module app/(admin)/billing/InvoiceTable
  */
 
+import { Download } from "lucide-react";
+
 import { StatusText } from "@/components/ui/StatusText";
 import type { getAllInvoices } from "@/lib/billing/invoiceService";
 import { FlagInvoiceButton } from "./FlagInvoiceButton";
 import { ReinstateVendorButton } from "./ReinstateVendorButton";
+import { SendInvoiceButton } from "./SendInvoiceButton";
 import { SuspendVendorButton } from "./SuspendVendorButton";
 
 type InvoiceRow = Awaited<ReturnType<typeof getAllInvoices>>[number];
@@ -90,6 +93,14 @@ export function InvoiceTable({ invoices }: { invoices: InvoiceRow[] }) {
                 </td>
                 <td className="px-5 py-4">
                   <div className="flex flex-wrap items-center gap-2">
+                    <a
+                      className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
+                      href={`/api/admin/invoices/${invoice.id}/download`}
+                    >
+                      <Download aria-hidden className="size-4" />
+                      Download
+                    </a>
+                    <SendInvoiceButton invoiceId={invoice.id} />
                     <FlagInvoiceButton
                       disabled={invoice.status === "FLAGGED"}
                       invoiceId={invoice.id}
