@@ -29,7 +29,7 @@ export async function GET(
     return NextResponse.json({ error: { message: "Invoice not found." } }, { status: 404 });
   }
 
-  const pdfBuffer = await generateInvoicePdfBuffer(invoice);
+  const pdfBuffer = await generateInvoicePdfBuffer({ ...invoice, invoiceId: invoice.id });
 
   return new NextResponse(new Uint8Array(pdfBuffer), {
     status: 200,

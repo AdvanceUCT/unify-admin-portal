@@ -56,12 +56,14 @@ export async function reinstateVendorAction(formData: FormData) {
 }
 
 /**
- * Manually triggers the automated monthly invoice run — the same
- * verification-count-driven generation the cron job runs on the 1st of each
- * month — for backfills or testing. Takes no input: there is nothing to
- * enter, since every vendor's count and rate are always computed.
+ * Refreshes invoices on demand: counts each approved vendor's verifications
+ * for the previous billing period and creates any invoice that's missing.
+ * The same run also happens automatically shortly after each month ends
+ * (see /api/cron/generate-invoices) — this button is for testing or an
+ * early/backfill run. Takes no input: there is nothing to enter, since every
+ * vendor's count and rate are always computed.
  */
-export async function runInvoiceGenerationAction() {
+export async function refreshInvoicesAction() {
   const session = await requireRole(["SUPER_ADMIN"]);
   assertCan("billing:generate", session);
 

@@ -12,7 +12,7 @@ import {
   getSuspendedVendorCount,
 } from "@/lib/billing/invoiceService";
 import { InvoiceTable } from "./InvoiceTable";
-import { RunInvoiceGenerationButton } from "./RunInvoiceGenerationButton";
+import { RefreshInvoicesButton } from "./RefreshInvoicesButton";
 
 const STATUS_TABS = [
   { label: "All", value: undefined },
@@ -21,29 +21,46 @@ const STATUS_TABS = [
   { label: "Paid", value: "PAID" },
 ] as const;
 
-function billingHref(status: string | undefined, query: string | undefined) {
+type BillingFilters = { status?: string; query?: string; dateFrom?: string; dateTo?: string };
+
+function billingHref(overrides: Partial<BillingFilters>, current: BillingFilters) {
+  const merged = { ...current, ...overrides };
   const params = new URLSearchParams();
-  if (status) params.set("status", status);
-  if (query) params.set("q", query);
+  if (merged.status) params.set("status", merged.status);
+  if (merged.query) params.set("q", merged.query);
+  if (merged.dateFrom) params.set("dateFrom", merged.dateFrom);
+  if (merged.dateTo) params.set("dateTo", merged.dateTo);
   const search = params.toString();
   return search ? `/billing?${search}` : "/billing";
+}
+
+function parsedDate(value: string | undefined, endOfDay = false) {
+  if (!value) return undefined;
+  const parsed = new Date(`${value}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}`);
+  return Number.isFinite(parsed.getTime()) ? parsed : undefined;
 }
 
 export default async function BillingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; dateFrom?: string; dateTo?: string }>;
 }) {
   const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
   const isSuperAdmin = session.user.role === "SUPER_ADMIN";
 
-  const { status, q } = await searchParams;
+  const { status, q, dateFrom, dateTo } = await searchParams;
   const activeStatus = STATUS_TABS.some((tab) => tab.value === status) ? status : undefined;
   const query = q?.trim() || undefined;
+  const currentFilters: BillingFilters = { dateFrom, dateTo, query, status: activeStatus };
 
   const [overdueInvoices, allInvoices, suspendedVendorCount] = await Promise.all([
     getOverdueInvoices(),
-    getAllInvoices({ status: activeStatus, vendorNameQuery: query }),
+    getAllInvoices({
+      status: activeStatus,
+      vendorNameQuery: query,
+      periodFrom: parsedDate(dateFrom),
+      periodTo: parsedDate(dateTo, true),
+    }),
     getSuspendedVendorCount(),
   ]);
 
@@ -91,15 +108,15 @@ export default async function BillingPage({
             <div>
               <h2 className="text-section-title text-fg">All Invoices</h2>
               <p className="mt-0.5 text-xs text-fg-subtle">
-                Generated automatically on the 1st of each month from each vendor&apos;s actual
-                verification count.
+                Invoices generate automatically shortly after each month ends. Press Refresh to
+                run this now — for testing or a backfill — using the same verification counts.
               </p>
             </div>
-            {isSuperAdmin && <RunInvoiceGenerationButton />}
+            {isSuperAdmin && <RefreshInvoicesButton />}
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <form action="/billing" className="flex items-center gap-2" method="get">
+            <form action="/billing" className="flex flex-wrap items-center gap-2" method="get">
               {activeStatus && <input name="status" type="hidden" value={activeStatus} />}
               <input
                 className="h-9 w-56 rounded-md border border-border px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
@@ -108,10 +125,39 @@ export default async function BillingPage({
                 placeholder="Search vendor name..."
                 type="search"
               />
+              <input
+                aria-label="Period from"
+                className="h-9 rounded-md border border-border px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+                defaultValue={dateFrom ?? ""}
+                name="dateFrom"
+                type="date"
+              />
+              <span className="text-sm text-fg-subtle">to</span>
+              <input
+                aria-label="Period to"
+                className="h-9 rounded-md border border-border px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+                defaultValue={dateTo ?? ""}
+                name="dateTo"
+                type="date"
+              />
+              <button
+                className="h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
+                type="submit"
+              >
+                Filter
+              </button>
+              {(query || dateFrom || dateTo) && (
+                <a
+                  className="text-sm font-medium text-fg-subtle hover:text-fg"
+                  href={billingHref({ dateFrom: undefined, dateTo: undefined, query: undefined }, currentFilters)}
+                >
+                  Clear
+                </a>
+              )}
             </form>
             <PageTabs
               tabs={STATUS_TABS.map((tab) => ({
-                href: billingHref(tab.value, query),
+                href: billingHref({ status: tab.value }, currentFilters),
                 isActive: activeStatus === tab.value,
                 label: tab.label,
               }))}

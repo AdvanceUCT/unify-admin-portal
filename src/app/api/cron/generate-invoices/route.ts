@@ -2,10 +2,16 @@
  * @fileoverview Handles the `/api/cron/generate-invoices` API boundary, including its authorization and request validation.
  * @module app/api/cron/generate-invoices/route
  *
- * Scheduled via vercel.json to run early each month. Vercel automatically
- * sends `Authorization: Bearer $CRON_SECRET` on cron-triggered requests when
- * that env var is set, so this route only has to check for that same value —
- * no separate secret-sharing mechanism is needed.
+ * Scheduled via vercel.json to run shortly after each month ends — the
+ * period can only be counted completely once every verification in it has
+ * happened, so this fires just after midnight on the 1st rather than in the
+ * last hours of the 30th/31st. Vercel automatically sends
+ * `Authorization: Bearer $CRON_SECRET` on cron-triggered requests when that
+ * env var is set, so this route only has to check for that same value — no
+ * separate secret-sharing mechanism is needed.
+ *
+ * This is the automatic path; the billing page's Refresh button triggers the
+ * exact same underlying function on demand.
  */
 
 import { NextResponse } from "next/server";

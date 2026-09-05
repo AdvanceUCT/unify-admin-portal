@@ -74,9 +74,15 @@ export async function getOverdueInvoices() {
   });
 }
 
-/** All invoices, optionally filtered by status, vendor, and/or a vendor-name search, most recently created first. */
+/** All invoices, optionally filtered by status, vendor, a vendor-name search, and/or billing period, most recently created first. */
 export async function getAllInvoices(
-  filters: { status?: string; vendorProfileId?: string; vendorNameQuery?: string } = {},
+  filters: {
+    status?: string;
+    vendorProfileId?: string;
+    vendorNameQuery?: string;
+    periodFrom?: Date;
+    periodTo?: Date;
+  } = {},
 ) {
   const vendorNameQuery = filters.vendorNameQuery?.trim();
 
@@ -86,6 +92,14 @@ export async function getAllInvoices(
       ...(filters.vendorProfileId ? { vendorProfileId: filters.vendorProfileId } : {}),
       ...(vendorNameQuery
         ? { vendorName: { contains: vendorNameQuery, mode: "insensitive" } }
+        : {}),
+      ...(filters.periodFrom || filters.periodTo
+        ? {
+            periodStart: {
+              ...(filters.periodFrom ? { gte: filters.periodFrom } : {}),
+              ...(filters.periodTo ? { lte: filters.periodTo } : {}),
+            },
+          }
         : {}),
     },
     include: VENDOR_SUSPENSION_INCLUDE,
@@ -392,8 +406,9 @@ export type MonthlyInvoiceGenerationResult = {
  *
  * Safe to run more than once for the same period: a vendor that already has
  * an invoice for it, or that had zero billable verifications, is skipped.
- * Intended to run on a schedule (see /api/cron/generate-invoices) shortly
- * after each month ends, but can also be triggered on demand.
+ * Runs automatically shortly after each month ends (see
+ * /api/cron/generate-invoices), and can also be triggered on demand from the
+ * admin billing page's Refresh button — both call this same function.
  */
 export async function generateMonthlyInvoicesForVendors(
   period?: { periodStart: Date; periodEnd: Date },
