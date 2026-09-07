@@ -11,10 +11,13 @@ export function VendorInvoicePayButton({
   invoiceId,
   totalCents,
   isOverdue,
+  compact = false,
 }: {
   invoiceId: string;
   totalCents: number;
   isOverdue: boolean;
+  /** Small inline button for a table row, instead of the full-width call-to-action button. */
+  compact?: boolean;
 }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +50,22 @@ export function VendorInvoicePayButton({
       setError("Network error. Please check your connection and try again.");
       setIsLoading(false);
     }
+  }
+
+  if (compact) {
+    return (
+      <div>
+        <button
+          className="inline-flex h-8 items-center justify-center rounded-md bg-brand-600 px-3 text-xs font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={isLoading}
+          onClick={handlePay}
+          type="button"
+        >
+          {isLoading ? "Preparing..." : "Pay"}
+        </button>
+        {error && <p className="mt-1 text-xs text-danger-fg">{error}</p>}
+      </div>
+    );
   }
 
   return (

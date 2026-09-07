@@ -7,6 +7,7 @@ import { PortalShell } from "@/components/layout/PortalShell";
 import type { PortalNavItem } from "@/components/layout/portalTypes";
 import { AgentStatusIndicator } from "@/features/agent/AgentStatusIndicator";
 import { LiveVerificationNotifications } from "@/features/vendors/LiveVerificationNotifications";
+import { SuspendedBillingBanner } from "@/features/vendors/SuspendedBillingBanner";
 import { requireVendorSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { getDocumentSignedUrl } from "@/lib/storage/supabase";
@@ -75,9 +76,14 @@ export default async function VendorPortalLayout({
   const logoPath = vendorContext
     ? await getVendorProfileLogoPath(vendorContext.vendorProfileId)
     : null;
-  const [logoUrl, notificationBranchIds] = await Promise.all([
+  const [logoUrl, notificationBranchIds, suspendedForBilling] = await Promise.all([
     logoPath ? getDocumentSignedUrl(logoPath) : null,
     vendorContext ? notificationBranchIdsFor(vendorContext) : [],
+    vendorContext
+      ? prisma.vendorProfile
+          .findUnique({ where: { id: vendorContext.vendorProfileId }, select: { suspendedForBilling: true } })
+          .then((vendor) => vendor?.suspendedForBilling ?? false)
+      : false,
   ]);
 
   return (
@@ -114,6 +120,11 @@ export default async function VendorPortalLayout({
           initialCursor={encodeLiveVerificationCursor({ completedAt: new Date().toISOString(), id: "_" })}
         />
       ) : null}
+      {suspendedForBilling && (
+        <div className="mb-6">
+          <SuspendedBillingBanner />
+        </div>
+      )}
       {children}
     </PortalShell>
   );

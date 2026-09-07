@@ -6,11 +6,11 @@
 import { NextResponse } from "next/server";
 
 import { getVendorInvoiceSummary } from "@/lib/billing/invoiceService";
-import { requireApprovedVendorContext } from "@/lib/vendors/context";
+import { requireVendorOwnerContext } from "@/lib/vendors/context";
 
 /** Handles GET requests to `/api/vendor/invoices`. */
 export async function GET() {
-  const { context } = await requireApprovedVendorContext();
+  const { context } = await requireVendorOwnerContext();
 
   const summary = await getVendorInvoiceSummary(context.vendorProfileId);
 

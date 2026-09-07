@@ -6,11 +6,11 @@
 import { NextResponse } from "next/server";
 
 import { initiateInvoicePayment } from "@/lib/billing/invoiceService";
-import { requireApprovedVendorContext } from "@/lib/vendors/context";
+import { requireVendorOwnerContext } from "@/lib/vendors/context";
 
 /** Handles POST requests to `/api/vendor/invoices/pay`. */
 export async function POST(request: Request) {
-  const { context, session } = await requireApprovedVendorContext();
+  const { context, session } = await requireVendorOwnerContext();
 
   let body: unknown;
   try {

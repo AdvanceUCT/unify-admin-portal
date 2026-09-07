@@ -7,7 +7,7 @@ import { Metric } from "@/components/ui/Metric";
 import { StatusText } from "@/components/ui/StatusText";
 import { VendorInvoicePayButton } from "@/features/vendors/VendorInvoicePayButton";
 import { getVendorInvoiceSummary } from "@/lib/billing/invoiceService";
-import { requireApprovedVendorContext } from "@/lib/vendors/context";
+import { requireVendorOwnerContext } from "@/lib/vendors/context";
 
 function formatDate(value: Date) {
   return new Date(value).toLocaleDateString("en-GB", {
@@ -56,7 +56,7 @@ export default async function VendorInvoicesPage({
   const { payment } = await searchParams;
   const paymentResult = payment && payment in PAYMENT_BANNER ? (payment as keyof typeof PAYMENT_BANNER) : undefined;
 
-  const { context } = await requireApprovedVendorContext();
+  const { context } = await requireVendorOwnerContext();
   const summary = await getVendorInvoiceSummary(context.vendorProfileId);
   const { currentInvoice } = summary;
   const isOverdue = Boolean(currentInvoice && getDaysOverdue(currentInvoice.dueDate) > 0);
@@ -77,7 +77,7 @@ export default async function VendorInvoicesPage({
           value={currentInvoice ? formatCents(currentInvoice.totalCents) : "R 0.00"}
         />
         <Metric
-          detail="Lifetime payments to UCT"
+          detail="Lifetime payments made"
           label="Total paid"
           tone="success"
           value={formatCents(summary.totalPaidCents)}
@@ -161,32 +161,46 @@ export default async function VendorInvoicesPage({
                   <th className="px-5 py-3 font-medium">Amount</th>
                   <th className="px-5 py-3 font-medium">Due Date</th>
                   <th className="px-5 py-3 font-medium">Status</th>
+                  <th className="px-5 py-3 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {summary.allInvoices.map((invoice) => (
-                  <tr className="transition hover:bg-surface-muted/60" key={invoice.id}>
-                    <td className="whitespace-nowrap px-5 py-4 text-fg-muted">
-                      {formatPeriod(invoice.periodStart, invoice.periodEnd)}
-                    </td>
-                    <td className="px-5 py-4 tabular-nums text-fg-muted">{invoice.verificationCount}</td>
-                    <td className="whitespace-nowrap px-5 py-4 tabular-nums text-fg">
-                      {formatCents(invoice.totalCents)}
-                    </td>
-                    <td className="whitespace-nowrap px-5 py-4 tabular-nums text-fg-muted">
-                      {formatDate(invoice.dueDate)}
-                    </td>
-                    <td className="px-5 py-4">
-                      {invoice.status === "PAID" ? (
-                        <StatusText tone="success">Paid</StatusText>
-                      ) : invoice.status === "FLAGGED" ? (
-                        <StatusText tone="danger">Flagged</StatusText>
-                      ) : (
-                        <StatusText tone="warning">Unpaid</StatusText>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {summary.allInvoices.map((invoice) => {
+                  const isPayable = invoice.status === "UNPAID" || invoice.status === "FLAGGED";
+                  return (
+                    <tr className="transition hover:bg-surface-muted/60" key={invoice.id}>
+                      <td className="whitespace-nowrap px-5 py-4 text-fg-muted">
+                        {formatPeriod(invoice.periodStart, invoice.periodEnd)}
+                      </td>
+                      <td className="px-5 py-4 tabular-nums text-fg-muted">{invoice.verificationCount}</td>
+                      <td className="whitespace-nowrap px-5 py-4 tabular-nums text-fg">
+                        {formatCents(invoice.totalCents)}
+                      </td>
+                      <td className="whitespace-nowrap px-5 py-4 tabular-nums text-fg-muted">
+                        {formatDate(invoice.dueDate)}
+                      </td>
+                      <td className="px-5 py-4">
+                        {invoice.status === "PAID" ? (
+                          <StatusText tone="success">Paid</StatusText>
+                        ) : invoice.status === "FLAGGED" ? (
+                          <StatusText tone="danger">Flagged</StatusText>
+                        ) : (
+                          <StatusText tone="warning">Unpaid</StatusText>
+                        )}
+                      </td>
+                      <td className="px-5 py-4">
+                        {isPayable && (
+                          <VendorInvoicePayButton
+                            compact
+                            invoiceId={invoice.id}
+                            isOverdue={getDaysOverdue(invoice.dueDate) > 0}
+                            totalCents={invoice.totalCents}
+                          />
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
