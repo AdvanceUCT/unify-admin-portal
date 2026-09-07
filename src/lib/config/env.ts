@@ -92,6 +92,7 @@ const envSchema = z.object({
   WEBHOOK_SIGNING_SECRET: optionalNonEmptyString,
   VENDOR_API_KEY_PEPPER: optionalNonEmptyString,
   VENDOR_WEBHOOK_ENCRYPTION_KEY: optionalNonEmptyString,
+  PAYSTACK_ENCRYPTION_KEY: optionalNonEmptyString,
   SUPABASE_URL: optionalUrl,
   SUPABASE_SERVICE_ROLE_KEY: optionalNonEmptyString,
 });

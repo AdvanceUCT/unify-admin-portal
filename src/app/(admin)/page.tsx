@@ -5,6 +5,7 @@
 
 import { Metric } from "@/components/ui/Metric";
 import { StatusText } from "@/components/ui/StatusText";
+import { PaymentSetupPrompt } from "@/features/payments/PaymentSetupPrompt";
 import { getDashboardSummary, getRecentCredentialEvents } from "@/lib/api/server";
 import { ADMIN_ROLES } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
@@ -13,17 +14,23 @@ import {
   formatCredentialActivityEventStatus,
   formatDateTime,
 } from "@/lib/formatters";
+import { getUniversityProfile } from "@/lib/university/profile";
 
 export default async function AdminOverviewPage() {
   await requireRole(ADMIN_ROLES);
 
-  const [summary, credentialEvents] = await Promise.all([
+  const [summary, credentialEvents, profile] = await Promise.all([
     getDashboardSummary(),
     getRecentCredentialEvents(),
+    getUniversityProfile(),
   ]);
 
   return (
     <div className="space-y-6">
+      {profile && profile.setupStatus === "COMPLETE" && !profile.paymentServicesEnabled ? (
+        <PaymentSetupPrompt universityId={profile.id} />
+      ) : null}
+
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metric
           detail="Stored by students"

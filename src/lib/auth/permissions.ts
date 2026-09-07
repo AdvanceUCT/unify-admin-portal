@@ -34,6 +34,10 @@ export const ROLE_ROUTE_MAP: readonly RoleRoute[] = [
     allowedRoles: ["SUPER_ADMIN", "ADMIN"],
   },
   {
+    prefix: "/payments",
+    allowedRoles: ["SUPER_ADMIN", "ADMIN"],
+  },
+  {
     prefix: "/audit",
     allowedRoles: ["SUPER_ADMIN", "ADMIN", "VIEWER"],
   },
@@ -60,6 +64,8 @@ export const ADMIN_ACTIONS = [
   "student:write",
   "vendor:read",
   "vendor:write",
+  "payment:read",
+  "payment:write",
   "rule:read",
   "rule:write",
   "audit:read",
@@ -80,6 +86,8 @@ const ACTION_ROLE_MAP: Record<AdminAction, readonly AdminRole[]> = {
   "student:write": ["SUPER_ADMIN", "ADMIN", "ISSUER"],
   "vendor:read": ["SUPER_ADMIN", "ADMIN", "VIEWER"],
   "vendor:write": ["SUPER_ADMIN", "ADMIN"],
+  "payment:read": ["SUPER_ADMIN", "ADMIN", "VIEWER"],
+  "payment:write": ["SUPER_ADMIN", "ADMIN"],
   "rule:read": ["SUPER_ADMIN", "ADMIN", "VIEWER"],
   "rule:write": ["SUPER_ADMIN", "ADMIN"],
   "audit:read": ["SUPER_ADMIN", "ADMIN", "VIEWER"],

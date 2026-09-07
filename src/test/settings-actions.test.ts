@@ -25,6 +25,14 @@ vi.mock("@/lib/university/profile", () => ({
   saveUniversityProfileLogoPath: vi.fn(),
   updateUniversityProfile: vi.fn(),
 }));
+vi.mock("@/lib/payments/settings", () => ({
+  enablePaymentServices: vi.fn(),
+  savePaystackKey: vi.fn(),
+  upsertPaymentContacts: vi.fn(),
+}));
+vi.mock("@/lib/payments/paystackClient", () => ({
+  PaystackKeyError: class PaystackKeyError extends Error {},
+}));
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     $transaction: vi.fn((operation: (client: unknown) => unknown) =>

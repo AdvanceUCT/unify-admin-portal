@@ -22,6 +22,7 @@ const ownerNavItems: PortalNavItem[] = [
   { href: "/vendor/branches", label: "Branches", icon: "branches" },
   { href: "/vendor/staff", label: "Staff", icon: "staff" },
   { href: "/vendor/application", label: "Application", icon: "application" },
+  { href: "/vendor/payments", label: "Payments", icon: "payments" },
   { href: "/vendor/profile", label: "Profile", icon: "profile" },
   { href: "/vendor/integrations", label: "Integrations", icon: "integrations" },
   { href: "/vendor/help", label: "Help", icon: "help" },

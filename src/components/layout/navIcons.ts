@@ -16,6 +16,7 @@ import {
   Store,
   UserCog,
   Users,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -32,6 +33,7 @@ export const NAV_ICONS = {
   help: CircleHelp,
   integrations: KeyRound,
   overview: Gauge,
+  payments: Wallet,
   profile: UserCog,
   schemas: Layers3,
   settings: Settings,

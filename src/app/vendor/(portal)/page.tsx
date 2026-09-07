@@ -4,13 +4,14 @@
  */
 
 import Link from "next/link";
-import { ChevronRight, Mail } from "lucide-react";
+import { ChevronRight, Mail, Wallet } from "lucide-react";
 
 import { Badge } from "@/components/ui/Badge";
 import { VendorApplicationLanding } from "@/features/vendors/VendorApplicationLanding";
 import { VendorVerificationOverview } from "@/features/vendors/VendorVerificationOverview";
 import { prisma } from "@/lib/db/prisma";
 import { requireVendorSession } from "@/lib/auth/session";
+import { getPartnershipForVendor } from "@/lib/payments/partnerships";
 import { getUniversityProfile } from "@/lib/university/profile";
 import { getVendorApplicationForUser } from "@/lib/vendors/applications";
 import { getApprovedVendorContextForUser } from "@/lib/vendors/context";
@@ -37,17 +38,37 @@ export default async function VendorDashboardPage() {
       (vendor.defaultBranch && context.branchIds.includes(vendor.defaultBranch.id) ? vendor.defaultBranch : null) ??
       vendor.branches[0] ??
       null;
-    const [stats, recentVerifications, universityProfile] = await Promise.all([
+    const [stats, recentVerifications, universityProfile, partnership] = await Promise.all([
       getVendorVerificationStats(context.vendorProfileId, { branchIds: context.branchIds, inPersonOnly: true }),
       listRecentVendorVerifications(context.vendorProfileId, 5, { branchIds: context.branchIds, inPersonOnly: true }),
       getUniversityProfile(),
+      context.role === "OWNER" ? getPartnershipForVendor(context.vendorProfileId) : null,
     ]);
     const viewAllHref = context.branchIds.length === 1
       ? `/vendor/verifications?branchId=${encodeURIComponent(context.branchIds[0])}`
       : "/vendor/verifications";
+    const hasNotAppliedForPayments = partnership && partnership.paymentApplications.length === 0;
 
     return (
       <div className="space-y-6">
+        {hasNotAppliedForPayments ? (
+          <section className="flex items-start gap-3 rounded-xl border border-brand-200 bg-brand-50 p-4">
+            <Wallet className="mt-0.5 shrink-0 text-brand-700" size={20} aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-brand-700">Accept payments on campus</p>
+              <p className="mt-1 text-sm text-brand-700">
+                Apply to accept UNIFY wallet payments from students &mdash; no setup required on your side.
+              </p>
+            </div>
+            <Link
+              className="inline-flex h-9 shrink-0 items-center rounded-md bg-brand-600 px-3 text-sm font-medium text-white transition hover:bg-brand-700"
+              href="/vendor/payments"
+            >
+              Apply now
+            </Link>
+          </section>
+        ) : null}
+
         <VendorVerificationOverview
           companyName={displayBranch ? `${vendor.companyName} · ${displayBranch.name}` : vendor.companyName}
           vendorId={vendor.id}

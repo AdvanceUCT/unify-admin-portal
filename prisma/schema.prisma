@@ -102,9 +102,9 @@ model AdminInvite {
 }
 
 model VendorProfile {
-  id                  String                @id @default(cuid())
-  userId              String                @unique
-  user                User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                  String                        @id @default(cuid())
+  userId              String                        @unique
+  user                User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
   companyName         String
   serviceCategory     String
   contactPersonName   String?
@@ -114,17 +114,18 @@ model VendorProfile {
   verificationUrl     String?
   logoPath            String?
   agentServicePointId String?
-  defaultBranchId     String?               @unique
-  defaultBranch       VendorBranch?         @relation("VendorDefaultBranch", fields: [defaultBranchId], references: [id], onDelete: SetNull)
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
+  defaultBranchId     String?                       @unique
+  defaultBranch       VendorBranch?                 @relation("VendorDefaultBranch", fields: [defaultBranchId], references: [id], onDelete: SetNull)
+  createdAt           DateTime                      @default(now())
+  updatedAt           DateTime                      @updatedAt
   applications        VendorApplication[]
   verifications       VendorVerification[]
   apiCredentials      VendorApiCredential[]
   webhookConfig       VendorWebhookConfig?
-  branches            VendorBranch[]        @relation("VendorBranches")
+  branches            VendorBranch[]                @relation("VendorBranches")
   memberships         VendorMembership[]
   staffInvites        VendorStaffInvite[]
+  partnerships        VendorUniversityPartnership[]
 
   @@map("vendor_profile")
 }
@@ -403,25 +404,122 @@ model Student {
 }
 
 model UniversityProfile {
-  id                            String                  @id @default(cuid())
+  id                            String                        @id @default(cuid())
   name                          String
   abbreviation                  String
   logoPath                      String?
   contactEmail                  String
   websiteUrl                    String?
   issuerDid                     String?
-  setupStatus                   SetupStatus             @default(PENDING)
+  setupStatus                   SetupStatus                   @default(PENDING)
   setupCompletedAt              DateTime?
-  defaultCredentialValidityDays Int                     @default(365)
-  renewalCadenceMonths          Int                     @default(12)
-  createdAt                     DateTime                @default(now())
-  updatedAt                     DateTime                @updatedAt
+  defaultCredentialValidityDays Int                           @default(365)
+  renewalCadenceMonths          Int                           @default(12)
+  paymentServicesEnabled        Boolean                       @default(false)
+  paymentServicesEnabledAt      DateTime?
+  createdAt                     DateTime                      @default(now())
+  updatedAt                     DateTime                      @updatedAt
   credentialSchemas             CredentialSchema[]
   importMapping                 ImportMapping?
   importRuns                    ImportRun[]
   customFieldDefinitions        CustomFieldDefinition[]
+  paymentSettings               UniversityPaymentSettings?
+  vendorPartnerships            VendorUniversityPartnership[]
 
   @@map("university_profile")
+}
+
+/// A vendor's relationship with a single university: on-campus classification
+/// and payment-acceptance eligibility. Modeled as a join table (rather than a
+/// FK on VendorProfile) because a vendor may in principle partner with more
+/// than one university, and per-relationship state like campusStatus differs
+/// per university even for the same vendor.
+///
+/// Caveat: this app is deployed as one database per university (see
+/// `getUniversityProfile()`, which always does `findFirst()` — there is only
+/// ever one `UniversityProfile` row in a given deployment's database, and
+/// `Student`/`VendorProfile` carry no university-scoping field at all). So
+/// within a single deployment, this table will only ever reference that one
+/// row. Genuine "one vendor, many universities" requires either a future
+/// shared multi-tenant database or a cross-deployment vendor directory
+/// outside this schema — this table alone does not provide that; it only
+/// avoids foreclosing it.
+model VendorUniversityPartnership {
+  id                      String                     @id @default(cuid())
+  vendorProfileId         String
+  vendorProfile           VendorProfile              @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  universityProfileId     String
+  universityProfile       UniversityProfile          @relation(fields: [universityProfileId], references: [id], onDelete: Cascade)
+  campusStatus            CampusStatus?
+  paymentAcceptanceStatus VendorApplicationStatus?
+  paymentApplications     VendorPaymentApplication[]
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
+
+  @@unique([vendorProfileId, universityProfileId])
+  @@index([universityProfileId])
+  @@map("vendor_university_partnership")
+}
+
+enum CampusStatus {
+  ON_CAMPUS
+  OFF_CAMPUS
+}
+
+/// A vendor's request to accept UNIFY wallet payments on campus, reviewed by
+/// the university admin. Deliberately lighter than VendorApplication: vendors
+/// don't run their own Paystack integration under this model (funds settle to
+/// the university's own account), so this is an eligibility gate, not a
+/// document-heavy compliance submission. Mirrors VendorApplication's
+/// status/review/revocation field shape and transition pattern.
+model VendorPaymentApplication {
+  id               String                      @id @default(cuid())
+  partnershipId    String
+  partnership      VendorUniversityPartnership @relation(fields: [partnershipId], references: [id], onDelete: Cascade)
+  status           VendorApplicationStatus     @default(DRAFT)
+  justification    String?
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  reviewNotes      String?
+  revokedByUserId  String?
+  revokedAt        DateTime?
+  revokedNotes     String?
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
+
+  @@unique([partnershipId], map: "vendor_payment_application_one_active_per_partnership", where: raw("\"status\" IN ('DRAFT', 'PENDING', 'APPROVED')"))
+  @@index([partnershipId])
+  @@index([status])
+  @@map("vendor_payment_application")
+}
+
+/// University-level Paystack configuration. Kept as a satellite 1:1 table off
+/// UniversityProfile (same shape as VendorWebhookConfig off VendorProfile)
+/// rather than inline columns, since it holds encrypted secrets and optional
+/// contact fields rather than core identity fields.
+model UniversityPaymentSettings {
+  id                         String            @id @default(cuid())
+  universityProfileId        String            @unique
+  universityProfile          UniversityProfile @relation(fields: [universityProfileId], references: [id], onDelete: Cascade)
+  financeContactName         String?
+  financeContactEmail        String?
+  technicalContactName       String?
+  technicalContactEmail      String?
+  payoutCadence              PayoutCadence     @default(WEEKLY)
+  paystackTestKeyCiphertext  String?
+  paystackTestKeyValidatedAt DateTime?
+  paystackLiveKeyCiphertext  String?
+  paystackLiveKeyValidatedAt DateTime?
+  createdAt                  DateTime          @default(now())
+  updatedAt                  DateTime          @updatedAt
+
+  @@map("university_payment_settings")
+}
+
+enum PayoutCadence {
+  DAILY
+  WEEKLY
+  MONTHLY
 }
 
 model ImportMapping {
@@ -798,4 +896,12 @@ enum AuditAction {
   SCHEMA_PUBLISHED
   SCHEMA_VERSION_DELETED
   RENEWAL_SETTINGS_UPDATED
+  PAYMENT_SERVICES_ENABLED
+  PAYMENT_SETTINGS_UPDATED
+  PAYSTACK_KEY_UPDATED
+  VENDOR_CAMPUS_STATUS_CHANGED
+  VENDOR_PAYMENT_APPLICATION_SUBMITTED
+  VENDOR_PAYMENT_APPLICATION_APPROVED
+  VENDOR_PAYMENT_APPLICATION_REJECTED
+  VENDOR_PAYMENT_APPLICATION_REVOKED
 }

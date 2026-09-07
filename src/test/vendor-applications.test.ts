@@ -41,6 +41,8 @@ const database = vi.hoisted(() => {
       findUnique: vi.fn(),
       update: vi.fn(),
     },
+    universityProfile: { findFirst: vi.fn() },
+    vendorUniversityPartnership: { upsert: vi.fn() },
     vendorApplication: {
       count: vi.fn(),
       findFirst: vi.fn(),
@@ -127,6 +129,7 @@ beforeEach(() => {
     verificationUrl: "https://verify.example.com/verify/sp-public-1",
   });
   agentClient.listVerificationServicePoints.mockResolvedValue([]);
+  database.transaction.universityProfile.findFirst.mockResolvedValue(null);
 });
 
 describe("assertDraftDocumentUploadAllowed", () => {

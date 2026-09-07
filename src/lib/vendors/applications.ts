@@ -7,11 +7,12 @@ import "server-only";
 
 import { z } from "zod";
 
-import type { Prisma } from "@/generated/prisma/client";
 import { AuditAction, VendorApplicationStatus } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit/audit";
 import { env } from "@/lib/config/env";
+import { hasPrismaErrorCode, runSerializableTransaction } from "@/lib/db/transaction";
 import { prisma } from "@/lib/db/prisma";
+import { ensurePartnershipForApprovedVendor } from "@/lib/payments/partnerships";
 import { sendVendorApplicationApprovedEmail } from "@/lib/email/vendor-application-approved";
 import { sendVendorApplicationRejectedEmail } from "@/lib/email/vendor-application-rejected";
 import { sendVendorApplicationRevokedEmail } from "@/lib/email/vendor-application-revoked";
@@ -146,33 +147,6 @@ const revokeApplicationSchema = z.object({
   reviewerId: z.string().trim().min(1),
   notes: z.string().trim().min(1, "A revocation reason is required").max(500),
 });
-
-function hasPrismaErrorCode(error: unknown, code: string) {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === code
-  );
-}
-
-async function runSerializableTransaction<T>(
-  operation: (transaction: Prisma.TransactionClient) => Promise<T>,
-) {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      return await prisma.$transaction(operation, {
-        isolationLevel: "Serializable",
-      });
-    } catch (error) {
-      if (!hasPrismaErrorCode(error, "P2034") || attempt === 2) {
-        throw error;
-      }
-    }
-  }
-
-  throw new Error("The transaction could not be completed.");
-}
 
 function activeApplicationError(status?: VendorApplicationStatus) {
   return status === VendorApplicationStatus.APPROVED
@@ -486,6 +460,8 @@ export async function reviewVendorApplication({
           },
           update: { role: "OWNER", active: true },
         });
+
+        await ensurePartnershipForApprovedVendor(application.vendorProfileId, transaction);
 
         approvedVendor = { vendorProfileId: application.vendorProfileId, companyName };
       }
