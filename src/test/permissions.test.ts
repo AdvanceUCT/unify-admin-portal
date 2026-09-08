@@ -106,4 +106,11 @@ describe("permissions", () => {
     expect(() => assertCan("credential:schema:manage", session("ISSUER"))).toThrow(PermissionError);
     expect(() => assertCan("session:revoke", session("ADMIN"))).toThrow(PermissionError);
   });
+
+  it("restricts billing policy management to SUPER_ADMIN only", () => {
+    expect(assertCan("billing-policy:manage", session("SUPER_ADMIN"))).toEqual(session("SUPER_ADMIN"));
+    expect(() => assertCan("billing-policy:manage", session("ADMIN"))).toThrow(PermissionError);
+    expect(() => assertCan("billing-policy:manage", session("ISSUER"))).toThrow(PermissionError);
+    expect(() => assertCan("billing-policy:manage", session("VIEWER"))).toThrow(PermissionError);
+  });
 });

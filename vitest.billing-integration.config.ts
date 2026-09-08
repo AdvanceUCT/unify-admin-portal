@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { configDefaults, defineConfig } from "vitest/config";
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: {
@@ -9,8 +9,10 @@ export default defineConfig({
     },
   },
   test: {
-    environment: "jsdom",
-    exclude: [...configDefaults.exclude, "src/test-integration/**", "src/test-billing-integration/**"],
-    setupFiles: "./src/test/setup.ts",
+    environment: "node",
+    fileParallelism: false,
+    hookTimeout: 60_000,
+    include: ["src/test-billing-integration/**/*.test.ts"],
+    testTimeout: 30_000,
   },
 });

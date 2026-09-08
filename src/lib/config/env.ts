@@ -72,6 +72,62 @@ const currencyCode = z
   .optional()
   .transform((value) => value ?? "ZAR");
 
+// Rejects anything but "true"/"false" (case-insensitive) instead of silently
+// coercing a typo like "yes" or "1" into a falsy feature flag.
+const strictBooleanFlag = (name: string) =>
+  z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? "")
+    .refine((value) => value === "" || value.toLowerCase() === "true" || value.toLowerCase() === "false", {
+      message: `${name} must be "true" or "false".`,
+    })
+    .transform((value) => value.toLowerCase() === "true");
+
+// This POC never accepts a live Paystack integration. Any other value is a
+// misconfiguration, not a supported mode, so it fails fast instead of being coerced.
+const paystackMode = z
+  .string()
+  .optional()
+  .transform((value) => (value && value.trim() !== "" ? value.trim().toLowerCase() : "test"))
+  .refine((value) => value === "test", {
+    message: 'PAYSTACK_MODE must be "test". This deployment does not support live Paystack mode.',
+  });
+
+const PAYSTACK_PLACEHOLDER_VALUES = new Set([
+  "sk_test_replace_in_private_env",
+  "acct_replace_with_test_code",
+  "replace_with_checked_integration_id",
+]);
+
+function isPaystackPlaceholder(value: string) {
+  return PAYSTACK_PLACEHOLDER_VALUES.has(value.toLowerCase()) || value.toLowerCase().includes("replace");
+}
+
+const paystackSecretKey = optionalNonEmptyString.refine(
+  (value) =>
+    value === undefined || (value.startsWith("sk_test_") && !isPaystackPlaceholder(value)),
+  {
+    message:
+      "PAYSTACK_SECRET_KEY must be a real Paystack test secret key (sk_test_...), never a live key or the setup-guide placeholder.",
+  },
+);
+
+const paystackSubaccountCode = optionalNonEmptyString.refine(
+  (value) => value === undefined || (value.startsWith("ACCT_") && !isPaystackPlaceholder(value)),
+  {
+    message:
+      "PAYSTACK_PLATFORM_SUBACCOUNT_CODE must be a real Paystack subaccount code (ACCT_...), not the setup-guide placeholder.",
+  },
+);
+
+const paystackIntegrationId = optionalNonEmptyString.refine(
+  (value) => value === undefined || !isPaystackPlaceholder(value),
+  {
+    message: "PAYSTACK_EXPECTED_INTEGRATION_ID must not be left as the setup-guide placeholder.",
+  },
+);
+
 const envSchema = z.object({
   DATABASE_URL: databaseUrl("DATABASE_URL"),
   DIRECT_URL: databaseUrl("DIRECT_URL").optional(),
@@ -114,6 +170,13 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: optionalNonEmptyString,
   VERIFICATION_FEE_MINOR: optionalNonNegativeInteger,
   VERIFICATION_FEE_CURRENCY: currencyCode,
+  VERIFICATION_INVOICING_ENABLED: strictBooleanFlag("VERIFICATION_INVOICING_ENABLED"),
+  VERIFICATION_INVOICE_CHECKOUT_ENABLED: strictBooleanFlag("VERIFICATION_INVOICE_CHECKOUT_ENABLED"),
+  PAYSTACK_MODE: paystackMode,
+  PAYSTACK_SECRET_KEY: paystackSecretKey,
+  PAYSTACK_ACCOUNT_REF: optionalNonEmptyString,
+  PAYSTACK_PLATFORM_SUBACCOUNT_CODE: paystackSubaccountCode,
+  PAYSTACK_EXPECTED_INTEGRATION_ID: paystackIntegrationId,
 });
 
 const parsedEnv = envSchema.parse(process.env);
@@ -122,7 +185,25 @@ if (process.env.NODE_ENV === "production" && parsedEnv.VERIFICATION_FEE_MINOR ==
   throw new Error("VERIFICATION_FEE_MINOR is required in production.");
 }
 
+// Checkout moves real (test-mode) money through Paystack, so its required
+// identity must be fully configured before the flag can be turned on — the
+// invoicing flag alone only issues/displays invoices and needs no provider.
+if (parsedEnv.VERIFICATION_INVOICE_CHECKOUT_ENABLED) {
+  const missing = [
+    ["PAYSTACK_SECRET_KEY", parsedEnv.PAYSTACK_SECRET_KEY],
+    ["PAYSTACK_PLATFORM_SUBACCOUNT_CODE", parsedEnv.PAYSTACK_PLATFORM_SUBACCOUNT_CODE],
+    ["PAYSTACK_EXPECTED_INTEGRATION_ID", parsedEnv.PAYSTACK_EXPECTED_INTEGRATION_ID],
+  ].filter(([, value]) => value === undefined).map(([name]) => name);
+
+  if (missing.length > 0) {
+    throw new Error(
+      `VERIFICATION_INVOICE_CHECKOUT_ENABLED requires ${missing.join(", ")} to be configured.`,
+    );
+  }
+}
+
 export const env = {
   ...parsedEnv,
   VERIFICATION_FEE_MINOR: parsedEnv.VERIFICATION_FEE_MINOR ?? 0,
+  PAYSTACK_ACCOUNT_REF: parsedEnv.PAYSTACK_ACCOUNT_REF ?? "university-demo",
 };
