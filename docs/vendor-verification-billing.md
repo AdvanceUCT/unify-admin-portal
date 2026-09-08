@@ -9,7 +9,7 @@ The active env values are only used when a verification result is materialized. 
 
 For v1, only `APPROVED` verifications where `isVerified = true` are billable. Declined, failed, expired, pending, and approved-but-not-verified results are stored as not billable. This rule lives in `src/lib/vendors/verificationBilling.ts` so it can be changed without rewriting page or export logic.
 
-The vendor-facing pricing view is intentionally limited to `/vendor/verifications`. Dashboard metrics and live verification notifications stay focused on verification activity.
+Vendor-facing pricing is intentionally limited to summary and history surfaces. The dashboard overview shows current-month running cost alongside current-month verification counts, and `/vendor/verifications` shows per-event price in the table and billing metadata in the CSV export. Live verification notifications stay focused on verification activity.
 
 ## Future Revenue Split
 

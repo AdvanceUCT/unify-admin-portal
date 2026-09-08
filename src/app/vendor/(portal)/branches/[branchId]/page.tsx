@@ -13,6 +13,7 @@ import { Metric } from "@/components/ui/Metric";
 import { LiveVerificationList } from "@/features/vendors/LiveVerificationList";
 import { QrCodeActions } from "@/features/vendors/QrCodeActions";
 import { prisma } from "@/lib/db/prisma";
+import { formatMoneyMinor } from "@/lib/formatters";
 import {
   assertBranchAccess,
   requireApprovedVendorContext,
@@ -40,6 +41,7 @@ const inputClassName =
 const labelClassName = "grid gap-1 text-sm font-medium text-fg-muted";
 const secondaryButtonClassName =
   "h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg";
+const metricValueClassName = "text-lg leading-tight break-all sm:text-xl xl:text-2xl";
 
 export default async function VendorBranchPage({
   params,
@@ -101,32 +103,32 @@ export default async function VendorBranchPage({
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Metric
-          label="In-person verifications"
-          value={stats.total}
-          detail="All time"
-          tone="brand"
-        />
-        <Metric
-          label="Approved"
-          value={stats.approved}
-          detail={
-            stats.total
-              ? `${Math.round((stats.approved / stats.total) * 100)}% approval rate`
-              : "No results yet"
-          }
-          tone="success"
-        />
-        <Metric
-          label="Pending"
-          value={stats.pending}
-          detail="Awaiting response"
-          tone="warning"
-        />
-        <Metric
           label="This month"
-          value={stats.thisMonth}
-          detail="Since the 1st"
+          value={stats.currentMonthTotal}
+          detail="Total verifications"
+          tone="brand"
+          valueClassName={metricValueClassName}
+        />
+        <Metric
+          label="Successful"
+          value={stats.currentMonthSuccessful}
+          detail="Approved and verified this month"
+          tone="success"
+          valueClassName={metricValueClassName}
+        />
+        <Metric
+          label="Failed or declined"
+          value={stats.currentMonthFailedOrDeclined}
+          detail="Failed or declined this month"
+          tone="danger"
+          valueClassName={metricValueClassName}
+        />
+        <Metric
+          label="Running cost"
+          value={formatMoneyMinor(stats.currentMonthRunningCostMinor, stats.currentMonthRunningCostCurrency)}
+          detail={`Estimated current-month cost in ${stats.currentMonthRunningCostCurrency}`}
           tone="info"
+          valueClassName={metricValueClassName}
         />
       </div>
 

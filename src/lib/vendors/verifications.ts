@@ -445,18 +445,49 @@ export async function getVendorVerificationStats(
 ) {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const billingPeriodKey = billingPeriodKeyFromDate(now);
   const where = {
     vendorProfileId,
     ...(options.branchIds ? { branchId: { in: options.branchIds } } : {}),
     ...(options.inPersonOnly ? { checkoutId: null } : {}),
   };
-  const [total, approved, pending, thisMonth] = await Promise.all([
+  const [total, approved, pending, thisMonth, currentMonthSuccessful, currentMonthFailedOrDeclined, billingRows] = await Promise.all([
     prisma.vendorVerification.count({ where }),
     prisma.vendorVerification.count({ where: { ...where, status: "APPROVED" } }),
     prisma.vendorVerification.count({ where: { ...where, status: "PENDING" } }),
     prisma.vendorVerification.count({ where: { ...where, createdAt: { gte: startOfMonth } } }),
+    prisma.vendorVerification.count({
+      where: { ...where, createdAt: { gte: startOfMonth }, isVerified: true, status: "APPROVED" },
+    }),
+    prisma.vendorVerification.count({
+      where: { ...where, createdAt: { gte: startOfMonth }, status: { in: ["FAILED", "DECLINED"] } },
+    }),
+    prisma.vendorVerification.findMany({
+      where: {
+        ...where,
+        billingPeriodKey,
+        billingStatus: VendorVerificationBillingStatus.BILLABLE,
+      },
+      select: {
+        verificationFeeCurrency: true,
+        verificationFeeMinor: true,
+      },
+    }),
   ]);
-  return { total, approved, pending, thisMonth };
+  const activePricing = getActiveVerificationPricing();
+  const currentMonthRunningCostCurrency = billingRows[0]?.verificationFeeCurrency ?? activePricing.currency;
+
+  return {
+    total,
+    approved,
+    pending,
+    thisMonth,
+    currentMonthTotal: thisMonth,
+    currentMonthSuccessful,
+    currentMonthFailedOrDeclined,
+    currentMonthRunningCostCurrency,
+    currentMonthRunningCostMinor: billingRows.reduce((sum, row) => sum + row.verificationFeeMinor, 0),
+  };
 }
 
 export async function getVendorVerificationBillingSummary(

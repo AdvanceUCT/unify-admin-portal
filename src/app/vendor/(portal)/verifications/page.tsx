@@ -5,13 +5,11 @@
 
 import Link from "next/link";
 
-import { Metric } from "@/components/ui/Metric";
 import { StatusText } from "@/components/ui/StatusText";
 import { prisma } from "@/lib/db/prisma";
 import { formatDateTime, formatMoneyMinor } from "@/lib/formatters";
 import { requireApprovedVendorContext } from "@/lib/vendors/context";
 import {
-  getVendorVerificationBillingSummary,
   listVendorVerificationEvents,
   listVendorVerificationUniversities,
   type VendorVerificationEventFilters,
@@ -20,7 +18,6 @@ import { ExportCsvButton } from "./ExportCsvButton";
 import { VendorVerificationsFilterBar } from "./VendorVerificationsFilterBar";
 
 const TONE = { PENDING: "warning", APPROVED: "success", DECLINED: "danger", EXPIRED: "danger", FAILED: "danger" } as const;
-const BILLING_TONE = { PENDING: "warning", BILLABLE: "success", NOT_BILLABLE: "neutral" } as const;
 
 function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -53,10 +50,6 @@ function exportHref(filters: VendorVerificationEventFilters) {
   return `/api/vendor/verifications/export${query ? `?${query}` : ""}`;
 }
 
-function billingReasonLabel(value: string | null) {
-  return value ? value.replaceAll("_", " ").toLowerCase().replace(/^\w/, (letter) => letter.toUpperCase()) : "None";
-}
-
 export default async function VendorVerificationsPage({
   searchParams,
 }: {
@@ -79,7 +72,7 @@ export default async function VendorVerificationsPage({
     query: firstParam(params.q),
     university: firstParam(params.university),
   };
-  const [branches, universities, billingSummary, result] = await Promise.all([
+  const [branches, universities, result] = await Promise.all([
     prisma.vendorBranch.findMany({
       where: {
         vendorProfileId: context.vendorProfileId,
@@ -89,9 +82,6 @@ export default async function VendorVerificationsPage({
       select: { id: true, name: true },
     }),
     listVendorVerificationUniversities(context.vendorProfileId, context.branchIds),
-    getVendorVerificationBillingSummary(context.vendorProfileId, context.branchIds, {
-      branchId: filters.branchId,
-    }),
     listVendorVerificationEvents(context.vendorProfileId, context.branchIds, filters),
   ]);
   const showBranchFilter = context.role === "OWNER" && branches.length > 1;
@@ -107,27 +97,6 @@ export default async function VendorVerificationsPage({
         universities={universities}
       />
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Metric
-          label="Current period"
-          value={billingSummary.periodLabel}
-          detail={`Billing timezone: ${billingSummary.timezone}`}
-          tone="info"
-        />
-        <Metric
-          label="Billable verifications"
-          value={billingSummary.billableVerifications}
-          detail="Successful verified events"
-          tone="success"
-        />
-        <Metric
-          label="Running cost"
-          value={formatMoneyMinor(billingSummary.runningCostMinor, billingSummary.currency)}
-          detail={`Estimated invoice total in ${billingSummary.currency}`}
-          tone="brand"
-        />
-      </div>
-
       <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
           <h2 className="text-section-title text-fg">Events</h2>
@@ -137,7 +106,7 @@ export default async function VendorVerificationsPage({
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[72rem] text-left text-body">
+          <table className="w-full min-w-[60rem] text-center text-body">
             <thead className="border-b border-border bg-surface-muted/60">
               <tr className="whitespace-nowrap text-caption uppercase tracking-wide text-fg-subtle">
                 <th className="px-4 py-3 font-medium">Completed</th>
@@ -146,10 +115,7 @@ export default async function VendorVerificationsPage({
                 <th className="px-4 py-3 font-medium">Student number</th>
                 <th className="px-4 py-3 font-medium">University</th>
                 <th className="px-4 py-3 font-medium">Verification</th>
-                <th className="px-4 py-3 font-medium">Billing</th>
                 <th className="px-4 py-3 font-medium">Price</th>
-                <th className="px-4 py-3 font-medium">Reason</th>
-                <th className="px-4 py-3 font-medium">Request ID</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -162,7 +128,7 @@ export default async function VendorVerificationsPage({
                   : "Not billable";
 
                 return (
-                  <tr className="align-top transition hover:bg-surface-muted/60" key={event.id}>
+                  <tr className="align-middle transition hover:bg-surface-muted/60" key={event.id}>
                     <td className="whitespace-nowrap px-4 py-3 text-fg-muted">
                       {formatDateTime(event.completedAt ?? event.createdAt)}
                     </td>
@@ -179,16 +145,7 @@ export default async function VendorVerificationsPage({
                         </p>
                       )}
                     </td>
-                    <td className="px-4 py-3">
-                      <StatusText tone={BILLING_TONE[event.billing.status]}>
-                        {event.billing.status.replaceAll("_", " ")}
-                      </StatusText>
-                    </td>
                     <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-fg">{price}</td>
-                    <td className="px-4 py-3 text-fg-muted">{billingReasonLabel(event.billing.reason)}</td>
-                    <td className="max-w-44 truncate px-4 py-3 font-mono text-xs text-fg-subtle">
-                      {event.verificationRequestId ?? "Unavailable"}
-                    </td>
                   </tr>
                 );
               })}

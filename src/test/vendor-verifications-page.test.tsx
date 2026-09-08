@@ -10,7 +10,6 @@ const database = vi.hoisted(() => ({
   vendorBranch: { findMany: vi.fn() },
 }));
 const verifications = vi.hoisted(() => ({
-  getVendorVerificationBillingSummary: vi.fn(),
   listVendorVerificationEvents: vi.fn(),
   listVendorVerificationUniversities: vi.fn(),
 }));
@@ -39,14 +38,6 @@ describe("VendorVerificationsPage", () => {
     });
     database.vendorBranch.findMany.mockResolvedValue([{ id: "branch-001", name: "Main Branch" }]);
     verifications.listVendorVerificationUniversities.mockResolvedValue(["University of Cape Town"]);
-    verifications.getVendorVerificationBillingSummary.mockResolvedValue({
-      billableVerifications: 2,
-      currency: "ZAR",
-      periodKey: "2026-08",
-      periodLabel: "August 2026",
-      runningCostMinor: 250,
-      timezone: "Africa/Johannesburg",
-    });
     verifications.listVendorVerificationEvents.mockResolvedValue({
       events: [{
         billing: {
@@ -84,21 +75,16 @@ describe("VendorVerificationsPage", () => {
     cleanup();
   });
 
-  it("renders the current billing summary and verification billing table", async () => {
+  it("renders a centered verification table with per-event price", async () => {
     render(await VendorVerificationsPage({
       searchParams: Promise.resolve({ branchId: "branch-001" }),
     }));
 
-    expect(screen.getByText("August 2026")).toBeInTheDocument();
-    expect(screen.getByText(/R\s*2,50/)).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Billing" })).toBeInTheDocument();
+    expect(screen.queryByText("August 2026")).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Billing" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Reason" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Request ID" })).not.toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Price" })).toBeInTheDocument();
-    expect(screen.getByRole("row", { name: /Main Branch Ada Lovelace STU001/ })).toHaveTextContent("BILLABLE");
     expect(screen.getByRole("row", { name: /Main Branch Ada Lovelace STU001/ })).toHaveTextContent(/R\s*1,25/);
-    expect(verifications.getVendorVerificationBillingSummary).toHaveBeenCalledWith(
-      "vendor-001",
-      ["branch-001"],
-      { branchId: "branch-001" },
-    );
   });
 });

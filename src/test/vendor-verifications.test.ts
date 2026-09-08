@@ -6,6 +6,7 @@ import {
   getVendorCheckoutVerificationResult,
   getVendorVerificationBillingSummary,
   getVendorVerificationResult,
+  getVendorVerificationStats,
   listRecentVendorVerifications,
   listVendorVerificationEvents,
   listVendorVerificationUniversities,
@@ -448,6 +449,65 @@ describe("vendor checkout verification", () => {
       runningCostMinor: 250,
       timezone: "Africa/Johannesburg",
     });
+  });
+
+  it("returns current-month verification counts and running cost for overview metrics", async () => {
+    database.vendorVerification.count
+      .mockResolvedValueOnce(20)
+      .mockResolvedValueOnce(12)
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(8)
+      .mockResolvedValueOnce(5)
+      .mockResolvedValueOnce(3);
+    database.vendorVerification.findMany.mockResolvedValue([
+      { verificationFeeCurrency: "ZAR", verificationFeeMinor: 125 },
+      { verificationFeeCurrency: "ZAR", verificationFeeMinor: 250 },
+    ]);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-08T10:00:00.000Z"));
+
+    const stats = await getVendorVerificationStats("vendor-001", {
+      branchIds: ["branch-001"],
+      inPersonOnly: true,
+    });
+
+    expect(database.vendorVerification.count).toHaveBeenNthCalledWith(4, {
+      where: expect.objectContaining({ createdAt: { gte: expect.any(Date) } }),
+    });
+    expect(database.vendorVerification.count).toHaveBeenNthCalledWith(5, {
+      where: expect.objectContaining({
+        createdAt: { gte: expect.any(Date) },
+        isVerified: true,
+        status: "APPROVED",
+      }),
+    });
+    expect(database.vendorVerification.count).toHaveBeenNthCalledWith(6, {
+      where: expect.objectContaining({
+        createdAt: { gte: expect.any(Date) },
+        status: { in: ["FAILED", "DECLINED"] },
+      }),
+    });
+    expect(database.vendorVerification.findMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        billingPeriodKey: "2026-08",
+        billingStatus: "BILLABLE",
+        branchId: { in: ["branch-001"] },
+        checkoutId: null,
+        vendorProfileId: "vendor-001",
+      }),
+      select: {
+        verificationFeeCurrency: true,
+        verificationFeeMinor: true,
+      },
+    });
+    expect(stats).toMatchObject({
+      currentMonthFailedOrDeclined: 3,
+      currentMonthRunningCostCurrency: "ZAR",
+      currentMonthRunningCostMinor: 375,
+      currentMonthSuccessful: 5,
+      currentMonthTotal: 8,
+    });
+    vi.useRealTimers();
   });
 
   it("derives university filter options from accessible verification attributes", async () => {

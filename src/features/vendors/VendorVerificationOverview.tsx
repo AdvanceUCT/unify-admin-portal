@@ -11,6 +11,7 @@ import { ApprovedBanner } from "@/features/vendors/ApprovedBanner";
 import { CopyButton, QrCodeActions } from "@/features/vendors/QrCodeActions";
 import { LiveVerificationList } from "@/features/vendors/LiveVerificationList";
 import { Metric } from "@/components/ui/Metric";
+import { formatMoneyMinor } from "@/lib/formatters";
 import type { getVendorVerificationStats, listRecentVendorVerifications } from "@/lib/vendors/verifications";
 import {
   normalizedVerificationAttributes,
@@ -36,6 +37,8 @@ const HOW_IT_WORKS = [
   },
 ];
 
+const METRIC_VALUE_CLASS = "text-lg leading-tight break-all sm:text-xl xl:text-2xl";
+
 export async function VendorVerificationOverview({
   companyName,
   vendorId,
@@ -53,7 +56,6 @@ export async function VendorVerificationOverview({
   liveCursor?: string;
   viewAllHref?: string;
 }) {
-  const approvalRate = stats.total > 0 ? Math.round((stats.approved / stats.total) * 100) : null;
   const qrSvg = verificationUrl
     ? await QRCode.toString(verificationUrl, { type: "svg", margin: 1 })
     : null;
@@ -70,15 +72,34 @@ export async function VendorVerificationOverview({
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Metric label="Total verifications" value={stats.total} detail="All time" tone="brand" />
         <Metric
-          label="Approved"
-          value={stats.approved}
-          detail={approvalRate !== null ? `${approvalRate}% approval rate` : "No verifications yet"}
-          tone="success"
+          label="This month"
+          value={stats.currentMonthTotal}
+          detail="Total verifications"
+          tone="brand"
+          valueClassName={METRIC_VALUE_CLASS}
         />
-        <Metric label="Pending" value={stats.pending} detail="Awaiting student response" tone="warning" />
-        <Metric label="This month" value={stats.thisMonth} detail="Verifications since the 1st" tone="info" />
+        <Metric
+          label="Successful"
+          value={stats.currentMonthSuccessful}
+          detail="Approved and verified this month"
+          tone="success"
+          valueClassName={METRIC_VALUE_CLASS}
+        />
+        <Metric
+          label="Failed or declined"
+          value={stats.currentMonthFailedOrDeclined}
+          detail="Failed or declined this month"
+          tone="danger"
+          valueClassName={METRIC_VALUE_CLASS}
+        />
+        <Metric
+          label="Running cost"
+          value={formatMoneyMinor(stats.currentMonthRunningCostMinor, stats.currentMonthRunningCostCurrency)}
+          detail={`Estimated current-month cost in ${stats.currentMonthRunningCostCurrency}`}
+          tone="info"
+          valueClassName={METRIC_VALUE_CLASS}
+        />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
