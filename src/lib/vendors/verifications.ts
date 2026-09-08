@@ -457,7 +457,7 @@ export async function getVendorVerificationStats(
     prisma.vendorVerification.count({ where: { ...where, status: "PENDING" } }),
     prisma.vendorVerification.count({ where: { ...where, createdAt: { gte: startOfMonth } } }),
     prisma.vendorVerification.count({
-      where: { ...where, createdAt: { gte: startOfMonth }, isVerified: true, status: "APPROVED" },
+      where: { ...where, createdAt: { gte: startOfMonth }, NOT: { isVerified: false }, status: "APPROVED" },
     }),
     prisma.vendorVerification.count({
       where: { ...where, createdAt: { gte: startOfMonth }, status: { in: ["FAILED", "DECLINED"] } },

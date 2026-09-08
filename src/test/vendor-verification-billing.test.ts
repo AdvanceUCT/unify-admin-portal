@@ -43,12 +43,23 @@ describe("vendor verification billing", () => {
     expect(snapshot.pricingSnapshotAt).toBeInstanceOf(Date);
   });
 
+  it("treats approved events without an isVerified flag as billable", () => {
+    expect(resolveVerificationBillingSnapshot({
+      completedAt: new Date("2026-08-03T20:02:00.000Z"),
+      isVerified: null,
+      status: "APPROVED",
+    })).toMatchObject({
+      billingReason: "APPROVED_VERIFICATION",
+      billingStatus: VendorVerificationBillingStatus.BILLABLE,
+      verificationFeeMinor: 125,
+    });
+  });
+
   it.each([
     ["DECLINED", false, "DECLINED"],
     ["FAILED", false, "FAILED"],
     ["EXPIRED", false, "EXPIRED"],
     ["APPROVED", false, "NOT_VERIFIED"],
-    ["APPROVED", null, "NOT_VERIFIED"],
   ] as const)("marks %s events as not billable", (status, isVerified, reason) => {
     expect(resolveVerificationBillingSnapshot({
       completedAt: new Date("2026-08-03T20:02:00.000Z"),

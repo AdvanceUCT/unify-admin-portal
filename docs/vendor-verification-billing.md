@@ -7,7 +7,7 @@ Vendor verification billing is separate from the student payment wallet. Verific
 
 The active env values are only used when a verification result is materialized. Each completed `VendorVerification` stores its own billing snapshot so historical usage and future invoice estimates do not change when the platform price changes later.
 
-For v1, only `APPROVED` verifications where `isVerified = true` are billable. Declined, failed, expired, pending, and approved-but-not-verified results are stored as not billable. This rule lives in `src/lib/vendors/verificationBilling.ts` so it can be changed without rewriting page or export logic.
+For v1, `APPROVED` verifications are billable unless `isVerified` is explicitly `false`. This supports deployed agent events that may omit the optional `isVerified` flag while still treating approved-but-not-verified results as not billable. Declined, failed, expired, and pending results are stored as not billable. This rule lives in `src/lib/vendors/verificationBilling.ts` so it can be changed without rewriting page or export logic.
 
 Vendor-facing pricing is intentionally limited to summary and history surfaces. The dashboard overview shows current-month running cost alongside current-month verification counts, and `/vendor/verifications` shows per-event price in the table and billing metadata in the CSV export. Live verification notifications stay focused on verification activity.
 

@@ -477,7 +477,7 @@ describe("vendor checkout verification", () => {
     expect(database.vendorVerification.count).toHaveBeenNthCalledWith(5, {
       where: expect.objectContaining({
         createdAt: { gte: expect.any(Date) },
-        isVerified: true,
+        NOT: { isVerified: false },
         status: "APPROVED",
       }),
     });

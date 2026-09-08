@@ -5,6 +5,8 @@
 
 import "server-only";
 
+import { VendorVerificationBillingStatus } from "@/generated/prisma/enums";
+import { getActiveVerificationPricing } from "@/lib/vendors/verificationBilling";
 import { prisma } from "@/lib/db/prisma";
 
 export const VENDOR_VERIFICATION_REPORT_TIME_ZONE = "Africa/Johannesburg";
@@ -14,12 +16,17 @@ const REPORTING_OFFSET_MS = 2 * 60 * 60 * 1000;
 export type MonthlyVendorVerificationCount = {
   month: string;
   label: string;
+  rowLabel: string;
   successfulVerifications: number;
+  amountDueMinor: number;
+  currency: string;
   isCurrentMonth: boolean;
 };
 
 export type VendorMonthlyVerificationHistory = {
   timezone: typeof VENDOR_VERIFICATION_REPORT_TIME_ZONE;
+  selectedYear: number;
+  availableYears: number[];
   currentMonth: MonthlyVendorVerificationCount;
   allTimeSuccessfulVerifications: number;
   months: MonthlyVendorVerificationCount[];
@@ -57,6 +64,23 @@ function monthLabel(monthKey: string) {
   }).format(new Date(Date.UTC(year, month - 1, 15, 12)));
 }
 
+function monthRowLabel(monthKey: string) {
+  const { year, month } = parseMonthKey(monthKey);
+
+  return new Intl.DateTimeFormat("en-GB", {
+    month: "long",
+    timeZone: VENDOR_VERIFICATION_REPORT_TIME_ZONE,
+  }).format(new Date(Date.UTC(year, month - 1, 15, 12)));
+}
+
+function yearFromMonthKey(monthKey: string) {
+  return parseMonthKey(monthKey).year;
+}
+
+function normalizedYear(value: number | undefined, availableYears: number[], currentYear: number) {
+  return value && availableYears.includes(value) ? value : currentYear;
+}
+
 function buildMonthRange(startMonth: string, endMonth: string) {
   const months: string[] = [];
 
@@ -67,19 +91,32 @@ function buildMonthRange(startMonth: string, endMonth: string) {
   return months;
 }
 
+function monthsForYear(year: number, currentMonthKey: string) {
+  const currentYear = yearFromMonthKey(currentMonthKey);
+  const endMonth = year === currentYear ? currentMonthKey : `${year}-12`;
+
+  return buildMonthRange(`${year}-01`, endMonth);
+}
+
 export async function getVendorMonthlyVerificationHistory(
   vendorProfileId: string,
-  now = new Date(),
+  options: Date | { now?: Date; year?: number } = {},
 ): Promise<VendorMonthlyVerificationHistory> {
+  const now = options instanceof Date ? options : options.now ?? new Date();
+  const requestedYear = options instanceof Date ? undefined : options.year;
+  const activePricing = getActiveVerificationPricing();
   const successfulVerifications = await prisma.vendorVerification.findMany({
     where: {
       vendorProfileId,
       status: "APPROVED",
-      isVerified: true,
+      NOT: { isVerified: false },
       completedAt: { not: null },
     },
     select: {
       completedAt: true,
+      billingStatus: true,
+      verificationFeeCurrency: true,
+      verificationFeeMinor: true,
     },
     orderBy: {
       completedAt: "asc",
@@ -87,41 +124,54 @@ export async function getVendorMonthlyVerificationHistory(
   });
 
   const currentMonthKey = monthKeyFromDate(now);
-  const firstSuccessfulMonth = successfulVerifications[0]?.completedAt
-    ? monthKeyFromDate(successfulVerifications[0].completedAt)
-    : currentMonthKey;
-  const startMonth = firstSuccessfulMonth > currentMonthKey
-    ? currentMonthKey
-    : firstSuccessfulMonth;
+  const currentYear = yearFromMonthKey(currentMonthKey);
+  const years = new Set<number>([currentYear]);
   const countsByMonth = new Map<string, number>();
+  const amountDueByMonth = new Map<string, number>();
+  const currencyByMonth = new Map<string, string>();
 
   for (const verification of successfulVerifications) {
     if (!verification.completedAt) continue;
 
     const month = monthKeyFromDate(verification.completedAt);
+    years.add(yearFromMonthKey(month));
     countsByMonth.set(month, (countsByMonth.get(month) ?? 0) + 1);
+    if (verification.billingStatus === VendorVerificationBillingStatus.BILLABLE) {
+      amountDueByMonth.set(month, (amountDueByMonth.get(month) ?? 0) + verification.verificationFeeMinor);
+      currencyByMonth.set(month, verification.verificationFeeCurrency);
+    }
   }
 
-  const months = buildMonthRange(startMonth, currentMonthKey)
+  const availableYears = Array.from(years).sort((left, right) => right - left);
+  const selectedYear = normalizedYear(requestedYear, availableYears, currentYear);
+  const months = monthsForYear(selectedYear, currentMonthKey)
     .map((month) => ({
+      amountDueMinor: amountDueByMonth.get(month) ?? 0,
+      currency: currencyByMonth.get(month) ?? activePricing.currency,
       month,
       label: monthLabel(month),
+      rowLabel: monthRowLabel(month),
       successfulVerifications: countsByMonth.get(month) ?? 0,
       isCurrentMonth: month === currentMonthKey,
     }))
     .reverse();
 
   const currentMonth = months.find((month) => month.isCurrentMonth) ?? {
+    amountDueMinor: amountDueByMonth.get(currentMonthKey) ?? 0,
+    currency: currencyByMonth.get(currentMonthKey) ?? activePricing.currency,
     month: currentMonthKey,
     label: monthLabel(currentMonthKey),
+    rowLabel: monthRowLabel(currentMonthKey),
     successfulVerifications: 0,
     isCurrentMonth: true,
   };
 
   return {
-    timezone: VENDOR_VERIFICATION_REPORT_TIME_ZONE,
-    currentMonth,
     allTimeSuccessfulVerifications: successfulVerifications.length,
+    availableYears,
+    currentMonth,
     months,
+    selectedYear,
+    timezone: VENDOR_VERIFICATION_REPORT_TIME_ZONE,
   };
 }

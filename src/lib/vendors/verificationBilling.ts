@@ -55,7 +55,7 @@ export function getActiveVerificationPricing(): VerificationPricing {
 }
 
 function notBillableReason(status: VendorVerificationStatus, isVerified: boolean | null | undefined) {
-  if (status === "APPROVED" && isVerified !== true) return "NOT_VERIFIED";
+  if (status === "APPROVED" && isVerified === false) return "NOT_VERIFIED";
   return status;
 }
 
@@ -94,7 +94,7 @@ export function resolveVerificationBillingSnapshot({
 
   const billingPeriodKey = billingPeriodKeyFromDate(completedAt);
 
-  if (status === "APPROVED" && isVerified === true) {
+  if (status === "APPROVED" && isVerified !== false) {
     return {
       billingPeriodKey,
       billingReason: "APPROVED_VERIFICATION",

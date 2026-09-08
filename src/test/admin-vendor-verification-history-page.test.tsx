@@ -63,25 +63,36 @@ const approvedApplication = {
 
 const history = {
   timezone: "Africa/Johannesburg",
+  selectedYear: 2026,
+  availableYears: [2026, 2025],
   currentMonth: {
-    month: "2026-08",
+    amountDueMinor: 875,
+    currency: "ZAR",
     label: "August 2026",
-    successfulVerifications: 7,
+    rowLabel: "August",
     isCurrentMonth: true,
+    month: "2026-08",
+    successfulVerifications: 7,
   },
   allTimeSuccessfulVerifications: 32,
   months: [
     {
-      month: "2026-08",
+      amountDueMinor: 875,
+      currency: "ZAR",
       label: "August 2026",
-      successfulVerifications: 7,
+      rowLabel: "August",
       isCurrentMonth: true,
+      month: "2026-08",
+      successfulVerifications: 7,
     },
     {
-      month: "2026-07",
+      amountDueMinor: 3125,
+      currency: "ZAR",
       label: "July 2026",
-      successfulVerifications: 25,
+      rowLabel: "July",
       isCurrentMonth: false,
+      month: "2026-07",
+      successfulVerifications: 25,
     },
   ],
 };
@@ -119,27 +130,35 @@ describe("admin vendor verification history", () => {
     expect(applications.getVendorApplicationById).toHaveBeenCalledWith("application-1");
     expect(reports.getVendorMonthlyVerificationHistory).toHaveBeenCalledWith(
       "vendor-profile-1",
+      { year: undefined },
     );
   });
 
-  it("renders high-level current month, all-time total, and monthly rows", async () => {
+  it("renders high-level current month amount due, year filter, and monthly billing rows", async () => {
     render(
       await VendorVerificationHistoryPage({
         params: Promise.resolve({ applicationId: "application-1" }),
+        searchParams: Promise.resolve({ year: "2026" }),
       }),
     );
 
     expect(screen.getByRole("heading", { name: "Verification history" })).toBeInTheDocument();
     expect(screen.getByText("Campus Books")).toBeInTheDocument();
     expect(screen.getByText("Bookstore")).toBeInTheDocument();
-    expect(screen.getByText("August 2026 successful verifications")).toBeInTheDocument();
-    expect(screen.getByText("Successful verifications processed")).toBeInTheDocument();
-    expect(screen.getByRole("row", { name: /August 2026 7/ })).toBeInTheDocument();
-    expect(screen.getByRole("row", { name: /July 2026 25/ })).toBeInTheDocument();
+    expect(screen.getByText(/August 2026 successful verifications/)).toBeInTheDocument();
+    expect(screen.getByText(/R\s*8,75 due/)).toBeInTheDocument();
+    expect(screen.getByText("Estimated for August 2026")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Year" })).toHaveValue("2026");
+    expect(screen.getByRole("row", { name: /August 7 R\s*8,75/ })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /July 25 R\s*31,25/ })).toBeInTheDocument();
     expect(screen.queryByText(/student/i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Back to vendors/ })).toHaveAttribute(
       "href",
       "/vendors",
+    );
+    expect(reports.getVendorMonthlyVerificationHistory).toHaveBeenCalledWith(
+      "vendor-profile-1",
+      { year: 2026 },
     );
   });
 });
