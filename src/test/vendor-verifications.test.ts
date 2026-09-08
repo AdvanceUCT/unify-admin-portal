@@ -4,6 +4,7 @@ import {
   createVendorCheckoutSession,
   exportVendorVerificationEventsCsv,
   getVendorCheckoutVerificationResult,
+  getVendorVerificationBillingSummary,
   getVendorVerificationResult,
   listRecentVendorVerifications,
   listVendorVerificationEvents,
@@ -33,6 +34,12 @@ const integrations = vi.hoisted(() => ({ deliverVendorWebhook: vi.fn() }));
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/agentClient", () => agent);
+vi.mock("@/lib/config/env", () => ({
+  env: {
+    VERIFICATION_FEE_CURRENCY: "ZAR",
+    VERIFICATION_FEE_MINOR: 125,
+  },
+}));
 vi.mock("@/lib/db/prisma", () => ({ prisma: database }));
 vi.mock("@/lib/vendors/applications", () => applications);
 vi.mock("@/lib/vendors/integrations", () => integrations);
@@ -118,6 +125,27 @@ describe("vendor checkout verification", () => {
     expect(integrations.deliverVendorWebhook).not.toHaveBeenCalled();
   });
 
+  it("returns duplicate completed events without recalculating billing", async () => {
+    database.vendorVerification.findUnique.mockResolvedValueOnce({
+      id: "stored-verification-001",
+      checkoutId: "cart-001",
+      billingStatus: "BILLABLE",
+      verificationFeeMinor: 99,
+    });
+
+    const result = await recordVerificationCompletedEvent(completedEvent);
+
+    expect(result).toMatchObject({
+      duplicate: true,
+      verification: {
+        billingStatus: "BILLABLE",
+        verificationFeeMinor: 99,
+      },
+    });
+    expect(database.vendorVerification.upsert).not.toHaveBeenCalled();
+    expect(integrations.deliverVendorWebhook).not.toHaveBeenCalled();
+  });
+
   it("records a terminal result and makes one immediate webhook attempt", async () => {
     database.vendorVerification.findUnique
       .mockResolvedValueOnce(null)
@@ -137,14 +165,24 @@ describe("vendor checkout verification", () => {
       where: { verificationRequestId: "verification-001" },
       create: expect.objectContaining({
         attributes: completedEvent.attributes,
+        billingPeriodKey: "2026-08",
+        billingReason: "APPROVED_VERIFICATION",
+        billingStatus: "BILLABLE",
         isVerified: true,
         status: "APPROVED",
+        verificationFeeCurrency: "ZAR",
+        verificationFeeMinor: 125,
       }),
       update: expect.objectContaining({
         attributes: completedEvent.attributes,
+        billingPeriodKey: "2026-08",
+        billingReason: "APPROVED_VERIFICATION",
+        billingStatus: "BILLABLE",
         eventId: completedEvent.eventId,
         isVerified: true,
         status: "APPROVED",
+        verificationFeeCurrency: "ZAR",
+        verificationFeeMinor: 125,
       }),
     }));
     expect(integrations.deliverVendorWebhook).toHaveBeenCalledTimes(1);
@@ -327,6 +365,12 @@ describe("vendor checkout verification", () => {
       isVerified: true,
       failureCode: null,
       attributes: completedEvent.attributes,
+      billingStatus: "BILLABLE",
+      verificationFeeMinor: 125,
+      verificationFeeCurrency: "ZAR",
+      billingPeriodKey: "2026-08",
+      pricingSnapshotAt: new Date("2026-08-03T20:02:10.000Z"),
+      billingReason: "APPROVED_VERIFICATION",
       createdAt: new Date("2026-08-03T20:00:00.000Z"),
       completedAt: new Date("2026-08-03T20:02:00.000Z"),
     }]);
@@ -355,12 +399,54 @@ describe("vendor checkout verification", () => {
       totalPages: 2,
       events: [{
         branchName: "Main Branch",
+        billing: {
+          currency: "ZAR",
+          feeMinor: 125,
+          periodKey: "2026-08",
+          reason: "APPROVED_VERIFICATION",
+          status: "BILLABLE",
+        },
         student: {
           id: "STU001",
           name: "Ada Lovelace",
           university: "University of Cape Town",
         },
       }],
+    });
+  });
+
+  it("summarizes current-period verification cost for accessible branches", async () => {
+    database.vendorVerification.findMany.mockResolvedValue([
+      { verificationFeeCurrency: "ZAR", verificationFeeMinor: 125 },
+      { verificationFeeCurrency: "ZAR", verificationFeeMinor: 125 },
+    ]);
+
+    const summary = await getVendorVerificationBillingSummary(
+      "vendor-001",
+      ["branch-001", "branch-002"],
+      { branchId: "branch-001", now: new Date("2026-08-08T10:00:00.000Z") },
+    );
+
+    expect(database.vendorVerification.findMany).toHaveBeenCalledWith({
+      where: {
+        billingPeriodKey: "2026-08",
+        billingStatus: "BILLABLE",
+        branchId: { in: ["branch-001"] },
+        checkoutId: null,
+        vendorProfileId: "vendor-001",
+      },
+      select: {
+        verificationFeeCurrency: true,
+        verificationFeeMinor: true,
+      },
+    });
+    expect(summary).toEqual({
+      billableVerifications: 2,
+      currency: "ZAR",
+      periodKey: "2026-08",
+      periodLabel: "August 2026",
+      runningCostMinor: 250,
+      timezone: "Africa/Johannesburg",
     });
   });
 
@@ -384,6 +470,11 @@ describe("vendor checkout verification", () => {
       servicePointName: "Fallback Branch",
       status: "APPROVED",
       failureCode: null,
+      billingStatus: "BILLABLE",
+      verificationFeeMinor: 125,
+      verificationFeeCurrency: "ZAR",
+      billingPeriodKey: "2026-08",
+      billingReason: "APPROVED_VERIFICATION",
       attributes: {
         fullName: 'Ada "Countess" Lovelace',
         institution: "University of Cape Town",
@@ -401,9 +492,10 @@ describe("vendor checkout verification", () => {
     });
 
     expect(csv.split("\r\n")[0]).toBe(
-      '"Completed At","Created At","Branch","Status","Student Name","Student Number","University","Failure Code","Failure Reason","Verification Request ID","Event ID"',
+      '"Completed At","Created At","Branch","Status","Billing Status","Fee","Currency","Billing Period","Billing Reason","Student Name","Student Number","University","Failure Code","Failure Reason","Verification Request ID","Event ID"',
     );
     expect(csv).toContain('"Ada ""Countess"" Lovelace"');
+    expect(csv).toContain('"BILLABLE","125","ZAR","2026-08","APPROVED_VERIFICATION"');
     expect(database.vendorVerification.findMany).toHaveBeenCalledWith(expect.objectContaining({
       take: 10000,
       where: expect.objectContaining({ AND: expect.any(Array) }),

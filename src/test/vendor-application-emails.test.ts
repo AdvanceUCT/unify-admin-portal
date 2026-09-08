@@ -15,6 +15,7 @@ const validEnv = {
     "postgresql://postgres.realproject:secret@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true",
   DIRECT_URL: "postgresql://postgres:secret@db.realproject.supabase.co:5432/postgres",
   NEXT_PUBLIC_API_BASE_URL: "mock://unify-admin",
+  VERIFICATION_FEE_MINOR: "125",
 };
 
 function stubValidEnv(overrides: Record<string, string> = {}) {

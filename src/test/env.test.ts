@@ -92,4 +92,51 @@ describe("environment configuration", () => {
 
     await expect(import("@/lib/config/env")).rejects.toThrow();
   });
+
+  it("defaults verification pricing to zero outside production", async () => {
+    stubValidEnv();
+
+    await expect(import("@/lib/config/env")).resolves.toMatchObject({
+      env: expect.objectContaining({
+        VERIFICATION_FEE_CURRENCY: "ZAR",
+        VERIFICATION_FEE_MINOR: 0,
+      }),
+    });
+  });
+
+  it("normalizes configured verification pricing", async () => {
+    stubValidEnv({
+      VERIFICATION_FEE_CURRENCY: "zar",
+      VERIFICATION_FEE_MINOR: "125",
+    });
+
+    await expect(import("@/lib/config/env")).resolves.toMatchObject({
+      env: expect.objectContaining({
+        VERIFICATION_FEE_CURRENCY: "ZAR",
+        VERIFICATION_FEE_MINOR: 125,
+      }),
+    });
+  });
+
+  it("requires verification pricing in production", async () => {
+    stubValidEnv({ NODE_ENV: "production" });
+
+    await expect(import("@/lib/config/env")).rejects.toThrow(
+      "VERIFICATION_FEE_MINOR is required in production.",
+    );
+  });
+
+  it("treats a blank production verification fee as missing", async () => {
+    stubValidEnv({ NODE_ENV: "production", VERIFICATION_FEE_MINOR: "" });
+
+    await expect(import("@/lib/config/env")).rejects.toThrow(
+      "VERIFICATION_FEE_MINOR is required in production.",
+    );
+  });
+
+  it("rejects invalid verification pricing values", async () => {
+    stubValidEnv({ VERIFICATION_FEE_CURRENCY: "RAND", VERIFICATION_FEE_MINOR: "-1" });
+
+    await expect(import("@/lib/config/env")).rejects.toThrow();
+  });
 });

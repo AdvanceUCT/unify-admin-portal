@@ -55,6 +55,23 @@ const timeoutMs = (defaultValue: number) =>
     .optional()
     .transform((value) => (value === "" || value === undefined ? defaultValue : value));
 
+const optionalNonNegativeInteger = z.preprocess(
+  (value) => {
+    if (value === undefined) return undefined;
+    if (typeof value === "string" && value.trim() === "") return undefined;
+    return Number(value);
+  },
+  z.number().int().nonnegative().optional(),
+).optional();
+
+const currencyCode = z
+  .preprocess(
+    (value) => (value === undefined || (typeof value === "string" && value.trim() === "") ? undefined : value),
+    z.string().trim().regex(/^[A-Za-z]{3}$/).transform((value) => value.toUpperCase()).optional(),
+  )
+  .optional()
+  .transform((value) => value ?? "ZAR");
+
 const envSchema = z.object({
   DATABASE_URL: databaseUrl("DATABASE_URL"),
   DIRECT_URL: databaseUrl("DIRECT_URL").optional(),
@@ -95,6 +112,17 @@ const envSchema = z.object({
   VENDOR_WEBHOOK_ENCRYPTION_KEY: optionalNonEmptyString,
   SUPABASE_URL: optionalUrl,
   SUPABASE_SERVICE_ROLE_KEY: optionalNonEmptyString,
+  VERIFICATION_FEE_MINOR: optionalNonNegativeInteger,
+  VERIFICATION_FEE_CURRENCY: currencyCode,
 });
 
-export const env = envSchema.parse(process.env);
+const parsedEnv = envSchema.parse(process.env);
+
+if (process.env.NODE_ENV === "production" && parsedEnv.VERIFICATION_FEE_MINOR === undefined) {
+  throw new Error("VERIFICATION_FEE_MINOR is required in production.");
+}
+
+export const env = {
+  ...parsedEnv,
+  VERIFICATION_FEE_MINOR: parsedEnv.VERIFICATION_FEE_MINOR ?? 0,
+};

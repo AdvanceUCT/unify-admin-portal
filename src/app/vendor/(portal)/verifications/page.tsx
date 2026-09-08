@@ -5,12 +5,13 @@
 
 import Link from "next/link";
 
-import { Avatar } from "@/components/ui/Avatar";
+import { Metric } from "@/components/ui/Metric";
 import { StatusText } from "@/components/ui/StatusText";
 import { prisma } from "@/lib/db/prisma";
-import { formatDateTime } from "@/lib/formatters";
+import { formatDateTime, formatMoneyMinor } from "@/lib/formatters";
 import { requireApprovedVendorContext } from "@/lib/vendors/context";
 import {
+  getVendorVerificationBillingSummary,
   listVendorVerificationEvents,
   listVendorVerificationUniversities,
   type VendorVerificationEventFilters,
@@ -19,6 +20,7 @@ import { ExportCsvButton } from "./ExportCsvButton";
 import { VendorVerificationsFilterBar } from "./VendorVerificationsFilterBar";
 
 const TONE = { PENDING: "warning", APPROVED: "success", DECLINED: "danger", EXPIRED: "danger", FAILED: "danger" } as const;
+const BILLING_TONE = { PENDING: "warning", BILLABLE: "success", NOT_BILLABLE: "neutral" } as const;
 
 function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -51,6 +53,10 @@ function exportHref(filters: VendorVerificationEventFilters) {
   return `/api/vendor/verifications/export${query ? `?${query}` : ""}`;
 }
 
+function billingReasonLabel(value: string | null) {
+  return value ? value.replaceAll("_", " ").toLowerCase().replace(/^\w/, (letter) => letter.toUpperCase()) : "None";
+}
+
 export default async function VendorVerificationsPage({
   searchParams,
 }: {
@@ -73,7 +79,7 @@ export default async function VendorVerificationsPage({
     query: firstParam(params.q),
     university: firstParam(params.university),
   };
-  const [branches, universities, result] = await Promise.all([
+  const [branches, universities, billingSummary, result] = await Promise.all([
     prisma.vendorBranch.findMany({
       where: {
         vendorProfileId: context.vendorProfileId,
@@ -83,6 +89,9 @@ export default async function VendorVerificationsPage({
       select: { id: true, name: true },
     }),
     listVendorVerificationUniversities(context.vendorProfileId, context.branchIds),
+    getVendorVerificationBillingSummary(context.vendorProfileId, context.branchIds, {
+      branchId: filters.branchId,
+    }),
     listVendorVerificationEvents(context.vendorProfileId, context.branchIds, filters),
   ]);
   const showBranchFilter = context.role === "OWNER" && branches.length > 1;
@@ -98,6 +107,27 @@ export default async function VendorVerificationsPage({
         universities={universities}
       />
 
+      <div className="grid gap-4 md:grid-cols-3">
+        <Metric
+          label="Current period"
+          value={billingSummary.periodLabel}
+          detail={`Billing timezone: ${billingSummary.timezone}`}
+          tone="info"
+        />
+        <Metric
+          label="Billable verifications"
+          value={billingSummary.billableVerifications}
+          detail="Successful verified events"
+          tone="success"
+        />
+        <Metric
+          label="Running cost"
+          value={formatMoneyMinor(billingSummary.runningCostMinor, billingSummary.currency)}
+          detail={`Estimated invoice total in ${billingSummary.currency}`}
+          tone="brand"
+        />
+      </div>
+
       <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
           <h2 className="text-section-title text-fg">Events</h2>
@@ -106,34 +136,64 @@ export default async function VendorVerificationsPage({
             <ExportCsvButton href={exportHref(filters)} />
           </div>
         </div>
-        <div className="divide-y divide-border">
-          {result.events.map((event) => {
-            const studentName = event.student.name ?? "Student verification";
-            const studentNumber = event.student.id ?? "Unavailable";
-            const university = event.student.university ?? "Unavailable";
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[72rem] text-left text-body">
+            <thead className="border-b border-border bg-surface-muted/60">
+              <tr className="whitespace-nowrap text-caption uppercase tracking-wide text-fg-subtle">
+                <th className="px-4 py-3 font-medium">Completed</th>
+                <th className="px-4 py-3 font-medium">Branch</th>
+                <th className="px-4 py-3 font-medium">Student</th>
+                <th className="px-4 py-3 font-medium">Student number</th>
+                <th className="px-4 py-3 font-medium">University</th>
+                <th className="px-4 py-3 font-medium">Verification</th>
+                <th className="px-4 py-3 font-medium">Billing</th>
+                <th className="px-4 py-3 font-medium">Price</th>
+                <th className="px-4 py-3 font-medium">Reason</th>
+                <th className="px-4 py-3 font-medium">Request ID</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {result.events.map((event) => {
+                const studentName = event.student.name ?? "Student verification";
+                const studentNumber = event.student.id ?? "Unavailable";
+                const university = event.student.university ?? "Unavailable";
+                const price = event.billing.status === "BILLABLE"
+                  ? formatMoneyMinor(event.billing.feeMinor, event.billing.currency)
+                  : "Not billable";
 
-            return (
-              <div className="flex flex-col gap-3 px-5 py-4 transition hover:bg-surface-muted/60 sm:flex-row sm:items-center sm:justify-between" key={event.id}>
-                <div className="flex min-w-0 items-center gap-3">
-                  <Avatar name={studentName} />
-                  <div className="min-w-0">
-                    <p className="truncate text-body font-medium text-fg">{studentName}</p>
-                    <p className="mt-0.5 truncate text-xs text-fg-subtle">{studentNumber} / {university}</p>
-                    <p className="mt-0.5 truncate text-xs text-fg-subtle">{event.branchName} / {formatDateTime(event.completedAt ?? event.createdAt)}</p>
-                    {event.failureReason && (
-                      <p className="mt-1 text-xs text-danger-fg">
-                        {event.failureReason}
-                        {event.failureCode && <span className="font-mono"> ({event.failureCode})</span>}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <div className="shrink-0 pl-12 sm:pl-0">
-                  <StatusText tone={TONE[event.status]}>{event.status}</StatusText>
-                </div>
-              </div>
-            );
-          })}
+                return (
+                  <tr className="align-top transition hover:bg-surface-muted/60" key={event.id}>
+                    <td className="whitespace-nowrap px-4 py-3 text-fg-muted">
+                      {formatDateTime(event.completedAt ?? event.createdAt)}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-fg">{event.branchName}</td>
+                    <td className="px-4 py-3 font-medium text-fg">{studentName}</td>
+                    <td className="px-4 py-3 text-fg-muted">{studentNumber}</td>
+                    <td className="px-4 py-3 text-fg-muted">{university}</td>
+                    <td className="px-4 py-3">
+                      <StatusText tone={TONE[event.status]}>{event.status}</StatusText>
+                      {event.failureReason && (
+                        <p className="mt-1 max-w-48 text-xs text-danger-fg">
+                          {event.failureReason}
+                          {event.failureCode && <span className="font-mono"> ({event.failureCode})</span>}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusText tone={BILLING_TONE[event.billing.status]}>
+                        {event.billing.status.replaceAll("_", " ")}
+                      </StatusText>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-fg">{price}</td>
+                    <td className="px-4 py-3 text-fg-muted">{billingReasonLabel(event.billing.reason)}</td>
+                    <td className="max-w-44 truncate px-4 py-3 font-mono text-xs text-fg-subtle">
+                      {event.verificationRequestId ?? "Unavailable"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
           {result.events.length === 0 && <p className="px-5 py-8 text-center text-sm text-fg-subtle">No verification events match these filters.</p>}
         </div>
         <div className="flex items-center justify-between border-t border-border px-5 py-4">

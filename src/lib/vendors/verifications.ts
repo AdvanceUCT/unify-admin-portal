@@ -12,10 +12,17 @@ import {
   type AgentVerificationResult,
 } from "@/lib/agentClient";
 import { Prisma } from "@/generated/prisma/client";
-import type { VendorVerificationStatus } from "@/generated/prisma/enums";
+import { VendorVerificationBillingStatus, type VendorVerificationStatus } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/db/prisma";
 import { ensureVendorVerificationServicePoint } from "@/lib/vendors/applications";
 import { deliverVendorWebhook } from "@/lib/vendors/integrations";
+import {
+  billingPeriodKeyFromDate,
+  billingPeriodLabel,
+  getActiveVerificationPricing,
+  resolveVerificationBillingSnapshot,
+  VERIFICATION_BILLING_TIME_ZONE,
+} from "@/lib/vendors/verificationBilling";
 import {
   mapAgentVerificationDecision,
   normalizedVerificationAttributes,
@@ -61,6 +68,12 @@ type VerificationEventRow = {
   isVerified: boolean | null;
   failureCode: string | null;
   attributes: unknown;
+  billingStatus: VendorVerificationBillingStatus;
+  verificationFeeMinor: number;
+  verificationFeeCurrency: string;
+  billingPeriodKey: string | null;
+  pricingSnapshotAt: Date | null;
+  billingReason: string | null;
   createdAt: Date;
   completedAt: Date | null;
 };
@@ -217,19 +230,36 @@ function verificationEventShape(verification: VerificationEventRow) {
     failureReason: vendorVerificationFailureReason(verification.failureCode),
     attributes,
     student: summarizeVerificationStudent(attributes),
+    billing: {
+      status: verification.billingStatus,
+      feeMinor: verification.verificationFeeMinor,
+      currency: verification.verificationFeeCurrency,
+      periodKey: verification.billingPeriodKey,
+      pricingSnapshotAt: verification.pricingSnapshotAt?.toISOString() ?? null,
+      reason: verification.billingReason,
+    },
     createdAt: verification.createdAt.toISOString(),
     completedAt: verification.completedAt?.toISOString() ?? null,
   };
 }
 
 async function applyAgentResult(id: string, result: AgentVerificationResult) {
+  const status = mapAgentVerificationDecision(result.status);
+  const completedAt = result.completedAt ? new Date(result.completedAt) : null;
+  const billingSnapshot = resolveVerificationBillingSnapshot({
+    completedAt,
+    isVerified: null,
+    status,
+  });
+
   return prisma.vendorVerification.update({
     where: { id },
     data: {
-      status: mapAgentVerificationDecision(result.status),
+      status,
       failureCode: result.failureCode ?? null,
       expiresAt: new Date(result.expiresAt),
-      completedAt: result.completedAt ? new Date(result.completedAt) : null,
+      completedAt,
+      ...billingSnapshot,
     },
   });
 }
@@ -357,6 +387,13 @@ export async function recordVerificationCompletedEvent(payload: VerificationComp
     isVerified = isVerified ?? metadata.isVerified;
   }
   const storedAttributes = attributes ?? Prisma.DbNull;
+  const status = mapAgentVerificationDecision(payload.decision);
+  const completedAt = new Date(payload.completedAt);
+  const billingSnapshot = resolveVerificationBillingSnapshot({
+    completedAt,
+    isVerified,
+    status,
+  });
   const verification = await prisma.vendorVerification.upsert({
     where: { verificationRequestId: payload.verificationRequestId },
     create: {
@@ -367,23 +404,25 @@ export async function recordVerificationCompletedEvent(payload: VerificationComp
       eventId: payload.eventId,
       servicePointId: payload.servicePointId,
       servicePointName: branch.name,
-      status: mapAgentVerificationDecision(payload.decision),
+      status,
       isVerified,
       failureCode: payload.failureCode ?? null,
       attributes: storedAttributes,
+      ...billingSnapshot,
       expiresAt: new Date(payload.expiresAt),
-      completedAt: new Date(payload.completedAt),
+      completedAt,
     },
     update: {
       eventId: payload.eventId,
       branchId: branch.id,
       servicePointName: branch.name,
-      status: mapAgentVerificationDecision(payload.decision),
+      status,
       isVerified,
       failureCode: payload.failureCode ?? null,
       attributes: storedAttributes,
+      ...billingSnapshot,
       expiresAt: new Date(payload.expiresAt),
-      completedAt: new Date(payload.completedAt),
+      completedAt,
     },
   });
 
@@ -418,6 +457,41 @@ export async function getVendorVerificationStats(
     prisma.vendorVerification.count({ where: { ...where, createdAt: { gte: startOfMonth } } }),
   ]);
   return { total, approved, pending, thisMonth };
+}
+
+export async function getVendorVerificationBillingSummary(
+  vendorProfileId: string,
+  allowedBranchIds: string[],
+  options: { branchId?: string; now?: Date } = {},
+) {
+  const periodKey = billingPeriodKeyFromDate(options.now ?? new Date());
+  const branchIds = options.branchId && allowedBranchIds.includes(options.branchId)
+    ? [options.branchId]
+    : allowedBranchIds;
+  const rows = await prisma.vendorVerification.findMany({
+    where: {
+      vendorProfileId,
+      branchId: { in: branchIds },
+      checkoutId: null,
+      billingPeriodKey: periodKey,
+      billingStatus: VendorVerificationBillingStatus.BILLABLE,
+    },
+    select: {
+      verificationFeeCurrency: true,
+      verificationFeeMinor: true,
+    },
+  });
+  const activePricing = getActiveVerificationPricing();
+  const currency = rows[0]?.verificationFeeCurrency ?? activePricing.currency;
+
+  return {
+    billableVerifications: rows.length,
+    currency,
+    periodKey,
+    periodLabel: billingPeriodLabel(periodKey),
+    runningCostMinor: rows.reduce((total, row) => total + row.verificationFeeMinor, 0),
+    timezone: VERIFICATION_BILLING_TIME_ZONE,
+  };
 }
 
 export async function listRecentVendorVerifications(
@@ -526,6 +600,11 @@ export async function exportVendorVerificationEventsCsv(
     "Created At",
     "Branch",
     "Status",
+    "Billing Status",
+    "Fee",
+    "Currency",
+    "Billing Period",
+    "Billing Reason",
     "Student Name",
     "Student Number",
     "University",
@@ -542,6 +621,11 @@ export async function exportVendorVerificationEventsCsv(
       row.createdAt.toISOString(),
       row.branch?.name ?? row.servicePointName ?? "",
       row.status,
+      row.billingStatus,
+      row.verificationFeeMinor,
+      row.verificationFeeCurrency,
+      row.billingPeriodKey,
+      row.billingReason,
       student.name,
       student.id,
       student.university,

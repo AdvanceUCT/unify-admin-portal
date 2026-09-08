@@ -305,31 +305,38 @@ enum VendorApplicationStatus {
 }
 
 model VendorVerification {
-  id                     String                   @id @default(cuid())
-  vendorProfileId        String
-  vendorProfile          VendorProfile            @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
-  branchId               String?
-  branch                 VendorBranch?            @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  verificationRequestId  String?                  @unique
-  checkoutId             String?
-  eventId                String?                  @unique
-  servicePointId         String?
-  servicePointName       String?
-  status                 VendorVerificationStatus @default(PENDING)
-  isVerified             Boolean?
-  failureCode            String?
-  attributes             Json?
-  schemaId               String?
-  credentialDefinitionId String?
-  createdAt              DateTime                 @default(now())
-  updatedAt              DateTime                 @updatedAt
-  completedAt            DateTime?
-  expiresAt              DateTime?
-  deliveries             VendorWebhookDelivery[]
+  id                      String                          @id @default(cuid())
+  vendorProfileId         String
+  vendorProfile           VendorProfile                   @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  branchId                String?
+  branch                  VendorBranch?                   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  verificationRequestId   String?                         @unique
+  checkoutId              String?
+  eventId                 String?                         @unique
+  servicePointId          String?
+  servicePointName        String?
+  status                  VendorVerificationStatus        @default(PENDING)
+  isVerified              Boolean?
+  failureCode             String?
+  attributes              Json?
+  billingStatus           VendorVerificationBillingStatus @default(PENDING)
+  verificationFeeMinor    Int                             @default(0)
+  verificationFeeCurrency String                          @default("ZAR")
+  billingPeriodKey        String?
+  pricingSnapshotAt       DateTime?
+  billingReason           String?
+  schemaId                String?
+  credentialDefinitionId  String?
+  createdAt               DateTime                        @default(now())
+  updatedAt               DateTime                        @updatedAt
+  completedAt             DateTime?
+  expiresAt               DateTime?
+  deliveries              VendorWebhookDelivery[]
 
   @@unique([vendorProfileId, checkoutId])
   @@index([vendorProfileId])
   @@index([branchId, createdAt])
+  @@index([vendorProfileId, billingPeriodKey, billingStatus])
   @@index([status])
   @@index([createdAt])
   @@map("vendor_verification")
@@ -389,6 +396,12 @@ enum VendorVerificationStatus {
   DECLINED
   EXPIRED
   FAILED
+}
+
+enum VendorVerificationBillingStatus {
+  PENDING
+  BILLABLE
+  NOT_BILLABLE
 }
 
 model Student {
