@@ -14,7 +14,7 @@ const university = {
   id: "university-1",
   name: "Example University",
   abbreviation: "EU",
-  paymentsEnabled: false,
+  paymentWalletEnabled: false,
 };
 
 const database = {
@@ -34,7 +34,7 @@ beforeEach(() => {
   database.universityProfile.findMany.mockResolvedValue([university]);
   database.universityProfile.update.mockResolvedValue({
     ...university,
-    paymentsEnabled: true,
+    paymentWalletEnabled: true,
   });
   database.walletAccount.upsert.mockImplementation(async ({ create }) => ({
     id: `account-${create.systemCode}`,
@@ -76,25 +76,25 @@ describe("payment wallet foundation bootstrap", () => {
     );
     expect(database.walletAccount.upsert).toHaveBeenCalledTimes(2);
     expect(database.universityProfile.update).not.toHaveBeenCalled();
-    expect(result.university.paymentsEnabled).toBe(false);
+    expect(result.university.paymentWalletEnabled).toBe(false);
   });
 
-  it("enables payments only when development enablement is explicitly requested", async () => {
+  it("enables the payment wallet only when development enablement is explicitly requested", async () => {
     const result = await bootstrapPaymentWalletFoundation(client, {
-      enablePaymentsForDevelopment: true,
+      enablePaymentWalletForDevelopment: true,
     });
 
     expect(database.universityProfile.update).toHaveBeenCalledWith({
       where: { id: university.id },
-      data: { paymentsEnabled: true },
+      data: { paymentWalletEnabled: true },
       select: {
         id: true,
         name: true,
         abbreviation: true,
-        paymentsEnabled: true,
+        paymentWalletEnabled: true,
       },
     });
-    expect(result.university.paymentsEnabled).toBe(true);
+    expect(result.university.paymentWalletEnabled).toBe(true);
   });
 
   it("rolls back through the caller when a balance projection is missing", async () => {

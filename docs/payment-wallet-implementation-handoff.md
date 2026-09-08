@@ -276,16 +276,16 @@ enum PayoutInitiationSource {
 ```prisma
 model UniversityProfile {
   // Existing university profile fields omitted.
-  paymentsEnabled               Boolean @default(false)
-  paymentRefundWindowSeconds    Int     @default(600)
-  paymentSettlementDelaySeconds Int     @default(600)
+  paymentWalletEnabled                       Boolean @default(false)
+  paymentWalletRefundWindowSeconds            Int     @default(600)
+  paymentWalletSettlementDelaySeconds         Int     @default(600)
 }
 ```
 
 Rules:
 
-- A missing university profile or `paymentsEnabled = false` means payments are disabled.
-- `paymentSettlementDelaySeconds` must be greater than or equal to `paymentRefundWindowSeconds`.
+- A missing university profile or `paymentWalletEnabled = false` means payment-wallet functionality is disabled. Verification and verification billing remain available.
+- `paymentWalletSettlementDelaySeconds` must be greater than or equal to `paymentWalletRefundWindowSeconds`.
 - Enabling payments is restricted to a suitably privileged admin action.
 - The deployment is dedicated to one university, so a separate one-to-one payment-settings table adds no current value.
 - Provider configuration and secrets must be stored separately so the public feature flag can be read without loading sensitive configuration.
@@ -684,7 +684,7 @@ This prevents a forged QR payload from controlling confirmation-screen text. It 
 
 A spend must verify, inside the posting transaction:
 
-- university payments are enabled;
+- the university payment wallet is enabled;
 - the authenticated student account is active;
 - the parent vendor application is currently approved;
 - the vendor payment profile is approved;
@@ -704,7 +704,7 @@ When a spend completes:
 
 ```text
 refundableUntil      = completedAt + 600 seconds
-availableForPayoutAt = max(refundableUntil, completedAt + paymentSettlementDelaySeconds)
+availableForPayoutAt = max(refundableUntil, completedAt + paymentWalletSettlementDelaySeconds)
 ```
 
 The configured values are copied onto the spend so later configuration changes do not affect existing transactions.
@@ -847,7 +847,7 @@ Internal job routes require a dedicated internal secret or platform-authenticate
 
 API responses should use a consistent error envelope, request/correlation IDs, and stable machine-readable payment error codes such as:
 
-- `PAYMENTS_DISABLED`
+- `PAYMENT_WALLET_DISABLED`
 - `WALLET_SESSION_INVALID`
 - `ACCOUNT_SUSPENDED`
 - `BRANCH_NOT_PAYMENT_ENABLED`
@@ -1047,7 +1047,7 @@ For the selected Payfast sandbox adapter:
 6. Add server-only account and balance repositories.
 7. Add the serializable posting boundary and recognized serialization retry behavior.
 8. Add PostgreSQL-backed invariant and concurrency tests.
-9. Keep `UniversityProfile.paymentsEnabled` false.
+9. Keep `UniversityProfile.paymentWalletEnabled` false.
 
 The PostgreSQL suite is implemented as `npm run test:payments:db`. It runs separately from ordinary unit tests, verifies the applied migration record on `DIRECT_URL`, and cleans up its disposable test objects after exercising the real triggers and concurrency paths.
 
@@ -1124,7 +1124,7 @@ The first implementation milestone is complete when:
 - Refund eligibility is captured as a transaction timestamp with a 10-minute default.
 - Only the server-only payment domain can post entries.
 - PostgreSQL-backed tests cover constraints and concurrency.
-- Payments remain disabled by default.
+- The payment wallet remains disabled by default.
 
 ---
 

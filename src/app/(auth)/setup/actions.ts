@@ -8,22 +8,24 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import * as agentClient from "@/lib/agentClient";
 import { AgentServiceError } from "@/lib/agentClient";
 import { validateLogoFile } from "@/lib/images/logoValidation";
+import { provisionWalletSystemAccounts } from "@/lib/payments/foundation";
 import { requireRole } from "@/lib/auth/session";
 import { deleteVendorDocument, getDocumentSignedUrl, uploadUniversityLogo } from "@/lib/storage/supabase";
 import {
   getUniversityProfile,
   saveUniversityProfileLogoPath,
-  upsertUniversityProfile,
 } from "@/lib/university/profile";
 
 const profileSchema = z.object({
   abbreviation: z.string().min(1, "Abbreviation is required"),
   contactEmail: z.string().email("Invalid email address"),
   name: z.string().min(1, "University name is required"),
+  paymentWalletEnabled: z.boolean(),
 });
 
 type PersistedSetupProfile = NonNullable<Awaited<ReturnType<typeof getUniversityProfile>>>;
@@ -36,6 +38,7 @@ export async function serializeSetupProfile(profile: PersistedSetupProfile) {
     issuerDid: profile.issuerDid,
     logoUrl: profile.logoPath ? await getDocumentSignedUrl(profile.logoPath) : null,
     name: profile.name,
+    paymentWalletEnabled: profile.paymentWalletEnabled,
     setupCompletedAt: profile.setupCompletedAt?.toISOString() ?? null,
     setupStatus: profile.setupStatus,
   };
@@ -53,13 +56,33 @@ export async function serializeSetupProfile(profile: PersistedSetupProfile) {
 export async function saveProfileAction(formData: FormData) {
   const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
   const rawData = Object.fromEntries(formData.entries());
-  const parsed = profileSchema.safeParse(rawData);
+  const parsed = profileSchema.safeParse({
+    ...rawData,
+    paymentWalletEnabled: formData.get("paymentWalletEnabled") === "on",
+  });
 
   if (!parsed.success) {
     throw new Error(`Invalid profile data: ${parsed.error.flatten().fieldErrors}`);
   }
 
-  let profile = await upsertUniversityProfile(parsed.data);
+  const { paymentWalletEnabled, ...profileData } = parsed.data;
+  let profile = await prisma.$transaction(async (transaction: Prisma.TransactionClient) => {
+    const existingProfile = await transaction.universityProfile.findFirst();
+    const saved = existingProfile
+      ? await transaction.universityProfile.update({
+          where: { id: existingProfile.id },
+          data: { ...profileData, paymentWalletEnabled },
+        })
+      : await transaction.universityProfile.create({
+          data: { ...profileData, paymentWalletEnabled },
+        });
+
+    if (paymentWalletEnabled) {
+      await provisionWalletSystemAccounts(transaction);
+    }
+
+    return saved;
+  });
 
   const file = formData.get("file");
   if (file instanceof File && file.size > 0) {

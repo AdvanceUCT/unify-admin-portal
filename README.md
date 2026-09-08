@@ -324,13 +324,13 @@ After migrations are applied and the setup wizard has created the single univers
 npm run payments:bootstrap
 ```
 
-This command is idempotent and leaves `UniversityProfile.paymentsEnabled` unchanged. To enable posting while developing locally, use the explicit development command:
+This command is idempotent and leaves `UniversityProfile.paymentWalletEnabled` unchanged. To enable wallet posting while developing locally, use the explicit development command:
 
 ```powershell
 npm run payments:bootstrap:dev
 ```
 
-The development command refuses to enable payments when `NODE_ENV=production`. Neither command creates student or vendor wallets; those remain lifecycle-driven. See [Payment wallet development setup](./docs/payment-wallet-development-setup.md) for the full workflow and troubleshooting guidance.
+The development command refuses to enable the payment wallet when `NODE_ENV=production`. Neither command creates student or vendor wallets; those remain lifecycle-driven. See [Payment wallet development setup](./docs/payment-wallet-development-setup.md) for the full workflow and troubleshooting guidance.
 
 Run the real PostgreSQL wallet invariant and concurrency suite explicitly against the migrated test database configured by `DIRECT_URL`:
 

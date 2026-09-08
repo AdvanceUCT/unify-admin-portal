@@ -29,6 +29,7 @@ const savedProfile: SetupProfile = {
   issuerDid: null,
   logoUrl: null,
   name: "University of Example",
+  paymentWalletEnabled: false,
   setupCompletedAt: null,
   setupStatus: "PENDING",
 };
@@ -106,6 +107,32 @@ describe("SetupWizard", () => {
     expect(screen.getByText("did:example:issuer")).toBeInTheDocument();
   });
 
+  it("includes the payment wallet choice when saving the profile", async () => {
+    render(<SetupWizard profile={null} />);
+
+    await screen.findAllByText("Online");
+    fillProfileForm();
+    expect(screen.getByRole("checkbox", { name: /Enable payment wallet/ })).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
+
+    await waitFor(() => expect(mocks.saveProfileAction).toHaveBeenCalled());
+    const submitted = mocks.saveProfileAction.mock.calls[0][0] as FormData;
+    expect(submitted.get("paymentWalletEnabled")).toBe("on");
+  });
+
+  it("lets admins opt out of the payment wallet during setup", async () => {
+    render(<SetupWizard profile={null} />);
+
+    await screen.findAllByText("Online");
+    fillProfileForm();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Enable payment wallet/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
+
+    await waitFor(() => expect(mocks.saveProfileAction).toHaveBeenCalled());
+    const submitted = mocks.saveProfileAction.mock.calls[0][0] as FormData;
+    expect(submitted.has("paymentWalletEnabled")).toBe(false);
+  });
+
   it("saves the profile while offline and waits without creating a DID", async () => {
     mocks.checkAgentStatusAction.mockResolvedValue(offlineHealth());
 
@@ -139,6 +166,7 @@ describe("SetupWizard", () => {
     expect(screen.getByText("University account setup is complete.")).toBeInTheDocument();
     expect(screen.getByText("University of Example")).toBeInTheDocument();
     expect(screen.getByText("did:example:issuer")).toBeInTheDocument();
+    expect(screen.getByText("Disabled")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Configure credential schema" })).toHaveAttribute(
       "href",
       "/credentials/schemas",

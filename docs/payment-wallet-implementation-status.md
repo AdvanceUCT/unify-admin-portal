@@ -26,7 +26,7 @@ The proof of concept uses Payfast sandbox credentials for external top-ups. Stud
 ## Important decisions reflected in the code
 
 - Each deployment/database represents one university.
-- Payment settings live directly on `UniversityProfile`; there is no separate `UniversityPaymentConfig` table.
+- Payment-wallet settings live directly on `UniversityProfile`; there is no separate `UniversityPaymentConfig` table.
 - Payments default to disabled.
 - V1 supports ZAR only and stores money as integer cents using PostgreSQL `BIGINT` and Prisma `BigInt`.
 - Each student has one wallet account and balance.
@@ -59,9 +59,9 @@ Required inverse relations were added to `Student`, `VendorProfile`, `VendorBran
 `UniversityProfile` now contains:
 
 ```prisma
-paymentsEnabled               Boolean @default(false)
-paymentRefundWindowSeconds    Int     @default(600)
-paymentSettlementDelaySeconds Int     @default(600)
+paymentWalletEnabled                       Boolean @default(false)
+paymentWalletRefundWindowSeconds            Int     @default(600)
+paymentWalletSettlementDelaySeconds         Int     @default(600)
 ```
 
 These timing values are copied onto completed spends so future setting changes do not retroactively change refund or payout eligibility.
@@ -119,7 +119,7 @@ The following reusable modules exist under `src/lib/payments/`:
 
 - `accounts.ts` — idempotent student, vendor, and clearing-account provisioning;
 - `balance.ts` — constant-time projected balance reads;
-- `config.ts` — fail-closed reads of university payment settings;
+- `config.ts` — fail-closed reads of university payment-wallet settings;
 - `constants.ts` — ZAR and clearing-account constants;
 - `errors.ts` — stable wallet domain errors;
 - `foundation.ts` — transaction-scoped bootstrap and integrity verification; and
@@ -128,7 +128,7 @@ The following reusable modules exist under `src/lib/payments/`:
 The typed posting boundary:
 
 - exposes semantic top-up, spend, and refund operations rather than accepting caller-built entries;
-- checks `UniversityProfile.paymentsEnabled`;
+- checks `UniversityProfile.paymentWalletEnabled`;
 - uses serializable Prisma transactions with retry handling;
 - locks participating balance rows in deterministic order;
 - derives and validates account ownership, status, currency, branch/vendor eligibility, and funds;
@@ -151,7 +151,7 @@ npm run payments:bootstrap:dev
 
 Both commands regenerate the Prisma client, require exactly one university profile, provision the two clearing accounts idempotently, and verify their active status and balance projections in one serializable transaction.
 
-The default command leaves `paymentsEnabled` unchanged. The development command explicitly enables it and refuses to do so when `NODE_ENV=production`.
+The default command leaves `paymentWalletEnabled` unchanged. The development command explicitly enables it and refuses to do so when `NODE_ENV=production`.
 
 The bootstrap intentionally does not create student wallets, vendor wallets, transactions, or balances. Those records remain tied to their real activation and approval lifecycles.
 

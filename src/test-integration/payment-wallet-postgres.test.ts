@@ -13,7 +13,14 @@ config({ path: ".env" });
 
 const MIGRATION_NAME = "20260904120000_add_payment_wallet_ledger_foundation";
 const HARDENING_MIGRATION_NAME = "20260904150000_harden_payment_wallet_invariants";
-const migrationSql = [MIGRATION_NAME, HARDENING_MIGRATION_NAME]
+const WALLET_SETTINGS_RENAME_MIGRATION_NAME =
+  "20260904160000_rename_payment_wallet_settings";
+const paymentWalletMigrationNames = [
+  MIGRATION_NAME,
+  HARDENING_MIGRATION_NAME,
+  WALLET_SETTINGS_RENAME_MIGRATION_NAME,
+];
+const migrationSql = paymentWalletMigrationNames
   .map((name) =>
     readFileSync(resolve(process.cwd(), "prisma/migrations", name, "migration.sql"), "utf8"),
   )
@@ -306,9 +313,9 @@ beforeAll(async () => {
        WHERE "migration_name" = ANY($1::text[])
          AND "finished_at" IS NOT NULL
          AND "rolled_back_at" IS NULL`,
-      [[MIGRATION_NAME, HARDENING_MIGRATION_NAME]],
+      [paymentWalletMigrationNames],
     );
-    if (appliedMigrations.rowCount !== 2) {
+    if (appliedMigrations.rowCount !== paymentWalletMigrationNames.length) {
       throw new Error(
         "Payment-wallet migrations are not recorded as applied on DIRECT_URL.",
       );
@@ -338,7 +345,7 @@ beforeAll(async () => {
       "integration-university",
     ]);
     await client.query(
-      'UPDATE "university_profile" SET "paymentsEnabled" = true WHERE "id" = $1',
+      'UPDATE "university_profile" SET "paymentWalletEnabled" = true WHERE "id" = $1',
       ["integration-university"],
     );
   } finally {

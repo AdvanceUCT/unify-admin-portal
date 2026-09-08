@@ -23,6 +23,7 @@ export type SetupProfile = {
   issuerDid: string | null;
   logoUrl: string | null;
   name: string;
+  paymentWalletEnabled: boolean;
   setupCompletedAt: string | null;
   setupStatus: "PENDING" | "DID_CREATED" | "SCHEMA_CREATED" | "COMPLETE";
 };
@@ -82,6 +83,7 @@ export function SetupWizard({
   const [name, setName] = useState(profile?.name ?? "");
   const [abbreviation, setAbbreviation] = useState(profile?.abbreviation ?? "");
   const [contactEmail, setContactEmail] = useState(profile?.contactEmail ?? "");
+  const [paymentWalletEnabled, setPaymentWalletEnabled] = useState(profile?.paymentWalletEnabled ?? true);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   const logoObjectUrlRef = useRef<string | null>(null);
@@ -188,6 +190,7 @@ export function SetupWizard({
       formData.append("name", name.trim());
       formData.append("abbreviation", abbreviation.trim());
       formData.append("contactEmail", contactEmail.trim());
+      if (paymentWalletEnabled) formData.append("paymentWalletEnabled", "on");
       if (logoFile) formData.append("file", logoFile);
 
       const nextProfile = await saveProfileAction(formData);
@@ -274,6 +277,23 @@ export function SetupWizard({
                       type="email"
                       value={contactEmail}
                     />
+                  </label>
+
+                  <label className="flex items-start gap-3 rounded-md border border-border bg-surface-muted px-3 py-3 text-sm">
+                    <input
+                      checked={paymentWalletEnabled}
+                      className="mt-1"
+                      disabled={isSaving}
+                      name="paymentWalletEnabled"
+                      onChange={(event) => setPaymentWalletEnabled(event.target.checked)}
+                      type="checkbox"
+                    />
+                    <span>
+                      <span className="font-medium text-fg">Enable payment wallet</span>
+                      <span className="block text-fg-subtle">
+                        Turn on student wallet payments for this instance and provision the required clearing accounts.
+                      </span>
+                    </span>
                   </label>
 
                   <div>
@@ -459,6 +479,10 @@ function UniversityProfileCard({
         <div>
           <dt className="text-fg-subtle">Contact</dt>
           <dd className="mt-1 break-all font-medium text-fg">{profile.contactEmail}</dd>
+        </div>
+        <div>
+          <dt className="text-fg-subtle">Payment wallet</dt>
+          <dd className="mt-1 font-medium text-fg">{profile.paymentWalletEnabled ? "Enabled" : "Disabled"}</dd>
         </div>
         <div className="sm:col-span-2">
           <dt className="text-fg-subtle">Issuer DID</dt>

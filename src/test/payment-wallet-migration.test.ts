@@ -15,6 +15,13 @@ const hardeningMigration = readFileSync(
   ),
   "utf8",
 );
+const walletSettingsRenameMigration = readFileSync(
+  resolve(
+    process.cwd(),
+    "prisma/migrations/20260904160000_rename_payment_wallet_settings/migration.sql",
+  ),
+  "utf8",
+);
 
 describe("payment wallet foundation migration", () => {
   it("creates the immutable ledger and rebuildable balance projection", () => {
@@ -40,7 +47,7 @@ describe("payment wallet foundation migration", () => {
     expect(migration).toContain('CREATE UNIQUE INDEX "vendor_payment_profile_vendorProfileId_key"');
   });
 
-  it("keeps payment settings on the university profile and omits generic adjustments", () => {
+  it("keeps payment-wallet settings on the university profile and omits generic adjustments", () => {
     expect(migration).toContain('ADD COLUMN "paymentsEnabled" BOOLEAN NOT NULL DEFAULT false');
     expect(migration).toContain('ADD COLUMN "paymentRefundWindowSeconds" INTEGER NOT NULL DEFAULT 600');
     expect(migration).not.toContain('CREATE TABLE "university_payment_config"');
@@ -63,5 +70,20 @@ describe("payment wallet foundation migration", () => {
     expect(hardeningMigration).toContain("Spend refund and settlement timestamps do not match university policy");
     expect(hardeningMigration).toContain("Top-up ledger topology is invalid");
     expect(hardeningMigration).toContain("Refund ledger topology is invalid");
+  });
+
+  it("renames university settings to make their wallet-only scope explicit", () => {
+    expect(walletSettingsRenameMigration).toContain(
+      'RENAME COLUMN "paymentsEnabled" TO "paymentWalletEnabled"',
+    );
+    expect(walletSettingsRenameMigration).toContain(
+      'RENAME COLUMN "paymentRefundWindowSeconds" TO "paymentWalletRefundWindowSeconds"',
+    );
+    expect(walletSettingsRenameMigration).toContain(
+      'RENAME COLUMN "paymentSettlementDelaySeconds" TO "paymentWalletSettlementDelaySeconds"',
+    );
+    expect(walletSettingsRenameMigration).toContain(
+      'BOOL_OR("paymentWalletEnabled")',
+    );
   });
 });

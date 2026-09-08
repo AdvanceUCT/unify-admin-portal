@@ -23,8 +23,11 @@ const mocks = vi.hoisted(() => {
     requireRole: vi.fn(),
     revalidatePath: vi.fn(),
     saveUniversityProfileLogoPath: vi.fn(),
+    transactionUniversityProfileCreate: vi.fn(),
+    transactionUniversityProfileFindFirst: vi.fn(),
+    transactionUniversityProfileUpdate: vi.fn(),
+    transactionWalletAccountUpsert: vi.fn(),
     universityProfileUpdate: vi.fn(),
-    upsertUniversityProfile: vi.fn(),
     uploadUniversityLogo: vi.fn(),
     validateLogoFile: vi.fn(),
   };
@@ -57,6 +60,18 @@ vi.mock("@/lib/storage/supabase", () => ({
 
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
+    $transaction: vi.fn((operation: (client: unknown) => unknown) =>
+      operation({
+        universityProfile: {
+          create: mocks.transactionUniversityProfileCreate,
+          findFirst: mocks.transactionUniversityProfileFindFirst,
+          update: mocks.transactionUniversityProfileUpdate,
+        },
+        walletAccount: {
+          upsert: mocks.transactionWalletAccountUpsert,
+        },
+      }),
+    ),
     universityProfile: {
       update: mocks.universityProfileUpdate,
     },
@@ -66,7 +81,6 @@ vi.mock("@/lib/db/prisma", () => ({
 vi.mock("@/lib/university/profile", () => ({
   getUniversityProfile: mocks.getUniversityProfile,
   saveUniversityProfileLogoPath: mocks.saveUniversityProfileLogoPath,
-  upsertUniversityProfile: mocks.upsertUniversityProfile,
 }));
 
 import { checkAgentStatusAction, createOrGetDidAction, saveProfileAction } from "@/app/(auth)/setup/actions";
@@ -80,6 +94,9 @@ const profile = {
   issuerDid: null,
   logoPath: null,
   name: "University of Example",
+  paymentWalletEnabled: false,
+  paymentWalletRefundWindowSeconds: 600,
+  paymentWalletSettlementDelaySeconds: 600,
   renewalCadenceMonths: 12,
   setupCompletedAt: null,
   setupStatus: "PENDING",
@@ -107,26 +124,83 @@ describe("setup actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.requireRole.mockResolvedValue({ user: { id: "actor-1" } });
-    mocks.upsertUniversityProfile.mockResolvedValue(profile);
+    mocks.transactionUniversityProfileFindFirst.mockResolvedValue(null);
+    mocks.transactionUniversityProfileCreate.mockResolvedValue(profile);
+    mocks.transactionUniversityProfileUpdate.mockResolvedValue(profile);
+    mocks.transactionWalletAccountUpsert.mockImplementation(async ({ create }) => ({
+      ...create,
+      id: `account-${create.systemCode}`,
+      status: "ACTIVE",
+      balance: {
+        postedBalanceMinor: BigInt(0),
+        version: BigInt(0),
+      },
+    }));
     mocks.universityProfileUpdate.mockResolvedValue(completedProfile());
   });
 
   it("saves and returns a serialized university profile", async () => {
     const result = await saveProfileAction(profileFormData());
 
-    expect(mocks.upsertUniversityProfile).toHaveBeenCalledWith({
-      abbreviation: "UEX",
-      contactEmail: "admin@example.edu",
-      name: "University of Example",
+    expect(mocks.transactionUniversityProfileCreate).toHaveBeenCalledWith({
+      data: {
+        abbreviation: "UEX",
+        contactEmail: "admin@example.edu",
+        name: "University of Example",
+        paymentWalletEnabled: false,
+      },
     });
+    expect(mocks.transactionWalletAccountUpsert).not.toHaveBeenCalled();
     expect(result).toEqual(
       expect.objectContaining({
         id: "profile-1",
         issuerDid: null,
+        paymentWalletEnabled: false,
         setupCompletedAt: null,
       }),
     );
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/setup");
+  });
+
+  it("enables the payment wallet during setup and provisions clearing accounts", async () => {
+    mocks.transactionUniversityProfileCreate.mockResolvedValue({
+      ...profile,
+      paymentWalletEnabled: true,
+    });
+    const formData = profileFormData();
+    formData.set("paymentWalletEnabled", "on");
+
+    const result = await saveProfileAction(formData);
+
+    expect(mocks.transactionUniversityProfileCreate).toHaveBeenCalledWith({
+      data: {
+        abbreviation: "UEX",
+        contactEmail: "admin@example.edu",
+        name: "University of Example",
+        paymentWalletEnabled: true,
+      },
+    });
+    expect(mocks.transactionWalletAccountUpsert).toHaveBeenCalledTimes(2);
+    expect(result.paymentWalletEnabled).toBe(true);
+  });
+
+  it("can save an existing setup profile with the payment wallet disabled", async () => {
+    mocks.transactionUniversityProfileFindFirst.mockResolvedValue({
+      id: "profile-1",
+    });
+
+    await saveProfileAction(profileFormData());
+
+    expect(mocks.transactionUniversityProfileUpdate).toHaveBeenCalledWith({
+      where: { id: "profile-1" },
+      data: {
+        abbreviation: "UEX",
+        contactEmail: "admin@example.edu",
+        name: "University of Example",
+        paymentWalletEnabled: false,
+      },
+    });
+    expect(mocks.transactionWalletAccountUpsert).not.toHaveBeenCalled();
   });
 
   it("uploads a logo included in the same submission and records its path", async () => {

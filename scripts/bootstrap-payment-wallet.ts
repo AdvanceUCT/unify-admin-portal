@@ -8,7 +8,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 config({ path: ".env" });
 
-const ENABLE_PAYMENTS_FLAG = "--enable-payments";
+const ENABLE_PAYMENT_WALLET_FLAG = "--enable-payment-wallet";
 
 function hasPrismaErrorCode(error: unknown, codes: string[]) {
   return (
@@ -21,15 +21,17 @@ function hasPrismaErrorCode(error: unknown, codes: string[]) {
 }
 
 async function main() {
-  const unknownArguments = process.argv.slice(2).filter((argument) => argument !== ENABLE_PAYMENTS_FLAG);
+  const unknownArguments = process.argv
+    .slice(2)
+    .filter((argument) => argument !== ENABLE_PAYMENT_WALLET_FLAG);
   if (unknownArguments.length > 0) {
     throw new Error(`Unknown payment bootstrap argument: ${unknownArguments.join(", ")}`);
   }
 
-  const enablePaymentsForDevelopment = process.argv.includes(ENABLE_PAYMENTS_FLAG);
-  if (enablePaymentsForDevelopment && process.env.NODE_ENV === "production") {
+  const enablePaymentWalletForDevelopment = process.argv.includes(ENABLE_PAYMENT_WALLET_FLAG);
+  if (enablePaymentWalletForDevelopment && process.env.NODE_ENV === "production") {
     throw new Error(
-      "Refusing to enable payments from the bootstrap command in production. Use the future controlled activation workflow.",
+      "Refusing to enable the payment wallet from the bootstrap command in production. Use the future controlled activation workflow.",
     );
   }
 
@@ -42,7 +44,7 @@ async function main() {
     const result = await prisma.$transaction(
       (transaction) =>
         bootstrapPaymentWalletFoundation(transaction, {
-          enablePaymentsForDevelopment,
+          enablePaymentWalletForDevelopment,
         }),
       { isolationLevel: "Serializable" },
     );
@@ -51,7 +53,7 @@ async function main() {
       `Payment wallet foundation ready for ${result.university.name} (${result.university.abbreviation}).`,
     );
     console.log(
-      `Payments enabled: ${result.university.paymentsEnabled ? "yes" : "no"}`,
+      `Payment wallet enabled: ${result.university.paymentWalletEnabled ? "yes" : "no"}`,
     );
 
     for (const account of result.systemAccounts) {
@@ -60,9 +62,9 @@ async function main() {
       );
     }
 
-    if (!result.university.paymentsEnabled) {
+    if (!result.university.paymentWalletEnabled) {
       console.log(
-        "Payments remain disabled. Use npm run payments:bootstrap:dev only in a development environment when posting tests need to run.",
+        "The payment wallet remains disabled. Use npm run payments:bootstrap:dev only in a development environment when posting tests need to run.",
       );
     }
   } catch (error) {
