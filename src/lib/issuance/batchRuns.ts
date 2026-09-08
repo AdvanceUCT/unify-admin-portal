@@ -43,6 +43,7 @@ import {
 } from "@/lib/student-records/simulatedUniversityRecords";
 
 type PersistedBatchItem = {
+  id: string;
   failureReason: string | null;
   credentialIssuance: CredentialIssuance | null;
   credentialIssuanceId: string | null;
@@ -111,8 +112,20 @@ function batchIdFrom(now: Date) {
   return `batch-${timestamp}`;
 }
 
+function batchItemIdempotencyKey(batchId: string, batchItemId: string) {
+  return `batch-issuance:${batchId}:${batchItemId}`;
+}
+
 function fullName(student: StudentRecord) {
   return `${student.profile.firstName} ${student.profile.lastName}`;
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return [...new Set(values.filter((value): value is string => Boolean(value)))];
+}
+
+function credentialLookupIdsForItem(item: PersistedBatchItem, student?: StudentRecord) {
+  return uniqueStrings([item.studentId, student?.credential.studentNumber, student?.profile.id]);
 }
 
 function filterMatches(student: StudentRecord, selection: BatchIssuanceSelection) {
@@ -346,10 +359,16 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
 
   await Promise.all(
     pendingItems.map(async (item) => {
-      const activeIssuance = await findActiveCredentialIssuance({
-        credentialDefinitionId: activeSchema.credentialDefinitionId,
-        studentId: item.studentId,
-      });
+      const student = studentsById.get(item.studentId);
+      let activeIssuance: CredentialIssuance | null = null;
+
+      for (const studentId of credentialLookupIdsForItem(item, student)) {
+        activeIssuance = await findActiveCredentialIssuance({
+          credentialDefinitionId: activeSchema.credentialDefinitionId,
+          studentId,
+        });
+        if (activeIssuance) break;
+      }
 
       if (activeIssuance) {
         blockedItems.add(item.id);
@@ -364,29 +383,45 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
       }
     }),
   );
-  let allowedPendingItems = pendingItems.filter((item) => !blockedItems.has(item.id));
+  const allowedPendingItems = pendingItems.filter((item) => !blockedItems.has(item.id));
+  let itemsForAgent = allowedPendingItems
+    .map((item) => ({ item, student: studentsById.get(item.studentId) }))
+    .filter((entry): entry is { item: typeof allowedPendingItems[number]; student: StudentRecord } => Boolean(entry.student));
+
+  await Promise.all(
+    allowedPendingItems
+      .filter((item) => !studentsById.has(item.studentId))
+      .map((item) =>
+        prisma.batchIssuanceItem.update({
+          data: {
+            failureReason: "Student record was not found during batch processing.",
+            status: BatchIssuanceItemStatus.FAILED,
+          },
+          where: { id: item.id },
+        }),
+      ),
+  );
 
   let agentResult: Awaited<ReturnType<typeof createBatchActivationLinks>> = { failures: [], offers: [] };
-  if (allowedPendingItems.length > 0) {
+  if (itemsForAgent.length > 0) {
     try {
       agentResult = await createBatchActivationLinks({
         credentialDefinitionId: activeSchema.credentialDefinitionId,
         ...(activeSchema.revocationRegistryDefinitionId
           ? { revocationRegistryDefinitionId: activeSchema.revocationRegistryDefinitionId }
           : {}),
-        students: allowedPendingItems
-          .map((item) => studentsById.get(item.studentId))
-          .filter((student): student is StudentRecord => Boolean(student))
-          .map((student) => ({
+        students: itemsForAgent
+          .map(({ item, student }) => ({
             attributes: attributesForStudent(student, activeSchema.schemaAttributes, validityWindow),
             email: student.profile.email,
-            externalId: student.credential.studentNumber,
+            externalId: item.studentId,
+            idempotencyKey: batchItemIdempotencyKey(batchId, item.id),
           })),
       });
     } catch (error) {
       const failureReason = error instanceof Error ? error.message : "Agent service request failed.";
       await Promise.all(
-        allowedPendingItems.map((item) =>
+        itemsForAgent.map(({ item }) =>
           prisma.batchIssuanceItem.update({
             data: {
               failureReason,
@@ -396,27 +431,15 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
           }),
         ),
       );
-      allowedPendingItems = [];
+      itemsForAgent = [];
     }
   }
   const offerByStudentId = new Map(agentResult.offers.map((offer) => [offer.externalId, offer]));
   const failureByStudentId = new Map(agentResult.failures.map((failure) => [failure.externalId, failure]));
 
-  for (const item of allowedPendingItems) {
-    const student = studentsById.get(item.studentId);
+  for (const { item, student } of itemsForAgent) {
     const offer = offerByStudentId.get(item.studentId);
     const failure = failureByStudentId.get(item.studentId);
-
-    if (!student) {
-      await prisma.batchIssuanceItem.update({
-        data: {
-          failureReason: "Student record was not found during batch processing.",
-          status: BatchIssuanceItemStatus.FAILED,
-        },
-        where: { id: item.id },
-      });
-      continue;
-    }
 
     if (failure || !offer) {
       await prisma.batchIssuanceItem.update({

@@ -9,8 +9,11 @@ const mocks = vi.hoisted(() => ({
   batchIssuanceRunFindUniqueOrThrow: vi.fn(),
   batchIssuanceRunUpdate: vi.fn(),
   createBatchActivationLinks: vi.fn(),
+  createCredentialIssuanceFromOffer: vi.fn(),
   findActiveCredentialIssuance: vi.fn(),
   getAllStudents: vi.fn(),
+  recordCredentialOfferSentAudit: vi.fn(),
+  sendCredentialActivationEmail: vi.fn(),
   writeAuditLog: vi.fn(),
 }));
 
@@ -23,11 +26,11 @@ vi.mock("@/lib/audit/audit", () => ({
 }));
 
 vi.mock("@/lib/credentials/audit", () => ({
-  recordCredentialOfferSentAudit: vi.fn(),
+  recordCredentialOfferSentAudit: mocks.recordCredentialOfferSentAudit,
 }));
 
 vi.mock("@/lib/credentials/status", () => ({
-  createCredentialIssuanceFromOffer: vi.fn(),
+  createCredentialIssuanceFromOffer: mocks.createCredentialIssuanceFromOffer,
   findActiveCredentialIssuance: mocks.findActiveCredentialIssuance,
   overlayCredentialStatuses: vi.fn(async (students) => students),
   reconcileCredentialEventLogs: vi.fn(),
@@ -47,7 +50,7 @@ vi.mock("@/lib/db/prisma", () => ({
 }));
 
 vi.mock("@/lib/email/credential-activation", () => ({
-  sendCredentialActivationEmail: vi.fn(),
+  sendCredentialActivationEmail: mocks.sendCredentialActivationEmail,
 }));
 
 vi.mock("@/lib/issuance/batchIssuance", () => ({
@@ -131,6 +134,15 @@ describe("persisted batch runs", () => {
     vi.clearAllMocks();
     mocks.getAllStudents.mockResolvedValue([student]);
     mocks.findActiveCredentialIssuance.mockResolvedValue(null);
+    mocks.createCredentialIssuanceFromOffer.mockResolvedValue({
+      activationId: "activation-1",
+      activationUrl: "http://localhost:3000/activate?token=token-1",
+      credentialExchangeId: "credential-exchange-1",
+      deliveryStatus: "DELIVERED",
+      id: "issuance-1",
+    });
+    mocks.recordCredentialOfferSentAudit.mockResolvedValue(undefined);
+    mocks.sendCredentialActivationEmail.mockResolvedValue(undefined);
   });
 
   it("fails pending items and finalizes the run when the agent batch call times out", async () => {
@@ -190,5 +202,113 @@ describe("persisted batch runs", () => {
       status: "Failed",
       studentId: "STU001",
     });
+  });
+
+  it("sends deterministic per-item idempotency keys when processing retryable items", async () => {
+    const deliveredItem = {
+      ...pendingItem,
+      credentialIssuance: {
+        activationId: "activation-1",
+        activationUrl: "http://localhost:3000/activate?token=token-1",
+        credentialExchangeId: "credential-exchange-1",
+        createdAt: new Date("2026-04-27T09:01:00.000Z"),
+        deliveryStatus: "DELIVERED",
+        email: "student@example.edu",
+        activationExpiresAt: new Date("2026-04-28T10:00:00.000Z"),
+        id: "issuance-1",
+      },
+      credentialIssuanceId: "issuance-1",
+      status: BatchIssuanceItemStatus.DELIVERED,
+    };
+    const completedRun = {
+      ...pendingRun,
+      completedAt: new Date("2026-04-27T09:01:00.000Z"),
+      issuedCount: 1,
+      items: [deliveredItem],
+      status: BatchIssuanceRunStatus.COMPLETED,
+    };
+
+    mocks.batchIssuanceRunFindUnique.mockResolvedValueOnce({
+      ...pendingRun,
+      items: [{ ...pendingItem, status: BatchIssuanceItemStatus.DELIVERY_FAILED }],
+    });
+    mocks.createBatchActivationLinks.mockResolvedValueOnce({
+      failures: [],
+      offers: [{
+        activationId: "activation-1",
+        activationUrl: "unifywallet://activate?token=token-1",
+        credentialExchangeId: "credential-exchange-1",
+        email: "student@example.edu",
+        expiresAt: "2026-04-28T10:00:00.000Z",
+        externalId: "STU001",
+      }],
+    });
+    mocks.batchIssuanceRunFindUniqueOrThrow.mockResolvedValueOnce({
+      ...pendingRun,
+      items: [deliveredItem],
+    });
+    mocks.batchIssuanceRunUpdate
+      .mockResolvedValueOnce({ ...pendingRun, status: BatchIssuanceRunStatus.PROCESSING })
+      .mockResolvedValueOnce(completedRun);
+
+    const result = await processBatchRun("batch-1");
+
+    expect(mocks.createBatchActivationLinks).toHaveBeenCalledWith({
+      credentialDefinitionId: "cred-def-1",
+      students: [
+        expect.objectContaining({
+          email: "student@example.edu",
+          externalId: "STU001",
+          idempotencyKey: "batch-issuance:batch-1:item-1",
+        }),
+      ],
+    });
+    expect(mocks.createCredentialIssuanceFromOffer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        credentialExchangeId: "credential-exchange-1",
+        studentId: "STU001",
+      }),
+    );
+    expect(result.status).toBe("Completed");
+    expect(result.items[0]).toMatchObject({
+      credentialId: "issuance-1",
+      status: "Delivered",
+      studentId: "STU001",
+    });
+  });
+
+  it("does not send missing student records to the agent", async () => {
+    const missingItem = { ...pendingItem, id: "item-missing", studentId: "MISSING001" };
+    const failedItem = {
+      ...missingItem,
+      failureReason: "Student record was not found during batch processing.",
+      status: BatchIssuanceItemStatus.FAILED,
+    };
+    const failedRun = {
+      ...pendingRun,
+      completedAt: new Date("2026-04-27T09:01:00.000Z"),
+      failedCount: 1,
+      items: [failedItem],
+      status: BatchIssuanceRunStatus.FAILED,
+    };
+
+    mocks.batchIssuanceRunFindUnique.mockResolvedValueOnce({ ...pendingRun, items: [missingItem] });
+    mocks.batchIssuanceItemUpdate.mockResolvedValueOnce(failedItem);
+    mocks.batchIssuanceRunFindUniqueOrThrow.mockResolvedValueOnce({ ...pendingRun, items: [failedItem] });
+    mocks.batchIssuanceRunUpdate
+      .mockResolvedValueOnce({ ...pendingRun, status: BatchIssuanceRunStatus.PROCESSING })
+      .mockResolvedValueOnce(failedRun);
+
+    const result = await processBatchRun("batch-1");
+
+    expect(mocks.createBatchActivationLinks).not.toHaveBeenCalled();
+    expect(mocks.batchIssuanceItemUpdate).toHaveBeenCalledWith({
+      data: {
+        failureReason: "Student record was not found during batch processing.",
+        status: BatchIssuanceItemStatus.FAILED,
+      },
+      where: { id: "item-missing" },
+    });
+    expect(result.status).toBe("Failed");
   });
 });

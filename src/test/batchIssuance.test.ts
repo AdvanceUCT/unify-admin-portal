@@ -4,7 +4,7 @@ import { sendCredentialActivationEmail } from "@/lib/email/credential-activation
 import { resetMockActivationStore } from "@/lib/api/mockActivationStore";
 import { recordCredentialOfferSentAudit } from "@/lib/credentials/audit";
 import { queueRealBatchIssuance, queueRealStudentIssuance, queueRealStudentRenewal, StudentIssuanceError } from "@/lib/issuance/batchIssuance";
-import { assertCredentialIssuanceAllowed, createCredentialIssuanceFromOffer, overlayCredentialStatusForStudent } from "@/lib/credentials/status";
+import { assertCredentialIssuanceAllowed, createCredentialIssuanceFromOffer, overlayCredentialStatus, overlayCredentialStatusForStudent } from "@/lib/credentials/status";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfile } from "@/lib/university/profile";
 
@@ -107,6 +107,11 @@ describe("real batch issuance orchestration", () => {
           ? "credential-demo-100"
           : "credential-demo-001",
     }) as never);
+    vi.mocked(overlayCredentialStatus).mockReset();
+    vi.mocked(overlayCredentialStatus).mockImplementation((student) => ({
+      ...student,
+      credential: { ...student.credential, lifecycleState: "ACTIVE" },
+    }));
     vi.mocked(overlayCredentialStatusForStudent).mockReset();
     vi.mocked(overlayCredentialStatusForStudent).mockImplementation(async (student) => student);
     vi.mocked(getUniversityProfile).mockReset();
@@ -342,6 +347,16 @@ describe("real batch issuance orchestration", () => {
     const result = await queueRealStudentRenewal("student-demo-100", new Date("2026-04-27T10:00:00Z"), "admin-1");
 
     expect(assertCredentialIssuanceAllowed).not.toHaveBeenCalled();
+    expect(createBatchActivationLinks).toHaveBeenCalledWith({
+      credentialDefinitionId: "cred-def-id",
+      students: [
+        expect.objectContaining({
+          email: "joshuawood.dc@gmail.com",
+          externalId: "student-demo-100",
+          idempotencyKey: "credential-renewal:issuance-old",
+        }),
+      ],
+    });
     expect(result.activationDeliveries[0]).toMatchObject({
       credentialId: "credential-renewal-100",
       status: "Delivered",
@@ -441,5 +456,28 @@ describe("real batch issuance orchestration", () => {
       }),
     );
     expect(createCredentialIssuanceFromOffer).not.toHaveBeenCalled();
+  });
+
+  it("rejects manual renewal before a credential is active or expired", async () => {
+    prismaMocks.issuanceFindFirst.mockResolvedValue({
+      credentialDefinitionId: "cred-def-id",
+      credentialExchangeId: "credential-exchange-old",
+      id: "issuance-old",
+      studentId: "WOOJOS100",
+    });
+    vi.mocked(overlayCredentialStatus).mockImplementationOnce((student) => ({
+      ...student,
+      credential: { ...student.credential, lifecycleState: "OFFER_SENT" },
+    }));
+
+    await expect(
+      queueRealStudentRenewal("student-demo-100", new Date("2026-04-27T10:00:00Z"), "admin-1"),
+    ).rejects.toMatchObject({
+      message: "Credential is not ready for renewal in its current lifecycle state.",
+      status: 409,
+    } satisfies Partial<StudentIssuanceError>);
+
+    expect(prismaMocks.issuanceUpdateMany).not.toHaveBeenCalled();
+    expect(createBatchActivationLinks).not.toHaveBeenCalled();
   });
 });

@@ -142,6 +142,10 @@ function batchIdFrom(now: Date) {
   return `batch-${timestamp}`;
 }
 
+function renewalIdempotencyKeyFor(issuanceId: string) {
+  return `credential-renewal:${issuanceId}`;
+}
+
 function optionalTrimmedString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
@@ -511,7 +515,7 @@ export async function queueCredentialIssuanceRenewal(
   if (status === "REVOKED" || status === "SUSPENDED" || status === "LEGACY_NON_REVOCABLE") {
     throw new StudentIssuanceError(`Credential cannot be renewed while its status is ${status}.`, 409);
   }
-  if (!["ACTIVE", "EXPIRED", "ACCEPTED", "OFFER_SENT"].includes(status)) {
+  if (!["ACTIVE", "EXPIRED"].includes(status)) {
     throw new StudentIssuanceError("Credential is not ready for renewal in its current lifecycle state.", 409);
   }
 
@@ -532,6 +536,7 @@ export async function queueCredentialIssuanceRenewal(
   }
 
   try {
+    const renewalIdempotencyKey = idempotencyKey ?? renewalIdempotencyKeyFor(existing.id);
     const result = await issueStudentActivationLinks(
       [studentWithCredentialStatus],
       now,
@@ -539,7 +544,7 @@ export async function queueCredentialIssuanceRenewal(
       { cohortId: "renewal" },
       actorId,
       false,
-      { idempotencyKey, renewedFromIssuanceId: existing.id, skipActiveIssuanceCheck: true },
+      { idempotencyKey: renewalIdempotencyKey, renewedFromIssuanceId: existing.id, skipActiveIssuanceCheck: true },
     );
     const replacementId = result.activationDeliveries[0]?.credentialId;
     if (!replacementId) {
@@ -621,5 +626,5 @@ export async function queueRealStudentRenewal(
   });
   if (!existing) throw new StudentIssuanceError("No credential exists to renew for this student.", 404);
 
-  return queueCredentialIssuanceRenewal(existing.id, now, actorId, undefined, existing);
+  return queueCredentialIssuanceRenewal(existing.id, now, actorId, renewalIdempotencyKeyFor(existing.id), existing);
 }
