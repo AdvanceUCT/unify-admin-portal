@@ -7,7 +7,7 @@ import { resolve } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { config } from "dotenv";
 import { Pool, type PoolClient } from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 config({ path: ".env.local" });
 config({ path: ".env" });
@@ -21,6 +21,8 @@ config({ path: ".env" });
 type PolicyModule = typeof import("@/lib/billing/policy");
 type ChargesModule = typeof import("@/lib/billing/charges");
 type InvoicesModule = typeof import("@/lib/billing/invoices");
+type PaymentAttemptsModule = typeof import("@/lib/billing/paymentAttempts");
+type PaymentConfirmationModule = typeof import("@/lib/billing/paymentConfirmation");
 
 import { PrismaClient } from "@/generated/prisma/client";
 import { resolveBillingTestDirectUrl } from "@/lib/billing/testDatabaseGuard";
@@ -28,6 +30,11 @@ import { resolveBillingTestDirectUrl } from "@/lib/billing/testDatabaseGuard";
 const MIGRATION_NAME = "20260909120000_add_vendor_invoicing_billing";
 const migrationSql = readFileSync(
   resolve(process.cwd(), "prisma/migrations", MIGRATION_NAME, "migration.sql"),
+  "utf8",
+);
+const PAYSTACK_GUARDS_MIGRATION_NAME = "20260911120000_add_paystack_payment_guards";
+const paystackGuardsMigrationSql = readFileSync(
+  resolve(process.cwd(), "prisma/migrations", PAYSTACK_GUARDS_MIGRATION_NAME, "migration.sql"),
   "utf8",
 );
 const schemaName = `unify_billing_it_${randomUUID().replaceAll("-", "")}`;
@@ -38,6 +45,8 @@ let universityId: string;
 let policy: PolicyModule;
 let charges: ChargesModule;
 let invoices: InvoicesModule;
+let paymentAttempts: PaymentAttemptsModule;
+let paymentConfirmation: PaymentConfirmationModule;
 
 function quotedTestSchema() {
   if (!/^unify_billing_it_[a-f0-9]{32}$/.test(schemaName)) {
@@ -124,11 +133,60 @@ async function insertCharge(
   return id;
 }
 
+async function insertPaymentAttempt(
+  client: PoolClient,
+  params: {
+    invoiceId: string;
+    reference: string;
+    expectedAmountMinor: number;
+    transactionChargeMinor: number;
+    currency?: string;
+    subaccountCode?: string;
+    status?: string;
+  },
+) {
+  const id = `attempt-${randomUUID()}`;
+  await client.query(
+    `INSERT INTO "vendor_invoice_payment_attempt" (
+      "id", "invoiceId", "ownerUserId", "provider", "providerAccountRef", "providerMode",
+      "reference", "expectedAmountMinor", "currency", "purpose", "subaccountCode",
+      "transactionChargeMinor", "initializationFingerprint", "status", "updatedAt"
+    ) VALUES ($1, $2, 'owner-user', 'paystack', 'university-demo', 'test', $3, $4, $5, 'vendor_invoice_payment', $6, $7, $8, $9, now())`,
+    [
+      id,
+      params.invoiceId,
+      params.reference,
+      params.expectedAmountMinor,
+      params.currency ?? "ZAR",
+      params.subaccountCode ?? "ACCT_PLATFORM_TEST_CODE",
+      params.transactionChargeMinor,
+      `${params.invoiceId}:fingerprint`,
+      params.status ?? "PREPARING",
+    ],
+  );
+  return id;
+}
+
+function paystackJsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+}
+
+const PAYSTACK_TEST_CONFIG = {
+  secretKey: "sk_test_fixture",
+  mode: "test",
+  accountRef: "university-demo",
+  subaccountCode: "ACCT_PLATFORM_TEST_CODE",
+  expectedIntegrationId: "2001638",
+  baseUrl: "https://api.paystack.example",
+};
+
 beforeAll(async () => {
   const directUrl = resolveBillingTestDirectUrl();
   policy = await import("@/lib/billing/policy");
   charges = await import("@/lib/billing/charges");
   invoices = await import("@/lib/billing/invoices");
+  paymentAttempts = await import("@/lib/billing/paymentAttempts");
+  paymentConfirmation = await import("@/lib/billing/paymentConfirmation");
 
   pool = new Pool({ connectionString: directUrl, max: 8 });
   const client = await pool.connect();
@@ -186,6 +244,7 @@ beforeAll(async () => {
         ON "vendor_branch_payment_application"("vendorBranchId") WHERE ("status" IN ('DRAFT', 'PENDING', 'APPROVED'));
     `);
     await client.query(migrationSql);
+    await client.query(paystackGuardsMigrationSql);
 
     universityId = `university-${randomUUID()}`;
     await client.query('INSERT INTO "university_profile" ("id") VALUES ($1)', [universityId]);
@@ -962,6 +1021,279 @@ describe("vendor invoice generation", () => {
         new Date(periodEnd.getTime() + 3600_000 + 1000),
       );
       expect(afterClosing).toBe("2026-12");
+    } finally {
+      client.release();
+    }
+  });
+});
+
+describe("payment attempt and confirmation invariants", () => {
+  async function billablePolicy() {
+    return scopedPrisma.verificationBillingPolicy.findFirstOrThrow({
+      where: { universityId, effectiveTo: null },
+    });
+  }
+
+  async function issueOneInvoice(client: PoolClient, periodKey: string, feeMinor = 1000, universityShareMinor = 900, platformShareMinor = 100) {
+    const { vendorProfileId, branchId } = await createVendorAndBranch(client);
+    const policyRow = await billablePolicy();
+    const verificationId = await createVerification(client, vendorProfileId);
+    await insertCharge(client, {
+      verificationId,
+      vendorProfileId,
+      branchId,
+      policyId: policyRow.id,
+      feeMinor,
+      platformShareMinor,
+      universityShareMinor,
+      servicePeriodKey: periodKey,
+    });
+    const invoice = await invoices.issueInvoiceForVendorPeriod(scopedPrisma, { vendorProfileId, periodKey });
+    if (!invoice) throw new Error("Test setup failed to issue an invoice.");
+    return invoice;
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("enforces the payment attempt snapshot-immutability and one-way status trigger for real", async () => {
+    const client = await getClient();
+    try {
+      const invoice = await issueOneInvoice(client, "2025-01");
+      const attemptId = await insertPaymentAttempt(client, {
+        invoiceId: invoice.id,
+        reference: `unify-inv-${randomUUID()}`,
+        expectedAmountMinor: 1000,
+        transactionChargeMinor: 900,
+      });
+
+      await expect(
+        client.query('UPDATE "vendor_invoice_payment_attempt" SET "expectedAmountMinor" = 1 WHERE "id" = $1', [attemptId]),
+      ).rejects.toThrow(/immutable/i);
+
+      await expect(
+        client.query('UPDATE "vendor_invoice_payment_attempt" SET "status" = \'SUCCEEDED\' WHERE "id" = $1', [attemptId]),
+      ).rejects.toThrow(/[Ii]nvalid.*transition/);
+
+      await client.query('UPDATE "vendor_invoice_payment_attempt" SET "status" = \'READY\', "accessCode" = $2 WHERE "id" = $1', [attemptId, "code"]);
+      await client.query('UPDATE "vendor_invoice_payment_attempt" SET "status" = \'SUCCEEDED\' WHERE "id" = $1', [attemptId]);
+
+      await expect(
+        client.query('UPDATE "vendor_invoice_payment_attempt" SET "status" = \'FAILED\' WHERE "id" = $1', [attemptId]),
+      ).rejects.toThrow(/terminal/i);
+
+      await expect(client.query('DELETE FROM "vendor_invoice_payment_attempt" WHERE "id" = $1', [attemptId])).rejects.toThrow(
+        /cannot be deleted/i,
+      );
+    } finally {
+      client.release();
+    }
+  });
+
+  it("confirms a real end-to-end payment: prepares the attempt, verifies, and settles with exactly one receipt and allocation", async () => {
+    const client = await getClient();
+    try {
+      const invoice = await issueOneInvoice(client, "2025-02");
+      let reference = "";
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn((url: string) => {
+          if (url.endsWith("/transaction/initialize")) {
+            reference = `unify-inv-${randomUUID()}`;
+            return Promise.resolve(
+              paystackJsonResponse({ status: true, data: { authorization_url: "https://checkout.paystack.com/x", access_code: "code-x", reference } }),
+            );
+          }
+          return Promise.resolve(
+            paystackJsonResponse({
+              status: true,
+              data: {
+                id: 555,
+                reference,
+                status: "success",
+                amount: 1000,
+                currency: "ZAR",
+                domain: "test",
+                paid_at: "2026-09-11T10:00:00.000Z",
+                subaccount: { subaccount_code: "ACCT_PLATFORM_TEST_CODE" },
+              },
+            }),
+          );
+        }),
+      );
+
+      const prepared = await paymentAttempts.prepareInvoicePaymentAttempt(scopedPrisma, {
+        invoiceId: invoice.id,
+        ownerUserId: "owner-user",
+        config: PAYSTACK_TEST_CONFIG,
+        callbackUrl: "https://demo-host/return",
+      });
+      expect(prepared.status).toBe("READY");
+
+      const result = await paymentConfirmation.confirmInvoicePayment(scopedPrisma, { reference: prepared.reference, config: PAYSTACK_TEST_CONFIG });
+      expect(result).toMatchObject({ outcome: "confirmed", invoiceId: invoice.id });
+
+      const settledInvoice = await scopedPrisma.vendorInvoice.findUniqueOrThrow({ where: { id: invoice.id } });
+      expect(settledInvoice.paymentStatus).toBe("PAID");
+      const payments = await scopedPrisma.vendorInvoicePayment.findMany({ where: { attemptId: prepared.attemptId } });
+      expect(payments).toHaveLength(1);
+      const allocations = await scopedPrisma.vendorInvoicePaymentAllocation.findMany({ where: { invoiceId: invoice.id } });
+      expect(allocations).toHaveLength(1);
+    } finally {
+      client.release();
+    }
+  });
+
+  it("resolves a real concurrent double-confirmation of the same reference to exactly one allocation", async () => {
+    const client = await getClient();
+    try {
+      const invoice = await issueOneInvoice(client, "2025-03");
+      const reference = `unify-inv-${randomUUID()}`;
+      await insertPaymentAttempt(client, { invoiceId: invoice.id, reference, expectedAmountMinor: 1000, transactionChargeMinor: 900, status: "READY" });
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() =>
+          Promise.resolve(
+            paystackJsonResponse({
+              status: true,
+              data: { id: 777, reference, status: "success", amount: 1000, currency: "ZAR", domain: "test", subaccount: { subaccount_code: "ACCT_PLATFORM_TEST_CODE" } },
+            }),
+          ),
+        ),
+      );
+
+      const [a, b] = await Promise.all([
+        paymentConfirmation.confirmInvoicePayment(scopedPrisma, { reference, config: PAYSTACK_TEST_CONFIG }),
+        paymentConfirmation.confirmInvoicePayment(scopedPrisma, { reference, config: PAYSTACK_TEST_CONFIG }),
+      ]);
+
+      const outcomes = [a.outcome, b.outcome].sort();
+      expect(outcomes).toEqual(["already_confirmed", "confirmed"]);
+
+      const payments = await scopedPrisma.vendorInvoicePayment.count({ where: { providerTransactionId: "777" } });
+      expect(payments).toBe(1);
+      const allocations = await scopedPrisma.vendorInvoicePaymentAllocation.count({ where: { invoiceId: invoice.id } });
+      expect(allocations).toBe(1);
+    } finally {
+      client.release();
+    }
+  });
+
+  it("keeps both receipts but allocates only once when two distinct attempts on the same invoice both succeed", async () => {
+    const client = await getClient();
+    try {
+      const invoice = await issueOneInvoice(client, "2025-04");
+      const referenceA = `unify-inv-${randomUUID()}`;
+      const referenceB = `unify-inv-${randomUUID()}`;
+      await insertPaymentAttempt(client, { invoiceId: invoice.id, reference: referenceA, expectedAmountMinor: 1000, transactionChargeMinor: 900, status: "READY" });
+      await insertPaymentAttempt(client, { invoiceId: invoice.id, reference: referenceB, expectedAmountMinor: 1000, transactionChargeMinor: 900, status: "READY" });
+
+      function verifyResponseFor(reference: string, providerTransactionId: number) {
+        return paystackJsonResponse({
+          status: true,
+          data: { id: providerTransactionId, reference, status: "success", amount: 1000, currency: "ZAR", domain: "test", subaccount: { subaccount_code: "ACCT_PLATFORM_TEST_CODE" } },
+        });
+      }
+
+      vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(verifyResponseFor(referenceA, 1001))));
+      const first = await paymentConfirmation.confirmInvoicePayment(scopedPrisma, { reference: referenceA, config: PAYSTACK_TEST_CONFIG });
+      expect(first.outcome).toBe("confirmed");
+
+      vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(verifyResponseFor(referenceB, 1002))));
+      const second = await paymentConfirmation.confirmInvoicePayment(scopedPrisma, { reference: referenceB, config: PAYSTACK_TEST_CONFIG });
+      expect(second.outcome).toBe("excess");
+
+      const payments = await scopedPrisma.vendorInvoicePayment.findMany({ where: { OR: [{ providerTransactionId: "1001" }, { providerTransactionId: "1002" }] } });
+      expect(payments).toHaveLength(2); // neither receipt was discarded
+
+      const allocations = await scopedPrisma.vendorInvoicePaymentAllocation.count({ where: { invoiceId: invoice.id } });
+      expect(allocations).toBe(1); // only the first settlement is allocated
+
+      const settledInvoice = await scopedPrisma.vendorInvoice.findUniqueOrThrow({ where: { id: invoice.id } });
+      expect(settledInvoice.hasUnresolvedException).toBe(true);
+
+      const exception = await scopedPrisma.billingException.findFirst({ where: { invoiceId: invoice.id, type: "PAYMENT_EXCESS" } });
+      expect(exception).not.toBeNull();
+    } finally {
+      client.release();
+    }
+  });
+
+  it("cannot mark an invoice paid when the verified amount does not match the attempt snapshot", async () => {
+    const client = await getClient();
+    try {
+      const invoice = await issueOneInvoice(client, "2025-05");
+      const reference = `unify-inv-${randomUUID()}`;
+      await insertPaymentAttempt(client, { invoiceId: invoice.id, reference, expectedAmountMinor: 1000, transactionChargeMinor: 900, status: "READY" });
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() =>
+          Promise.resolve(
+            paystackJsonResponse({ status: true, data: { id: 999, reference, status: "success", amount: 1, currency: "ZAR", domain: "test" } }),
+          ),
+        ),
+      );
+
+      const result = await paymentConfirmation.confirmInvoicePayment(scopedPrisma, { reference, config: PAYSTACK_TEST_CONFIG });
+      expect(result).toEqual({ outcome: "mismatch", reason: "amount" });
+
+      const settledInvoice = await scopedPrisma.vendorInvoice.findUniqueOrThrow({ where: { id: invoice.id } });
+      expect(settledInvoice.paymentStatus).toBe("UNPAID");
+      const payments = await scopedPrisma.vendorInvoicePayment.count({ where: { providerTransactionId: "999" } });
+      expect(payments).toBe(0);
+    } finally {
+      client.release();
+    }
+  });
+
+  it("enforces payment, allocation, and gateway-event immutability triggers for real", async () => {
+    const client = await getClient();
+    try {
+      const invoice = await issueOneInvoice(client, "2025-06");
+      const reference = `unify-inv-${randomUUID()}`;
+      await insertPaymentAttempt(client, { invoiceId: invoice.id, reference, expectedAmountMinor: 1000, transactionChargeMinor: 900, status: "READY" });
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() =>
+          Promise.resolve(
+            paystackJsonResponse({
+              status: true,
+              data: { id: 2001, reference, status: "success", amount: 1000, currency: "ZAR", domain: "test", subaccount: { subaccount_code: "ACCT_PLATFORM_TEST_CODE" } },
+            }),
+          ),
+        ),
+      );
+      const result = await paymentConfirmation.confirmInvoicePayment(scopedPrisma, { reference, config: PAYSTACK_TEST_CONFIG });
+      if (result.outcome !== "confirmed") throw new Error("Test setup expected a confirmed payment.");
+
+      await expect(
+        client.query('UPDATE "vendor_invoice_payment" SET "grossAmountMinor" = 1 WHERE "id" = $1', [result.paymentId]),
+      ).rejects.toThrow(/immutable/i);
+      await expect(client.query('DELETE FROM "vendor_invoice_payment" WHERE "id" = $1', [result.paymentId])).rejects.toThrow(/immutable/i);
+
+      const allocation = await scopedPrisma.vendorInvoicePaymentAllocation.findUniqueOrThrow({ where: { paymentId: result.paymentId } });
+      await expect(
+        client.query('UPDATE "vendor_invoice_payment_allocation" SET "amountAppliedMinor" = 1 WHERE "id" = $1', [allocation.id]),
+      ).rejects.toThrow(/immutable/i);
+      await expect(client.query('DELETE FROM "vendor_invoice_payment_allocation" WHERE "id" = $1', [allocation.id])).rejects.toThrow(/immutable/i);
+
+      const eventId = `event-${randomUUID()}`;
+      await client.query(
+        `INSERT INTO "billing_gateway_event" ("id", "provider", "providerAccountRef", "providerMode", "eventType", "resourceKey", "bodyHash")
+         VALUES ($1, 'paystack', 'university-demo', 'test', 'charge.success', $2, 'hash')`,
+        [eventId, reference],
+      );
+      await expect(
+        client.query('UPDATE "billing_gateway_event" SET "eventType" = \'charge.failed\' WHERE "id" = $1', [eventId]),
+      ).rejects.toThrow(/immutable/i);
+      // Inbox bookkeeping fields remain freely updatable.
+      await client.query('UPDATE "billing_gateway_event" SET "processedAt" = now() WHERE "id" = $1', [eventId]);
+      await expect(client.query('DELETE FROM "billing_gateway_event" WHERE "id" = $1', [eventId])).rejects.toThrow(/cannot be deleted/i);
     } finally {
       client.release();
     }

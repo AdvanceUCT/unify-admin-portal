@@ -21,6 +21,8 @@
     "billing:backfill": "tsx scripts/billing-backfill.ts",
     "prebilling:invoices": "npm run prisma:generate",
     "billing:invoices": "tsx scripts/billing-invoices.ts",
+    "prebilling:paystack-check": "npm run prisma:generate",
+    "billing:paystack-check": "tsx scripts/paystack-check.ts",
     "typecheck": "tsc --noEmit",
     "pretypecheck": "npm run prisma:generate",
     "test": "vitest run",

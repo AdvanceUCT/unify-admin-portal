@@ -10,7 +10,11 @@ export type BillingErrorCode =
   | "INVALID_VENDOR"
   | "POLICY_NOT_FOUND"
   | "POLICY_CONFLICT"
-  | "UNIVERSITY_NOT_CONFIGURED";
+  | "UNIVERSITY_NOT_CONFIGURED"
+  | "INVOICE_NOT_PAYABLE"
+  | "ATTEMPT_IN_PROGRESS"
+  | "ATTEMPT_NOT_FOUND"
+  | "PAYMENT_MISMATCH";
 
 export class BillingDomainError extends Error {
   constructor(

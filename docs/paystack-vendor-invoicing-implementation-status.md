@@ -395,7 +395,141 @@ real historical data with those characteristics.
 Given the above, Phase 3 is usable end-to-end for issuance and owner/admin reads, but is not a full
 Gate 3 pass — the gaps are recorded rather than the phase being marked complete.
 
-## Phase 4 — Paystack adapter and authoritative confirmation — ⬜ not started
+## Phase 4 — Paystack adapter and authoritative confirmation — 🟡 service layer complete and tested; routes deferred to Phase 5 by design
+
+**Scope boundary, confirmed with the user before starting**: this phase builds the Paystack adapter,
+attempt-preparation, and `confirmInvoicePayment()` as a service layer only. The actual
+`/api/webhooks/paystack` HTTP route, the browser-facing attempt/reconcile routes, and the
+`proxy.ts` fix (currently *any* unauthenticated request, `/api/webhooks/*` included, gets redirected
+to `/sign-in` — confirmed by reading `proxy.ts`, not assumed) are Phase 5 work, matching where the
+handoff's own route table places them. Gate 4's "PostgreSQL tests race callback/webhook/worker"
+requirement is satisfied by calling `confirmInvoicePayment()` directly from real-Postgres tests — no
+HTTP route needs to exist yet for that proof.
+
+The user added real Paystack test-mode credentials (`sk_test_...`, `ACCT_...`, an integration ID) to
+`.env.local` before this phase started. Per the standing "no live testing" instruction, those are
+never used to make a real network call from this session — every test here (contract, signature, and
+the real-Postgres suite) stubs `fetch`/the client module instead. `npm run billing:paystack-check` is
+built and typechecked but deliberately not run by me; it's for the user to run once they're ready for
+real evidence.
+
+**Files added**
+- `prisma/migrations/20260911120000_add_paystack_payment_guards/migration.sql` — additive, applied via
+  `npx prisma migrate deploy` against the real dev database (same non-interactive approach as Phases
+  1/3; `migrate dev` still can't run without a TTY). Adds three trigger-enforced invariants the Phase 1
+  migration didn't yet cover:
+  - `vendor_invoice_payment_allocation` is now append-only (immutable), matching `vendor_invoice_payment`.
+  - `vendor_invoice_payment_attempt` gets a one-way lifecycle guard: snapshot fields (amount, shares,
+    reference, provider account, fingerprint, ...) are frozen at creation; status may only move
+    `PREPARING → READY|FAILED`, `READY → PENDING|UNKNOWN|FAILED|SUCCEEDED`,
+    `PENDING/UNKNOWN → …|FAILED|SUCCEEDED`; `SUCCEEDED`/`FAILED` are terminal.
+  - `billing_gateway_event` gets its received identity/snapshot fields frozen (provider, event type,
+    resource key, body hash, payload snapshot, received-at) while leaving inbox bookkeeping
+    (`processedAt`, `retryCount`, `nextAttemptAt`, `leaseExpiresAt`) freely updatable.
+  - All three enforced for real in `test:billing:db` (see below), not just asserted in mocks.
+- `src/lib/paymentProviders/paystack/` (new provider adapter directory, mirrors `src/lib/payments/`'s
+  narrow-export style; deliberately not `"server-only"` — the CLI script needs it):
+  - `errors.ts` — `PaystackProviderError` with stable codes (`NOT_CONFIGURED`, `MODE_MISMATCH`,
+    `SUBACCOUNT_INACTIVE`, `SUBACCOUNT_CURRENCY_MISMATCH`, `INTEGRATION_MISMATCH`, `AMOUNT_TOO_SMALL`,
+    `AMOUNT_UNSAFE`, `HTTP_ERROR`, `MALFORMED_RESPONSE`, `TIMEOUT`, `UNKNOWN_OUTCOME`).
+  - `config.ts` — `resolvePaystackProviderConfig()`: reads `env.PAYSTACK_*`, throws `NOT_CONFIGURED` if
+    any required identity variable is missing (checkout can be enabled without them per `env.ts`'s
+    existing gate, but the live adapter itself always re-checks).
+  - `signature.ts` — `verifyPaystackWebhookSignature()`: HMAC-**SHA512** (Paystack's own scheme — the
+    existing `/api/webhooks/agent` handler uses SHA256 with a `sha256=` prefix; Paystack sends a bare
+    hex digest, no prefix) with constant-time comparison, plus a 256KB body-size ceiling checked before
+    computing the HMAC at all.
+  - `client.ts` — the only module that calls `fetch` directly: `initializeTransaction()`,
+    `verifyTransaction()`, `fetchSubaccount()`. Sends `transaction_charge`/`bearer: "account"` exactly
+    per the handoff's illustrative payload; validates amounts against `Number.MAX_SAFE_INTEGER` before
+    ever building a request; distinguishes a genuine timeout/network failure (mapped to
+    `TIMEOUT`/`UNKNOWN_OUTCOME` — an ambiguous outcome, not a hard failure) from a real 4xx/5xx
+    (`AMOUNT_TOO_SMALL` when Paystack's own message says so, else `HTTP_ERROR`) from a malformed
+    response body. Never returns or logs the `authorization`/`customer` sub-objects from a verify
+    response.
+- `src/lib/billing/gatewayEvents.ts` — `recordGatewayEvent()` (dedupe-and-insert by
+  `(provider, providerAccountRef, providerMode, eventType, resourceKey)`, stores a SHA-256 `bodyHash`
+  rather than the raw payload where not needed, resolves a concurrent-insert race to the winning row
+  instead of throwing), `markGatewayEventProcessed()`, `recordGatewayEventFailure()` (bounded-backoff
+  inbox bookkeeping — full scheduled retry is Phase 6).
+- `src/lib/billing/paymentAttempts.ts` — `prepareInvoicePaymentAttempt()`. Two-phase per the handoff:
+  phase A is a short Serializable transaction that validates the invoice is payable, retires any
+  stale/expired prior attempt, and inserts the snapshot row; phase B calls Paystack *outside* any lock
+  and persists the result afterward. A repeated "Pay" click reuses an existing usable (`READY`+
+  `accessCode`, < 55 minutes old) attempt without calling Paystack again, or returns a fresh
+  `PREPARING` attempt's confirming state without starting a second one. A `PREPARING` row older than 2
+  minutes is treated as an abandoned crash (recorded as a `PAYMENT_ATTEMPT_ABANDONED` exception,
+  marked `FAILED`) rather than blocking forever. An ambiguous timeout from `initializeTransaction`
+  marks the attempt `UNKNOWN` and returns normally — it is a valid *result*, not a thrown error, per
+  the handoff's "missing lookup results immediately after a timeout are not definitive failure".
+- `src/lib/billing/paymentConfirmation.ts` — `confirmInvoicePayment()`, the single receipt/allocation
+  boundary every caller (webhook, browser reconcile, job reconcile — Phase 5/6) will route through.
+  Always re-verifies the reference against Paystack itself (never trusts a caller-supplied
+  amount/status); matches the result against the attempt's frozen snapshot (provider account/mode,
+  exact amount, currency) and refuses to settle on any mismatch; a split-evidence anomaly is recorded
+  but still settles as collected, per the handoff, rather than being discarded. A late failed/abandoned
+  observation can never overwrite an already-`SUCCEEDED` attempt.
+  - **Design correction found only by testing against real Postgres, not by unit tests**: the first
+    draft wrapped the whole function in one Serializable transaction and caught `P2002` inline to keep
+    going (matching the style already used elsewhere in this codebase, e.g. `invoices.ts`). Real
+    Postgres rejected this — once one statement in a transaction fails, Postgres aborts the *entire*
+    transaction and every further statement in it fails with `25P02` ("current transaction is aborted"),
+    even after the JS `catch` block runs. Fixed by making the receipt `create()` and the allocation
+    `create()` each their own standalone atomic statement (a lone `create()` needs no enclosing
+    transaction to be race-safe — the unique index is the actual guard); a conflict on either is
+    resolved with a fresh, separate read rather than by continuing inside the transaction that just
+    aborted. This also fixed a latent version of the same bug in `paymentAttempts.ts`'s
+    reference-collision retry loop (it retried `create()` a second time inside the same now-aborted
+    transaction); that retry now happens as a new transaction per attempt instead.
+  - **Second correction, same root cause**: assumed (matching the pattern already used in this
+    codebase) that a `P2002` error's `meta.target` names the violated column. Confirmed against a real
+    run that with the `pg` driver adapter, `meta` is empty (`{}`) — the only place the field name
+    actually appears is in the human-readable message (`` Unique constraint failed on the fields:
+    (`"attemptId"`) ``), so `prismaUniqueTargets()` parses that as a fallback.
+- `src/lib/billing/paystackHealth.ts` — `checkPaystackConfiguration()`: reads the configured
+  subaccount under the test secret, reports active status / ZAR currency / test domain / integration-ID
+  match as a safe, non-secret report object. `scripts/paystack-check.ts` → `npm run
+  billing:paystack-check` prints that report; never prints the secret key or bank details.
+- `src/lib/billing/constants.ts` — added `PAYMENT_ATTEMPT_REUSE_WINDOW_SECONDS` (55 min),
+  `PAYMENT_ATTEMPT_STALE_PREPARING_SECONDS` (2 min), `PAYSTACK_PROVIDER_NAME`.
+- `src/lib/billing/errors.ts` — added `INVOICE_NOT_PAYABLE`, `ATTEMPT_IN_PROGRESS`, `ATTEMPT_NOT_FOUND`,
+  `PAYMENT_MISMATCH` codes.
+
+**Evidence**
+- `npm run typecheck` — pass. `npm run lint` — 0 errors, same pre-existing warnings plus two
+  intentionally-unused mock parameters in the new client contract test.
+- `npm test` — **92 files / 606 tests**, all pass (60 new: `paystackClient.test.ts` (20 — exact
+  init/verify/subaccount payload shapes, safe-integer boundary, minimum-amount/bad-subaccount/5xx/
+  malformed-response mapping, timeout-vs-network-failure distinction), `paystackSignature.test.ts` (7 —
+  tampered body, missing/wrong-secret/malformed signature, oversized/at-limit body),
+  `paystackConfig.test.ts` (2), `paystackHealth.test.ts` (3), `paymentAttempts.test.ts` (11 — payable
+  checks, reuse/confirming-state/stale-abandonment logic, ambiguous-timeout-vs-definite-failure
+  handling, missing-email fail-closed), `paymentConfirmation.test.ts` (10 — confirm, mismatch on each
+  of amount/currency/account, split-anomaly-still-settles, replayed-webhook dedup, second-successful-
+  attempt-reported-excess, late-failure-cannot-overwrite-success), `gatewayEvents.test.ts` (6)).
+- `npm run test:billing:db` — **29/29 real PostgreSQL tests pass** (23 from Phases 1–3 + 6 new): real
+  trigger enforcement of the attempt snapshot/terminal-status guard, real trigger enforcement of
+  payment/allocation/gateway-event immutability, a real end-to-end prepare→verify→confirm flow with a
+  stubbed Paystack HTTP layer (exactly one receipt, one allocation, invoice `PAID`), a real concurrent
+  double-confirmation of the same reference resolving to exactly one allocation (one `confirmed` + one
+  `already_confirmed`, proven against real `P2002`/transaction-abort behavior, not a mock), two distinct
+  successful attempts on the same invoice keeping both receipts but allocating only once (the second
+  reported `excess` with a recorded `PAYMENT_EXCESS` exception), and a wrong-amount verification
+  correctly leaving the invoice `UNPAID` with no payment row created. Disposable schema confirmed
+  dropped afterward.
+- **Deliberately not run**: `npm run billing:paystack-check` — a real network call to Paystack, left for
+  the user to run now that test credentials are configured. No Phase 4 code makes a live Paystack call
+  from this session.
+- **Not done, by explicit scope agreement — recorded here rather than silently skipped**:
+  - `/api/webhooks/paystack` and the browser attempt/reconcile routes don't exist yet — Phase 5.
+  - The `proxy.ts` gap (unauthenticated `/api/webhooks/*` currently redirects to `/sign-in` instead of
+    reaching the route) is confirmed but not fixed — Phase 5, per the handoff's own routing note.
+  - Gate 4's "if test keys are available, run a provider configuration check and collect sanitized
+    response fixtures" is not done — test keys are now available, but running it is a live network call
+    left for the user per the standing no-live-testing instruction.
+  - No admin exception-review UI for `BillingException` rows (`PAYMENT_MISMATCH`, `PAYMENT_EXCESS`,
+    `PAYMENT_ATTEMPT_ABANDONED`, etc.) — they're recorded and queryable but not yet surfaced anywhere
+    in the admin UI.
 
 ## Phase 5 — Checkout UI and payment authorization — ⬜ not started
 
