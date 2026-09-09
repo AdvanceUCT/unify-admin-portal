@@ -531,7 +531,143 @@ real evidence.
     `PAYMENT_ATTEMPT_ABANDONED`, etc.) — they're recorded and queryable but not yet surfaced anywhere
     in the admin UI.
 
-## Phase 5 — Checkout UI and payment authorization — ⬜ not started
+## Phase 5 — Checkout UI and payment authorization — 🟡 core complete and tested; real test-mode checkout is the user's to run
+
+**Scope note**: this closes the routing/UI gap Phase 4 deliberately deferred, and also closes Phase 4's
+"no admin exception-review UI" gap — the new admin per-invoice page lists `BillingException` rows.
+
+**Pre-existing bug found and fixed (confirmed live, not billing-related)**: `proxy.ts` redirected *any*
+unauthenticated request to `/sign-in`, including ones that authenticate themselves a different way.
+Confirmed by reading the file (not assumed) that this already broke, in whatever environment runs this
+proxy: the external vendor `v1` API (`vendorFromApiRequest`, an API-key caller that never carries a
+session cookie), the agent webhook (`/api/webhooks/agent`), and the one existing cron job
+(`/api/cron/credential-automation`, `CRON_SECRET`-guarded) — a real caller to any of them got a 307
+HTML redirect instead of ever reaching its own auth check. Per the user's explicit choice to broaden
+the audit beyond just the new Paystack routes, `shouldSkipProxy()` now also exempts `/api/vendor`,
+`/api/webhooks`, and `/api/cron` — narrowly scoped to those three prefixes (not all of `/api`, per the
+handoff's own caution), verified against every route file under `/api/vendor/*` to confirm each already
+performs its own cookie-session or API-key/signature check. `src/test/proxy.test.ts` extended with a
+case exercising all thirteen routes under those prefixes plus a negative case (`/vendors/invoices`, an
+admin page, must still redirect).
+
+**Files added/changed**
+- `proxy.ts` — the exemption above.
+- `@paystack/inline-js@2.25.0` added as a dependency. Its `resumeTransaction(accessCode, callbacks)`
+  API (no access-code-taking constructor option, `new PaystackPop()` then the instance method,
+  `onSuccess`/`onError`/`onCancel`/`onLoad` callback shapes) was verified against the package's own
+  published README (fetched from unpkg, since paystack.com and npmjs.com both returned 403 to direct
+  fetches) rather than assumed — it ships no `.d.ts`, so `src/types/paystack-inline-js.d.ts` declares
+  the minimal ambient shape actually used, annotated with where it was confirmed.
+- `prisma/migrations/20260912120000_add_invoice_admin_audit_actions/migration.sql` — adds
+  `AuditAction.INVOICE_GENERATION_TRIGGERED` and `INVOICE_PAYMENT_RECONCILED`; applied via
+  `npx prisma migrate deploy` against the real dev database (same as every prior migration this pass).
+- `src/lib/billing/paymentRouteGuards.ts` — `isSameOriginRequest()` (Origin, falling back to Referer,
+  against `env.APP_URL`'s origin — these are plain Route Handlers, not Server Actions, so same-origin
+  protection isn't automatic) and `isRateLimited()` (an explicitly-labeled best-effort, in-memory,
+  per-process cooldown — 5 requests/30s per key; the real protection against repeat-click abuse is
+  `prepareInvoicePaymentAttempt`'s own reuse logic, which this doesn't replace).
+- `src/app/api/vendor/invoices/[invoiceId]/payment-attempts/route.ts` (POST) — owner-only, same-origin,
+  rate-limited. Never reads the request body — invoiced ID only; the server always resolves amount,
+  shares, and provider account from the invoice's own stored, immutable totals via
+  `prepareInvoicePaymentAttempt`.
+- `src/app/api/vendor/invoices/[invoiceId]/reconcile/route.ts` (POST) — owner-only, same-origin,
+  rate-limited. Resolves the invoice's own most recent unresolved attempt server-side and calls
+  `confirmInvoicePayment` on *that* reference — a request body carrying a different reference is never
+  read, per the handoff's "resolves stored attempt rather than accepting arbitrary provider references".
+- `src/app/api/webhooks/paystack/route.ts` (POST) — reads exact raw bytes before parsing JSON so the
+  signature is checked against what Paystack actually sent; 256KB body-size ceiling; deduplicates via
+  `recordGatewayEvent` before ever calling `confirmInvoicePayment`; strips `authorization`/`customer`
+  before persisting a payload snapshot; acknowledges (202) and ignores any event type outside
+  `charge.success`, except a dispute/refund/reversal-shaped event name, which is recorded as a
+  `PAYMENT_REVIEW_EVENT` exception for admin visibility — no automatic reversal, matching the handoff.
+  A genuine processing failure returns 500 (so Paystack's own retry applies) and records durable
+  retry bookkeeping via `recordGatewayEventFailure`, rather than falsely acknowledging success.
+- `src/lib/billing/invoiceQueries.ts` — added `isPayable` to `getVendorInvoiceDocument`'s return (a
+  boolean, never a raw amount — `documentStatus === ISSUED && paymentStatus === UNPAID && totalMinor > 0
+  && !hasUnresolvedException`) and a new `getAdminInvoiceDetail()` for the admin per-invoice page
+  (items, payment attempts, payments, and unresolved-or-not `BillingException` rows for one invoice).
+- `src/app/vendor/(portal)/invoices/paymentPolling.ts` — shared bounded-backoff polling
+  (2s/3s/5s/8s/13s, ~31s total) used by both the Pay button and the payment-return page; a poll
+  failure (e.g. an expired session, detected via a 401) surfaces a specific message rather than a
+  generic one.
+- `src/app/vendor/(portal)/invoices/[invoiceId]/PayInvoiceButton.tsx` — client component. Never
+  initializes a transaction itself; only ever resumes the access code the server already prepared.
+  On popup success, calls the owner-scoped reconcile route and polls — **a popup success callback
+  alone never marks the invoice paid**; only a settled server response does, and only then does it
+  `router.refresh()`. Disables itself while a request is in flight; shows the validated
+  `authorizationUrl` as an explicit hosted-checkout fallback link; distinguishes cancellation (try
+  again), a popup-reported error, and the ambiguous `UNKNOWN` attempt status (distinct message) from
+  each other; shows "Refresh status" only once the bounded polling window elapses unsettled.
+- `src/app/vendor/(portal)/invoices/[invoiceId]/payment-return/` (`page.tsx` + `PaymentReturnStatus.tsx`)
+  — the browser-return page. **Deliberately never reads the `?reference=` query string Paystack
+  appends** — per the handoff, that value is an untrusted hint only, so the safest implementation
+  reads it for nothing at all rather than trying to safely validate it. Confirmation is always
+  resolved against this invoice's own stored attempt, identically to the Pay button's post-success path.
+- `src/app/vendor/(portal)/invoices/[invoiceId]/page.tsx` — renders `<PayInvoiceButton>` only when
+  `isPayable && env.VERIFICATION_INVOICE_CHECKOUT_ENABLED` — a paid, zero-total, or
+  exception-flagged invoice, or checkout being off, never shows a Pay action.
+- `src/app/(admin)/vendors/invoices/actions.ts` — `generateMissingInvoicesAction()` (`invoice:issue`;
+  runs the same `runVendorInvoiceGeneration` service the CLI uses, writes an
+  `INVOICE_GENERATION_TRIGGERED` audit log with counts). Wired to a "Generate missing invoices" button
+  on `/vendors/invoices`, which now also links each invoice number to its new detail page.
+- `src/app/(admin)/vendors/invoices/[invoiceId]/` (`page.tsx` + `actions.ts`) — the admin per-invoice
+  detail page: totals, every payment attempt (status, reference, provider txn ID), every payment
+  receipt, and every `BillingException` row (with its JSON details) for that invoice.
+  `reconcileInvoicePaymentAction()` (`invoice:reconcile`) resolves the invoice's own most recent
+  unresolved attempt — an admin can review and recover, but never pays as the owner, since there is no
+  admin-triggered `prepareInvoicePaymentAttempt` call anywhere. Writes an `INVOICE_PAYMENT_RECONCILED`
+  audit log.
+- `src/lib/auth/permissions.ts` — `invoice:issue`/`invoice:reconcile` (added in Phase 3, unused until
+  now) are exercised for the first time by real UI/actions.
+
+**Evidence**
+- `npm run typecheck` — pass. `npm run lint` — 0 errors, same pre-existing warnings.
+- `npm test` — **100 files / 675 tests**, all pass (69 new: `vendorPaymentRoutes.test.ts` (14 —
+  401/403/404/429/cross-origin/BillingDomainError-mapping for both new routes, and confirmation that a
+  tampered request body is never read), `paystackWebhookRoute.test.ts` (11 — invalid/tampered/missing
+  signature, oversized body, malformed JSON, unrelated-event and dispute/refund handling, dedup,
+  success routing, durable-failure-on-500, sensitive-field stripping), `paymentRouteGuards.test.ts` (9),
+  `paymentPolling.test.ts` (7, fake-timer-based), `PayInvoiceButton.test.tsx` (9 — popup success/
+  cancel/error/fallback-link/UNKNOWN-status/double-click-disable/bounded-timeout-then-refresh),
+  `PaymentReturnStatus.test.tsx` (4), `adminInvoiceActions.test.ts` (5), `invoiceQueries.test.ts` (8),
+  plus the extended `proxy.test.ts`).
+- `npm run test:billing:db` — **29/29 real PostgreSQL tests still pass** (unchanged from Phase 4 — this
+  phase added routes/UI around already-DB-tested services, not new DB invariants).
+- **Deliberately not run**: an actual Paystack test-mode checkout in a browser (a real popup, a real
+  test card, a real webhook delivery) — this needs a reachable webhook URL and a browser, neither of
+  which this session has; it's the next thing for the user to do manually, per the standing "no live
+  testing" instruction. `VERIFICATION_INVOICE_CHECKOUT_ENABLED` is left at whatever value it already
+  had in `.env.local` — I did not flip it on myself, since doing so is the user's decision about when
+  real (test-mode) checkout becomes reachable.
+- **Not done, by explicit scope/time tradeoff — recorded here rather than silently skipped**:
+  - No live browser walkthrough (popup, real test card, webhook delivery, admin+owner both seeing the
+    same paid invoice) — Gate 5's own acceptance criterion, and squarely "the user tests manually".
+  - No mobile/desktop visual inspection of the new pages.
+  - Phase 6's `/api/cron/vendor-billing*` routes, `billing:reconcile` CLI, and scheduled reconciliation
+    don't exist yet — the admin "Reconcile" action here is a manual, per-invoice recovery tool only.
+  - No UI to resolve/dismiss a `BillingException` row (mark it reviewed) — the admin page displays them
+    read-only; resolution stays a direct-database action for this POC.
+
+**Deployment readiness (checked from the code, not yet exercised against a live deployment)**: the user
+asked directly whether any of this was accidentally coded to only work on localhost. Grepped every new
+payment file — nothing hardcodes `localhost`; the same-origin check and the Paystack `callback_url` both
+derive from `env.APP_URL`, and `vercel.json` shows production builds already auto-apply migrations
+(`scripts/run-production-migrations.mjs`). So the code itself is deployment-agnostic. What is
+environment-dependent, and must be set correctly for the *deployed* target before a real webhook/checkout
+will work there, is external to this codebase and unverified because no live deployment was available to
+check in this session:
+- `APP_URL` set to the real deployed HTTPS URL in that environment's variables (not `localhost`) — wrong
+  here breaks both the same-origin check and the Paystack return callback for real users.
+- Vercel Deployment Protection (password/SSO wall) disabled for whichever deployment receives the
+  webhook — a platform-level gate the `proxy.ts` fix in this phase cannot touch, and one the Paystack
+  setup guide calls out by name as a known failure mode.
+- `PAYSTACK_SECRET_KEY` / `PAYSTACK_PLATFORM_SUBACCOUNT_CODE` / `PAYSTACK_EXPECTED_INTEGRATION_ID` /
+  `VERIFICATION_INVOICE_CHECKOUT_ENABLED` set as real variables in that environment, not only locally.
+- The webhook URL (`https://YOUR-HOST/api/webhooks/paystack`) registered in Paystack's dashboard once a
+  target host exists.
+
+This list belongs to Phase 7 (demo deployment) by the handoff's own structure, but is recorded here since
+it was raised and checked mid-Phase-5.
 
 ## Phase 6 — Scheduling, reconciliation, operational controls — ⬜ not started
 

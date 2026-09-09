@@ -84,6 +84,14 @@ export async function getVendorInvoiceDocument(vendorProfileId: string, invoiceI
     id: invoice.id,
     paymentStatus: invoice.paymentStatus,
     hasUnresolvedException: invoice.hasUnresolvedException,
+    // A raw totalMinor is never sent to the client — this boolean is the only
+    // signal the Pay button needs. A paid, zero-total, or exception-flagged
+    // invoice never gets a Pay action, per the handoff.
+    isPayable:
+      invoice.documentStatus === "ISSUED" &&
+      invoice.paymentStatus === "UNPAID" &&
+      invoice.totalMinor > BigInt(0) &&
+      !invoice.hasUnresolvedException,
     document: buildInvoiceDocumentData(invoice, invoice.items),
   };
 }
@@ -109,4 +117,86 @@ export async function listAdminInvoiceReceivables(options: { vendorProfileId?: s
     vendorProfileId: invoice.vendorProfileId,
     vendorCompanyName: invoice.vendorProfile.companyName,
   }));
+}
+
+export type AdminInvoicePaymentAttemptRow = {
+  id: string;
+  status: string;
+  reference: string;
+  expectedAmountDisplay: string;
+  createdAtIso: string;
+  updatedAtIso: string;
+  providerTransactionId: string | null;
+};
+
+export type AdminInvoicePaymentRow = {
+  id: string;
+  providerTransactionId: string;
+  grossAmountDisplay: string;
+  paidAtIso: string;
+};
+
+export type AdminInvoiceExceptionRow = {
+  id: string;
+  type: string;
+  resolved: boolean;
+  createdAtIso: string;
+  details: unknown;
+};
+
+/** Full admin view of one invoice: document contents plus its payment/attempt/exception history. */
+export async function getAdminInvoiceDetail(invoiceId: string) {
+  const invoice = await prisma.vendorInvoice.findUnique({
+    where: { id: invoiceId },
+    include: {
+      items: { orderBy: [{ servicePeriodKey: "asc" }, { createdAt: "asc" }] },
+      vendorProfile: { select: { companyName: true } },
+      paymentAttempts: { orderBy: { createdAt: "desc" }, include: { payment: { include: { allocation: true } } } },
+    },
+  });
+  if (!invoice) return null;
+
+  const exceptions = await prisma.billingException.findMany({
+    where: { invoiceId },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const attempts: AdminInvoicePaymentAttemptRow[] = invoice.paymentAttempts.map((attempt) => ({
+    id: attempt.id,
+    status: attempt.status,
+    reference: attempt.reference,
+    expectedAmountDisplay: minorToDecimalString(attempt.expectedAmountMinor, attempt.currency),
+    createdAtIso: attempt.createdAt.toISOString(),
+    updatedAtIso: attempt.updatedAt.toISOString(),
+    providerTransactionId: attempt.providerTransactionId,
+  }));
+
+  const payments: AdminInvoicePaymentRow[] = invoice.paymentAttempts
+    .filter((attempt) => attempt.payment)
+    .map((attempt) => ({
+      id: attempt.payment!.id,
+      providerTransactionId: attempt.payment!.providerTransactionId,
+      grossAmountDisplay: minorToDecimalString(attempt.payment!.grossAmountMinor, attempt.payment!.currency),
+      paidAtIso: attempt.payment!.paidAt.toISOString(),
+    }));
+
+  return {
+    id: invoice.id,
+    vendorProfileId: invoice.vendorProfileId,
+    vendorCompanyName: invoice.vendorProfile.companyName,
+    paymentStatus: invoice.paymentStatus,
+    hasUnresolvedException: invoice.hasUnresolvedException,
+    document: buildInvoiceDocumentData(invoice, invoice.items),
+    attempts,
+    payments,
+    exceptions: exceptions.map(
+      (exception): AdminInvoiceExceptionRow => ({
+        id: exception.id,
+        type: exception.type,
+        resolved: exception.resolved,
+        createdAtIso: exception.createdAt.toISOString(),
+        details: exception.details,
+      }),
+    ),
+  };
 }

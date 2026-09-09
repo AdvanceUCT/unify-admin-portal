@@ -3,10 +3,14 @@
  * @module app/(admin)/vendors/invoices/page
  */
 
+import Link from "next/link";
+
 import { StatusText, type StatusTone } from "@/components/ui/StatusText";
 import { assertCan } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
 import { listAdminInvoiceReceivables } from "@/lib/billing/invoiceQueries";
+
+import { generateMissingInvoicesAction } from "./actions";
 
 const PAYMENT_TONE: Record<string, StatusTone> = {
   UNPAID: "warning",
@@ -17,6 +21,7 @@ const PAYMENT_TONE: Record<string, StatusTone> = {
 export default async function AdminVendorInvoicesPage() {
   const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
   assertCan("invoice:read", session);
+  assertCan("invoice:issue", session);
 
   const invoices = await listAdminInvoiceReceivables();
   const outstandingCount = invoices.filter((invoice) => invoice.paymentStatus === "UNPAID").length;
@@ -27,10 +32,20 @@ export default async function AdminVendorInvoicesPage() {
       <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
           <h2 className="text-section-title text-fg">Vendor invoices (receivables)</h2>
-          <p className="text-sm text-fg-muted">
-            {invoices.length} invoice{invoices.length === 1 ? "" : "s"} · {outstandingCount} outstanding ·{" "}
-            {exceptionCount} needing review
-          </p>
+          <div className="flex items-center gap-4">
+            <p className="text-sm text-fg-muted">
+              {invoices.length} invoice{invoices.length === 1 ? "" : "s"} · {outstandingCount} outstanding ·{" "}
+              {exceptionCount} needing review
+            </p>
+            <form action={generateMissingInvoicesAction}>
+              <button
+                className="h-9 rounded-md border border-border px-3 text-sm font-medium text-fg hover:bg-surface-muted"
+                type="submit"
+              >
+                Generate missing invoices
+              </button>
+            </form>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[56rem] text-left text-body">
@@ -49,7 +64,9 @@ export default async function AdminVendorInvoicesPage() {
                 <tr className="align-middle transition hover:bg-surface-muted/60" key={invoice.id}>
                   <td className="px-4 py-3 font-medium text-fg">{invoice.vendorCompanyName}</td>
                   <td className="px-4 py-3 text-fg-muted">
-                    {invoice.invoiceNumber}
+                    <Link className="text-brand-600 underline hover:no-underline" href={`/vendors/invoices/${invoice.id}`}>
+                      {invoice.invoiceNumber}
+                    </Link>
                     {invoice.isDemo && <span className="ml-2 text-xs text-fg-subtle">(demo)</span>}
                   </td>
                   <td className="px-4 py-3 text-fg-muted">{invoice.periodLabel}</td>

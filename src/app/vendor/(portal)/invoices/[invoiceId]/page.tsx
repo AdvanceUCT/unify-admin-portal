@@ -6,8 +6,11 @@
 import { notFound } from "next/navigation";
 
 import { StatusText, type StatusTone } from "@/components/ui/StatusText";
+import { env } from "@/lib/config/env";
 import { getVendorInvoiceDocument } from "@/lib/billing/invoiceQueries";
 import { requireVendorInvoiceOwnerContext } from "@/lib/billing/vendorAuthorization";
+
+import { PayInvoiceButton } from "./PayInvoiceButton";
 
 const PAYMENT_TONE: Record<string, StatusTone> = {
   UNPAID: "warning",
@@ -25,7 +28,8 @@ export default async function VendorInvoiceDetailPage({
   const result = await getVendorInvoiceDocument(context.vendorProfileId, invoiceId);
   if (!result) notFound();
 
-  const { document, paymentStatus, hasUnresolvedException } = result;
+  const { document, paymentStatus, hasUnresolvedException, isPayable } = result;
+  const canCheckout = isPayable && env.VERIFICATION_INVOICE_CHECKOUT_ENABLED;
 
   return (
     <div className="space-y-6">
@@ -45,6 +49,7 @@ export default async function VendorInvoiceDetailPage({
             >
               Download PDF
             </a>
+            {canCheckout && <PayInvoiceButton invoiceId={invoiceId} />}
           </div>
         </div>
 

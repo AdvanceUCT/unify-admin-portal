@@ -103,6 +103,7 @@ describe("GET /api/vendor/invoices/[invoiceId]", () => {
       id: "invoice-1",
       paymentStatus: "UNPAID",
       hasUnresolvedException: false,
+      isPayable: true,
       document: { invoiceNumber: "DEMO-2026-000001" } as never,
     });
 
@@ -153,6 +154,7 @@ describe("GET /api/vendor/invoices/[invoiceId]/download", () => {
       id: "invoice-1",
       paymentStatus: "UNPAID",
       hasUnresolvedException: false,
+      isPayable: true,
       document: { invoiceNumber: "DEMO-2026-000001" } as never,
     });
     vi.mocked(renderInvoicePdf).mockResolvedValue(Buffer.from("%PDF-1.4 fake"));

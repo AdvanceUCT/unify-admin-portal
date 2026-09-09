@@ -54,4 +54,40 @@ describe("proxy", () => {
       expect(proxy(request(route)).status, route).toBe(200);
     }
   });
+
+  it("lets self-authenticating API prefixes reach their own handler instead of redirecting to sign-in", () => {
+    getSessionCookieMock.mockReturnValue(null);
+
+    for (const route of [
+      // External vendor API-key callers and the vendor portal's own
+      // cookie-authenticated routes both need their own auth check to run —
+      // neither ever carries this app's session cookie in the API-key case,
+      // and the cookie-session routes need to return JSON 401, not a redirect.
+      "/api/vendor/v1/verification-sessions",
+      "/api/vendor/invoices",
+      "/api/vendor/invoices/invoice-1",
+      "/api/vendor/invoices/invoice-1/download",
+      "/api/vendor/live-verifications",
+      "/api/vendor/verifications/req-1",
+      "/api/vendor/verifications/req-1/retry",
+      "/api/vendor/verifications/export",
+      "/api/vendor/integrations/api-keys",
+      "/api/vendor/integrations/webhook",
+      // Server-to-server: HMAC-signed webhooks and CRON_SECRET-guarded jobs.
+      "/api/webhooks/agent",
+      "/api/webhooks/paystack",
+      "/api/cron/credential-automation",
+    ]) {
+      expect(proxy(request(route)).status, route).toBe(200);
+    }
+  });
+
+  it("still redirects an unauthenticated request to an ordinary admin API-adjacent page route", () => {
+    getSessionCookieMock.mockReturnValue(null);
+
+    // The exemption is scoped to /api/vendor, /api/webhooks, and /api/cron —
+    // it must not silently become "skip auth for everything under /api" or
+    // "skip auth for /vendors" (an admin page, not a vendor-portal route).
+    expect(proxy(request("/vendors/invoices")).status).toBe(307);
+  });
 });

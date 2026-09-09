@@ -1131,6 +1131,8 @@ enum AuditAction {
   SCHEMA_VERSION_DELETED
   RENEWAL_SETTINGS_UPDATED
   BILLING_POLICY_CREATED
+  INVOICE_GENERATION_TRIGGERED
+  INVOICE_PAYMENT_RECONCILED
 }
 
 // ─── Vendor verification invoicing (Paystack POC) ──────────────────────────
