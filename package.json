@@ -23,6 +23,8 @@
     "billing:invoices": "tsx scripts/billing-invoices.ts",
     "prebilling:paystack-check": "npm run prisma:generate",
     "billing:paystack-check": "tsx scripts/paystack-check.ts",
+    "prebilling:reconcile": "npm run prisma:generate",
+    "billing:reconcile": "tsx scripts/billing-reconcile.ts",
     "typecheck": "tsc --noEmit",
     "pretypecheck": "npm run prisma:generate",
     "test": "vitest run",

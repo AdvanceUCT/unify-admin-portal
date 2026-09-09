@@ -67,6 +67,10 @@ async function main() {
     }
 
     const summary = await runVendorInvoiceGeneration(prisma, { now });
+    if (summary.skippedDisabled) {
+      console.log("Skipped: VERIFICATION_INVOICING_ENABLED is not \"true\" — no invoices were issued.");
+      return;
+    }
     console.log(
       `Vendors scanned: ${summary.vendorsScanned}. Invoices issued: ${summary.invoicesIssued} ` +
         `(${summary.zeroTotalInvoices} zero-total / "No payment required").`,

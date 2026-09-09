@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/config/env", () => ({
-  env: { VERIFICATION_FEE_CURRENCY: "ZAR", VERIFICATION_FEE_MINOR: 125 },
-}));
+const envMock = vi.hoisted(() => ({ VERIFICATION_FEE_CURRENCY: "ZAR", VERIFICATION_FEE_MINOR: 125, VERIFICATION_INVOICING_ENABLED: true }));
+vi.mock("@/lib/config/env", () => ({ env: envMock }));
 
 import {
   isBillingPeriodClosed,
@@ -301,5 +300,19 @@ describe("previewVendorInvoiceGeneration and runVendorInvoiceGeneration", () => 
     expect(summary.vendorsScanned).toBe(1);
     expect(summary.invoicesIssued).toBe(1);
     expect(db.vendorInvoiceItem.createMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing and reports skippedDisabled when VERIFICATION_INVOICING_ENABLED is off, without even reading unclaimed charges", async () => {
+    const findManySpy = vi.fn();
+    const db = { verificationCharge: { findMany: findManySpy } } as unknown as InvoiceGenerationRunner;
+
+    envMock.VERIFICATION_INVOICING_ENABLED = false;
+    try {
+      const summary = await runVendorInvoiceGeneration(db);
+      expect(summary).toEqual({ vendorsScanned: 0, invoicesIssued: 0, zeroTotalInvoices: 0, skippedDisabled: true });
+      expect(findManySpy).not.toHaveBeenCalled();
+    } finally {
+      envMock.VERIFICATION_INVOICING_ENABLED = true;
+    }
   });
 });

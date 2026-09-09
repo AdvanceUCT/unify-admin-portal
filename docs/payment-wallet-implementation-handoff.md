@@ -14,6 +14,15 @@ Payfast sandbox integration, wallet UI, production OTP delivery, simulated payou
 
 For this proof of concept, Payfast sandbox is the selected external top-up provider. Student-to-vendor value moves inside the internal ledger, vendor payouts do not call a real disbursement provider, and all cryptocurrency or Ethereum branches are out of scope.
 
+> **Update**: the vendor verification invoicing POC (`docs/paystack-vendor-invoicing-implementation-plan.md`,
+> status in `docs/paystack-vendor-invoicing-implementation-status.md`) implemented a real Paystack
+> test-mode integration — provider adapter, checkout, webhook confirmation, reconciliation — as a
+> separate, already-working system. Paystack, not Payfast, is now the intended provider direction for
+> this wallet's future top-up/payout work too, so a later wallet-provider phase should reuse that
+> adapter's patterns rather than building a second, different provider integration. This note does not
+> change any wallet foundation milestone above — no top-up, payout, or Payfast integration has been
+> implemented as part of the wallet itself.
+
 This is a technical design, not legal, banking, tax, or regulatory advice. Before real funds are accepted, the selected payment provider and the university should confirm the custodial, settlement, refund, chargeback, KYC/KYB, and reconciliation obligations.
 
 ---

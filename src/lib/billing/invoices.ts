@@ -10,6 +10,7 @@
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { VendorInvoicePaymentStatus } from "@/generated/prisma/enums";
 import { INVOICE_CLOSING_DELAY_SECONDS, MAX_INVOICES_PER_VENDOR_PER_RUN, VENDOR_INVOICE_NUMBER_PREFIX } from "@/lib/billing/constants";
+import { env } from "@/lib/config/env";
 import { billingPeriodEndUtc, nextBillingPeriodKey } from "@/lib/vendors/verificationBilling";
 
 export type ReadClient = Pick<Prisma.TransactionClient, "verificationCharge" | "vendorInvoice">;
@@ -284,19 +285,35 @@ export type VendorInvoiceGenerationSummary = {
   vendorsScanned: number;
   invoicesIssued: number;
   zeroTotalInvoices: number;
+  /** True when this run did nothing because VERIFICATION_INVOICING_ENABLED is off — distinct from "nothing was due". */
+  skippedDisabled: boolean;
+};
+
+const DISABLED_SUMMARY: VendorInvoiceGenerationSummary = {
+  vendorsScanned: 0,
+  invoicesIssued: 0,
+  zeroTotalInvoices: 0,
+  skippedDisabled: true,
 };
 
 /**
  * Issues every currently-due invoice: for each vendor with unclaimed
  * charges, repeatedly issues the next eligible period's invoice until no
  * closed period remains to bill (bounded per vendor for safety). The same
- * service backs both the CLI job and a future admin "Generate missing
- * invoices" action.
+ * service backs the CLI job, the admin "Generate missing invoices" action,
+ * and the daily cron.
+ *
+ * `VERIFICATION_INVOICING_ENABLED` stops *new* issuance only — per the
+ * handoff, invoice reading, signed webhook receipt, and reconciliation of
+ * already-issued invoices must keep working regardless, so this flag is
+ * deliberately not checked anywhere else.
  */
 export async function runVendorInvoiceGeneration(
   db: TransactionRunner & ReadClient,
   options: { now?: Date; currency?: string } = {},
 ): Promise<VendorInvoiceGenerationSummary> {
+  if (!env.VERIFICATION_INVOICING_ENABLED) return DISABLED_SUMMARY;
+
   const now = options.now ?? new Date();
   const currency = options.currency ?? "ZAR";
 
@@ -306,7 +323,12 @@ export async function runVendorInvoiceGeneration(
     select: { vendorProfileId: true },
   });
 
-  const summary: VendorInvoiceGenerationSummary = { vendorsScanned: candidateRows.length, invoicesIssued: 0, zeroTotalInvoices: 0 };
+  const summary: VendorInvoiceGenerationSummary = {
+    vendorsScanned: candidateRows.length,
+    invoicesIssued: 0,
+    zeroTotalInvoices: 0,
+    skippedDisabled: false,
+  };
 
   for (const { vendorProfileId } of candidateRows) {
     for (let iteration = 0; iteration < MAX_INVOICES_PER_VENDOR_PER_RUN; iteration += 1) {

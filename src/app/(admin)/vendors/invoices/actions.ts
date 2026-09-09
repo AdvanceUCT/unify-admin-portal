@@ -25,6 +25,10 @@ export async function generateMissingInvoicesAction() {
 
   const summary = await runVendorInvoiceGeneration(prisma);
 
+  if (summary.skippedDisabled) {
+    throw new Error("Invoice issuance is currently disabled (VERIFICATION_INVOICING_ENABLED is off).");
+  }
+
   await writeAuditLog({
     action: "INVOICE_GENERATION_TRIGGERED",
     actorId: session.user.id,

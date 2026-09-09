@@ -23,20 +23,24 @@ type ChargesModule = typeof import("@/lib/billing/charges");
 type InvoicesModule = typeof import("@/lib/billing/invoices");
 type PaymentAttemptsModule = typeof import("@/lib/billing/paymentAttempts");
 type PaymentConfirmationModule = typeof import("@/lib/billing/paymentConfirmation");
+type JobLeaseModule = typeof import("@/lib/billing/jobLease");
 
 import { PrismaClient } from "@/generated/prisma/client";
 import { resolveBillingTestDirectUrl } from "@/lib/billing/testDatabaseGuard";
 
+function readMigrationSql(migrationName: string) {
+  return readFileSync(resolve(process.cwd(), "prisma/migrations", migrationName, "migration.sql"), "utf8");
+}
+
 const MIGRATION_NAME = "20260909120000_add_vendor_invoicing_billing";
-const migrationSql = readFileSync(
-  resolve(process.cwd(), "prisma/migrations", MIGRATION_NAME, "migration.sql"),
-  "utf8",
-);
-const PAYSTACK_GUARDS_MIGRATION_NAME = "20260911120000_add_paystack_payment_guards";
-const paystackGuardsMigrationSql = readFileSync(
-  resolve(process.cwd(), "prisma/migrations", PAYSTACK_GUARDS_MIGRATION_NAME, "migration.sql"),
-  "utf8",
-);
+const migrationSql = readMigrationSql(MIGRATION_NAME);
+const paystackGuardsMigrationSql = readMigrationSql("20260911120000_add_paystack_payment_guards");
+// Enum-only additions replayed in order after the main migration; neither
+// changes schema.prisma models, so there's no corresponding stub-table change.
+const laterMigrationSql = [
+  readMigrationSql("20260912120000_add_invoice_admin_audit_actions"),
+  readMigrationSql("20260913120000_add_billing_run_lease_guard"),
+];
 const schemaName = `unify_billing_it_${randomUUID().replaceAll("-", "")}`;
 
 let pool: Pool;
@@ -47,6 +51,7 @@ let charges: ChargesModule;
 let invoices: InvoicesModule;
 let paymentAttempts: PaymentAttemptsModule;
 let paymentConfirmation: PaymentConfirmationModule;
+let jobLease: JobLeaseModule;
 
 function quotedTestSchema() {
   if (!/^unify_billing_it_[a-f0-9]{32}$/.test(schemaName)) {
@@ -187,6 +192,7 @@ beforeAll(async () => {
   invoices = await import("@/lib/billing/invoices");
   paymentAttempts = await import("@/lib/billing/paymentAttempts");
   paymentConfirmation = await import("@/lib/billing/paymentConfirmation");
+  jobLease = await import("@/lib/billing/jobLease");
 
   pool = new Pool({ connectionString: directUrl, max: 8 });
   const client = await pool.connect();
@@ -245,6 +251,9 @@ beforeAll(async () => {
     `);
     await client.query(migrationSql);
     await client.query(paystackGuardsMigrationSql);
+    for (const sql of laterMigrationSql) {
+      await client.query(sql);
+    }
 
     universityId = `university-${randomUUID()}`;
     await client.query('INSERT INTO "university_profile" ("id") VALUES ($1)', [universityId]);
@@ -1297,5 +1306,52 @@ describe("payment attempt and confirmation invariants", () => {
     } finally {
       client.release();
     }
+  });
+});
+
+describe("job lease concurrency (real overlapping invocations)", () => {
+  it("resolves a real concurrent acquire race for the same jobType to exactly one winner", async () => {
+    const jobType = `TEST_JOB_${randomUUID()}`;
+
+    const [a, b] = await Promise.all([
+      jobLease.acquireJobLease(scopedPrisma, { jobType, leaseOwner: "owner-a" }),
+      jobLease.acquireJobLease(scopedPrisma, { jobType, leaseOwner: "owner-b" }),
+    ]);
+
+    const winners = [a, b].filter((result) => result !== null);
+    expect(winners).toHaveLength(1);
+
+    const runCount = await scopedPrisma.billingRun.count({ where: { jobType, status: "RUNNING" } });
+    expect(runCount).toBe(1); // the real partial unique index enforced this, not application logic alone
+  });
+
+  it("refuses a second acquire while the first lease is still live, then allows it once completed", async () => {
+    const jobType = `TEST_JOB_${randomUUID()}`;
+
+    const first = await jobLease.acquireJobLease(scopedPrisma, { jobType, leaseOwner: "owner-a" });
+    expect(first).not.toBeNull();
+
+    const second = await jobLease.acquireJobLease(scopedPrisma, { jobType, leaseOwner: "owner-b" });
+    expect(second).toBeNull();
+
+    await jobLease.completeJobLease(scopedPrisma, first!.runId, { scannedCount: 1 });
+
+    const third = await jobLease.acquireJobLease(scopedPrisma, { jobType, leaseOwner: "owner-c" });
+    expect(third).not.toBeNull();
+  });
+
+  it("takes over a real stale (expired) lease left by a dead worker, preserving its cursor", async () => {
+    const jobType = `TEST_JOB_${randomUUID()}`;
+    const longAgo = new Date(Date.now() - 60 * 60 * 1000);
+
+    const dead = await jobLease.acquireJobLease(scopedPrisma, { jobType, leaseOwner: "dead-worker", now: longAgo, leaseDurationSeconds: 1 });
+    expect(dead).not.toBeNull();
+    await scopedPrisma.billingRun.update({ where: { id: dead!.runId }, data: { cursor: "charge-999" } });
+
+    const takenOver = await jobLease.acquireJobLease(scopedPrisma, { jobType, leaseOwner: "new-worker" });
+
+    expect(takenOver).toEqual({ runId: dead!.runId, cursor: "charge-999" });
+    const runCount = await scopedPrisma.billingRun.count({ where: { jobType, status: "RUNNING" } });
+    expect(runCount).toBe(1);
   });
 });

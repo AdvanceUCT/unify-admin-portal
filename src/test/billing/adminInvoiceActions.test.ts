@@ -39,9 +39,27 @@ describe("generateMissingInvoicesAction", () => {
     expect(runVendorInvoiceGeneration).not.toHaveBeenCalled();
   });
 
+  it("throws a clear message instead of silently doing nothing when invoicing is disabled", async () => {
+    vi.mocked(requireRole).mockResolvedValue(adminSession);
+    vi.mocked(runVendorInvoiceGeneration).mockResolvedValue({
+      vendorsScanned: 0,
+      invoicesIssued: 0,
+      zeroTotalInvoices: 0,
+      skippedDisabled: true,
+    });
+
+    await expect(generateMissingInvoicesAction()).rejects.toThrow(/disabled/i);
+    expect(writeAuditLog).not.toHaveBeenCalled();
+  });
+
   it("runs generation, writes an audit log with counts, and revalidates the list", async () => {
     vi.mocked(requireRole).mockResolvedValue(adminSession);
-    vi.mocked(runVendorInvoiceGeneration).mockResolvedValue({ vendorsScanned: 3, invoicesIssued: 2, zeroTotalInvoices: 1 });
+    vi.mocked(runVendorInvoiceGeneration).mockResolvedValue({
+      vendorsScanned: 3,
+      invoicesIssued: 2,
+      zeroTotalInvoices: 1,
+      skippedDisabled: false,
+    });
 
     await generateMissingInvoicesAction();
 

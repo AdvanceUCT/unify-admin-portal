@@ -23,4 +23,11 @@ The expected future policy shape is:
 - university share in basis points;
 - effective start and end timestamps.
 
+**This is now implemented.** `VerificationBillingPolicy` (effective-dated, exactly this shape) and the full
+monthly invoicing/Paystack checkout system built on top of it are documented in
+`docs/paystack-vendor-invoicing-implementation-plan.md`, with progress and evidence tracked in
+`docs/paystack-vendor-invoicing-implementation-status.md`. This page describes the original,
+pre-policy v1 behavior (env-only pricing, no revenue split) — it is kept for historical context on why
+the schema was designed the way it was, not as the current state of billing.
+
 When that policy exists, each verification should snapshot the applied policy and calculated share amounts. That preserves invoice and payout traceability without rewriting historical verification records.

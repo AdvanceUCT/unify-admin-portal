@@ -669,6 +669,116 @@ check in this session:
 This list belongs to Phase 7 (demo deployment) by the handoff's own structure, but is recorded here since
 it was raised and checked mid-Phase-5.
 
-## Phase 6 — Scheduling, reconciliation, operational controls — ⬜ not started
+## Phase 6 — Scheduling, reconciliation, operational controls — 🟡 core complete and tested; scheduling verified locally, not yet observed running as a real Vercel cron
+
+**Scope decisions, confirmed with the user before starting**:
+- **Vercel plan is Hobby.** The existing `credential-automation` cron already occupies one slot, and Hobby
+  caps both cron count and cadence (daily only). Rather than register two more cron entries and risk the
+  plan limit, `/api/cron/vendor-billing` is the single new Vercel-scheduled entry (daily) and runs
+  invoice generation *and* a reconciliation sweep in one bounded invocation.
+  `/api/cron/vendor-billing-reconcile` still exists as its own independently-authenticated route — not
+  in `vercel.json` — for on-demand recovery via the CLI or the admin action, sharing the exact same
+  service function so there is only one reconciliation implementation either way.
+- **Operational reporting lives in a card on `/settings`**, not a new page or folded into the invoices
+  list, per the user's explicit choice.
+
+**Files added/changed**
+- `prisma/migrations/20260913120000_add_billing_run_lease_guard/migration.sql` — one partial unique
+  index: `billing_run("jobType") WHERE status = 'RUNNING'`. This is the actual concurrency guard for
+  overlapping job invocations (cron vs. cron, cron vs. CLI, cron vs. admin action) — application code
+  only decides whether an existing RUNNING row is stale enough to take over; two truly simultaneous
+  attempts to start the same job always race this index, not a check-then-act condition in JS. Applied
+  via `npx prisma migrate deploy` against the real dev database, as with every migration this pass.
+- `src/lib/billing/jobLease.ts` — `acquireJobLease()` (create, or on a real `P2002` decide whether the
+  existing row's `leaseExpiresAt` is stale enough to take over via an optimistic-concurrency `updateMany`
+  — preserving its `cursor` so a large backlog resumes rather than restarts), `completeJobLease()`,
+  `failJobLease()`.
+- `src/lib/billing/reconciliation.ts` — `runVendorBillingReconciliation()`: re-verifies
+  `READY`/`PENDING`/`UNKNOWN` payment attempts older than 2 minutes (never re-checks one the owner might
+  still be actively completing) through the same `confirmInvoicePayment` boundary as everything else,
+  and separately retries durably-failed `BillingGatewayEvent` rows whose `nextAttemptAt` has elapsed.
+  Bounded to 25 items per category per invocation (Vercel Hobby's ~10s function limit). One item's
+  unexpected error never stops the sweep. Reports `configured: false` (doing nothing) rather than
+  erroring when Paystack isn't configured at all.
+- `src/lib/billing/invoices.ts` — **`VERIFICATION_INVOICING_ENABLED` is now actually wired**, to
+  `runVendorInvoiceGeneration()` only (returns immediately with `skippedDisabled: true` and touches no
+  data). Per the handoff, this stops *new* issuance only — `previewVendorInvoiceGeneration` (read-only)
+  is deliberately never gated, so dry-run previews, invoice reading, webhook receipt, and reconciliation
+  of already-issued invoices all keep working regardless of this flag. **This is a real behavior change
+  from Phases 2–3**, where the flag was parsed but silently unused everywhere — confirmed by grep before
+  wiring it. `scripts/billing-invoices.ts` and the admin "Generate missing invoices" action both now
+  surface a specific, visible message when a run is skipped for this reason rather than looking like a
+  silent no-op.
+- `src/app/api/cron/vendor-billing/route.ts`, `src/app/api/cron/vendor-billing-reconcile/route.ts` —
+  `CRON_SECRET`-guarded (identical constant-time-comparison pattern as the existing
+  `credential-automation` route). Both acquire their job's lease first and return `202` without doing
+  any work if another instance already holds it; both mark the lease `FAILED` (not `COMPLETED`) and
+  return `500` on an unexpected error, rather than losing the failure.
+- `scripts/billing-reconcile.ts` → `npm run billing:reconcile` — same lease-guarded sweep, callable
+  manually; skips cleanly (not an error) if a cron/other CLI invocation already holds the lease.
+- `src/lib/billing/operationsSummary.ts` — `getBillingOperationsSummary()`: last run status/time per
+  job type, unclaimed (uninvoiced) charge count, pending-attempt count and the oldest one's age, webhook
+  processing failure count, unresolved `PAYMENT_EXCESS`/`PAYMENT_SPLIT_MISMATCH` exception counts, and
+  total collected — with `settlementNote` hardcoded to `"Not applicable — test mode"`, per the handoff's
+  explicit instruction never to imply a verified bank settlement from test-mode data.
+- `src/app/(admin)/settings/actions.ts` — added `getBillingOperationsSummaryAction()` (`invoice:read`)
+  and `runBillingReconciliationNowAction()` (`invoice:reconcile`; acquires the same lease the cron/CLI
+  use, so an admin click can never race a scheduled run into double-processing; writes an
+  `INVOICE_PAYMENT_RECONCILED` audit log).
+- `src/app/(admin)/settings/BillingOperationsCard.tsx` + `page.tsx` — the new card (visible to
+  `SUPER_ADMIN`/`ADMIN`, matching who already has `invoice:read`), with "Refresh" and "Run reconciliation
+  now" buttons following the existing `AgentServiceHealthCard`'s `useTransition` pattern.
+- `vercel.json` — added the one new cron entry (`/api/cron/vendor-billing`, `15 22 * * *`, right after
+  the existing `credential-automation` job) — bringing the project to 2 total cron jobs, still within
+  Hobby's daily-only cadence.
+- `docs/payment-wallet-implementation-handoff.md`, `docs/vendor-verification-billing.md` — added
+  cross-links to this implementation and marked Paystack (not Payfast) as the wallet's now-intended
+  future provider direction, without rewriting any existing wallet-foundation milestone claim.
+
+**Evidence**
+- `npm run typecheck` — pass. `npm run lint` — 0 errors, same pre-existing warnings.
+- `npm test` — **106 files / 715 tests**, all pass (40 new: `jobLease.test.ts` (8 — real-shaped
+  create/takeover/race/stale-row scenarios, mocked), `reconciliation.test.ts` (6),
+  `vendorBillingCronRoutes.test.ts` (9 — secret rejection, lease-held skip, success, failure-marks-lease),
+  `operationsSummary.test.ts` (5), `settingsBillingOperationsActions.test.ts` (6),
+  `BillingOperationsCard.test.tsx` (4), plus a `VERIFICATION_INVOICING_ENABLED`-disabled case added to
+  `invoices.test.ts` and a `skippedDisabled` case added to `adminInvoiceActions.test.ts`).
+- `npm run test:billing:db` — **32/32 real PostgreSQL tests pass** (29 from Phases 1–5 + 3 new): a real
+  concurrent-acquire race for the same `jobType` resolving to exactly one `RUNNING` row (the partial
+  unique index enforcing it, not application logic), a second acquire correctly refused while the first
+  lease is live and then allowed once completed, and a real stale-lease takeover preserving the prior
+  run's `cursor`.
+- **Real evidence against the actual dev database** (safe: read-only, or a bounded operation confirmed
+  to touch nothing when there is nothing to do):
+  - Confirmed via direct query that the one existing invoice (`DEMO-2026-000013`, vendor Amazon) now has
+    a `SUCCEEDED` payment attempt and `paymentStatus: PAID` — **the user's real Paystack test-mode
+    checkout from Phase 5 completed successfully end-to-end**, including the browser-triggered reconcile
+    path.
+  - Ran `npm run billing:reconcile` for real: since that one attempt is already terminal (`SUCCEEDED`,
+    not `READY`/`PENDING`/`UNKNOWN`), the sweep correctly found zero attempts and zero gateway events to
+    process — confirmed zero live Paystack calls were made, and the `BillingRun` lease row was
+    created/completed correctly in the real table.
+  - Ran `npm run billing:invoices -- --apply` for real with `VERIFICATION_INVOICING_ENABLED` still
+    `false`: printed the new "Skipped: VERIFICATION_INVOICING_ENABLED is not true" message and wrote
+    nothing, confirming the newly-wired flag behaves as intended against real data.
+  - Ran the dry-run preview (`npm run billing:invoices`) for real: still reports correctly regardless of
+    the flag, confirming reads are genuinely unaffected as required.
+- **Deliberately not run/observed**: the actual Vercel cron trigger firing `/api/cron/vendor-billing` on
+  its schedule — that only happens on a real deployment, which this session has none of. The route's own
+  logic is fully unit-tested (secret rejection, lease-skip, success, failure-handling); only the
+  platform's act of calling it on schedule is unverified.
+- **Not done, by explicit scope/time tradeoff — recorded here rather than silently skipped**:
+  - No UI to resolve/dismiss a `BillingException` row — still read-only display (from Phase 5), now also
+    summarized as counts on the operations card.
+  - `runVerificationBillingBackfill` (historical import) is **not** gated on
+    `VERIFICATION_INVOICING_ENABLED` — scoped deliberately to *new recurring issuance* only, since
+    backfill is a one-time administrative operation, not the recurring "new issuance" the flag's own
+    wording targets. Recorded here as a scoping decision, not an oversight.
+  - No large-backlog-resumed-in-batches test against real data (the dev DB currently has only the one
+    invoice/verification set up) — the `cursor`-preservation mechanism is proven at the lease level
+    (real DB test above) and `MAX_INVOICES_PER_VENDOR_PER_RUN`/`RECONCILE_BATCH_SIZE` bound each
+    invocation, but a true multi-day large-backlog drain has not been observed end-to-end.
+  - Gate 6's "simulate a worker dying after receipt persistence" is covered at the payment-confirmation
+    level already (Phase 4's real-Postgres tests), not re-simulated at the job-lease level specifically.
 
 ## Phase 7 — Demo deployment and acceptance walkthrough — ⬜ not started (out of scope for this implementation pass; reported separately per deployment authorization)

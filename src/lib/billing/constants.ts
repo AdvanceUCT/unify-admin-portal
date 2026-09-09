@@ -28,3 +28,8 @@ export const PAYMENT_ATTEMPT_REUSE_WINDOW_SECONDS = 55 * 60;
 export const PAYMENT_ATTEMPT_STALE_PREPARING_SECONDS = 120;
 
 export const PAYSTACK_PROVIDER_NAME = "paystack" as const;
+
+/** `BillingRun.jobType` values — also the lease key, so each names one exclusive job. */
+export const BILLING_JOB_TYPE_DAILY = "VENDOR_BILLING_DAILY" as const;
+export const BILLING_JOB_TYPE_RECONCILE = "VENDOR_BILLING_RECONCILE" as const;
+export const BILLING_JOB_TYPE_BACKFILL = "VERIFICATION_CHARGE_BACKFILL" as const;

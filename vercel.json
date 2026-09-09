@@ -3,6 +3,7 @@
   "installCommand": "npm ci",
   "buildCommand": "npm run build",
   "crons": [
-    { "path": "/api/cron/credential-automation", "schedule": "5 22 * * *" }
+    { "path": "/api/cron/credential-automation", "schedule": "5 22 * * *" },
+    { "path": "/api/cron/vendor-billing", "schedule": "15 22 * * *" }
   ]
 }
