@@ -20,6 +20,7 @@ config({ path: ".env" });
 // see the dynamic import in `beforeAll` below.
 type PolicyModule = typeof import("@/lib/billing/policy");
 type ChargesModule = typeof import("@/lib/billing/charges");
+type InvoicesModule = typeof import("@/lib/billing/invoices");
 
 import { PrismaClient } from "@/generated/prisma/client";
 import { resolveBillingTestDirectUrl } from "@/lib/billing/testDatabaseGuard";
@@ -36,6 +37,7 @@ let scopedPrisma: PrismaClient;
 let universityId: string;
 let policy: PolicyModule;
 let charges: ChargesModule;
+let invoices: InvoicesModule;
 
 function quotedTestSchema() {
   if (!/^unify_billing_it_[a-f0-9]{32}$/.test(schemaName)) {
@@ -94,6 +96,8 @@ async function insertCharge(
     platformShareMinor: number;
     universityShareMinor: number;
     currency?: string;
+    servicePeriodKey?: string;
+    branchNameSnapshot?: string;
   },
 ) {
   const id = `charge-${randomUUID()}`;
@@ -102,7 +106,7 @@ async function insertCharge(
       "id", "verificationId", "vendorProfileId", "branchId", "branchNameSnapshot",
       "servicePeriodKey", "serviceCompletedAt", "feeMinor", "currency",
       "platformShareMinor", "universityShareMinor", "policyId", "source"
-    ) VALUES ($1, $2, $3, $4, 'Test Branch', '2026-09', now(), $5, $6, $7, $8, $9, 'LIVE')`,
+    ) VALUES ($1, $2, $3, $4, $10, $11, now(), $5, $6, $7, $8, $9, 'LIVE')`,
     [
       id,
       params.verificationId,
@@ -113,6 +117,8 @@ async function insertCharge(
       params.platformShareMinor,
       params.universityShareMinor,
       params.policyId,
+      params.branchNameSnapshot ?? "Test Branch",
+      params.servicePeriodKey ?? "2026-09",
     ],
   );
   return id;
@@ -122,6 +128,7 @@ beforeAll(async () => {
   const directUrl = resolveBillingTestDirectUrl();
   policy = await import("@/lib/billing/policy");
   charges = await import("@/lib/billing/charges");
+  invoices = await import("@/lib/billing/invoices");
 
   pool = new Pool({ connectionString: directUrl, max: 8 });
   const client = await pool.connect();
@@ -129,8 +136,17 @@ beforeAll(async () => {
     await client.query(`CREATE SCHEMA ${quotedTestSchema()}`);
     await client.query(`SET search_path TO ${quotedTestSchema()}`);
     await client.query(`
-      CREATE TABLE "university_profile" ("id" TEXT PRIMARY KEY);
-      CREATE TABLE "vendor_profile" ("id" TEXT PRIMARY KEY);
+      CREATE TABLE "university_profile" (
+        "id" TEXT PRIMARY KEY,
+        "name" TEXT NOT NULL DEFAULT 'Test University',
+        "abbreviation" TEXT NOT NULL DEFAULT 'TU',
+        "contactEmail" TEXT NOT NULL DEFAULT 'admin@example.test'
+      );
+      CREATE TABLE "vendor_profile" (
+        "id" TEXT PRIMARY KEY,
+        "companyName" TEXT NOT NULL DEFAULT 'Test Vendor',
+        "contactEmail" TEXT NOT NULL DEFAULT 'vendor@example.test'
+      );
       CREATE TABLE "vendor_branch" (
         "id" TEXT PRIMARY KEY,
         "vendorProfileId" TEXT NOT NULL REFERENCES "vendor_profile"("id")
@@ -698,5 +714,256 @@ describe("verification charge finalizer", () => {
     // The verification_charge.vendorProfileId FK violation is caught, logged,
     // and turned into a durable exception rather than propagating.
     expect(result).toBeNull();
+  });
+});
+
+describe("vendor invoice generation", () => {
+  async function billablePolicy() {
+    return scopedPrisma.verificationBillingPolicy.findFirstOrThrow({
+      where: { universityId, effectiveTo: null },
+    });
+  }
+
+  it("issues an invoice for a closed period with the correct totals and items", async () => {
+    const client = await getClient();
+    try {
+      const { vendorProfileId, branchId } = await createVendorAndBranch(client);
+      const policyRow = await billablePolicy();
+      const verificationA = await createVerification(client, vendorProfileId);
+      const verificationB = await createVerification(client, vendorProfileId);
+      await insertCharge(client, {
+        verificationId: verificationA,
+        vendorProfileId,
+        branchId,
+        policyId: policyRow.id,
+        feeMinor: 250,
+        platformShareMinor: 25,
+        universityShareMinor: 225,
+        servicePeriodKey: "2024-01",
+      });
+      await insertCharge(client, {
+        verificationId: verificationB,
+        vendorProfileId,
+        branchId,
+        policyId: policyRow.id,
+        feeMinor: 100,
+        platformShareMinor: 10,
+        universityShareMinor: 90,
+        servicePeriodKey: "2024-01",
+      });
+
+      const invoice = await invoices.issueInvoiceForVendorPeriod(scopedPrisma, {
+        vendorProfileId,
+        periodKey: "2024-01",
+      });
+
+      expect(invoice).toMatchObject({
+        periodKey: "2024-01",
+        documentStatus: "ISSUED",
+        paymentStatus: "UNPAID",
+        totalMinor: BigInt(350),
+        platformShareMinor: BigInt(35),
+        universityShareMinor: BigInt(315),
+      });
+      expect(invoice!.invoiceNumber).toMatch(/^DEMO-\d{4}-\d{6}$/);
+
+      const items = await scopedPrisma.vendorInvoiceItem.findMany({ where: { invoiceId: invoice!.id } });
+      expect(items).toHaveLength(2);
+    } finally {
+      client.release();
+    }
+  });
+
+  it("does not generate an invoice for a period that has not closed yet", async () => {
+    const client = await getClient();
+    try {
+      const { vendorProfileId, branchId } = await createVendorAndBranch(client);
+      const policyRow = await billablePolicy();
+      const verificationId = await createVerification(client, vendorProfileId);
+      await insertCharge(client, {
+        verificationId,
+        vendorProfileId,
+        branchId,
+        policyId: policyRow.id,
+        feeMinor: 250,
+        platformShareMinor: 25,
+        universityShareMinor: 225,
+        servicePeriodKey: "2099-01",
+      });
+
+      const target = await invoices.resolveNextInvoicePeriodForVendor(scopedPrisma, vendorProfileId, "ZAR", new Date());
+      expect(target).toBeNull();
+
+      const summary = await invoices.runVendorInvoiceGeneration(scopedPrisma, { now: new Date() });
+      const invoiceCount = await scopedPrisma.vendorInvoice.count({ where: { vendorProfileId } });
+      expect(invoiceCount).toBe(0);
+      expect(summary.invoicesIssued).toBeGreaterThanOrEqual(0); // other vendors from earlier tests may also be due
+    } finally {
+      client.release();
+    }
+  });
+
+  it("creates a zero-total invoice labelled NO_PAYMENT_REQUIRED for an explicit zero fee", async () => {
+    const client = await getClient();
+    try {
+      const { vendorProfileId, branchId } = await createVendorAndBranch(client);
+      const policyRow = await billablePolicy();
+      const verificationId = await createVerification(client, vendorProfileId);
+      await insertCharge(client, {
+        verificationId,
+        vendorProfileId,
+        branchId,
+        policyId: policyRow.id,
+        feeMinor: 0,
+        platformShareMinor: 0,
+        universityShareMinor: 0,
+        servicePeriodKey: "2024-02",
+      });
+
+      const invoice = await invoices.issueInvoiceForVendorPeriod(scopedPrisma, {
+        vendorProfileId,
+        periodKey: "2024-02",
+      });
+
+      expect(invoice).toMatchObject({ totalMinor: BigInt(0), paymentStatus: "NO_PAYMENT_REQUIRED" });
+    } finally {
+      client.release();
+    }
+  });
+
+  it("sweeps a late-arriving charge from an already-invoiced period into the next invoice, retaining its original period", async () => {
+    const client = await getClient();
+    try {
+      const { vendorProfileId, branchId } = await createVendorAndBranch(client);
+      const policyRow = await billablePolicy();
+
+      const firstVerification = await createVerification(client, vendorProfileId);
+      await insertCharge(client, {
+        verificationId: firstVerification,
+        vendorProfileId,
+        branchId,
+        policyId: policyRow.id,
+        feeMinor: 100,
+        platformShareMinor: 10,
+        universityShareMinor: 90,
+        servicePeriodKey: "2024-03",
+      });
+      const firstInvoice = await invoices.issueInvoiceForVendorPeriod(scopedPrisma, {
+        vendorProfileId,
+        periodKey: "2024-03",
+      });
+      expect(firstInvoice).not.toBeNull();
+
+      // A late webhook for a March verification arrives after that invoice
+      // already issued.
+      const lateVerification = await createVerification(client, vendorProfileId);
+      await insertCharge(client, {
+        verificationId: lateVerification,
+        vendorProfileId,
+        branchId,
+        policyId: policyRow.id,
+        feeMinor: 50,
+        platformShareMinor: 5,
+        universityShareMinor: 45,
+        servicePeriodKey: "2024-03",
+      });
+
+      const nextTarget = await invoices.resolveNextInvoicePeriodForVendor(scopedPrisma, vendorProfileId, "ZAR", new Date());
+      expect(nextTarget).toBe("2024-04");
+
+      const secondInvoice = await invoices.issueInvoiceForVendorPeriod(scopedPrisma, {
+        vendorProfileId,
+        periodKey: "2024-04",
+      });
+
+      expect(secondInvoice).toMatchObject({ periodKey: "2024-04", totalMinor: BigInt(50) });
+      const secondInvoiceItems = await scopedPrisma.vendorInvoiceItem.findMany({
+        where: { invoiceId: secondInvoice!.id },
+      });
+      // The item's own service period still reads "2024-03" even though the
+      // invoice it landed on is periodKey "2024-04".
+      expect(secondInvoiceItems).toEqual([expect.objectContaining({ servicePeriodKey: "2024-03" })]);
+
+      const vendorInvoiceCount = await scopedPrisma.vendorInvoice.count({ where: { vendorProfileId } });
+      expect(vendorInvoiceCount).toBe(2); // never a duplicate "2024-03" invoice
+    } finally {
+      client.release();
+    }
+  });
+
+  it("resolves a real concurrent generation race for the same vendor/period to exactly one invoice", async () => {
+    const client = await getClient();
+    try {
+      const { vendorProfileId, branchId } = await createVendorAndBranch(client);
+      const policyRow = await billablePolicy();
+      const verificationId = await createVerification(client, vendorProfileId);
+      await insertCharge(client, {
+        verificationId,
+        vendorProfileId,
+        branchId,
+        policyId: policyRow.id,
+        feeMinor: 250,
+        platformShareMinor: 25,
+        universityShareMinor: 225,
+        servicePeriodKey: "2024-05",
+      });
+
+      const [a, b] = await Promise.all([
+        invoices.issueInvoiceForVendorPeriod(scopedPrisma, { vendorProfileId, periodKey: "2024-05" }),
+        invoices.issueInvoiceForVendorPeriod(scopedPrisma, { vendorProfileId, periodKey: "2024-05" }),
+      ]);
+
+      const succeeded = [a, b].filter((result) => result !== null);
+      expect(succeeded).toHaveLength(1);
+
+      const invoiceCount = await scopedPrisma.vendorInvoice.count({
+        where: { vendorProfileId, periodKey: "2024-05" },
+      });
+      expect(invoiceCount).toBe(1);
+      const itemCount = await scopedPrisma.vendorInvoiceItem.count({
+        where: { invoice: { vendorProfileId, periodKey: "2024-05" } },
+      });
+      expect(itemCount).toBe(1);
+    } finally {
+      client.release();
+    }
+  });
+
+  it("the --as-of style simulated clock treats a period as closed only once the closing delay has elapsed", async () => {
+    const client = await getClient();
+    try {
+      const { vendorProfileId, branchId } = await createVendorAndBranch(client);
+      const policyRow = await billablePolicy();
+      const verificationId = await createVerification(client, vendorProfileId);
+      await insertCharge(client, {
+        verificationId,
+        vendorProfileId,
+        branchId,
+        policyId: policyRow.id,
+        feeMinor: 250,
+        platformShareMinor: 25,
+        universityShareMinor: 225,
+        servicePeriodKey: "2026-12",
+      });
+
+      const periodEnd = new Date("2026-12-31T22:00:00.000Z");
+      const justBeforeClosing = await invoices.resolveNextInvoicePeriodForVendor(
+        scopedPrisma,
+        vendorProfileId,
+        "ZAR",
+        new Date(periodEnd.getTime() + 1000),
+      );
+      expect(justBeforeClosing).toBeNull(); // period ended but the 1-hour closing delay has not elapsed
+
+      const afterClosing = await invoices.resolveNextInvoicePeriodForVendor(
+        scopedPrisma,
+        vendorProfileId,
+        "ZAR",
+        new Date(periodEnd.getTime() + 3600_000 + 1000),
+      );
+      expect(afterClosing).toBe("2026-12");
+    } finally {
+      client.release();
+    }
   });
 });

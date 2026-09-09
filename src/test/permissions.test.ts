@@ -107,6 +107,15 @@ describe("permissions", () => {
     expect(() => assertCan("session:revoke", session("ADMIN"))).toThrow(PermissionError);
   });
 
+  it("allows SUPER_ADMIN and ADMIN to read, issue, and reconcile invoices, but not ISSUER/VIEWER", () => {
+    for (const action of ["invoice:read", "invoice:issue", "invoice:reconcile"] as const) {
+      expect(assertCan(action, session("SUPER_ADMIN"))).toEqual(session("SUPER_ADMIN"));
+      expect(assertCan(action, session("ADMIN"))).toEqual(session("ADMIN"));
+      expect(() => assertCan(action, session("ISSUER"))).toThrow(PermissionError);
+      expect(() => assertCan(action, session("VIEWER"))).toThrow(PermissionError);
+    }
+  });
+
   it("restricts billing policy management to SUPER_ADMIN only", () => {
     expect(assertCan("billing-policy:manage", session("SUPER_ADMIN"))).toEqual(session("SUPER_ADMIN"));
     expect(() => assertCan("billing-policy:manage", session("ADMIN"))).toThrow(PermissionError);

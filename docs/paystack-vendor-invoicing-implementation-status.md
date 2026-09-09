@@ -270,7 +270,130 @@ implemented — any such row would currently fall through as a generic
 This is the agreed tradeoff, not an oversight; it should be revisited before any deployment that has
 real historical data with those characteristics.
 
-## Phase 3 — Invoice issuance, owner views, admin reporting — ⬜ not started
+## Phase 3 — Invoice issuance, owner views, admin reporting — 🟡 core complete and tested; some Gate 3 items not covered
+
+**Files added/changed**
+- `prisma/migrations/20260910120000_add_vendor_invoice_number_sequence/migration.sql` — a plain
+  Postgres `SEQUENCE` (`vendor_invoice_number_seq`); Prisma has no native sequence concept, so this
+  has no corresponding schema.prisma model change. Invoice numbers are always
+  `nextval('vendor_invoice_number_seq')`-derived, never `MAX(...) + 1`.
+- `src/lib/billing/constants.ts` — `VENDOR_INVOICE_NUMBER_PREFIX` ("DEMO"), `INVOICE_CLOSING_DELAY_SECONDS`
+  (3600, the POC default), `MAX_INVOICES_PER_VENDOR_PER_RUN` (24, a backlog safety bound).
+- `src/lib/vendors/verificationBilling.ts` — added `billingPeriodEndUtc()` (the exact UTC instant a
+  Johannesburg-local period ends — matches the handoff's worked example: "2026-09" ends
+  `2026-09-30T22:00:00Z`) and `nextBillingPeriodKey()`. Removed `import "server-only"` here too (see
+  below).
+- `src/lib/billing/invoices.ts` — the issuance service:
+  - `resolveNextInvoicePeriodForVendor()`: picks the *later* of "the period right after the vendor's
+    last invoice" and "the vendor's earliest still-unclaimed charge". This is the key design decision
+    that makes the rest correct: it skips cleanly over a genuinely empty gap (never creates an empty
+    invoice) while still sweeping a late-arriving charge from an *already-invoiced* period into
+    whichever period comes next — without ever re-targeting a period that already has an invoice.
+  - `issueInvoiceForVendorPeriod()`: one short serializable transaction — claims every unclaimed
+    eligible charge with `servicePeriodKey <= periodKey`, snapshots issuer/customer contents, assigns
+    the sequenced number, creates items, then flips `DRAFT → ISSUED` (matching Phase 1's
+    deferred-constraint-trigger design exactly). Returns `null` (writing nothing) if there is truly no
+    eligible charge. A `P2002` from the `(vendorProfileId, periodKey, currency)` unique constraint
+    (concurrent generation racing for the same target) resolves to `null`, not an error.
+  - `previewVendorInvoiceGeneration()`: read-only; simulates the same per-vendor loop locally (a local
+    cursor + "simulated last invoice period") so a dry-run can report a full multi-month backlog
+    without writing anything — re-querying between iterations would see stale unclaimed charges
+    forever and never advance.
+  - `runVendorInvoiceGeneration()`: the `--apply` loop, shared by the CLI and (once built) an admin
+    "Generate missing invoices" action.
+- `src/lib/billing/vendorAuthorization.ts` — `getVendorInvoiceOwnerContext()` /
+  `requireVendorInvoiceOwnerContext()`: deliberately separate from
+  `getApprovedVendorContextForUser()` (`src/lib/vendors/context.ts`), which also requires a
+  currently-`APPROVED` verification application. Invoice ownership is resolved from an active `OWNER`
+  `VendorMembership` alone, so it survives a later verification-approval change — exactly the
+  distinction the handoff calls out by name.
+- `src/lib/billing/invoiceDocument.ts` — `buildInvoiceDocumentData()`: the single, immutable data
+  shape consumed by both the HTML detail view and the PDF, built once from an already-issued invoice
+  and never recomputed from live pricing/profile data.
+- `src/lib/billing/invoicePdf.ts` — `renderInvoicePdf()` using **pdfkit** (chosen over pdf-lib and a
+  headless-browser HTML-to-PDF approach — see discussion). pdfkit draws glyphs directly via `.text()`
+  calls, so there is no markup-injection surface the way an HTML-to-PDF approach would have, and no
+  remote resources are ever fetched. Multi-page tables paginate via an explicit room check
+  (`ensureRoom`) that re-draws the header on a new page; page numbers are added last via
+  `bufferPages`/`switchToPage` once the true page count is known.
+  - **Rendered and inspected**: a 60-line-item sample (long branch names, a name containing `&`/`"`
+    characters) produced a real 4-page PDF (`/Count 4` in the raw PDF structure), sent to the user for
+    visual inspection.
+- `src/lib/billing/invoiceQueries.ts` — read-only, tenant-scoped queries: `listVendorInvoices` (owner
+  list; excludes `DRAFT`), `getVendorInvoiceDocument` (owner-scoped detail — a wrong vendor ID and a
+  missing ID return the identical `null`, never leaking existence), `listAdminInvoiceReceivables`
+  (admin, all vendors).
+- `scripts/billing-invoices.ts`, `npm run billing:invoices` (dry-run) / `-- --apply` — also supports a
+  demo/test-only `--as-of <ISO8601>` flag (per the user's explicit choice on how to prove generation
+  works without real closed-month data) that simulates a later "now" for period-closing eligibility
+  and for the invoice's own `issuedAt` — it never fabricates or backdates a *verification* record, it
+  only changes the generation job's perspective on the current time. The script logs a loud
+  DEMO/TEST-ONLY warning whenever it's used and the doc for it says never to use it against a real
+  deployment's live invoices.
+- Owner UI: `/vendor/invoices` (list) and `/vendor/invoices/[invoiceId]` (detail, with PDF download
+  link), both behind `requireVendorInvoiceOwnerContext()`. Added an "Invoices" nav item to
+  `src/app/vendor/(portal)/layout.tsx` computed **independently** of the existing
+  approved-vendor-context role branches — so an owner who still has active billing access but has
+  lost current verification approval still sees the link (matches the ownership-independence design
+  above). New `Receipt` nav icon in `src/components/layout/navIcons.ts`.
+- Owner API: `GET /api/vendor/invoices`, `GET /api/vendor/invoices/[invoiceId]`,
+  `GET /api/vendor/invoices/[invoiceId]/download` — all manually check `getCurrentVendorSession()` +
+  `getVendorInvoiceOwnerContext()` and return JSON `401`/`403` (never an HTML redirect), matching the
+  existing `/api/vendor/verifications/*` route convention exactly. The download route sends
+  `Cache-Control: private, no-store, max-age=0` and `Content-Disposition: attachment`.
+- Admin UI: `/vendors/invoices` (all-vendor receivables list; `requireRole(["SUPER_ADMIN","ADMIN"])` +
+  `assertCan("invoice:read", ...)`), linked from a new "Invoices" tab on the main `/vendors` page.
+  `/settings/verification-billing` (current policy, a plain server-action form to create a new policy
+  version, and full policy history) — `requireRole(["SUPER_ADMIN"])` + `assertCan("billing-policy:manage", ...)`
+  on the mutating action — linked from a new card on the main `/settings` page, shown only to
+  `SUPER_ADMIN`.
+- `src/lib/auth/permissions.ts` — added `invoice:read`, `invoice:issue`, `invoice:reconcile`
+  (`SUPER_ADMIN`/`ADMIN`, per the handoff). `invoice:issue` is defined but not yet wired to a route —
+  no admin "Generate missing invoices" button exists yet (see gap list below).
+- **Correction found while wiring the CLI script**: `invoices.ts` transitively imports
+  `verificationBilling.ts`, which still had `import "server-only"` — the exact same
+  `MODULE_NOT_FOUND` failure mode as Phase 2's fix. Removed it there too, since that file has no
+  database access of its own to guard and several CLI-callable modules now depend on it.
+
+**Evidence**
+- `npm run typecheck` — pass. `npm run lint` — 0 errors, same 6 pre-existing warnings.
+- `npm test` — 85 files / 554 tests, all pass (new: `invoices.test.ts` (13),
+  `vendorAuthorization.test.ts` (5), `vendorInvoiceRoutes.test.ts` (11), plus permission-matrix
+  additions).
+- `npm run test:billing:db` — **23/23 real PostgreSQL tests pass** (17 from Phases 1–2 + 6 new
+  invoice-generation tests: correct totals/items for a closed period, refusing an unclosed period,
+  a zero-total `NO_PAYMENT_REQUIRED` invoice, a late-arriving charge from an already-invoiced period
+  correctly swept into the next invoice while keeping its own original-period label, a real
+  concurrent-generation race resolving to exactly one invoice, and the exact closing-delay boundary).
+  Disposable schema confirmed dropped afterward; real dev database confirmed unchanged (0
+  `vendor_invoice` rows — no policy has actually been bootstrapped there yet).
+- **Real dry-run** (`npm run billing:invoices`) against the actual dev database: "No invoices are
+  currently due" — correct, since there is no bootstrapped policy or any charge yet.
+- **Deliberately not run**: `npm run billing:invoices -- --apply`, `npm run billing:bootstrap`,
+  `npm run billing:backfill -- --apply` against the real dev database — all real write operations,
+  left for the user to run when ready, consistent with Phase 1/2's same discipline.
+- **Not done, by explicit scope/time tradeoff — recorded here rather than silently skipped**:
+  - No live browser walkthrough of the new pages — per the user's standing instruction to stop at
+    typecheck/tests passing and test manually themselves. **The UI has not been visually verified in
+    a browser and should be checked manually before treating it as done.**
+  - No admin "Generate missing invoices" action wired to `invoice:issue` yet — the service
+    (`runVendorInvoiceGeneration`) exists and is tested, but there's no button; only the CLI can
+    trigger issuance today.
+  - No dedicated per-invoice admin detail page — the admin view is a flat receivables list only, not
+    the list+detail pair the handoff describes.
+  - Gate 3 explicitly also asks for UI/component tests of the checkout/payment-popup flow and a real
+    Paystack test-mode payment creating one paid invoice — those depend on Phase 4/5 (Paystack
+    adapter, checkout UI) and are correctly out of scope until then; "Pay controls remain unavailable
+    until the provider confirmation phase passes" already holds today since no pay action exists
+    anywhere yet.
+  - Route/security tests cover the three new vendor invoice API routes directly (401/403/404,
+    cross-vendor scoping) but there is no rendered-page test (e.g. `render()`-based) for the four new
+    Server Component pages themselves, unlike the precedent in
+    `admin-vendor-verification-history-page.test.tsx`. The lower-level functions each page calls are
+    fully unit-tested; the pages' own JSX/auth-gating wiring is not independently tested.
+
+Given the above, Phase 3 is usable end-to-end for issuance and owner/admin reads, but is not a full
+Gate 3 pass — the gaps are recorded rather than the phase being marked complete.
 
 ## Phase 4 — Paystack adapter and authoritative confirmation — ⬜ not started
 

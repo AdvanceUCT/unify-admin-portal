@@ -3,7 +3,8 @@
  * @module app/(admin)/settings/page
  */
 
-import { Activity, Building, Clock, FileText, Link as LinkIcon, Webhook } from "lucide-react";
+import { Activity, Building, Clock, FileText, Link as LinkIcon, Receipt, Webhook } from "lucide-react";
+import Link from "next/link";
 
 import { checkAgentHealth } from "@/lib/agentClient";
 import { ADMIN_ROLES, ROLE_LABELS, type AdminRole } from "@/lib/auth/permissions";
@@ -169,6 +170,18 @@ export default async function SettingsPage() {
           />
         </div>
       </SettingsCard>
+
+      {role === "SUPER_ADMIN" && (
+        <SettingsCard
+          description="Set the demo verification fee and platform revenue share. Separate from the student payment wallet."
+          icon={Receipt}
+          title="Vendor verification billing"
+        >
+          <Link className="text-sm font-medium text-brand-700 hover:underline" href="/settings/verification-billing">
+            Manage verification billing policy →
+          </Link>
+        </SettingsCard>
+      )}
     </div>
   );
 }

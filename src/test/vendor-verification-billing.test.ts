@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import { VendorVerificationBillingStatus } from "@/generated/prisma/enums";
 import {
+  billingPeriodEndUtc,
   billingPeriodKeyFromDate,
   billingPeriodLabel,
   getActiveVerificationPricing,
+  nextBillingPeriodKey,
   resolveVerificationBillingSnapshot,
 } from "@/lib/vendors/verificationBilling";
 
@@ -24,6 +26,16 @@ describe("vendor verification billing", () => {
   it("builds billing period keys using the Johannesburg reporting month", () => {
     expect(billingPeriodKeyFromDate(new Date("2026-01-31T22:30:00.000Z"))).toBe("2026-02");
     expect(billingPeriodLabel("2026-02")).toBe("February 2026");
+  });
+
+  it("computes the exact UTC instant a billing period ends, matching the handoff's worked example", () => {
+    expect(billingPeriodEndUtc("2026-09")).toEqual(new Date("2026-09-30T22:00:00.000Z"));
+    expect(billingPeriodEndUtc("2026-12")).toEqual(new Date("2026-12-31T22:00:00.000Z"));
+  });
+
+  it("computes the next billing period key, rolling over the year at December", () => {
+    expect(nextBillingPeriodKey("2026-09")).toBe("2026-10");
+    expect(nextBillingPeriodKey("2026-12")).toBe("2027-01");
   });
 
   it("marks approved verified events as billable", () => {

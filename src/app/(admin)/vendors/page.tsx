@@ -70,6 +70,7 @@ export default async function VendorsPage({
             label: "Applications",
           },
           { href: "/vendors?tab=log", isActive: activeTab === "log", label: "Decision Log" },
+          { href: "/vendors/invoices", isActive: false, label: "Invoices" },
         ]}
       />
 

@@ -1,9 +1,11 @@
 /**
  * @fileoverview Resolves platform-controlled verification billing snapshots.
+ * Deliberately not "server-only": `src/lib/billing/invoices.ts` (used by
+ * CLI scripts) depends on this module's period-key helpers, and this file
+ * has no database access of its own to guard — matching
+ * `src/lib/payments/foundation.ts`'s precedent for CLI-callable modules.
  * @module lib/vendors/verificationBilling
  */
-
-import "server-only";
 
 import {
   VendorVerificationBillingStatus,
@@ -35,6 +37,28 @@ export function billingPeriodKeyFromDate(date: Date) {
   const month = String(reportingDate.getUTCMonth() + 1).padStart(2, "0");
 
   return `${year}-${month}`;
+}
+
+/**
+ * The UTC instant marking the end (exclusive) of a Johannesburg-local
+ * billing period — i.e. the start of the next period, expressed in UTC.
+ * E.g. "2026-09" ends at 2026-09-30T22:00:00Z (2026-10-01T00:00:00 SAST).
+ */
+export function billingPeriodEndUtc(periodKey: string) {
+  const [year, month] = periodKey.split("-").map(Number);
+  // `month` is already 1-indexed ("09" -> 9), and Date.UTC's monthIndex
+  // parameter is 0-indexed, so passing it directly yields the *next*
+  // month's start.
+  const nextPeriodStartAsUtc = Date.UTC(year, month, 1, 0, 0, 0, 0);
+  return new Date(nextPeriodStartAsUtc - REPORTING_OFFSET_MS);
+}
+
+/** The period key immediately following `periodKey` (e.g. "2026-09" -> "2026-10"). */
+export function nextBillingPeriodKey(periodKey: string) {
+  const [year, month] = periodKey.split("-").map(Number);
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const nextYear = month === 12 ? year + 1 : year;
+  return `${nextYear}-${String(nextMonth).padStart(2, "0")}`;
 }
 
 export function billingPeriodLabel(periodKey: string) {
