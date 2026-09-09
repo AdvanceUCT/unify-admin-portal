@@ -1,33 +1,42 @@
-# Vendor invoicing demo: reset and reseed
+# Vendor invoicing demo: seed and start over safely
 
-Companion to [`paystack-vendor-invoicing-implementation-plan.md`](./paystack-vendor-invoicing-implementation-plan.md). This is a two-step cycle for running the vendor invoicing demo repeatedly against your dev/test database: wipe everything, then repopulate it with fresh fake verification history.
+Companion to [`paystack-vendor-invoicing-implementation-plan.md`](./paystack-vendor-invoicing-implementation-plan.md). This guide creates fake verification history for an invoicing demo without providing a database-wide reset script.
 
-**Only ever run this against your dev/test database**, never against real production data. The wipe step deletes real rows and temporarily disables database safety triggers to do it.
+The repository intentionally does not include a destructive billing reset SQL script. A broad delete that disables database safety triggers is not a safe reset mechanism for a shared database. For a clean rerun, recreate or restore an isolated, disposable demo database from a known baseline using the database provider's normal lifecycle controls.
 
-## Step 1 — Wipe: `scripts/sql/reset-billing-demo-data.sql`
+## Safety boundary
 
-This is a plain `.sql` file in the repo. Supabase's SQL Editor doesn't read files from your git repo or know this file exists just because it's committed — you have to open it yourself and paste its contents in. There's no "run this committed file" button.
+Only run the seed script against a local or disposable demo database that nobody else relies on. Do not run it against production, a shared staging/dev database, or a database containing data that must be retained.
 
-1. Open [`scripts/sql/reset-billing-demo-data.sql`](../scripts/sql/reset-billing-demo-data.sql) in your editor and copy its full contents.
-2. Go to [supabase.com](https://supabase.com/dashboard) and open the project that backs your **dev/test** database (check the project name/URL matches your `.env.local`'s `DATABASE_URL` — not whatever project backs the live site, if they differ).
-3. In the left sidebar, click **SQL Editor**.
-4. Click **New query**.
-5. Paste the copied SQL into the editor.
-6. Click **Run** (or `Ctrl`/`Cmd`+`Enter`).
+The script refuses to run when `NODE_ENV=production`, but that check cannot tell whether a non-production connection points to a shared or important database. The operator is still responsible for confirming the target without printing or sharing connection strings.
 
-What it does: deletes every verification, charge, invoice, payment, payment attempt, allocation, gateway event, billing exception, and job-run row — a full clean slate. It leaves your bootstrapped pricing policy (`VerificationBillingPolicy`) alone, so you don't need to re-run `billing:bootstrap` afterward. It also restarts invoice numbering so the next invoice is `DEMO-<year>-000001` again.
+The seed is additive: every run creates more `VendorVerification` rows. It does not remove prior verifications, charges, invoices, payments, allocations, exceptions, or job runs, and it does not reset invoice numbering.
 
-If you also want the pricing policy wiped (meaning you'd need to re-run `billing:bootstrap` before generating invoices again), open the file, find the two commented-out lines near the bottom, and uncomment them before pasting into Supabase.
+## Prepare an isolated demo database
 
-## Step 2 — Reseed: `scripts/seed-vendor-verification-history.ts`
+1. Create or restore a disposable database from a known, sanitized baseline. It must contain the university and approved vendor records needed for the walkthrough.
+2. Configure the local environment to target only that database. Confirm the project/database identity in the provider dashboard without copying connection strings into logs or chat.
+3. Apply the committed migrations:
 
-Run this locally (it writes to whatever database your `.env.local` points at):
+   ```bash
+   npx prisma migrate deploy
+   ```
+
+4. If the baseline does not already contain a billing policy, bootstrap one with demo values:
+
+   ```bash
+   npx tsx scripts/bootstrap-billing.ts --platform-share-bps <BPS> --legacy-fee-minor <CENTS>
+   ```
+
+## Seed verification history
+
+Run the seed locally after confirming the isolated database target:
 
 ```bash
 npx tsx scripts/seed-vendor-verification-history.ts
 ```
 
-This creates realistic, already-completed, billable verifications for every currently-approved vendor, spread randomly across the last few months (so you get more than one billing period to demo monthly invoicing with). It only creates verification history — no charges or invoices yet.
+This creates realistic, already-completed, billable verifications for every currently approved vendor. The completion dates are spread randomly across recent months so monthly invoicing can be demonstrated. It creates verification history only; it does not create charges or invoices.
 
 Optional flags:
 
@@ -35,30 +44,32 @@ Optional flags:
 npx tsx scripts/seed-vendor-verification-history.ts --count 15 --months-back 3
 ```
 
-| Flag | Default | Meaning |
-| --- | --- | --- |
-| `--count` | 12 | Verifications created per approved vendor |
-| `--months-back` | 3 | How many past months the `completedAt` dates are spread across |
+| Flag            | Default | Meaning                                              |
+| --------------- | ------- | ---------------------------------------------------- |
+| `--count`       | 12      | Verifications created per approved vendor            |
+| `--months-back` | 3       | How many recent months the `completedAt` dates cover |
 
-Use `npx tsx scripts/<name>.ts` directly rather than `npm run <name> -- --flag value` — npm's argument passing on Windows has been unreliable at forwarding `--flag value` pairs through the `--` separator in this project.
+Use `npx tsx scripts/<name>.ts` directly rather than `npm run <name> -- --flag value`; npm argument forwarding on Windows has been unreliable for this project.
 
-## Full demo cycle
+## Run the demo cycle
 
 ```bash
-# 1. Wipe — run scripts/sql/reset-billing-demo-data.sql in Supabase's SQL Editor (see Step 1)
-
-# 2. Reseed verification history
+# 1. Seed fake verification history in the isolated database
 npx tsx scripts/seed-vendor-verification-history.ts
 
-# 3. Turn that history into charges
-npx tsx scripts/billing-backfill.ts            # dry run first — review the counts
+# 2. Preview, then create charges from that history
+npx tsx scripts/billing-backfill.ts
 npx tsx scripts/billing-backfill.ts --apply
 
-# 4. Generate invoices from those charges
-npx tsx scripts/billing-invoices.ts            # dry run first — review what would be issued
+# 3. Preview, then generate invoices from those charges
+npx tsx scripts/billing-invoices.ts
 npx tsx scripts/billing-invoices.ts --apply
 ```
 
-At this point, invoices exist for the seeded history and can be viewed at `/vendors/invoices` (admin) or `/vendor/invoices` (as an owner of that vendor). If `VERIFICATION_INVOICE_CHECKOUT_ENABLED=true` and Paystack is configured, they can be paid through the normal Pay flow too.
+Invoices can then be viewed at `/vendors/invoices` (admin) or `/vendor/invoices` (an owner of that vendor). If `VERIFICATION_INVOICE_CHECKOUT_ENABLED=true` and Paystack test mode is configured, they can be paid through the normal Pay flow.
 
-Repeat from Step 1 as many times as you like for a fresh demo run.
+## Start over
+
+To rerun from a clean slate, discard the disposable demo database and recreate or restore it from the same known baseline, then repeat the preparation and seed steps. Do not paste ad hoc delete SQL into Supabase, disable triggers, or try to clean billing tables individually: the related records and ledger invariants make partial cleanup easy to get wrong.
+
+If the current database cannot be discarded safely, do not reset it. Use a new isolated demo database instead.

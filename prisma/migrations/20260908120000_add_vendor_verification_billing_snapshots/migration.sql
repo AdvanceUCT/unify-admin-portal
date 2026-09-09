@@ -14,15 +14,24 @@ ADD COLUMN "billingReason" TEXT;
 
 ALTER TABLE "vendor_verification"
 ADD CONSTRAINT "vendor_verification_fee_non_negative_check"
-CHECK ("verificationFeeMinor" >= 0);
+CHECK ("verificationFeeMinor" >= 0) NOT VALID;
+
+ALTER TABLE "vendor_verification"
+VALIDATE CONSTRAINT "vendor_verification_fee_non_negative_check";
 
 ALTER TABLE "vendor_verification"
 ADD CONSTRAINT "vendor_verification_fee_currency_check"
-CHECK ("verificationFeeCurrency" ~ '^[A-Z]{3}$');
+CHECK ("verificationFeeCurrency" ~ '^[A-Z]{3}$') NOT VALID;
+
+ALTER TABLE "vendor_verification"
+VALIDATE CONSTRAINT "vendor_verification_fee_currency_check";
 
 ALTER TABLE "vendor_verification"
 ADD CONSTRAINT "vendor_verification_billing_period_key_check"
-CHECK ("billingPeriodKey" IS NULL OR "billingPeriodKey" ~ '^[0-9]{4}-[0-9]{2}$');
+CHECK ("billingPeriodKey" IS NULL OR "billingPeriodKey" ~ '^[0-9]{4}-(0[1-9]|1[0-2])$') NOT VALID;
+
+ALTER TABLE "vendor_verification"
+VALIDATE CONSTRAINT "vendor_verification_billing_period_key_check";
 
 CREATE INDEX "vendor_verification_vendorProfileId_billingPeriodKey_billingStatus_idx"
 ON "vendor_verification"("vendorProfileId", "billingPeriodKey", "billingStatus");

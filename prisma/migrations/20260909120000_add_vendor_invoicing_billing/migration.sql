@@ -32,15 +32,6 @@ CREATE TYPE "BillingRunStatus" AS ENUM ('RUNNING', 'COMPLETED', 'FAILED');
 -- AlterEnum
 ALTER TYPE "AuditAction" ADD VALUE 'BILLING_POLICY_CREATED';
 
--- DropIndex
--- Prisma re-emits these two identical partial unique indexes on every nearby
--- schema diff in this repo (see 20260831133456, 20260831163702,
--- 20260714125000); they are unrelated to this feature and unchanged here.
-DROP INDEX "vendor_application_one_active_per_profile";
-
--- DropIndex
-DROP INDEX "vendor_branch_payment_application_one_active";
-
 -- CreateTable
 CREATE TABLE "verification_billing_policy" (
     "id" TEXT NOT NULL,
@@ -311,12 +302,6 @@ CREATE INDEX "billing_exception_resolved_type_idx" ON "billing_exception"("resol
 -- CreateIndex
 CREATE INDEX "billing_run_jobType_status_idx" ON "billing_run"("jobType", "status");
 
--- CreateIndex
-CREATE UNIQUE INDEX "vendor_application_one_active_per_profile" ON "vendor_application"("vendorProfileId") WHERE ("status" IN ('DRAFT', 'PENDING', 'APPROVED'));
-
--- CreateIndex
-CREATE UNIQUE INDEX "vendor_branch_payment_application_one_active" ON "vendor_branch_payment_application"("vendorBranchId") WHERE ("status" IN ('DRAFT', 'PENDING', 'APPROVED'));
-
 -- AddForeignKey
 ALTER TABLE "verification_billing_policy" ADD CONSTRAINT "verification_billing_policy_universityId_fkey" FOREIGN KEY ("universityId") REFERENCES "university_profile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
@@ -370,6 +355,7 @@ ALTER TABLE "verification_billing_policy"
 ALTER TABLE "verification_charge"
   ADD CONSTRAINT "verification_charge_fee_check" CHECK ("feeMinor" >= 0),
   ADD CONSTRAINT "verification_charge_currency_check" CHECK ("currency" = 'ZAR'),
+  ADD CONSTRAINT "verification_charge_service_period_key_check" CHECK ("servicePeriodKey" ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'),
   ADD CONSTRAINT "verification_charge_shares_nonnegative_check" CHECK ("platformShareMinor" >= 0 AND "universityShareMinor" >= 0),
   ADD CONSTRAINT "verification_charge_shares_balance_check" CHECK ("platformShareMinor" + "universityShareMinor" = "feeMinor");
 
@@ -377,6 +363,7 @@ ALTER TABLE "verification_charge"
 ALTER TABLE "vendor_invoice"
   ADD CONSTRAINT "vendor_invoice_total_check" CHECK ("totalMinor" >= 0),
   ADD CONSTRAINT "vendor_invoice_currency_check" CHECK ("currency" = 'ZAR'),
+  ADD CONSTRAINT "vendor_invoice_period_key_check" CHECK ("periodKey" ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'),
   ADD CONSTRAINT "vendor_invoice_shares_nonnegative_check" CHECK ("platformShareMinor" >= 0 AND "universityShareMinor" >= 0),
   ADD CONSTRAINT "vendor_invoice_shares_balance_check" CHECK ("platformShareMinor" + "universityShareMinor" = "totalMinor"),
   ADD CONSTRAINT "vendor_invoice_template_version_check" CHECK ("templateVersion" > 0);
@@ -384,6 +371,7 @@ ALTER TABLE "vendor_invoice"
 -- CheckConstraint: vendor_invoice_item
 ALTER TABLE "vendor_invoice_item"
   ADD CONSTRAINT "vendor_invoice_item_quantity_check" CHECK ("quantity" > 0),
+  ADD CONSTRAINT "vendor_invoice_item_service_period_key_check" CHECK ("servicePeriodKey" ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'),
   ADD CONSTRAINT "vendor_invoice_item_unit_price_check" CHECK ("unitPriceMinor" >= 0),
   ADD CONSTRAINT "vendor_invoice_item_line_total_check" CHECK ("lineTotalMinor" = "quantity" * "unitPriceMinor"),
   ADD CONSTRAINT "vendor_invoice_item_shares_nonnegative_check" CHECK ("platformShareMinor" >= 0 AND "universityShareMinor" >= 0),

@@ -9,6 +9,7 @@ Legend: ✅ done and gate passed · 🟡 done, gate partially blocked on an exte
 ## Phase 0 — Baseline, configuration contracts, test isolation — ✅ Gate 0 passed
 
 **Files added/changed**
+
 - `src/lib/config/env.ts` — added `VERIFICATION_INVOICING_ENABLED`, `VERIFICATION_INVOICE_CHECKOUT_ENABLED`,
   `PAYSTACK_MODE`, `PAYSTACK_SECRET_KEY`, `PAYSTACK_ACCOUNT_REF`, `PAYSTACK_PLATFORM_SUBACCOUNT_CODE`,
   `PAYSTACK_EXPECTED_INTEGRATION_ID`. All optional/default-off; live mode and setup-guide placeholder
@@ -19,7 +20,7 @@ Legend: ✅ done and gate passed · 🟡 done, gate partially blocked on an exte
   handoff draft originally specified a wholly separate `BILLING_TEST_DATABASE_URL`/`DIRECT_URL` pair;
   after discussion, this was intentionally relaxed to match this repo's existing
   `test:payments:db` convention instead — reuse `DIRECT_URL` directly, isolated by a uniquely-named
-  disposable Postgres *schema* the test creates and drops per run, rather than requiring a wholly
+  disposable Postgres _schema_ the test creates and drops per run, rather than requiring a wholly
   separate database. See Phase 1's evidence below for the real run.)
 - `src/test/billing/env.test.ts`, `src/test/billing/testDatabaseGuard.test.ts` — new unit suites.
 - `vitest.billing-integration.config.ts` — mirrors `vitest.integration.config.ts`, targets
@@ -29,18 +30,21 @@ Legend: ✅ done and gate passed · 🟡 done, gate partially blocked on an exte
   (`vitest run --config vitest.billing-integration.config.ts`).
 
 **Baseline evidence (recorded before any billing code existed)**
+
 - `npm run typecheck` — pass, no errors.
 - `npm run lint` — 0 errors, 6 pre-existing warnings (all unrelated: `statusMapping.ts`,
   `simulatedUniversityRecords.ts`, three import-flow test files) — not touched by this feature.
 - `npm test` — 77 files / 454 tests, all passed.
 
 **Post-change evidence**
+
 - `npm run typecheck` — pass.
 - `npm run lint` — 0 errors, same 6 pre-existing warnings as baseline (no new lint issues).
 - `npx vitest run src/test/billing` (i.e. `npm run test:billing`) — 2 files, 21 tests, all pass.
 - `npm test` — 79 files / 475 tests, all pass (454 baseline + 21 new billing tests).
 
 **Read-only inventory of existing `VendorVerification` data** (dev database; counts only):
+
 - University profiles: 1.
 - Total `VendorVerification` rows: 4, all `status = APPROVED`.
 - `billingStatus`: 3 `BILLABLE`, 1 `PENDING` (see exception note below).
@@ -56,6 +60,7 @@ Legend: ✅ done and gate passed · 🟡 done, gate partially blocked on an exte
   reclassified in Phase 0/1.
 
 **Gate 0 checklist**
+
 - [x] Baseline typecheck/lint/unit results recorded (above).
 - [x] App boots / env parses with no billing env vars set at all (flags default false, mode defaults `test`).
 - [x] Unit tests cover malformed flags, live-mode rejection, live/placeholder key rejection, and the
@@ -67,6 +72,7 @@ Legend: ✅ done and gate passed · 🟡 done, gate partially blocked on an exte
 ## Phase 1 — Billing schema, policy, invariants — ✅ Gate 1 passed
 
 **Files added/changed**
+
 - `prisma/schema.prisma` — added `VerificationBillingPolicy`, `VerificationCharge`, `VendorInvoice`,
   `VendorInvoiceItem`, `VendorInvoicePaymentAttempt`, `VendorInvoicePayment`,
   `VendorInvoicePaymentAllocation`, `BillingGatewayEvent`, `BillingException`, `BillingRun`, their
@@ -104,7 +110,7 @@ Legend: ✅ done and gate passed · 🟡 done, gate partially blocked on an exte
   `BILLING_POLICY_CREATED` audit log entry in the same transaction).
 - `src/lib/auth/permissions.ts` — added `billing-policy:manage` (`SUPER_ADMIN` only).
 - `scripts/bootstrap-billing.ts`, `npm run billing:bootstrap -- --platform-share-bps <BPS>
-  --legacy-fee-minor <CENTS>` — idempotent; live policy fee comes from the already-configured
+--legacy-fee-minor <CENTS>` — idempotent; live policy fee comes from the already-configured
   `VERIFICATION_FEE_MINOR`, never overwrites an existing open policy.
 - `src/test/billing/money.test.ts` — rounding edges (exact-half tie rounds up, below-half rounds
   down, 0/10000 bps boundaries, zero fee), invalid money/currency/basis-points rejection, percentage
@@ -127,6 +133,7 @@ Legend: ✅ done and gate passed · 🟡 done, gate partially blocked on an exte
   `vitest.config.ts`) so this suite can exercise real `server-only`-guarded modules.
 
 **Evidence**
+
 - `npx prisma validate` — schema valid.
 - `npx prisma migrate deploy` — applied cleanly to the dev database; `npx prisma migrate status` —
   up to date.
@@ -186,6 +193,7 @@ inventory. Unifying this path through the shared finalizer (as the handoff expli
 it as a side effect, not as unrelated scope creep (see evidence below).
 
 **Files added/changed**
+
 - `src/lib/billing/config.ts` — `requireSingleUniversityId()`.
 - `src/lib/billing/exceptions.ts` — `recordBillingException()`: upserts by `dedupeKey` so repeated
   processing never duplicates a row; never throws (a failure to record an exception must not itself
@@ -243,6 +251,7 @@ it as a side effect, not as unrelated scope creep (see evidence below).
   (nonexistent vendor) resolving to a swallowed `null` rather than a thrown error.
 
 **Evidence**
+
 - `npm run typecheck` — pass. `npm run lint` — 0 errors, same 6 pre-existing warnings.
 - `npm test` — 82 files / 522 tests, all pass.
 - `npm run test:billing:db` — **17/17 real PostgreSQL tests pass** (13 from Phase 1 + 4 new finalizer
@@ -250,7 +259,7 @@ it as a side effect, not as unrelated scope creep (see evidence below).
   data confirmed unchanged.
 - **Real dry-run** (`npm run billing:backfill`, no `--apply`) against the actual dev database:
   `scanned 4, imported 0, already imported 0, not billable 0, pending 1, exceptions 3`. This matches
-  Phase 0's inventory (4 total rows, 1 `PENDING`-billingStatus row) and is *correct*, not a bug: no
+  Phase 0's inventory (4 total rows, 1 `PENDING`-billingStatus row) and is _correct_, not a bug: no
   `VerificationBillingPolicy` has ever actually been bootstrapped against this real database (bootstrap
   has only ever run against disposable test schemas so far — see below), so the 3 otherwise-billable
   rows correctly have no policy to price them and are reported as `MISSING_BILLING_POLICY` exceptions
@@ -273,6 +282,7 @@ real historical data with those characteristics.
 ## Phase 3 — Invoice issuance, owner views, admin reporting — 🟡 core complete and tested; some Gate 3 items not covered
 
 **Files added/changed**
+
 - `prisma/migrations/20260910120000_add_vendor_invoice_number_sequence/migration.sql` — a plain
   Postgres `SEQUENCE` (`vendor_invoice_number_seq`); Prisma has no native sequence concept, so this
   has no corresponding schema.prisma model change. Invoice numbers are always
@@ -284,10 +294,10 @@ real historical data with those characteristics.
   `2026-09-30T22:00:00Z`) and `nextBillingPeriodKey()`. Removed `import "server-only"` here too (see
   below).
 - `src/lib/billing/invoices.ts` — the issuance service:
-  - `resolveNextInvoicePeriodForVendor()`: picks the *later* of "the period right after the vendor's
+  - `resolveNextInvoicePeriodForVendor()`: picks the _later_ of "the period right after the vendor's
     last invoice" and "the vendor's earliest still-unclaimed charge". This is the key design decision
     that makes the rest correct: it skips cleanly over a genuinely empty gap (never creates an empty
-    invoice) while still sweeping a late-arriving charge from an *already-invoiced* period into
+    invoice) while still sweeping a late-arriving charge from an _already-invoiced_ period into
     whichever period comes next — without ever re-targeting a period that already has an invoice.
   - `issueInvoiceForVendorPeriod()`: one short serializable transaction — claims every unclaimed
     eligible charge with `servicePeriodKey <= periodKey`, snapshots issuer/customer contents, assigns
@@ -326,7 +336,7 @@ real historical data with those characteristics.
 - `scripts/billing-invoices.ts`, `npm run billing:invoices` (dry-run) / `-- --apply` — also supports a
   demo/test-only `--as-of <ISO8601>` flag (per the user's explicit choice on how to prove generation
   works without real closed-month data) that simulates a later "now" for period-closing eligibility
-  and for the invoice's own `issuedAt` — it never fabricates or backdates a *verification* record, it
+  and for the invoice's own `issuedAt` — it never fabricates or backdates a _verification_ record, it
   only changes the generation job's perspective on the current time. The script logs a loud
   DEMO/TEST-ONLY warning whenever it's used and the doc for it says never to use it against a real
   deployment's live invoices.
@@ -356,6 +366,7 @@ real historical data with those characteristics.
   database access of its own to guard and several CLI-callable modules now depend on it.
 
 **Evidence**
+
 - `npm run typecheck` — pass. `npm run lint` — 0 errors, same 6 pre-existing warnings.
 - `npm test` — 85 files / 554 tests, all pass (new: `invoices.test.ts` (13),
   `vendorAuthorization.test.ts` (5), `vendorInvoiceRoutes.test.ts` (11), plus permission-matrix
@@ -400,7 +411,7 @@ Gate 3 pass — the gaps are recorded rather than the phase being marked complet
 **Scope boundary, confirmed with the user before starting**: this phase builds the Paystack adapter,
 attempt-preparation, and `confirmInvoicePayment()` as a service layer only. The actual
 `/api/webhooks/paystack` HTTP route, the browser-facing attempt/reconcile routes, and the
-`proxy.ts` fix (currently *any* unauthenticated request, `/api/webhooks/*` included, gets redirected
+`proxy.ts` fix (currently _any_ unauthenticated request, `/api/webhooks/*` included, gets redirected
 to `/sign-in` — confirmed by reading `proxy.ts`, not assumed) are Phase 5 work, matching where the
 handoff's own route table places them. Gate 4's "PostgreSQL tests race callback/webhook/worker"
 requirement is satisfied by calling `confirmInvoicePayment()` directly from real-Postgres tests — no
@@ -414,6 +425,7 @@ built and typechecked but deliberately not run by me; it's for the user to run o
 real evidence.
 
 **Files added**
+
 - `prisma/migrations/20260911120000_add_paystack_payment_guards/migration.sql` — additive, applied via
   `npx prisma migrate deploy` against the real dev database (same non-interactive approach as Phases
   1/3; `migrate dev` still can't run without a TTY). Adds three trigger-enforced invariants the Phase 1
@@ -454,13 +466,13 @@ real evidence.
   inbox bookkeeping — full scheduled retry is Phase 6).
 - `src/lib/billing/paymentAttempts.ts` — `prepareInvoicePaymentAttempt()`. Two-phase per the handoff:
   phase A is a short Serializable transaction that validates the invoice is payable, retires any
-  stale/expired prior attempt, and inserts the snapshot row; phase B calls Paystack *outside* any lock
+  stale/expired prior attempt, and inserts the snapshot row; phase B calls Paystack _outside_ any lock
   and persists the result afterward. A repeated "Pay" click reuses an existing usable (`READY`+
   `accessCode`, < 55 minutes old) attempt without calling Paystack again, or returns a fresh
   `PREPARING` attempt's confirming state without starting a second one. A `PREPARING` row older than 2
   minutes is treated as an abandoned crash (recorded as a `PAYMENT_ATTEMPT_ABANDONED` exception,
   marked `FAILED`) rather than blocking forever. An ambiguous timeout from `initializeTransaction`
-  marks the attempt `UNKNOWN` and returns normally — it is a valid *result*, not a thrown error, per
+  marks the attempt `UNKNOWN` and returns normally — it is a valid _result_, not a thrown error, per
   the handoff's "missing lookup results immediately after a timeout are not definitive failure".
 - `src/lib/billing/paymentConfirmation.ts` — `confirmInvoicePayment()`, the single receipt/allocation
   boundary every caller (webhook, browser reconcile, job reconcile — Phase 5/6) will route through.
@@ -472,7 +484,7 @@ real evidence.
   - **Design correction found only by testing against real Postgres, not by unit tests**: the first
     draft wrapped the whole function in one Serializable transaction and caught `P2002` inline to keep
     going (matching the style already used elsewhere in this codebase, e.g. `invoices.ts`). Real
-    Postgres rejected this — once one statement in a transaction fails, Postgres aborts the *entire*
+    Postgres rejected this — once one statement in a transaction fails, Postgres aborts the _entire_
     transaction and every further statement in it fails with `25P02` ("current transaction is aborted"),
     even after the JS `catch` block runs. Fixed by making the receipt `create()` and the allocation
     `create()` each their own standalone atomic statement (a lone `create()` needs no enclosing
@@ -484,18 +496,19 @@ real evidence.
   - **Second correction, same root cause**: assumed (matching the pattern already used in this
     codebase) that a `P2002` error's `meta.target` names the violated column. Confirmed against a real
     run that with the `pg` driver adapter, `meta` is empty (`{}`) — the only place the field name
-    actually appears is in the human-readable message (`` Unique constraint failed on the fields:
-    (`"attemptId"`) ``), so `prismaUniqueTargets()` parses that as a fallback.
+    actually appears is in the human-readable message (``Unique constraint failed on the fields:
+(`"attemptId"`)``), so `prismaUniqueTargets()` parses that as a fallback.
 - `src/lib/billing/paystackHealth.ts` — `checkPaystackConfiguration()`: reads the configured
   subaccount under the test secret, reports active status / ZAR currency / test domain / integration-ID
   match as a safe, non-secret report object. `scripts/paystack-check.ts` → `npm run
-  billing:paystack-check` prints that report; never prints the secret key or bank details.
+billing:paystack-check` prints that report; never prints the secret key or bank details.
 - `src/lib/billing/constants.ts` — added `PAYMENT_ATTEMPT_REUSE_WINDOW_SECONDS` (55 min),
   `PAYMENT_ATTEMPT_STALE_PREPARING_SECONDS` (2 min), `PAYSTACK_PROVIDER_NAME`.
 - `src/lib/billing/errors.ts` — added `INVOICE_NOT_PAYABLE`, `ATTEMPT_IN_PROGRESS`, `ATTEMPT_NOT_FOUND`,
   `PAYMENT_MISMATCH` codes.
 
 **Evidence**
+
 - `npm run typecheck` — pass. `npm run lint` — 0 errors, same pre-existing warnings plus two
   intentionally-unused mock parameters in the new client contract test.
 - `npm test` — **92 files / 606 tests**, all pass (60 new: `paystackClient.test.ts` (20 — exact
@@ -536,7 +549,7 @@ real evidence.
 **Scope note**: this closes the routing/UI gap Phase 4 deliberately deferred, and also closes Phase 4's
 "no admin exception-review UI" gap — the new admin per-invoice page lists `BillingException` rows.
 
-**Pre-existing bug found and fixed (confirmed live, not billing-related)**: `proxy.ts` redirected *any*
+**Pre-existing bug found and fixed (confirmed live, not billing-related)**: `proxy.ts` redirected _any_
 unauthenticated request to `/sign-in`, including ones that authenticate themselves a different way.
 Confirmed by reading the file (not assumed) that this already broke, in whatever environment runs this
 proxy: the external vendor `v1` API (`vendorFromApiRequest`, an API-key caller that never carries a
@@ -551,6 +564,7 @@ case exercising all thirteen routes under those prefixes plus a negative case (`
 admin page, must still redirect).
 
 **Files added/changed**
+
 - `proxy.ts` — the exemption above.
 - `@paystack/inline-js@2.25.0` added as a dependency. Its `resumeTransaction(accessCode, callbacks)`
   API (no access-code-taking constructor option, `new PaystackPop()` then the instance method,
@@ -572,7 +586,7 @@ admin page, must still redirect).
   `prepareInvoicePaymentAttempt`.
 - `src/app/api/vendor/invoices/[invoiceId]/reconcile/route.ts` (POST) — owner-only, same-origin,
   rate-limited. Resolves the invoice's own most recent unresolved attempt server-side and calls
-  `confirmInvoicePayment` on *that* reference — a request body carrying a different reference is never
+  `confirmInvoicePayment` on _that_ reference — a request body carrying a different reference is never
   read, per the handoff's "resolves stored attempt rather than accepting arbitrary provider references".
 - `src/app/api/webhooks/paystack/route.ts` (POST) — reads exact raw bytes before parsing JSON so the
   signature is checked against what Paystack actually sent; 256KB body-size ceiling; deduplicates via
@@ -584,7 +598,7 @@ admin page, must still redirect).
   retry bookkeeping via `recordGatewayEventFailure`, rather than falsely acknowledging success.
 - `src/lib/billing/invoiceQueries.ts` — added `isPayable` to `getVendorInvoiceDocument`'s return (a
   boolean, never a raw amount — `documentStatus === ISSUED && paymentStatus === UNPAID && totalMinor > 0
-  && !hasUnresolvedException`) and a new `getAdminInvoiceDetail()` for the admin per-invoice page
+&& !hasUnresolvedException`) and a new `getAdminInvoiceDetail()` for the admin per-invoice page
   (items, payment attempts, payments, and unresolved-or-not `BillingException` rows for one invoice).
 - `src/app/vendor/(portal)/invoices/paymentPolling.ts` — shared bounded-backoff polling
   (2s/3s/5s/8s/13s, ~31s total) used by both the Pay button and the payment-return page; a poll
@@ -621,6 +635,7 @@ admin page, must still redirect).
   now) are exercised for the first time by real UI/actions.
 
 **Evidence**
+
 - `npm run typecheck` — pass. `npm run lint` — 0 errors, same pre-existing warnings.
 - `npm test` — **100 files / 675 tests**, all pass (69 new: `vendorPaymentRoutes.test.ts` (14 —
   401/403/404/429/cross-origin/BillingDomainError-mapping for both new routes, and confirmation that a
@@ -653,9 +668,10 @@ asked directly whether any of this was accidentally coded to only work on localh
 payment file — nothing hardcodes `localhost`; the same-origin check and the Paystack `callback_url` both
 derive from `env.APP_URL`, and `vercel.json` shows production builds already auto-apply migrations
 (`scripts/run-production-migrations.mjs`). So the code itself is deployment-agnostic. What is
-environment-dependent, and must be set correctly for the *deployed* target before a real webhook/checkout
+environment-dependent, and must be set correctly for the _deployed_ target before a real webhook/checkout
 will work there, is external to this codebase and unverified because no live deployment was available to
 check in this session:
+
 - `APP_URL` set to the real deployed HTTPS URL in that environment's variables (not `localhost`) — wrong
   here breaks both the same-origin check and the Paystack return callback for real users.
 - Vercel Deployment Protection (password/SSO wall) disabled for whichever deployment receives the
@@ -672,10 +688,11 @@ it was raised and checked mid-Phase-5.
 ## Phase 6 — Scheduling, reconciliation, operational controls — 🟡 core complete and tested; scheduling verified locally, not yet observed running as a real Vercel cron
 
 **Scope decisions, confirmed with the user before starting**:
+
 - **Vercel plan is Hobby.** The existing `credential-automation` cron already occupies one slot, and Hobby
   caps both cron count and cadence (daily only). Rather than register two more cron entries and risk the
   plan limit, `/api/cron/vendor-billing` is the single new Vercel-scheduled entry (daily) and runs
-  invoice generation *and* a reconciliation sweep in one bounded invocation.
+  invoice generation _and_ a reconciliation sweep in one bounded invocation.
   `/api/cron/vendor-billing-reconcile` still exists as its own independently-authenticated route — not
   in `vercel.json` — for on-demand recovery via the CLI or the admin action, sharing the exact same
   service function so there is only one reconciliation implementation either way.
@@ -683,6 +700,7 @@ it was raised and checked mid-Phase-5.
   list, per the user's explicit choice.
 
 **Files added/changed**
+
 - `prisma/migrations/20260913120000_add_billing_run_lease_guard/migration.sql` — one partial unique
   index: `billing_run("jobType") WHERE status = 'RUNNING'`. This is the actual concurrency guard for
   overlapping job invocations (cron vs. cron, cron vs. CLI, cron vs. admin action) — application code
@@ -702,7 +720,7 @@ it was raised and checked mid-Phase-5.
   erroring when Paystack isn't configured at all.
 - `src/lib/billing/invoices.ts` — **`VERIFICATION_INVOICING_ENABLED` is now actually wired**, to
   `runVendorInvoiceGeneration()` only (returns immediately with `skippedDisabled: true` and touches no
-  data). Per the handoff, this stops *new* issuance only — `previewVendorInvoiceGeneration` (read-only)
+  data). Per the handoff, this stops _new_ issuance only — `previewVendorInvoiceGeneration` (read-only)
   is deliberately never gated, so dry-run previews, invoice reading, webhook receipt, and reconciliation
   of already-issued invoices all keep working regardless of this flag. **This is a real behavior change
   from Phases 2–3**, where the flag was parsed but silently unused everywhere — confirmed by grep before
@@ -736,6 +754,7 @@ it was raised and checked mid-Phase-5.
   future provider direction, without rewriting any existing wallet-foundation milestone claim.
 
 **Evidence**
+
 - `npm run typecheck` — pass. `npm run lint` — 0 errors, same pre-existing warnings.
 - `npm test` — **106 files / 715 tests**, all pass (40 new: `jobLease.test.ts` (8 — real-shaped
   create/takeover/race/stale-row scenarios, mocked), `reconciliation.test.ts` (6),
@@ -771,7 +790,7 @@ it was raised and checked mid-Phase-5.
   - No UI to resolve/dismiss a `BillingException` row — still read-only display (from Phase 5), now also
     summarized as counts on the operations card.
   - `runVerificationBillingBackfill` (historical import) is **not** gated on
-    `VERIFICATION_INVOICING_ENABLED` — scoped deliberately to *new recurring issuance* only, since
+    `VERIFICATION_INVOICING_ENABLED` — scoped deliberately to _new recurring issuance_ only, since
     backfill is a one-time administrative operation, not the recurring "new issuance" the flag's own
     wording targets. Recorded here as a scoping decision, not an oversight.
   - No large-backlog-resumed-in-batches test against real data (the dev DB currently has only the one
@@ -781,4 +800,23 @@ it was raised and checked mid-Phase-5.
   - Gate 6's "simulate a worker dying after receipt persistence" is covered at the payment-confirmation
     level already (Phase 4's real-Postgres tests), not re-simulated at the job-lease level specifically.
 
-## Phase 7 — Demo deployment and acceptance walkthrough — ⬜ not started (out of scope for this implementation pass; reported separately per deployment authorization)
+## Post-review hardening
+
+- `billing:backfill` now classifies terminal pre-migration rows whose billing snapshot is still
+  `PENDING`. Completed approved rows use the explicitly bootstrapped legacy policy and are marked
+  `LEGACY_DEMO_BACKFILL`; terminal non-billable rows are snapshotted as such; genuinely pending rows
+  remain pending; and terminal rows without a completion time become durable exceptions. Existing
+  explicit snapshots remain unchanged.
+- The billing migrations no longer drop and recreate unrelated vendor-application indexes. Billing
+  period constraints now accept only real `YYYY-01` through `YYYY-12` values, and checks against the
+  existing `vendor_verification` table are added `NOT VALID` before validation to reduce lock impact.
+- GitHub CI now runs `test:billing:db` against its own PostgreSQL service so the financial invariants
+  and concurrency suite are merge-gated rather than relying only on local evidence.
+- The missing destructive demo-reset script references were removed. A clean repeatable demo now
+  requires recreating or restoring an isolated disposable database; the seed remains explicitly
+  additive and prohibited on shared data.
+- Post-review local checks: `npm run typecheck` passed; the focused backfill suite passed 15/15; and
+  `npm test` passed 107 files / 727 tests. The updated migration suite is expected to be enforced by
+  the new CI job on the next push.
+
+## Phase 7 — Demo deployment and acceptance walkthrough — ⬜ not started (reported separately per deployment authorization)

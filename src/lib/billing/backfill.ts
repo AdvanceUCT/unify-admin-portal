@@ -2,13 +2,10 @@
  * @fileoverview One-time historical import of VerificationCharge rows for VendorVerification
  * rows that predate the charge/invoice system.
  *
- * This is a minimal-scope implementation (see
- * docs/paystack-vendor-invoicing-implementation-status.md, Phase 2): it
- * implements the core dry-run/apply contract, idempotent selection, and a
- * keyset cursor for resumability, but not the handoff's full six-category
- * classification table (missing-branch name recovery, legacy-rate
- * reconstruction heuristics, etc.) — there is no real historical data in
- * this deployment to develop or verify those paths against.
+ * Pre-migration terminal rows have no trustworthy price snapshot. They are
+ * classified from their authoritative result and completion time, then use
+ * the explicitly bootstrapped legacy policy rather than today's live price.
+ * Dry runs report the same categories without changing those rows.
  * Deliberately not "server-only": `scripts/billing-backfill.ts` runs this
  * outside the Next.js server bundle, matching `src/lib/payments/foundation.ts`'s
  * precedent for CLI-callable modules.
@@ -16,7 +13,10 @@
  */
 
 import type { Prisma } from "@/generated/prisma/client";
-import { ChargeSource, VendorVerificationBillingStatus } from "@/generated/prisma/enums";
+import {
+  ChargeSource,
+  VendorVerificationBillingStatus,
+} from "@/generated/prisma/enums";
 import { requireSingleUniversityId } from "@/lib/billing/config";
 import { recordBillingException } from "@/lib/billing/exceptions";
 import { computeVerificationShares } from "@/lib/billing/money";
@@ -24,7 +24,11 @@ import { findVerificationBillingPolicyForInstant } from "@/lib/billing/policy";
 
 export type BackfillClient = Pick<
   Prisma.TransactionClient,
-  "vendorVerification" | "verificationCharge" | "universityProfile" | "verificationBillingPolicy" | "billingException"
+  | "vendorVerification"
+  | "verificationCharge"
+  | "universityProfile"
+  | "verificationBillingPolicy"
+  | "billingException"
 >;
 
 export type RunVerificationBillingBackfillOptions = {
@@ -50,9 +54,20 @@ export type VerificationBillingBackfillSummary = {
 };
 
 const DEFAULT_BATCH_SIZE = 500;
+const JOHANNESBURG_OFFSET_MS = 2 * 60 * 60 * 1000;
+
+function legacyBillingPeriodKey(date: Date) {
+  const reportingDate = new Date(date.getTime() + JOHANNESBURG_OFFSET_MS);
+  return `${reportingDate.getUTCFullYear()}-${String(reportingDate.getUTCMonth() + 1).padStart(2, "0")}`;
+}
 
 function hasPrismaErrorCode(error: unknown, code: string) {
-  return typeof error === "object" && error !== null && "code" in error && error.code === code;
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === code
+  );
 }
 
 /**
@@ -105,17 +120,73 @@ export async function runVerificationBillingBackfill(
       continue;
     }
 
-    if (verification.billingStatus === VendorVerificationBillingStatus.PENDING) {
+    if (
+      verification.billingStatus === VendorVerificationBillingStatus.PENDING &&
+      verification.status === "PENDING"
+    ) {
       summary.pending += 1;
       continue;
     }
 
-    if (verification.billingStatus !== VendorVerificationBillingStatus.BILLABLE) {
+    if (
+      verification.billingStatus === VendorVerificationBillingStatus.PENDING &&
+      !verification.completedAt
+    ) {
+      summary.exceptions += 1;
+      if (apply) {
+        await recordBillingException(client, {
+          type: "BACKFILL_MISSING_SNAPSHOT",
+          dedupeKey: `backfill-missing-snapshot:${verification.id}`,
+          details: {
+            verificationId: verification.id,
+            status: verification.status,
+            hasCompletedAt: false,
+            hasBillingPeriodKey: false,
+          },
+        });
+      }
+      continue;
+    }
+
+    if (
+      verification.billingStatus === VendorVerificationBillingStatus.PENDING &&
+      (verification.status !== "APPROVED" || verification.isVerified === false)
+    ) {
+      summary.notBillable += 1;
+      if (apply) {
+        await client.vendorVerification.update({
+          where: { id: verification.id },
+          data: {
+            billingStatus: VendorVerificationBillingStatus.NOT_BILLABLE,
+            verificationFeeMinor: 0,
+            billingPeriodKey: legacyBillingPeriodKey(verification.completedAt!),
+            pricingSnapshotAt: new Date(),
+            billingReason:
+              verification.status === "APPROVED" &&
+              verification.isVerified === false
+                ? "NOT_VERIFIED"
+                : verification.status,
+          },
+        });
+      }
+      continue;
+    }
+
+    if (
+      verification.billingStatus !== VendorVerificationBillingStatus.BILLABLE &&
+      verification.billingStatus !== VendorVerificationBillingStatus.PENDING
+    ) {
       summary.notBillable += 1;
       continue;
     }
 
-    if (!verification.completedAt || !verification.billingPeriodKey) {
+    const isLegacySnapshot =
+      verification.billingStatus === VendorVerificationBillingStatus.PENDING;
+
+    if (
+      !verification.completedAt ||
+      (!isLegacySnapshot && !verification.billingPeriodKey)
+    ) {
       summary.exceptions += 1;
       if (apply) {
         await recordBillingException(client, {
@@ -131,41 +202,89 @@ export async function runVerificationBillingBackfill(
       continue;
     }
 
-    const policy = await findVerificationBillingPolicyForInstant(client, universityId, verification.completedAt);
+    const policy = await findVerificationBillingPolicyForInstant(
+      client,
+      universityId,
+      verification.completedAt,
+    );
     if (!policy) {
       summary.exceptions += 1;
       if (apply) {
         await recordBillingException(client, {
           type: "BACKFILL_MISSING_POLICY",
           dedupeKey: `backfill-missing-policy:${verification.id}`,
-          details: { verificationId: verification.id, completedAt: verification.completedAt.toISOString() },
+          details: {
+            verificationId: verification.id,
+            completedAt: verification.completedAt.toISOString(),
+          },
         });
       }
       continue;
     }
 
+    const feeMinor = isLegacySnapshot
+      ? BigInt(policy.verificationFeeMinor)
+      : BigInt(verification.verificationFeeMinor);
+    const currency = isLegacySnapshot
+      ? policy.currency
+      : verification.verificationFeeCurrency;
+    const servicePeriodKey = isLegacySnapshot
+      ? legacyBillingPeriodKey(verification.completedAt)
+      : verification.billingPeriodKey!;
+    const source = isLegacySnapshot
+      ? ChargeSource.LEGACY_DEMO_BACKFILL
+      : ChargeSource.EXISTING_SNAPSHOT;
+    const { platformMinor, universityMinor } = computeVerificationShares(
+      feeMinor,
+      policy.platformBasisPoints,
+    );
+    const branchNameSnapshot =
+      verification.branch?.name ??
+      verification.servicePointName ??
+      "Unattributed branch";
+
     summary.imported += 1;
     if (!apply) continue;
 
-    const feeMinor = BigInt(verification.verificationFeeMinor);
-    const { platformMinor, universityMinor } = computeVerificationShares(feeMinor, policy.platformBasisPoints);
-    const branchNameSnapshot = verification.branch?.name ?? verification.servicePointName ?? "Unattributed branch";
-
     try {
+      if (isLegacySnapshot) {
+        const feeMinorNumber = Number(feeMinor);
+        if (
+          !Number.isSafeInteger(feeMinorNumber) ||
+          feeMinorNumber > 2_147_483_647
+        ) {
+          throw new Error(
+            "The legacy verification fee does not fit the verification snapshot column.",
+          );
+        }
+
+        await client.vendorVerification.update({
+          where: { id: verification.id },
+          data: {
+            billingStatus: VendorVerificationBillingStatus.BILLABLE,
+            verificationFeeMinor: feeMinorNumber,
+            verificationFeeCurrency: currency,
+            billingPeriodKey: servicePeriodKey,
+            pricingSnapshotAt: new Date(),
+            billingReason: "LEGACY_APPROVED_VERIFICATION",
+          },
+        });
+      }
+
       await client.verificationCharge.create({
         data: {
           verificationId: verification.id,
           vendorProfileId: verification.vendorProfileId,
           branchId: verification.branchId,
           branchNameSnapshot,
-          servicePeriodKey: verification.billingPeriodKey,
+          servicePeriodKey,
           serviceCompletedAt: verification.completedAt,
           feeMinor,
-          currency: verification.verificationFeeCurrency,
+          currency,
           platformShareMinor: platformMinor,
           universityShareMinor: universityMinor,
           policyId: policy.id,
-          source: ChargeSource.EXISTING_SNAPSHOT,
+          source,
         },
       });
     } catch (error) {
