@@ -18,6 +18,8 @@ import type {
   StudentRecord,
 } from "@/lib/api/types";
 import { createBatchActivationLinks } from "@/lib/agentClient";
+import { mapWithConcurrency } from "@/lib/async/mapWithConcurrency";
+import { env } from "@/lib/config/env";
 import { recordCredentialOfferSentAudit } from "@/lib/credentials/audit";
 import {
   assertCredentialIssuanceAllowed,
@@ -38,7 +40,7 @@ import {
 } from "@/lib/student-records/simulatedUniversityRecords";
 
 const DEFAULT_YEAR = "2026";
-const MAX_BATCH_ISSUANCE_LIMIT = 100_000;
+export const MAX_BATCH_ISSUANCE_LIMIT = 100;
 const credentialStatuses = new Set<CredentialLifecycleState>([
   "ACCEPTED",
   "ACTIVE",
@@ -328,85 +330,108 @@ async function issueStudentActivationLinks(
   const deliveries: ActivationDelivery[] = [];
   const failures = [...agentResult.failures];
 
-  for (const offer of agentResult.offers) {
-    const student = studentsForIssuance.find((candidate) => candidate.profile.id === offer.externalId);
-    const persistedStudentId = student?.credential.studentNumber ?? offer.externalId ?? offer.activationId;
-    const publicActivationUrl = toPublicWalletActivationLink(offer.activationUrl);
-    const publicOffer = { ...offer, activationUrl: publicActivationUrl };
-    const issuance = await createCredentialIssuanceFromOffer({
-      activationId: offer.activationId,
-      activationUrl: publicActivationUrl,
-      credentialDefinitionId: activeSchema.credentialDefinitionId,
-      credentialExchangeId: offer.credentialExchangeId,
-      credentialExpiresAt: validityWindow.expiresAt,
-      credentialRevocationId: offer.credentialRevocationId,
-      email: offer.email,
-      expiresAt: offer.expiresAt,
-      deliveryStatus: CredentialDeliveryStatus.PENDING,
-      revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId,
-      schemaVersion: activeSchema.schemaVersion,
-      studentId: persistedStudentId,
-      renewedFromIssuanceId: options.renewedFromIssuanceId,
-      wasDelivered: false,
-    });
-    await prisma.credentialIssuance.updateMany({
-      data: { status: "OFFER_SENT" },
-      where: { id: issuance.id, status: "FAILED" },
-    });
-    await reconcileCredentialEventLogs(offer.credentialExchangeId);
-    const emailDelivery = await emailDeliveryForOffer(student, publicOffer);
-    await prisma.credentialIssuance.update({
-      data: {
-        deliveryStatus: emailDelivery.status === "Delivered"
-          ? CredentialDeliveryStatus.DELIVERED
-          : CredentialDeliveryStatus.FAILED,
-        failureReason: emailDelivery.status === "Failed" ? emailDelivery.failureReason : null,
-      },
-      where: { id: issuance.id },
-    });
-    if (emailDelivery.status === "Failed") {
-      await prisma.credentialIssuance.updateMany({
-        data: { status: "FAILED" },
-        where: { id: issuance.id, status: "OFFER_SENT" },
-      });
-    }
+  const processedOffers = await mapWithConcurrency(
+    agentResult.offers,
+    env.BATCH_ISSUANCE_PROCESSING_CONCURRENCY,
+    async (offer) => {
+      const student = studentsForIssuance.find((candidate) => candidate.profile.id === offer.externalId);
+      const persistedStudentId = student?.credential.studentNumber ?? offer.externalId ?? offer.activationId;
+      const publicActivationUrl = toPublicWalletActivationLink(offer.activationUrl);
+      const publicOffer = { ...offer, activationUrl: publicActivationUrl };
 
-    await recordCredentialOfferSentAudit({
-      actorId,
-      batchId: includeBatchIdInAudit ? batchId : null,
-      credentialDefinitionId: activeSchema.credentialDefinitionId,
-      credentialExchangeId: offer.credentialExchangeId,
-      credentialIssuanceId: issuance.id,
-      deliveryStatus:
-        emailDelivery.status === "Delivered" ? CredentialDeliveryStatus.DELIVERED : CredentialDeliveryStatus.FAILED,
-      failureReason: emailDelivery.status === "Failed" ? emailDelivery.failureReason : undefined,
-      studentId: persistedStudentId,
-    });
+      try {
+        const issuance = await createCredentialIssuanceFromOffer({
+          activationId: offer.activationId,
+          activationUrl: publicActivationUrl,
+          credentialDefinitionId: activeSchema.credentialDefinitionId,
+          credentialExchangeId: offer.credentialExchangeId,
+          credentialExpiresAt: validityWindow.expiresAt,
+          credentialRevocationId: offer.credentialRevocationId,
+          email: offer.email,
+          expiresAt: offer.expiresAt,
+          deliveryStatus: CredentialDeliveryStatus.PENDING,
+          revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId,
+          schemaVersion: activeSchema.schemaVersion,
+          studentId: persistedStudentId,
+          renewedFromIssuanceId: options.renewedFromIssuanceId,
+          wasDelivered: false,
+        });
+        await prisma.credentialIssuance.updateMany({
+          data: { status: "OFFER_SENT" },
+          where: { id: issuance.id, status: "FAILED" },
+        });
+        await reconcileCredentialEventLogs(offer.credentialExchangeId);
+        const emailDelivery = await emailDeliveryForOffer(student, publicOffer);
+        await prisma.credentialIssuance.update({
+          data: {
+            deliveryStatus: emailDelivery.status === "Delivered"
+              ? CredentialDeliveryStatus.DELIVERED
+              : CredentialDeliveryStatus.FAILED,
+            failureReason: emailDelivery.status === "Failed" ? emailDelivery.failureReason : null,
+          },
+          where: { id: issuance.id },
+        });
+        if (emailDelivery.status === "Failed") {
+          await prisma.credentialIssuance.updateMany({
+            data: { status: "FAILED" },
+            where: { id: issuance.id, status: "OFFER_SENT" },
+          });
+        }
 
-    if (emailDelivery.status === "Failed") {
-      failures.push({
-        email: offer.email,
-        externalId: offer.externalId,
-        message: emailDelivery.failureReason,
-      });
-    }
+        await recordCredentialOfferSentAudit({
+          actorId,
+          batchId: includeBatchIdInAudit ? batchId : null,
+          credentialDefinitionId: activeSchema.credentialDefinitionId,
+          credentialExchangeId: offer.credentialExchangeId,
+          credentialIssuanceId: issuance.id,
+          deliveryStatus: emailDelivery.status === "Delivered"
+            ? CredentialDeliveryStatus.DELIVERED
+            : CredentialDeliveryStatus.FAILED,
+          failureReason: emailDelivery.status === "Failed" ? emailDelivery.failureReason : undefined,
+          studentId: persistedStudentId,
+        });
 
-    deliveries.push({
-      activationId: offer.activationId,
-      activationUrl: publicActivationUrl,
-      batchId,
-      channel: "activation-link",
-      credentialExchangeId: offer.credentialExchangeId,
-      credentialId: issuance.id,
-      deliveredAt: emailDelivery.status === "Delivered" ? now.toISOString() : undefined,
-      email: offer.email,
-      emailStatus: emailDelivery.status === "Delivered" ? "Sent" : "Failed",
-      expiresAt: deliveryExpiryFrom(offer.expiresAt),
-      failureReason: emailDelivery.status === "Failed" ? emailDelivery.failureReason : undefined,
-      id: `activation-delivery-${offer.activationId}`,
-      status: emailDelivery.status,
-      studentId: student?.profile.id ?? offer.externalId ?? offer.activationId,
-    });
+        return {
+          delivery: {
+            activationId: offer.activationId,
+            activationUrl: publicActivationUrl,
+            batchId,
+            channel: "activation-link" as const,
+            credentialExchangeId: offer.credentialExchangeId,
+            credentialId: issuance.id,
+            deliveredAt: emailDelivery.status === "Delivered" ? now.toISOString() : undefined,
+            email: offer.email,
+            emailStatus: emailDelivery.status === "Delivered" ? "Sent" as const : "Failed" as const,
+            expiresAt: deliveryExpiryFrom(offer.expiresAt),
+            failureReason: emailDelivery.status === "Failed" ? emailDelivery.failureReason : undefined,
+            id: `activation-delivery-${offer.activationId}`,
+            status: emailDelivery.status,
+            studentId: student?.profile.id ?? offer.externalId ?? offer.activationId,
+          },
+          failure: emailDelivery.status === "Failed"
+            ? {
+                email: offer.email,
+                externalId: offer.externalId,
+                message: emailDelivery.failureReason,
+              }
+            : undefined,
+        };
+      } catch (error) {
+        return {
+          delivery: undefined,
+          failure: {
+            email: offer.email,
+            externalId: offer.externalId,
+            message: error instanceof Error ? error.message : "Portal post-processing failed.",
+          },
+        };
+      }
+    },
+  );
+
+  for (const processed of processedOffers) {
+    if (processed.delivery) deliveries.push(processed.delivery);
+    if (processed.failure) failures.push(processed.failure);
   }
 
   const result: BatchIssuanceResult = {

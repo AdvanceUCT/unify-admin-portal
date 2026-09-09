@@ -55,6 +55,12 @@ const timeoutMs = (defaultValue: number) =>
     .optional()
     .transform((value) => (value === "" || value === undefined ? defaultValue : value));
 
+const boundedPositiveInteger = (defaultValue: number, maximum: number) =>
+  z
+    .union([z.coerce.number().int().positive().max(maximum), z.literal("")])
+    .optional()
+    .transform((value) => (value === "" || value === undefined ? defaultValue : value));
+
 const envSchema = z.object({
   DATABASE_URL: databaseUrl("DATABASE_URL"),
   DIRECT_URL: databaseUrl("DIRECT_URL").optional(),
@@ -84,6 +90,7 @@ const envSchema = z.object({
   AGENT_HEALTH_TIMEOUT_MS: timeoutMs(5_000),
   AGENT_STANDARD_TIMEOUT_MS: timeoutMs(15_000),
   AGENT_LONG_TIMEOUT_MS: timeoutMs(60_000),
+  BATCH_ISSUANCE_PROCESSING_CONCURRENCY: boundedPositiveInteger(4, 16),
   RESEND_API_KEY: optionalNonEmptyString,
   CREDENTIAL_EMAIL_FROM: optionalNonEmptyString,
   CREDENTIAL_EMAIL_DELIVERY_MODE: z.enum(["resend", "console"]).default("resend"),

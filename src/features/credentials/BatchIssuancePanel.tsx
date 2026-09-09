@@ -110,7 +110,9 @@ export function BatchIssuancePanel({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-section-title text-fg">Create batch run</h2>
-            <p className="mt-1 text-sm text-fg-muted">Preview eligible students before generating offers.</p>
+            <p className="mt-1 text-sm text-fg-muted">
+              Preview eligible students before generating up to 100 offers per synchronous batch.
+            </p>
           </div>
           <Link
             className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
