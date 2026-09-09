@@ -1,16 +1,17 @@
 # Vendor invoicing deployment handoff
 
 Everything a teammate with Vercel/Paystack dashboard access needs to do to get the
-`feature/verification-billing` branch working correctly on the live deployed site after it's merged.
-This is **not** a fresh demo deployment — it's turning on a new feature on a site that's already running,
-against its own real (non-dev) database. Companion to
+`feature/verification-billing` branch working correctly on the deployed site after it's merged. This site
+is a testing/staging deployment, not a production site with real vendors at risk — so there's no need to
+stage feature flags on and off in sequence; set everything up front and work through setup in whatever
+order the steps actually depend on each other. Companion to
 [`paystack-vendor-invoicing-implementation-plan.md`](./paystack-vendor-invoicing-implementation-plan.md) and
 [`paystack-vendor-invoicing-paystack-setup.md`](./paystack-vendor-invoicing-paystack-setup.md), which this
 condenses into an ordered checklist. Full evidence and test results are in
 [`paystack-vendor-invoicing-implementation-status.md`](./paystack-vendor-invoicing-implementation-status.md).
 
 **Do not use `scripts/sql/reset-billing-demo-data.sql` or `scripts/seed-vendor-verification-history.ts`
-against production.** Those two are dev/demo-only tools (see
+against a database anyone other than you relies on.** Those two are dev/demo-only tools (see
 [`paystack-vendor-invoicing-demo-reset.md`](./paystack-vendor-invoicing-demo-reset.md)) — the reset script
 deletes real rows and disables safety triggers to do it.
 
@@ -26,26 +27,26 @@ Postgres backfills existing rows automatically — no data loss, no manual step.
 new tables/constraints. `npm run build`, `npm run typecheck`, `npm run lint`, `npm test`, and
 `npm run test:billing:db` all pass on this branch (see the status doc for exact counts).
 
-## 1. Before merging: set production environment variables
+## 1. Before merging: set environment variables
 
-In the Vercel project's **production** environment (not just a local `.env.local`), set:
+In the Vercel project's environment for this site, set:
 
 | Variable | Value | Notes |
 | --- | --- | --- |
-| `VERIFICATION_INVOICING_ENABLED` | `false` | Leave off for the first deploy — see step 3. |
-| `VERIFICATION_INVOICE_CHECKOUT_ENABLED` | `false` | Leave off until step 5. |
+| `VERIFICATION_INVOICING_ENABLED` | `true` | Only gates *generating* new invoices — nothing auto-runs on deploy, so there's no reason to delay this. |
+| `VERIFICATION_INVOICE_CHECKOUT_ENABLED` | `true` | Only gates the Pay button/checkout routes. Since no real vendor is at risk here, set it now too — you'll still verify Paystack itself works before actually testing a payment (step 4). |
 | `PAYSTACK_MODE` | `test` | This POC only ever accepts `test`; a live key is rejected outright. |
 | `PAYSTACK_SECRET_KEY` | `sk_test_...` | From Paystack dashboard → Settings → API Keys & Webhooks. |
 | `PAYSTACK_PLATFORM_SUBACCOUNT_CODE` | `ACCT_...` | The platform's subaccount code (see the Paystack setup guide, §3). |
-| `PAYSTACK_EXPECTED_INTEGRATION_ID` | (from Paystack) | Confirmed via `billing:paystack-check` — see step 5. |
+| `PAYSTACK_EXPECTED_INTEGRATION_ID` | (from Paystack) | Confirmed via `paystack-check` — see step 4. |
 | `PAYSTACK_ACCOUNT_REF` | e.g. `university-demo` | A local label, not a secret. Optional — defaults to this value. |
 | `VERIFICATION_FEE_MINOR` / `VERIFICATION_FEE_CURRENCY` | your chosen demo fee | Only needed if not already set for the existing per-verification fee feature. |
 | `CRON_SECRET` | (should already exist) | Confirm it's set — the new cron routes reuse it. |
-| `APP_URL` | the real production URL | **Critical** — used for the same-origin check on payment routes and the URL Paystack redirects back to after checkout. Wrong here silently breaks both. |
+| `APP_URL` | the real deployed URL | **Important** — used for the same-origin check on payment routes and the URL Paystack redirects back to after checkout. Wrong here silently breaks both. |
 
-Also double check `DATABASE_URL` / `DIRECT_URL` in that same environment already point at the real
-production database (they should, since the site is already live) — this matters more now because the
-next step will run schema migrations against whatever they point at.
+Also double check `DATABASE_URL` / `DIRECT_URL` in that same environment point at the database you
+actually mean to run this against — this matters more now because the next step will run schema
+migrations against whatever they point at.
 
 ## 2. Merge and deploy
 
@@ -53,20 +54,15 @@ Merge `feature/verification-billing` into `main` and let the normal deploy pipel
 `scripts/run-production-migrations.mjs` already runs `prisma migrate deploy` automatically during a
 production Vercel build (`VERCEL_ENV=production`) — no manual migration step needed.
 
-After the deploy finishes:
-- Confirm the site loads normally and existing verification/credential flows still work unaffected —
-  nothing in this branch should change that behavior, since invoicing is still off.
-- Confirm the new pages exist but show empty/off states: `/vendors/invoices` (admin), `/vendor/invoices`
-  (owner) should load without error, just with nothing in them yet.
+After the deploy finishes, confirm the site loads normally and existing verification/credential flows
+still work unaffected. `/vendors/invoices` (admin) and `/vendor/invoices` (owner) should load with nothing
+in them yet, since there's no billing data until step 3.
 
-## 3. Populate production billing data
+## 3. Populate billing data
 
-Your database is separate from the dev one this feature was built and tested against, so none of the
-test data exists here — this step creates the real pricing policy and imports real historical usage.
-
-Run these **from a machine with production `DATABASE_URL`/`DIRECT_URL` and the other production env vars
-loaded** (e.g. `vercel env pull` into a local `.env.production.local`, or however your team runs one-off
-scripts against production today):
+The database this feature was built and tested against was a separate dev one, so none of that test data
+exists here — this step creates the pricing policy and imports historical usage. Run these from a machine
+with this environment's `DATABASE_URL`/`DIRECT_URL` and the other env vars loaded (e.g. `vercel env pull`):
 
 ```bash
 # Set the platform's revenue-share and legacy/historical fee (your own chosen values):
@@ -76,16 +72,14 @@ npx tsx scripts/bootstrap-billing.ts --platform-share-bps <BPS> --legacy-fee-min
 npx tsx scripts/billing-backfill.ts
 npx tsx scripts/billing-backfill.ts --apply
 
-# Then flip invoicing on:
+# Preview, then generate, invoices from that imported history:
+npx tsx scripts/billing-invoices.ts
+npx tsx scripts/billing-invoices.ts --apply
 ```
 
-Set `VERIFICATION_INVOICING_ENABLED=true` in Vercel now (redeploy or use Vercel's env-var hot-reload if
-your plan supports it), then:
-
-```bash
-npx tsx scripts/billing-invoices.ts            # dry run — review what would be issued
-npx tsx scripts/billing-invoices.ts --apply    # generates closed-month invoices from imported history
-```
+If there's no real historical verification data to import yet, see
+[`paystack-vendor-invoicing-demo-reset.md`](./paystack-vendor-invoicing-demo-reset.md) for a script that
+seeds realistic fake verification history instead.
 
 Review `billing_exception` rows for anything the backfill couldn't classify before treating history as
 fully imported.
@@ -105,21 +99,20 @@ works once that URL is real and publicly reachable, so it can't be done until th
    deployment serves this — that setting blocks Paystack's server-to-server call before it even reaches
    the app, and the code fix in this branch (`proxy.ts`) can't do anything about it, since it's a Vercel
    platform-level gate, not an application-level one.
-4. Run the read-only configuration check against production credentials:
+4. Run the read-only configuration check:
    ```bash
    npx tsx scripts/paystack-check.ts
    ```
    Confirm it reports the subaccount active, ZAR, test mode, and the integration ID matching.
 
-## 5. Enable checkout
+Checkout was already enabled in step 1, so once this passes, the Pay button on a payable invoice is ready
+to actually use.
 
-Set `VERIFICATION_INVOICE_CHECKOUT_ENABLED=true` in Vercel and redeploy/restart. The Pay button will now
-appear on payable invoices in the owner portal.
+## 5. Walkthrough
 
-## 6. Acceptance walkthrough
-
-Run through this with four real accounts: a vendor owner, a vendor staff member, a *different* vendor
-owner, and a university admin.
+Run through this with a vendor owner, a vendor staff member, a *different* vendor owner, and a university
+admin — real accounts if convenient, but since this isn't production, cutting corners here (e.g. skipping
+the "different vendor" account) is a judgment call, not a risk.
 
 | Scenario | What to check |
 | --- | --- |
@@ -135,7 +128,7 @@ owner, and a university admin.
 | No payment enforcement | The vendor can still perform verifications both before and after paying — nothing about branch access, the vendor API, or QR/checkout is gated on payment status. |
 | Job replay | Manually rerun `billing:invoices --apply` and the `/api/cron/vendor-billing` route — neither creates a duplicate invoice. |
 
-## 7. Record the result
+## 6. Record the result
 
 Once the walkthrough passes, update
 [`paystack-vendor-invoicing-implementation-status.md`](./paystack-vendor-invoicing-implementation-status.md)'s
@@ -144,15 +137,12 @@ from the test payment, the deployed URL, and any unresolved limitations. Don't c
 or live-money readiness from test-mode evidence — Paystack's own settlement is genuinely not applicable
 here, per the implementation's own operations reporting.
 
-## Rollback / recovery notes
+## If you want to pause or roll something back
 
-- Both feature flags (`VERIFICATION_INVOICING_ENABLED`, `VERIFICATION_INVOICE_CHECKOUT_ENABLED`) can be
-  flipped back to `false` independently at any time without losing data — turning either off stops *new*
-  issuance/checkout only; reading existing invoices, receiving a webhook, and reconciling an
-  already-in-flight payment keep working regardless (this was verified in Phase 6 both by test and by a
-  real run against dev data).
-- If something looks wrong after enabling checkout, disable `VERIFICATION_INVOICE_CHECKOUT_ENABLED`
-  immediately — it does not affect anything already paid or already invoiced.
+- Both feature flags can be flipped back to `false` independently at any time without losing data —
+  turning either off stops *new* issuance/checkout only; reading existing invoices, receiving a webhook,
+  and reconciling an already-in-flight payment keep working regardless (verified in Phase 6, both by test
+  and by a real run against dev data).
 - `npm run billing:reconcile` (or `/api/cron/vendor-billing-reconcile`, or the "Run reconciliation now"
   button on `/settings`) is the manual recovery path for a payment attempt that got stuck — it's safe to
   run at any time; it only re-checks references that are already unresolved and never starts a new charge.
