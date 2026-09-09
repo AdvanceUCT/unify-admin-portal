@@ -19,7 +19,9 @@ import type {
 } from "@/lib/api/types";
 import { toPublicWalletActivationLink } from "@/lib/api/activationLinks";
 import { createBatchActivationLinks } from "@/lib/agentClient";
+import { mapWithConcurrency } from "@/lib/async/mapWithConcurrency";
 import { writeAuditLog } from "@/lib/audit/audit";
+import { env } from "@/lib/config/env";
 import { recordCredentialOfferSentAudit } from "@/lib/credentials/audit";
 import {
   createCredentialIssuanceFromOffer,
@@ -36,6 +38,7 @@ import {
   attributesForStudent,
   credentialValidityWindowFrom,
   getActiveCredentialDefinition,
+  MAX_BATCH_ISSUANCE_LIMIT,
 } from "@/lib/issuance/batchIssuance";
 import {
   selectStudentRecordsForCredentialIssuance,
@@ -43,6 +46,7 @@ import {
 } from "@/lib/student-records/simulatedUniversityRecords";
 
 type PersistedBatchItem = {
+  id: string;
   failureReason: string | null;
   credentialIssuance: CredentialIssuance | null;
   credentialIssuanceId: string | null;
@@ -111,8 +115,20 @@ function batchIdFrom(now: Date) {
   return `batch-${timestamp}`;
 }
 
+function batchItemIdempotencyKey(batchId: string, batchItemId: string) {
+  return `batch-issuance:${batchId}:${batchItemId}`;
+}
+
 function fullName(student: StudentRecord) {
   return `${student.profile.firstName} ${student.profile.lastName}`;
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return [...new Set(values.filter((value): value is string => Boolean(value)))];
+}
+
+function credentialLookupIdsForItem(item: PersistedBatchItem, student?: StudentRecord) {
+  return uniqueStrings([item.studentId, student?.credential.studentNumber, student?.profile.id]);
 }
 
 function filterMatches(student: StudentRecord, selection: BatchIssuanceSelection) {
@@ -221,13 +237,24 @@ export async function previewBatchIssuance(selectionInput?: BatchIssuanceSelecti
   const selection = parseBatchIssuanceSelection(selectionInput);
   const students = await overlayCredentialStatuses(await getAllStudents());
   const matchingStudents = students.filter((student) => filterMatches(student, selection));
-  const eligibleStudents = selectStudentRecordsForCredentialIssuance(students, selection);
+  const allEligibleStudents = selectStudentRecordsForCredentialIssuance(students, {
+    ...selection,
+    limit: Number.MAX_SAFE_INTEGER,
+  });
+  const effectiveLimit = selection.limit ?? MAX_BATCH_ISSUANCE_LIMIT;
+  const eligibleStudents = allEligibleStudents.slice(0, effectiveLimit);
   const eligibleIds = new Set(eligibleStudents.map((student) => student.profile.id));
+  const allEligibleIds = new Set(allEligibleStudents.map((student) => student.profile.id));
   const selectedIds = new Set(eligibleStudents.map((student) => student.profile.id));
-  const limitedMatchingStudents = selection.limit ? matchingStudents.slice(0, selection.limit) : matchingStudents;
-  const skippedItems = limitedMatchingStudents
+  const skippedItems = matchingStudents
     .filter((student) => !eligibleIds.has(student.profile.id))
-    .map((student) => previewItem(student, "Skipped", skipReasonFor(student)));
+    .map((student) => previewItem(
+      student,
+      "Skipped",
+      allEligibleIds.has(student.profile.id)
+        ? `Batch maximum of ${effectiveLimit} students reached.`
+        : skipReasonFor(student),
+    ));
   const eligibleItems = eligibleStudents.map((student) => previewItem(student, "Eligible"));
 
   return {
@@ -346,10 +373,16 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
 
   await Promise.all(
     pendingItems.map(async (item) => {
-      const activeIssuance = await findActiveCredentialIssuance({
-        credentialDefinitionId: activeSchema.credentialDefinitionId,
-        studentId: item.studentId,
-      });
+      const student = studentsById.get(item.studentId);
+      let activeIssuance: CredentialIssuance | null = null;
+
+      for (const studentId of credentialLookupIdsForItem(item, student)) {
+        activeIssuance = await findActiveCredentialIssuance({
+          credentialDefinitionId: activeSchema.credentialDefinitionId,
+          studentId,
+        });
+        if (activeIssuance) break;
+      }
 
       if (activeIssuance) {
         blockedItems.add(item.id);
@@ -364,29 +397,45 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
       }
     }),
   );
-  let allowedPendingItems = pendingItems.filter((item) => !blockedItems.has(item.id));
+  const allowedPendingItems = pendingItems.filter((item) => !blockedItems.has(item.id));
+  let itemsForAgent = allowedPendingItems
+    .map((item) => ({ item, student: studentsById.get(item.studentId) }))
+    .filter((entry): entry is { item: typeof allowedPendingItems[number]; student: StudentRecord } => Boolean(entry.student));
+
+  await Promise.all(
+    allowedPendingItems
+      .filter((item) => !studentsById.has(item.studentId))
+      .map((item) =>
+        prisma.batchIssuanceItem.update({
+          data: {
+            failureReason: "Student record was not found during batch processing.",
+            status: BatchIssuanceItemStatus.FAILED,
+          },
+          where: { id: item.id },
+        }),
+      ),
+  );
 
   let agentResult: Awaited<ReturnType<typeof createBatchActivationLinks>> = { failures: [], offers: [] };
-  if (allowedPendingItems.length > 0) {
+  if (itemsForAgent.length > 0) {
     try {
       agentResult = await createBatchActivationLinks({
         credentialDefinitionId: activeSchema.credentialDefinitionId,
         ...(activeSchema.revocationRegistryDefinitionId
           ? { revocationRegistryDefinitionId: activeSchema.revocationRegistryDefinitionId }
           : {}),
-        students: allowedPendingItems
-          .map((item) => studentsById.get(item.studentId))
-          .filter((student): student is StudentRecord => Boolean(student))
-          .map((student) => ({
+        students: itemsForAgent
+          .map(({ item, student }) => ({
             attributes: attributesForStudent(student, activeSchema.schemaAttributes, validityWindow),
             email: student.profile.email,
-            externalId: student.credential.studentNumber,
+            externalId: item.studentId,
+            idempotencyKey: batchItemIdempotencyKey(batchId, item.id),
           })),
       });
     } catch (error) {
       const failureReason = error instanceof Error ? error.message : "Agent service request failed.";
       await Promise.all(
-        allowedPendingItems.map((item) =>
+        itemsForAgent.map(({ item }) =>
           prisma.batchIssuanceItem.update({
             data: {
               failureReason,
@@ -396,93 +445,118 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
           }),
         ),
       );
-      allowedPendingItems = [];
+      itemsForAgent = [];
     }
   }
   const offerByStudentId = new Map(agentResult.offers.map((offer) => [offer.externalId, offer]));
   const failureByStudentId = new Map(agentResult.failures.map((failure) => [failure.externalId, failure]));
 
-  for (const item of allowedPendingItems) {
-    const student = studentsById.get(item.studentId);
-    const offer = offerByStudentId.get(item.studentId);
-    const failure = failureByStudentId.get(item.studentId);
+  await mapWithConcurrency(
+    itemsForAgent,
+    env.BATCH_ISSUANCE_PROCESSING_CONCURRENCY,
+    async ({ item, student }) => {
+      try {
+        const offer = offerByStudentId.get(item.studentId);
+        const failure = failureByStudentId.get(item.studentId);
 
-    if (!student) {
-      await prisma.batchIssuanceItem.update({
-        data: {
-          failureReason: "Student record was not found during batch processing.",
-          status: BatchIssuanceItemStatus.FAILED,
-        },
-        where: { id: item.id },
-      });
-      continue;
-    }
+        if (failure || !offer) {
+          await prisma.batchIssuanceItem.update({
+            data: {
+              failureReason: failure?.message ?? "Agent service did not return an offer for this student.",
+              status: BatchIssuanceItemStatus.FAILED,
+            },
+            where: { id: item.id },
+          });
+          return;
+        }
 
-    if (failure || !offer) {
-      await prisma.batchIssuanceItem.update({
-        data: {
-          failureReason: failure?.message ?? "Agent service did not return an offer for this student.",
-          status: BatchIssuanceItemStatus.FAILED,
-        },
-        where: { id: item.id },
-      });
-      continue;
-    }
+        const publicActivationUrl = toPublicWalletActivationLink(offer.activationUrl);
+        const publicOffer = { ...offer, activationUrl: publicActivationUrl };
+        const issuance = await createCredentialIssuanceFromOffer({
+          activationId: offer.activationId,
+          activationUrl: publicActivationUrl,
+          credentialDefinitionId: activeSchema.credentialDefinitionId,
+          credentialExchangeId: offer.credentialExchangeId,
+          credentialExpiresAt: validityWindow.expiresAt,
+          credentialRevocationId: offer.credentialRevocationId,
+          deliveryStatus: CredentialDeliveryStatus.PENDING,
+          email: offer.email,
+          expiresAt: offer.expiresAt,
+          revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId,
+          schemaVersion: activeSchema.schemaVersion,
+          studentId: item.studentId,
+          wasDelivered: false,
+        });
+        await prisma.credentialIssuance.updateMany({
+          data: { status: "OFFER_SENT" },
+          where: { id: issuance.id, status: "FAILED" },
+        });
+        await reconcileCredentialEventLogs(offer.credentialExchangeId);
 
-    const publicActivationUrl = toPublicWalletActivationLink(offer.activationUrl);
-    const publicOffer = { ...offer, activationUrl: publicActivationUrl };
-    let delivery: Partial<ActivationDelivery> = {};
-    try {
-      await sendActivationEmail(student, publicOffer);
-      delivery = { deliveredAt: new Date().toISOString(), emailStatus: "Sent", status: "Delivered" };
-    } catch (error) {
-      delivery = {
-        emailStatus: "Failed",
-        failureReason: error instanceof Error ? error.message : String(error),
-        status: "Failed",
-      };
-    }
+        let delivery: Partial<ActivationDelivery>;
+        try {
+          await sendActivationEmail(student, publicOffer);
+          delivery = { deliveredAt: new Date().toISOString(), emailStatus: "Sent", status: "Delivered" };
+        } catch (error) {
+          delivery = {
+            emailStatus: "Failed",
+            failureReason: error instanceof Error ? error.message : String(error),
+            status: "Failed",
+          };
+        }
 
-    const issuance = await createCredentialIssuanceFromOffer({
-      activationId: offer.activationId,
-      activationUrl: publicActivationUrl,
-      credentialDefinitionId: activeSchema.credentialDefinitionId,
-      credentialExchangeId: offer.credentialExchangeId,
-      credentialExpiresAt: validityWindow.expiresAt,
-      credentialRevocationId: offer.credentialRevocationId,
-      email: offer.email,
-      expiresAt: offer.expiresAt,
-      failureReason: delivery.failureReason,
-      revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId,
-      schemaVersion: activeSchema.schemaVersion,
-      studentId: item.studentId,
-      wasDelivered: delivery.status === "Delivered",
-    });
-    await reconcileCredentialEventLogs(offer.credentialExchangeId);
+        const deliveryStatus = delivery.status === "Delivered"
+          ? CredentialDeliveryStatus.DELIVERED
+          : CredentialDeliveryStatus.FAILED;
+        await prisma.credentialIssuance.update({
+          data: {
+            deliveryStatus,
+            failureReason: delivery.failureReason ?? null,
+          },
+          where: { id: issuance.id },
+        });
+        if (deliveryStatus === CredentialDeliveryStatus.FAILED) {
+          await prisma.credentialIssuance.updateMany({
+            data: { status: "FAILED" },
+            where: { id: issuance.id, status: "OFFER_SENT" },
+          });
+        }
 
-    await recordCredentialOfferSentAudit({
-      actorId: auditActorId,
-      batchId,
-      batchItemId: item.id,
-      credentialDefinitionId: activeSchema.credentialDefinitionId,
-      credentialExchangeId: offer.credentialExchangeId,
-      credentialIssuanceId: issuance.id,
-      deliveryStatus:
-        delivery.status === "Delivered" ? CredentialDeliveryStatus.DELIVERED : CredentialDeliveryStatus.FAILED,
-      failureReason: delivery.failureReason,
-      studentId: item.studentId,
-    });
+        await recordCredentialOfferSentAudit({
+          actorId: auditActorId,
+          batchId,
+          batchItemId: item.id,
+          credentialDefinitionId: activeSchema.credentialDefinitionId,
+          credentialExchangeId: offer.credentialExchangeId,
+          credentialIssuanceId: issuance.id,
+          deliveryStatus,
+          failureReason: delivery.failureReason,
+          studentId: item.studentId,
+        });
 
-    await prisma.batchIssuanceItem.update({
-      data: {
-        credentialIssuanceId: issuance.id,
-        failureReason: delivery.failureReason,
-        status:
-          delivery.status === "Delivered" ? BatchIssuanceItemStatus.DELIVERED : BatchIssuanceItemStatus.DELIVERY_FAILED,
-      },
-      where: { id: item.id },
-    });
-  }
+        await prisma.batchIssuanceItem.update({
+          data: {
+            credentialIssuanceId: issuance.id,
+            failureReason: delivery.failureReason,
+            status: delivery.status === "Delivered"
+              ? BatchIssuanceItemStatus.DELIVERED
+              : BatchIssuanceItemStatus.DELIVERY_FAILED,
+          },
+          where: { id: item.id },
+        });
+      } catch (error) {
+        const failureReason = error instanceof Error ? error.message : "Portal post-processing failed.";
+        try {
+          await prisma.batchIssuanceItem.update({
+            data: { failureReason, status: BatchIssuanceItemStatus.FAILED },
+            where: { id: item.id },
+          });
+        } catch {
+          console.error("[batch-issuance] failed to persist an item failure", { batchId, batchItemId: item.id });
+        }
+      }
+    },
+  );
 
   const updatedRun = await prisma.batchIssuanceRun.findUniqueOrThrow({
     include: { items: { include: { credentialIssuance: true } } },
