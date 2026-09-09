@@ -9,7 +9,8 @@ export type BillingErrorCode =
   | "INVALID_BASIS_POINTS"
   | "INVALID_VENDOR"
   | "POLICY_NOT_FOUND"
-  | "POLICY_CONFLICT";
+  | "POLICY_CONFLICT"
+  | "UNIVERSITY_NOT_CONFIGURED";
 
 export class BillingDomainError extends Error {
   constructor(

@@ -1,9 +1,10 @@
 /**
  * @fileoverview Effective-dated verification billing policy lookup and the audited policy editor.
  * @module lib/billing/policy
+ * Deliberately not "server-only": `scripts/bootstrap-billing.ts` runs this
+ * outside the Next.js server bundle, matching `src/lib/payments/foundation.ts`'s
+ * precedent for CLI-callable modules.
  */
-
-import "server-only";
 
 import { Prisma } from "@/generated/prisma/client";
 import { BillingPolicySource, AuditAction } from "@/generated/prisma/enums";

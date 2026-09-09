@@ -13,6 +13,7 @@ import {
 } from "@/lib/agentClient";
 import { Prisma } from "@/generated/prisma/client";
 import { VendorVerificationBillingStatus, type VendorVerificationStatus } from "@/generated/prisma/enums";
+import { finalizeVerificationCharge } from "@/lib/billing/charges";
 import { prisma } from "@/lib/db/prisma";
 import { ensureVendorVerificationServicePoint } from "@/lib/vendors/applications";
 import { deliverVendorWebhook } from "@/lib/vendors/integrations";
@@ -252,7 +253,7 @@ async function applyAgentResult(id: string, result: AgentVerificationResult) {
     status,
   });
 
-  return prisma.vendorVerification.update({
+  const verification = await prisma.vendorVerification.update({
     where: { id },
     data: {
       status,
@@ -261,7 +262,22 @@ async function applyAgentResult(id: string, result: AgentVerificationResult) {
       completedAt,
       ...billingSnapshot,
     },
+    include: { branch: { select: { name: true } } },
   });
+
+  await finalizeVerificationCharge(prisma, {
+    verificationId: verification.id,
+    vendorProfileId: verification.vendorProfileId,
+    branchId: verification.branchId,
+    branchNameSnapshot: verification.branch?.name ?? verification.servicePointName ?? "Branch",
+    billingStatus: verification.billingStatus,
+    verificationFeeMinor: verification.verificationFeeMinor,
+    verificationFeeCurrency: verification.verificationFeeCurrency,
+    billingPeriodKey: verification.billingPeriodKey,
+    completedAt: verification.completedAt,
+  });
+
+  return verification;
 }
 
 /** Creates or reuses the checkout verification record identified by the vendor's checkout ID. */
@@ -284,6 +300,15 @@ export async function createVendorCheckoutSession(vendorProfileId: string, check
     servicePointId: branch.agentServicePointId,
     checkoutId: normalizedCheckoutId,
   });
+  const status = mapAgentVerificationDecision(agentResult.status);
+  const completedAt = agentResult.completedAt ? new Date(agentResult.completedAt) : null;
+  // The agent can return an already-terminal decision at creation time (not
+  // just "Pending"), so this creation path needs the same billing snapshot
+  // resolution as the polling/webhook paths — otherwise a checkout approved
+  // on its first response would be stored with a stale PENDING billing
+  // status forever, since the idempotent upsert never revisits it again.
+  const billingSnapshot = resolveVerificationBillingSnapshot({ completedAt, isVerified: null, status });
+
   // vendorProfileId + checkoutId is the caller's idempotency key. Retrying a
   // checkout must return the existing record rather than create a second result.
   const verification = await prisma.vendorVerification.upsert({
@@ -295,12 +320,25 @@ export async function createVendorCheckoutSession(vendorProfileId: string, check
       checkoutId: normalizedCheckoutId,
       servicePointId: branch.agentServicePointId,
       servicePointName: branch.name,
-      status: mapAgentVerificationDecision(agentResult.status),
+      status,
       failureCode: agentResult.failureCode ?? null,
       expiresAt: new Date(agentResult.expiresAt),
-      completedAt: agentResult.completedAt ? new Date(agentResult.completedAt) : null,
+      completedAt,
+      ...billingSnapshot,
     },
     update: {},
+  });
+
+  await finalizeVerificationCharge(prisma, {
+    verificationId: verification.id,
+    vendorProfileId: verification.vendorProfileId,
+    branchId: verification.branchId,
+    branchNameSnapshot: branch.name,
+    billingStatus: verification.billingStatus,
+    verificationFeeMinor: verification.verificationFeeMinor,
+    verificationFeeCurrency: verification.verificationFeeCurrency,
+    billingPeriodKey: verification.billingPeriodKey,
+    completedAt: verification.completedAt,
   });
 
   return { ...checkoutResultShape(verification), verificationUrl: agentResult.verificationUrl };
@@ -424,6 +462,18 @@ export async function recordVerificationCompletedEvent(payload: VerificationComp
       expiresAt: new Date(payload.expiresAt),
       completedAt,
     },
+  });
+
+  await finalizeVerificationCharge(prisma, {
+    verificationId: verification.id,
+    vendorProfileId: verification.vendorProfileId,
+    branchId: verification.branchId,
+    branchNameSnapshot: branch.name,
+    billingStatus: verification.billingStatus,
+    verificationFeeMinor: verification.verificationFeeMinor,
+    verificationFeeCurrency: verification.verificationFeeCurrency,
+    billingPeriodKey: verification.billingPeriodKey,
+    completedAt: verification.completedAt,
   });
 
   if (verification.checkoutId) await deliverVendorWebhook(verification.id, requestId);

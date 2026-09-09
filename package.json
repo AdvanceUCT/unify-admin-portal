@@ -17,6 +17,8 @@
     "payments:bootstrap:dev": "tsx scripts/bootstrap-payment-wallet.ts --enable-payment-wallet",
     "prebilling:bootstrap": "npm run prisma:generate",
     "billing:bootstrap": "tsx scripts/bootstrap-billing.ts",
+    "prebilling:backfill": "npm run prisma:generate",
+    "billing:backfill": "tsx scripts/billing-backfill.ts",
     "typecheck": "tsc --noEmit",
     "pretypecheck": "npm run prisma:generate",
     "test": "vitest run",

@@ -149,7 +149,126 @@ Legend: ✅ done and gate passed · 🟡 done, gate partially blocked on an exte
 Gate 1 is fully passed: schema/migration, policy/money services, and PostgreSQL-backed invariant and
 concurrency evidence are all in place.
 
-## Phase 2 — Stable charge finalization and historical import — ⬜ not started
+## Phase 2 — Stable charge finalization and historical import — ✅ finalizer complete and tested; 🟡 backfill core contract complete, minimal scope by design
+
+**Agreed scope adjustment before implementation begins**, per discussion with the user: their dev
+database is a personal test project with no real verification history worth preserving (confirmed in
+Phase 0's inventory — 4 test rows total). This phase bundles two things with very different stakes
+here:
+
+1. **The ongoing charge finalizer** — a shared, transactionally idempotent function that creates one
+   `VerificationCharge` per newly-completed billable verification, called from all three terminal
+   materialization paths (in-person/checkout polling via `applyAgentResult`, already-terminal
+   checkout creation via `createVendorCheckoutSession`, and the webhook handler via
+   `recordVerificationCompletedEvent`). This is load-bearing regardless of existing data — without
+   it, Phase 3 has nothing to invoice even for verifications completed after this ships. **Decision:
+   build this fully**, including recording a `BillingException` when a verification is billable but
+   no policy exists to price it, and when later evidence contradicts an already-created charge
+   (correction case) — charges stay immutable; a contradiction is flagged, never rewritten.
+2. **The one-time historical backfill script** (`billing:backfill`) — classifies and imports
+   `VendorVerification` rows that predate the charge/invoice system, per the handoff's six-category
+   table (valid billable, explicit zero fee, legacy missing snapshot, not-billable, pending,
+   conflicting/exception). This exists to protect real historical revenue/audit accuracy in a
+   production-like deployment. **Decision: implement the core contract only** — dry-run/`--apply`
+   modes, the idempotent selection/creation logic, and the cutoff+keyset cursor for resumability —
+   but do not build out exhaustive edge-case classification (missing-branch name recovery, legacy-rate
+   reconstruction heuristics, etc.), since there is no real messy history here to develop or verify
+   those paths against. This will be called out explicitly as an untested-against-real-data
+   simplification, not silently assumed complete, per the handoff's own recovery-and-completion
+   discipline (§14: "distinguish implemented, locally tested, PostgreSQL tested, ... do not mark the
+   entire feature complete").
+
+One incidental fix identified while scoping this: `createVendorCheckoutSession`'s existing `upsert`
+create-path never applies `resolveVerificationBillingSnapshot` when the agent returns an
+already-terminal decision at creation time — this is very likely the direct cause of the one
+inconsistent row (`status = APPROVED`, `billingStatus = PENDING`) already flagged in Phase 0's
+inventory. Unifying this path through the shared finalizer (as the handoff explicitly requires) fixed
+it as a side effect, not as unrelated scope creep (see evidence below).
+
+**Files added/changed**
+- `src/lib/billing/config.ts` — `requireSingleUniversityId()`.
+- `src/lib/billing/exceptions.ts` — `recordBillingException()`: upserts by `dedupeKey` so repeated
+  processing never duplicates a row; never throws (a failure to record an exception must not itself
+  break the caller).
+- `src/lib/billing/charges.ts` — `finalizeVerificationCharge()`: the shared, idempotent finalizer.
+  Looks up an existing charge first; if one exists and current evidence contradicts it (no longer
+  billable, or fee/currency differs), records a `CHARGE_BILLABILITY_CORRECTION` exception and returns
+  the existing (immutable) charge unchanged. Otherwise, if billable with a valid `completedAt`/
+  `billingPeriodKey`, resolves the effective policy and creates the charge (`source = LIVE`); records
+  a `MISSING_BILLING_POLICY` exception if none covers that instant. A `P2002` unique-constraint race
+  is resolved by re-reading the winning charge, not by erroring. The whole function never throws —
+  any unexpected error is logged, converted to a `CHARGE_FINALIZATION_FAILED` exception (itself
+  best-effort), and returns `null` — a billing failure must never break verification processing.
+- `src/lib/billing/backfill.ts` — `runVerificationBillingBackfill()`: the minimal-scope historical
+  import. One bounded batch (keyset cursor on `id`, default 500) per call; per row: already-charged →
+  skip, `PENDING` → count, not billable → count, billable-but-missing-snapshot or
+  billable-but-no-covering-policy → count + (in `--apply`) record an exception, otherwise create a
+  charge sourced as `EXISTING_SNAPSHOT` **preserving the verification's own stored fee/currency** (never
+  repriced from current config). Dry-run records nothing. Does **not** implement the handoff's full
+  six-category classification (branch-name reconstruction, legacy-rate heuristics for rows with no
+  snapshot at all, non-ZAR handling beyond flagging) — by agreed scope, since there is no real messy
+  history here to develop those paths against safely.
+- `src/lib/vendors/verifications.ts` — `applyAgentResult`, `createVendorCheckoutSession`, and
+  `recordVerificationCompletedEvent` now each call `finalizeVerificationCharge` right after their
+  terminal write. `createVendorCheckoutSession` now also resolves and stores the billing snapshot on
+  its `create` path (the bug fix above) instead of only on later polling.
+- `scripts/billing-backfill.ts`, `npm run billing:backfill` (dry-run) / `-- --apply` — loops batches
+  until `nextCursor` is null, prints per-batch and total counts, verifies
+  `scanned = imported + alreadyImported + notBillable + pending + exceptions` before finishing, and
+  (in `--apply` mode) records one `BillingRun` row (`COMPLETED` or `FAILED`) with the totals snapshot.
+- **Correction across all five new `src/lib/billing/*.ts` files** (`config.ts`, `exceptions.ts`,
+  `charges.ts`, `backfill.ts`, and Phase 1's `policy.ts`): removed `import "server-only"`. That import
+  resolves only inside the Next.js server bundle — `server-only` isn't even an installed package
+  (confirmed: absent from `node_modules`), so any CLI script importing one of these modules via `tsx`
+  failed with `MODULE_NOT_FOUND`. This exactly matches `src/lib/payments/foundation.ts`'s existing
+  precedent (script-callable modules stay free of `"server-only"`; only route/action-only modules like
+  `payments/posting.ts` keep it). Caught by actually running `npm run billing:backfill` for real
+  (see below) rather than only through mocked unit tests — a good example of why the plan requires
+  running real commands, not just asserting mocks.
+- New/updated tests: `src/test/billing/charges.test.ts` (11 cases — creation, share math, idempotency,
+  correction exceptions in both directions, missing-policy exception, `P2002` race resolution, and two
+  cases proving the function never throws even when exception-recording itself fails),
+  `src/test/billing/backfill.test.ts` (12 cases — dry-run vs apply, `EXISTING_SNAPSHOT` sourcing with
+  preserved pricing, already-imported skip, pending/not-billable counting, both exception types,
+  branch-name fallback, cursor pagination, concurrent-race handling, empty-batch short circuit),
+  and additions to `src/test/vendor-verifications.test.ts` (the `database` mock gained the new billing
+  delegates so existing tests stay clean/silent rather than exercising the error-swallowing path; one
+  new test proves the checkout-creation bug fix end-to-end; the webhook-completion test now asserts
+  the created charge's exact fields).
+- `src/test-billing-integration/verification-billing-postgres.test.ts` — extended with a
+  `"verification charge finalizer"` block (4 real-Postgres tests): charge creation against whichever
+  policy is currently effective (asserting the balanced-share invariant rather than a hardcoded split,
+  since it runs after the Phase 1 concurrent-policy-edit tests), idempotent sequential calls, a real
+  concurrent race resolved to exactly one charge via the unique constraint, and a foreign-key failure
+  (nonexistent vendor) resolving to a swallowed `null` rather than a thrown error.
+
+**Evidence**
+- `npm run typecheck` — pass. `npm run lint` — 0 errors, same 6 pre-existing warnings.
+- `npm test` — 82 files / 522 tests, all pass.
+- `npm run test:billing:db` — **17/17 real PostgreSQL tests pass** (13 from Phase 1 + 4 new finalizer
+  tests), against a fresh disposable schema; schema confirmed dropped afterward, real dev database
+  data confirmed unchanged.
+- **Real dry-run** (`npm run billing:backfill`, no `--apply`) against the actual dev database:
+  `scanned 4, imported 0, already imported 0, not billable 0, pending 1, exceptions 3`. This matches
+  Phase 0's inventory (4 total rows, 1 `PENDING`-billingStatus row) and is *correct*, not a bug: no
+  `VerificationBillingPolicy` has ever actually been bootstrapped against this real database (bootstrap
+  has only ever run against disposable test schemas so far — see below), so the 3 otherwise-billable
+  rows correctly have no policy to price them and are reported as `MISSING_BILLING_POLICY` exceptions
+  rather than guessed. Verified afterward that this dry-run wrote nothing: real
+  `verification_billing_policy`, `verification_charge`, and `billing_exception` row counts are all
+  still 0.
+- **Deliberately not run**: `npm run billing:bootstrap` and `npm run billing:backfill -- --apply`
+  against the real dev database. Both are write operations against the user's actual working
+  database, and per stated preference this session does not perform hands-on data manipulation there —
+  those are the user's to run when ready. Everything else (schema, services, real-Postgres invariant
+  and concurrency tests, a real read-only dry-run) has been verified first.
+
+**What "minimal backfill" leaves unverified**: branch-name reconstruction for a deleted branch,
+legacy-rate heuristics for a row with no fee snapshot at all, and non-ZAR historical rows are not
+implemented — any such row would currently fall through as a generic
+`BACKFILL_MISSING_SNAPSHOT`/`BACKFILL_MISSING_POLICY` exception rather than being specially recovered.
+This is the agreed tradeoff, not an oversight; it should be revisited before any deployment that has
+real historical data with those characteristics.
 
 ## Phase 3 — Invoice issuance, owner views, admin reporting — ⬜ not started
 

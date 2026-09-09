@@ -29,6 +29,13 @@ const database = vi.hoisted(() => ({
     upsert: vi.fn(),
     update: vi.fn(),
   },
+  // Consulted by the billing charge finalizer after every terminal write.
+  // Left unstubbed (resolving undefined) in tests that don't care about
+  // billing charges — that reads as "not billable yet" and no-ops cleanly.
+  verificationCharge: { findUnique: vi.fn(), create: vi.fn() },
+  verificationBillingPolicy: { findFirst: vi.fn() },
+  universityProfile: { findMany: vi.fn() },
+  billingException: { upsert: vi.fn() },
 }));
 const applications = vi.hoisted(() => ({ ensureVendorVerificationServicePoint: vi.fn() }));
 const integrations = vi.hoisted(() => ({ deliverVendorWebhook: vi.fn() }));
@@ -110,6 +117,72 @@ describe("vendor checkout verification", () => {
     expect(result).toMatchObject({ checkoutId: "cart-001", status: "PENDING" });
   });
 
+  it("applies the billing snapshot and finalizes a charge when the agent returns an already-terminal decision", async () => {
+    applications.ensureVendorVerificationServicePoint.mockResolvedValue(undefined);
+    database.vendorProfile.findUnique.mockResolvedValue({
+      id: "vendor-001",
+      defaultBranch: { id: "branch-001", name: "Main Branch", agentServicePointId: "service-point-001" },
+    });
+    // The agent can decide immediately (no separate polling round-trip).
+    agent.createCheckoutVerificationSession.mockResolvedValue({
+      verificationRequestId: "verification-001",
+      checkoutId: "cart-001",
+      verificationUrl: "https://voskuils.com/verify/checkout/verification-001?token=claim-token",
+      status: "Approved",
+      createdAt: "2026-08-03T20:00:00.000Z",
+      expiresAt: "2026-08-03T20:05:00.000Z",
+      completedAt: "2026-08-03T20:00:30.000Z",
+    });
+    database.vendorVerification.upsert.mockResolvedValue({
+      id: "stored-verification-001",
+      vendorProfileId: "vendor-001",
+      branchId: "branch-001",
+      checkoutId: "cart-001",
+      status: "APPROVED",
+      billingStatus: "BILLABLE",
+      verificationFeeMinor: 125,
+      verificationFeeCurrency: "ZAR",
+      billingPeriodKey: "2026-08",
+      failureCode: null,
+      createdAt: new Date("2026-08-03T20:00:00.000Z"),
+      expiresAt: new Date("2026-08-03T20:05:00.000Z"),
+      completedAt: new Date("2026-08-03T20:00:30.000Z"),
+    });
+    database.verificationCharge.findUnique.mockResolvedValue(null);
+    database.universityProfile.findMany.mockResolvedValue([{ id: "university-001" }]);
+    database.verificationBillingPolicy.findFirst.mockResolvedValue({ id: "policy-001", platformBasisPoints: 1000 });
+    database.verificationCharge.create.mockResolvedValue({ id: "charge-001" });
+
+    await createVendorCheckoutSession("vendor-001", "cart-001");
+
+    // This is the fix: the create branch must resolve and store the billing
+    // snapshot even though the agent already decided at creation time.
+    expect(database.vendorVerification.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({
+        status: "APPROVED",
+        billingStatus: "BILLABLE",
+        billingPeriodKey: "2026-08",
+        verificationFeeCurrency: "ZAR",
+        verificationFeeMinor: 125,
+      }),
+    }));
+    expect(database.verificationCharge.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        verificationId: "stored-verification-001",
+        vendorProfileId: "vendor-001",
+        branchId: "branch-001",
+        branchNameSnapshot: "Main Branch",
+        servicePeriodKey: "2026-08",
+        feeMinor: BigInt(125),
+        currency: "ZAR",
+        platformShareMinor: BigInt(13),
+        universityShareMinor: BigInt(112),
+        policyId: "policy-001",
+        source: "LIVE",
+      }),
+    });
+  });
+
   it("rejects a signed event that conflicts with the stored checkout binding", async () => {
     database.vendorVerification.findUnique
       .mockResolvedValueOnce(null)
@@ -156,8 +229,22 @@ describe("vendor checkout verification", () => {
         checkoutId: "cart-001",
       });
     database.vendorBranch.findFirst.mockResolvedValue({ id: "branch-001", name: "Main Branch" });
-    database.vendorVerification.upsert.mockResolvedValue({ id: "stored-verification-001", checkoutId: "cart-001" });
+    database.vendorVerification.upsert.mockResolvedValue({
+      id: "stored-verification-001",
+      vendorProfileId: "vendor-001",
+      branchId: "branch-001",
+      checkoutId: "cart-001",
+      billingStatus: "BILLABLE",
+      verificationFeeMinor: 125,
+      verificationFeeCurrency: "ZAR",
+      billingPeriodKey: "2026-08",
+      completedAt: new Date(completedEvent.completedAt),
+    });
     integrations.deliverVendorWebhook.mockResolvedValue({ skipped: false, status: "DELIVERED" });
+    database.verificationCharge.findUnique.mockResolvedValue(null);
+    database.universityProfile.findMany.mockResolvedValue([{ id: "university-001" }]);
+    database.verificationBillingPolicy.findFirst.mockResolvedValue({ id: "policy-001", platformBasisPoints: 1000 });
+    database.verificationCharge.create.mockResolvedValue({ id: "charge-001" });
 
     const result = await recordVerificationCompletedEvent(completedEvent);
 
@@ -186,6 +273,21 @@ describe("vendor checkout verification", () => {
         verificationFeeMinor: 125,
       }),
     }));
+    expect(database.verificationCharge.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        verificationId: "stored-verification-001",
+        vendorProfileId: "vendor-001",
+        branchId: "branch-001",
+        branchNameSnapshot: "Main Branch",
+        servicePeriodKey: "2026-08",
+        feeMinor: BigInt(125),
+        currency: "ZAR",
+        platformShareMinor: BigInt(13),
+        universityShareMinor: BigInt(112),
+        policyId: "policy-001",
+        source: "LIVE",
+      }),
+    });
     expect(integrations.deliverVendorWebhook).toHaveBeenCalledTimes(1);
     expect(integrations.deliverVendorWebhook).toHaveBeenCalledWith("stored-verification-001", undefined);
   });

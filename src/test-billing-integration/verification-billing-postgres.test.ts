@@ -12,13 +12,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 config({ path: ".env.local" });
 config({ path: ".env" });
 
-// `@/lib/billing/policy` transitively imports `@/lib/config/env`, which
-// validates `process.env` at module-evaluation time. Static imports are
-// hoisted ahead of the dotenv calls above regardless of source order, so
-// this (and only this) module must be imported dynamically after dotenv
-// has already populated `process.env` — see the dynamic import in
-// `beforeAll` below.
+// `@/lib/billing/policy` and `@/lib/billing/charges` transitively import
+// `@/lib/config/env`, which validates `process.env` at module-evaluation
+// time. Static imports are hoisted ahead of the dotenv calls above
+// regardless of source order, so these (and only these) modules must be
+// imported dynamically after dotenv has already populated `process.env` —
+// see the dynamic import in `beforeAll` below.
 type PolicyModule = typeof import("@/lib/billing/policy");
+type ChargesModule = typeof import("@/lib/billing/charges");
 
 import { PrismaClient } from "@/generated/prisma/client";
 import { resolveBillingTestDirectUrl } from "@/lib/billing/testDatabaseGuard";
@@ -34,6 +35,7 @@ let pool: Pool;
 let scopedPrisma: PrismaClient;
 let universityId: string;
 let policy: PolicyModule;
+let charges: ChargesModule;
 
 function quotedTestSchema() {
   if (!/^unify_billing_it_[a-f0-9]{32}$/.test(schemaName)) {
@@ -119,6 +121,7 @@ async function insertCharge(
 beforeAll(async () => {
   const directUrl = resolveBillingTestDirectUrl();
   policy = await import("@/lib/billing/policy");
+  charges = await import("@/lib/billing/charges");
 
   pool = new Pool({ connectionString: directUrl, max: 8 });
   const client = await pool.connect();
@@ -600,5 +603,100 @@ describe("vendor invoice invariants", () => {
     } finally {
       client.release();
     }
+  });
+});
+
+describe("verification charge finalizer", () => {
+  function chargeInput(verificationId: string, vendorProfileId: string, branchId: string) {
+    return {
+      verificationId,
+      vendorProfileId,
+      branchId,
+      branchNameSnapshot: "Main Branch",
+      billingStatus: "BILLABLE" as const,
+      verificationFeeMinor: 250,
+      verificationFeeCurrency: "ZAR",
+      billingPeriodKey: "2026-09",
+      completedAt: new Date(),
+    };
+  }
+
+  it("creates a charge for a billable verification using the currently effective policy", async () => {
+    const client = await getClient();
+    try {
+      const { vendorProfileId, branchId } = await createVendorAndBranch(client);
+      const verificationId = await createVerification(client, vendorProfileId);
+
+      const charge = await charges.finalizeVerificationCharge(
+        scopedPrisma,
+        chargeInput(verificationId, vendorProfileId, branchId),
+      );
+
+      expect(charge).not.toBeNull();
+      expect(charge!.feeMinor).toBe(BigInt(250));
+      expect(charge!.source).toBe("LIVE");
+      // The exact split depends on whichever policy is currently open (an
+      // earlier test in this file edits it concurrently); the balanced-share
+      // invariant itself is what this asserts.
+      expect(charge!.platformShareMinor + charge!.universityShareMinor).toBe(BigInt(250));
+    } finally {
+      client.release();
+    }
+  });
+
+  it("is idempotent across two sequential calls for the same verification", async () => {
+    const client = await getClient();
+    try {
+      const { vendorProfileId, branchId } = await createVendorAndBranch(client);
+      const verificationId = await createVerification(client, vendorProfileId);
+      const input = chargeInput(verificationId, vendorProfileId, branchId);
+
+      const first = await charges.finalizeVerificationCharge(scopedPrisma, input);
+      const second = await charges.finalizeVerificationCharge(scopedPrisma, input);
+
+      expect(second!.id).toBe(first!.id);
+      const count = await scopedPrisma.verificationCharge.count({ where: { verificationId } });
+      expect(count).toBe(1);
+    } finally {
+      client.release();
+    }
+  });
+
+  it("resolves a real concurrent race to exactly one charge via the unique constraint", async () => {
+    const client = await getClient();
+    try {
+      const { vendorProfileId, branchId } = await createVendorAndBranch(client);
+      const verificationId = await createVerification(client, vendorProfileId);
+      const input = chargeInput(verificationId, vendorProfileId, branchId);
+
+      const [a, b] = await Promise.all([
+        charges.finalizeVerificationCharge(scopedPrisma, input),
+        charges.finalizeVerificationCharge(scopedPrisma, input),
+      ]);
+
+      expect(a!.id).toBe(b!.id);
+      const count = await scopedPrisma.verificationCharge.count({ where: { verificationId } });
+      expect(count).toBe(1);
+    } finally {
+      client.release();
+    }
+  });
+
+  it("never throws and records an exception when the verification's vendor has no branch context", async () => {
+    const result = await charges.finalizeVerificationCharge(scopedPrisma, {
+      verificationId: `verification-${randomUUID()}`,
+      vendorProfileId: "vendor-does-not-exist",
+      branchId: null,
+      branchNameSnapshot: "Unattributed branch",
+      billingStatus: "BILLABLE",
+      verificationFeeMinor: 250,
+      verificationFeeCurrency: "ZAR",
+      billingPeriodKey: "2026-09",
+      completedAt: new Date(),
+    });
+
+    // The verification_charge.vendorProfileId FK violation is caught, logged,
+    // and turned into a durable exception rather than propagating.
+    expect(result).toBeNull();
   });
 });
