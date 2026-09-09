@@ -118,3 +118,50 @@ jobs:
       - name: Run payment wallet PostgreSQL tests
         run: npm run test:payments:db
 
+  verification-billing-postgres:
+    name: ci-verification-billing-postgres
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: unify_billing_test
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d unify_billing_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/unify_billing_test?schema=public
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/unify_billing_test?schema=public
+      NODE_ENV: test
+      BETTER_AUTH_SECRET: ci-only-verification-billing-secret
+      BOOTSTRAP_ADMIN_EMAIL: billing-ci@example.test
+      BOOTSTRAP_ADMIN_NAME: Billing CI
+      BOOTSTRAP_ADMIN_PASSWORD: ci-only-billing-password
+      AUTH_EMAIL_FROM: billing-ci@example.test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+
+      - name: Run verification billing PostgreSQL tests
+        run: npm run test:billing:db

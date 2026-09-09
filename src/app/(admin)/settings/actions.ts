@@ -11,7 +11,7 @@ import { z } from "zod";
 import { AuditAction, CredentialAutomationJobStatus, CredentialAutomationJobType } from "@/generated/prisma/enums";
 import { checkAgentHealth } from "@/lib/agentClient";
 import { writeAuditLog } from "@/lib/audit/audit";
-import { ADMIN_ROLES } from "@/lib/auth/permissions";
+import { ADMIN_ROLES, assertCan } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { countCredentialsDueForRenewal } from "@/lib/credentials/renewalPolicy";
@@ -252,4 +252,60 @@ export async function getRenewalSettingsPreviewAction(cadenceMonths: number) {
   await requireRole(["SUPER_ADMIN", "ADMIN"]);
   if (!Number.isInteger(cadenceMonths) || cadenceMonths < 1 || cadenceMonths > 120) return 0;
   return countCredentialsDueForRenewal(cadenceMonths);
+}
+
+/** `invoice:read` — refreshes the billing operations card's numbers without a full page reload. */
+export async function getBillingOperationsSummaryAction() {
+  const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
+  assertCan("invoice:read", session);
+
+  const { getBillingOperationsSummary } = await import("@/lib/billing/operationsSummary");
+  return getBillingOperationsSummary();
+}
+
+/**
+ * `invoice:reconcile` — the same bounded sweep the daily cron and the CLI
+ * run, triggerable on demand. Acquires the same job lease, so this can
+ * never race an in-progress cron/CLI reconciliation into double-processing.
+ */
+export async function runBillingReconciliationNowAction() {
+  const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
+  assertCan("invoice:reconcile", session);
+
+  const { BILLING_JOB_TYPE_RECONCILE } = await import("@/lib/billing/constants");
+  const { acquireJobLease, completeJobLease, failJobLease } = await import("@/lib/billing/jobLease");
+  const { runVendorBillingReconciliation } = await import("@/lib/billing/reconciliation");
+  const { getBillingOperationsSummary } = await import("@/lib/billing/operationsSummary");
+
+  const lease = await acquireJobLease(prisma, { jobType: BILLING_JOB_TYPE_RECONCILE, leaseOwner: `admin:${session.user.id}` });
+  if (!lease) {
+    throw new Error("A reconciliation run is already in progress (cron or another admin). Try again shortly.");
+  }
+
+  try {
+    const reconciliation = await runVendorBillingReconciliation(prisma);
+    await completeJobLease(prisma, lease.runId, {
+      scannedCount: reconciliation.attemptsSwept + reconciliation.gatewayEventsRetried,
+      importedCount: reconciliation.attemptsConfirmed + reconciliation.gatewayEventsRecovered,
+      exceptionCount: reconciliation.gatewayEventsStillFailing,
+      totalsSnapshot: reconciliation,
+    });
+
+    await writeAuditLog({
+      action: "INVOICE_PAYMENT_RECONCILED",
+      actorId: session.user.id,
+      meta: {
+        attemptsSwept: reconciliation.attemptsSwept,
+        attemptsConfirmed: reconciliation.attemptsConfirmed,
+        gatewayEventsRetried: reconciliation.gatewayEventsRetried,
+        gatewayEventsRecovered: reconciliation.gatewayEventsRecovered,
+      },
+    });
+  } catch (error) {
+    await failJobLease(prisma, lease.runId, error);
+    throw error;
+  }
+
+  revalidatePath("/settings");
+  return getBillingOperationsSummary();
 }

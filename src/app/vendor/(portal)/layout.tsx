@@ -8,6 +8,7 @@ import type { PortalNavItem } from "@/components/layout/portalTypes";
 import { AgentStatusIndicator } from "@/features/agent/AgentStatusIndicator";
 import { LiveVerificationNotifications } from "@/features/vendors/LiveVerificationNotifications";
 import { requireVendorSession } from "@/lib/auth/session";
+import { getVendorInvoiceOwnerContext } from "@/lib/billing/vendorAuthorization";
 import { prisma } from "@/lib/db/prisma";
 import { getDocumentSignedUrl } from "@/lib/storage/supabase";
 import { getApprovedVendorContextForUser, type ApprovedVendorContext } from "@/lib/vendors/context";
@@ -41,9 +42,15 @@ const applicantNavItems: PortalNavItem[] = [
   { href: "/vendor/help", label: "Help", icon: "help" },
 ];
 
-function navItemsForVendorContext(context: ApprovedVendorContext | null) {
-  if (!context) return applicantNavItems;
-  return context.role === "STAFF" ? staffNavItems : ownerNavItems;
+// Invoice access is a separate concern from verification-application
+// approval (see src/lib/billing/vendorAuthorization.ts): an owner whose
+// approval is later revoked must still be able to reach their invoices, so
+// this is checked independently of `context` rather than folded into the
+// approved-vendor role branches below.
+function navItemsForVendorContext(context: ApprovedVendorContext | null, hasInvoiceAccess: boolean) {
+  const baseItems = !context ? applicantNavItems : context.role === "STAFF" ? staffNavItems : ownerNavItems;
+  if (!hasInvoiceAccess) return baseItems;
+  return [...baseItems, { href: "/vendor/invoices", label: "Invoices", icon: "invoices" } satisfies PortalNavItem];
 }
 
 function roleLabelForVendorContext(context: ApprovedVendorContext | null) {
@@ -71,6 +78,7 @@ export default async function VendorPortalLayout({
 }>) {
   const session = await requireVendorSession();
   const vendorContext = await getApprovedVendorContextForUser(session.user.id);
+  const invoiceOwnerContext = await getVendorInvoiceOwnerContext(session.user.id);
   const logoPath = vendorContext
     ? await getVendorProfileLogoPath(vendorContext.vendorProfileId)
     : null;
@@ -87,7 +95,7 @@ export default async function VendorPortalLayout({
         tenantName: vendorContext?.companyName ?? "Verifier onboarding",
       }}
       fallbackTitle="Vendor"
-      navItems={navItemsForVendorContext(vendorContext)}
+      navItems={navItemsForVendorContext(vendorContext, Boolean(invoiceOwnerContext))}
       portal="vendor"
       settingsHref="/vendor/profile"
       settingsLabel="Profile"

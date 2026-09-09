@@ -23,11 +23,13 @@ export function Metric({
   label,
   tone = "brand",
   value,
+  valueClassName,
 }: {
   detail: string;
   label: string;
   tone?: keyof typeof accentClassName;
   value: number | string;
+  valueClassName?: string;
 }) {
   return (
     <div
@@ -38,7 +40,10 @@ export function Metric({
       )}
     >
       <p className="text-body font-medium text-fg-muted">{label}</p>
-      <p className="mt-3 text-4xl font-semibold tabular-nums leading-none tracking-tight text-fg">
+      <p className={cn(
+        "mt-3 font-semibold tabular-nums tracking-tight text-fg",
+        valueClassName ?? "text-4xl leading-none",
+      )}>
         {value}
       </p>
       <p className="mt-2 text-body text-fg-subtle">{detail}</p>

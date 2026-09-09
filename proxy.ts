@@ -26,6 +26,18 @@ function shouldSkipProxy(pathname: string) {
   return (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api/auth") ||
+    // These prefixes authenticate themselves (vendor API key, HMAC webhook
+    // signature, or CRON_SECRET) and never carry a session cookie. Without
+    // this, an unauthenticated request to any of them — which is every real
+    // caller, since none of these are browser sessions — never reaches its
+    // own auth check: it gets redirected to /sign-in instead, breaking the
+    // external vendor v1 API, the agent webhook, and every cron job. This is
+    // a pre-existing gap (confirmed by reading this file, not assumed), not
+    // something introduced by billing — fixed narrowly for these prefixes
+    // rather than exempting all of `/api`, per the vendor invoicing handoff.
+    pathname.startsWith("/api/vendor") ||
+    pathname.startsWith("/api/webhooks") ||
+    pathname.startsWith("/api/cron") ||
     pathname === "/favicon.ico" ||
     PUBLIC_FILE.test(pathname)
   );

@@ -3,17 +3,20 @@
  * @module app/(admin)/settings/page
  */
 
-import { Activity, Building, Clock, FileText, Link as LinkIcon, Webhook } from "lucide-react";
+import { Activity, Building, Clock, FileText, Gauge, Link as LinkIcon, Receipt, Webhook } from "lucide-react";
+import Link from "next/link";
 
 import { checkAgentHealth } from "@/lib/agentClient";
-import { ADMIN_ROLES, ROLE_LABELS, type AdminRole } from "@/lib/auth/permissions";
+import { ADMIN_ROLES, type AdminRole, ROLE_LABELS } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
+import { getBillingOperationsSummary } from "@/lib/billing/operationsSummary";
 import { env } from "@/lib/config/env";
 import { getDocumentSignedUrl } from "@/lib/storage/supabase";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfile } from "@/lib/university/profile";
 import { RenewalSettingsForm } from "./RenewalSettingsForm";
 import { AgentServiceHealthCard } from "./AgentServiceHealthCard";
+import { BillingOperationsCard } from "./BillingOperationsCard";
 import { SettingsCard, SettingsField } from "./SettingsCard";
 import { UniversityLogoUpload } from "./UniversityLogoUpload";
 import { UniversityProfileForm } from "./UniversityProfileForm";
@@ -33,6 +36,8 @@ export default async function SettingsPage() {
   const activeSchema = profile ? await getActiveCredentialSchema(profile.id) : null;
   const agentHealth = await checkAgentHealth();
   const webhookEndpoint = new URL("/api/webhooks/agent", env.APP_URL).toString();
+  const canViewBillingOperations = role === "SUPER_ADMIN" || role === "ADMIN";
+  const billingOperationsSummary = canViewBillingOperations ? await getBillingOperationsSummary() : null;
 
   return (
     <div className="space-y-6">
@@ -169,6 +174,28 @@ export default async function SettingsPage() {
           />
         </div>
       </SettingsCard>
+
+      {role === "SUPER_ADMIN" && (
+        <SettingsCard
+          description="Set the demo verification fee and platform revenue share. Separate from the student payment wallet."
+          icon={Receipt}
+          title="Vendor verification billing"
+        >
+          <Link className="text-sm font-medium text-brand-700 hover:underline" href="/settings/verification-billing">
+            Manage verification billing policy →
+          </Link>
+        </SettingsCard>
+      )}
+
+      {billingOperationsSummary && (
+        <SettingsCard
+          description="Job run history, backlog, and exception counts for vendor invoicing and Paystack payments."
+          icon={Gauge}
+          title="Billing operations"
+        >
+          <BillingOperationsCard initialSummary={billingOperationsSummary} />
+        </SettingsCard>
+      )}
     </div>
   );
 }

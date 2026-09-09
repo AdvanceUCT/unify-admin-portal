@@ -68,6 +68,10 @@ export const ADMIN_ACTIONS = [
   "user:reactivate",
   "user:change-role",
   "session:revoke",
+  "billing-policy:manage",
+  "invoice:read",
+  "invoice:issue",
+  "invoice:reconcile",
 ] as const;
 
 export type AdminAction = (typeof ADMIN_ACTIONS)[number];
@@ -88,6 +92,10 @@ const ACTION_ROLE_MAP: Record<AdminAction, readonly AdminRole[]> = {
   "user:reactivate": ["SUPER_ADMIN"],
   "user:change-role": ["SUPER_ADMIN"],
   "session:revoke": ["SUPER_ADMIN"],
+  "billing-policy:manage": ["SUPER_ADMIN"],
+  "invoice:read": ["SUPER_ADMIN", "ADMIN"],
+  "invoice:issue": ["SUPER_ADMIN", "ADMIN"],
+  "invoice:reconcile": ["SUPER_ADMIN", "ADMIN"],
 };
 
 export const superAdminAccess = defaultAc.newRole({

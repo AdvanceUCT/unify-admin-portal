@@ -73,6 +73,13 @@ export function formatDateTime(value: string) {
   return dateTimeFormatter.format(new Date(value));
 }
 
+export function formatMoneyMinor(amountMinor: number, currency = "ZAR") {
+  return new Intl.NumberFormat("en-ZA", {
+    currency,
+    style: "currency",
+  }).format(amountMinor / 100);
+}
+
 export function formatCredentialStatus(value: CredentialLifecycleState) {
   return credentialStatusLabels[value];
 }

@@ -1,0 +1,33 @@
+# Vendor Verification Billing
+
+Vendor verification billing is separate from the student payment wallet. Verification fees are platform-controlled in the first implementation and are configured through:
+
+- `VERIFICATION_FEE_MINOR`
+- `VERIFICATION_FEE_CURRENCY`
+
+The active env values are only used when a verification result is materialized. Each completed `VendorVerification` stores its own billing snapshot so historical usage and future invoice estimates do not change when the platform price changes later.
+
+For v1, `APPROVED` verifications are billable unless `isVerified` is explicitly `false`. This supports deployed agent events that may omit the optional `isVerified` flag while still treating approved-but-not-verified results as not billable. Declined, failed, expired, and pending results are stored as not billable. This rule lives in `src/lib/vendors/verificationBilling.ts` so it can be changed without rewriting page or export logic.
+
+Vendor-facing pricing is intentionally limited to summary and history surfaces. The dashboard overview shows current-month running cost alongside current-month verification counts, and `/vendor/verifications` shows per-event price in the table and billing metadata in the CSV export. Live verification notifications stay focused on verification activity.
+
+## Future Revenue Split
+
+The platform/university revenue split is intentionally not implemented yet. When needed, use a platform-controlled, effective-dated billing policy table rather than env-only configuration.
+
+The expected future policy shape is:
+
+- verification fee in minor units;
+- currency;
+- platform share in basis points;
+- university share in basis points;
+- effective start and end timestamps.
+
+**This is now implemented.** `VerificationBillingPolicy` (effective-dated, exactly this shape) and the full
+monthly invoicing/Paystack checkout system built on top of it are documented in
+`docs/paystack-vendor-invoicing-implementation-plan.md`, with progress and evidence tracked in
+`docs/paystack-vendor-invoicing-implementation-status.md`. This page describes the original,
+pre-policy v1 behavior (env-only pricing, no revenue split) — it is kept for historical context on why
+the schema was designed the way it was, not as the current state of billing.
+
+When that policy exists, each verification should snapshot the applied policy and calculated share amounts. That preserves invoice and payout traceability without rewriting historical verification records.

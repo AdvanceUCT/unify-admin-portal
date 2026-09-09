@@ -272,6 +272,7 @@ The most important variables are:
 | `WEBHOOK_SIGNING_SECRET` | Shared HMAC secret for agent event webhooks |
 | `VENDOR_API_KEY_PEPPER` | Server-side pepper used to hash vendor API keys |
 | `VENDOR_WEBHOOK_ENCRYPTION_KEY` | Base64-encoded 32-byte key for vendor webhook secrets |
+| `VERIFICATION_FEE_MINOR`, `VERIFICATION_FEE_CURRENCY` | Platform-controlled vendor verification price snapshot defaults |
 | `RESEND_API_KEY`, `*_EMAIL_FROM`, `*_DELIVERY_MODE` | Credential, auth, and vendor-help email delivery |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Server-only access to private vendor-document storage |
 

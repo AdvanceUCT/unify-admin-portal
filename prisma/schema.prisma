@@ -129,6 +129,8 @@ model VendorProfile {
   staffInvites        VendorStaffInvite[]
   paymentProfile      VendorPaymentProfile?
   walletAccount       WalletAccount?
+  verificationCharges VerificationCharge[]
+  invoices            VendorInvoice[]
 
   @@map("vendor_profile")
 }
@@ -155,6 +157,7 @@ model VendorBranch {
   paymentApplications VendorBranchPaymentApplication[]
   paymentAcceptance   VendorBranchPaymentAcceptance?
   walletTransactions  WalletTransaction[]
+  verificationCharges VerificationCharge[]
 
   @@unique([vendorProfileId, normalizedName])
   @@index([vendorProfileId, active])
@@ -305,31 +308,39 @@ enum VendorApplicationStatus {
 }
 
 model VendorVerification {
-  id                     String                   @id @default(cuid())
-  vendorProfileId        String
-  vendorProfile          VendorProfile            @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
-  branchId               String?
-  branch                 VendorBranch?            @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  verificationRequestId  String?                  @unique
-  checkoutId             String?
-  eventId                String?                  @unique
-  servicePointId         String?
-  servicePointName       String?
-  status                 VendorVerificationStatus @default(PENDING)
-  isVerified             Boolean?
-  failureCode            String?
-  attributes             Json?
-  schemaId               String?
-  credentialDefinitionId String?
-  createdAt              DateTime                 @default(now())
-  updatedAt              DateTime                 @updatedAt
-  completedAt            DateTime?
-  expiresAt              DateTime?
-  deliveries             VendorWebhookDelivery[]
+  id                      String                          @id @default(cuid())
+  vendorProfileId         String
+  vendorProfile           VendorProfile                   @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  branchId                String?
+  branch                  VendorBranch?                   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  verificationRequestId   String?                         @unique
+  checkoutId              String?
+  eventId                 String?                         @unique
+  servicePointId          String?
+  servicePointName        String?
+  status                  VendorVerificationStatus        @default(PENDING)
+  isVerified              Boolean?
+  failureCode             String?
+  attributes              Json?
+  billingStatus           VendorVerificationBillingStatus @default(PENDING)
+  verificationFeeMinor    Int                             @default(0)
+  verificationFeeCurrency String                          @default("ZAR")
+  billingPeriodKey        String?
+  pricingSnapshotAt       DateTime?
+  billingReason           String?
+  schemaId                String?
+  credentialDefinitionId  String?
+  createdAt               DateTime                        @default(now())
+  updatedAt               DateTime                        @updatedAt
+  completedAt             DateTime?
+  expiresAt               DateTime?
+  deliveries              VendorWebhookDelivery[]
+  charge                  VerificationCharge?
 
   @@unique([vendorProfileId, checkoutId])
   @@index([vendorProfileId])
   @@index([branchId, createdAt])
+  @@index([vendorProfileId, billingPeriodKey, billingStatus])
   @@index([status])
   @@index([createdAt])
   @@map("vendor_verification")
@@ -391,6 +402,12 @@ enum VendorVerificationStatus {
   FAILED
 }
 
+enum VendorVerificationBillingStatus {
+  PENDING
+  BILLABLE
+  NOT_BILLABLE
+}
+
 model Student {
   id            String         @id @default(cuid())
   studentNumber String         @unique
@@ -432,6 +449,7 @@ model UniversityProfile {
   importMapping                       ImportMapping?
   importRuns                          ImportRun[]
   customFieldDefinitions              CustomFieldDefinition[]
+  billingPolicies                     VerificationBillingPolicy[]
 
   @@map("university_profile")
 }
@@ -1112,4 +1130,282 @@ enum AuditAction {
   SCHEMA_PUBLISHED
   SCHEMA_VERSION_DELETED
   RENEWAL_SETTINGS_UPDATED
+  BILLING_POLICY_CREATED
+  INVOICE_GENERATION_TRIGGERED
+  INVOICE_PAYMENT_RECONCILED
+}
+
+// ─── Vendor verification invoicing (Paystack POC) ──────────────────────────
+// Separate from the student payment wallet ledger above. Verification fees
+// are never posted as wallet transactions; see docs/vendor-verification-billing.md
+// and docs/paystack-vendor-invoicing-implementation-plan.md.
+
+model VerificationBillingPolicy {
+  id                   String              @id @default(cuid())
+  universityId         String
+  university           UniversityProfile   @relation(fields: [universityId], references: [id], onDelete: Restrict)
+  version              Int
+  verificationFeeMinor BigInt
+  currency             String              @default("ZAR")
+  platformBasisPoints  Int
+  roundingRule         BillingRoundingRule @default(HALF_UP)
+  effectiveFrom        DateTime
+  effectiveTo          DateTime?
+  source               BillingPolicySource
+  actorUserId          String?
+  createdAt            DateTime            @default(now())
+  charges              VerificationCharge[]
+
+  @@unique([universityId, version])
+  @@unique([universityId], map: "verification_billing_policy_one_open", where: raw("\"effectiveTo\" IS NULL"))
+  @@index([universityId, effectiveFrom])
+  @@map("verification_billing_policy")
+}
+
+enum BillingRoundingRule {
+  HALF_UP
+}
+
+enum BillingPolicySource {
+  BOOTSTRAP
+  LEGACY_IMPORT
+  ADMIN_EDIT
+}
+
+model VerificationCharge {
+  id                   String                    @id @default(cuid())
+  verificationId       String                    @unique
+  verification         VendorVerification        @relation(fields: [verificationId], references: [id], onDelete: Restrict)
+  vendorProfileId      String
+  vendorProfile        VendorProfile             @relation(fields: [vendorProfileId], references: [id], onDelete: Restrict)
+  branchId             String?
+  branch               VendorBranch?             @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchNameSnapshot   String
+  servicePeriodKey     String
+  serviceCompletedAt   DateTime
+  feeMinor             BigInt
+  currency             String                    @default("ZAR")
+  platformShareMinor   BigInt
+  universityShareMinor BigInt
+  policyId             String
+  policy               VerificationBillingPolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  source               ChargeSource
+  createdAt            DateTime                  @default(now())
+  invoiceItem          VendorInvoiceItem?
+
+  @@index([vendorProfileId, servicePeriodKey])
+  @@index([servicePeriodKey])
+  @@index([policyId])
+  @@map("verification_charge")
+}
+
+enum ChargeSource {
+  LIVE
+  EXISTING_SNAPSHOT
+  LEGACY_DEMO_BACKFILL
+}
+
+model VendorInvoice {
+  id                     String                          @id @default(cuid())
+  invoiceNumber          String                          @unique
+  vendorProfileId        String
+  vendorProfile          VendorProfile                   @relation(fields: [vendorProfileId], references: [id], onDelete: Restrict)
+  periodKey              String
+  currency               String                          @default("ZAR")
+  issuerSnapshot         Json
+  customerSnapshot       Json
+  totalMinor             BigInt
+  platformShareMinor     BigInt
+  universityShareMinor   BigInt
+  isDemo                 Boolean                         @default(true)
+  documentStatus         VendorInvoiceDocumentStatus     @default(DRAFT)
+  paymentStatus          VendorInvoicePaymentStatus      @default(UNPAID)
+  hasUnresolvedException Boolean                         @default(false)
+  dueAt                  DateTime?
+  issuedAt               DateTime?
+  voidedAt               DateTime?
+  templateVersion        Int                             @default(1)
+  createdAt              DateTime                        @default(now())
+  updatedAt              DateTime                        @updatedAt
+  items                  VendorInvoiceItem[]
+  paymentAttempts        VendorInvoicePaymentAttempt[]
+  allocation             VendorInvoicePaymentAllocation?
+
+  @@unique([vendorProfileId, periodKey, currency])
+  @@index([vendorProfileId, documentStatus])
+  @@index([paymentStatus])
+  @@map("vendor_invoice")
+}
+
+enum VendorInvoiceDocumentStatus {
+  DRAFT
+  ISSUED
+  VOID
+}
+
+enum VendorInvoicePaymentStatus {
+  UNPAID
+  PAID
+  NO_PAYMENT_REQUIRED
+}
+
+model VendorInvoiceItem {
+  id                   String             @id @default(cuid())
+  invoiceId            String
+  invoice              VendorInvoice      @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  chargeId             String             @unique
+  charge               VerificationCharge @relation(fields: [chargeId], references: [id], onDelete: Restrict)
+  servicePeriodKey     String
+  branchNameSnapshot   String
+  quantity             Int                @default(1)
+  unitPriceMinor       BigInt
+  lineTotalMinor       BigInt
+  platformShareMinor   BigInt
+  universityShareMinor BigInt
+  createdAt            DateTime           @default(now())
+
+  @@index([invoiceId])
+  @@map("vendor_invoice_item")
+}
+
+enum BillingFeeBearer {
+  UNIVERSITY
+}
+
+model VendorInvoicePaymentAttempt {
+  id                         String                            @id @default(cuid())
+  invoiceId                  String
+  invoice                    VendorInvoice                     @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  ownerUserId                String
+  provider                   String
+  providerAccountRef         String
+  providerMode               String                            @default("test")
+  reference                  String                            @unique
+  expectedAmountMinor        BigInt
+  currency                   String                            @default("ZAR")
+  purpose                    String
+  subaccountCode             String?
+  transactionChargeMinor     BigInt?
+  feeBearer                  BillingFeeBearer                  @default(UNIVERSITY)
+  initializationFingerprint  String
+  accessCode                 String?
+  authorizationUrl           String?
+  providerTransactionId      String?
+  status                     VendorInvoicePaymentAttemptStatus @default(PREPARING)
+  attemptCount               Int                               @default(1)
+  lastCheckedAt              DateTime?
+  createdAt                  DateTime                          @default(now())
+  updatedAt                  DateTime                          @updatedAt
+  payment                    VendorInvoicePayment?
+
+  @@index([invoiceId, status])
+  @@map("vendor_invoice_payment_attempt")
+}
+
+enum VendorInvoicePaymentAttemptStatus {
+  PREPARING
+  READY
+  PENDING
+  UNKNOWN
+  FAILED
+  SUCCEEDED
+}
+
+model VendorInvoicePayment {
+  id                    String                          @id @default(cuid())
+  attemptId             String                          @unique
+  attempt               VendorInvoicePaymentAttempt     @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  provider              String
+  providerAccountRef    String
+  providerMode          String
+  providerTransactionId String
+  grossAmountMinor      BigInt
+  currency              String
+  paidAt                DateTime
+  feeEvidence           Json?
+  createdAt             DateTime                        @default(now())
+  allocation            VendorInvoicePaymentAllocation?
+
+  @@unique([provider, providerAccountRef, providerMode, providerTransactionId])
+  @@map("vendor_invoice_payment")
+}
+
+model VendorInvoicePaymentAllocation {
+  id                 String               @id @default(cuid())
+  invoiceId          String               @unique
+  invoice            VendorInvoice        @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  paymentId          String               @unique
+  payment            VendorInvoicePayment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  amountAppliedMinor BigInt
+  createdAt          DateTime             @default(now())
+
+  @@map("vendor_invoice_payment_allocation")
+}
+
+model BillingGatewayEvent {
+  id                 String    @id @default(cuid())
+  provider           String
+  providerAccountRef String
+  providerMode       String
+  eventType          String
+  resourceKey        String
+  bodyHash           String
+  payloadSnapshot    Json?
+  receivedAt         DateTime  @default(now())
+  processedAt        DateTime?
+  processingError    String?
+  retryCount         Int       @default(0)
+  nextAttemptAt      DateTime?
+  leaseExpiresAt     DateTime?
+
+  @@unique([provider, providerAccountRef, providerMode, eventType, resourceKey])
+  @@index([processedAt])
+  @@map("billing_gateway_event")
+}
+
+model BillingException {
+  id               String    @id @default(cuid())
+  type             String
+  dedupeKey        String    @unique
+  invoiceId        String?
+  chargeId         String?
+  attemptId        String?
+  eventId          String?
+  details          Json
+  resolved         Boolean   @default(false)
+  resolvedAt       DateTime?
+  resolvedByUserId String?
+  resolutionNote   String?
+  createdAt        DateTime  @default(now())
+
+  @@index([resolved, type])
+  @@map("billing_exception")
+}
+
+model BillingRun {
+  id             String           @id @default(cuid())
+  jobType        String
+  cutoffAt       DateTime?
+  cursor         String?
+  leaseOwner     String?
+  leaseExpiresAt DateTime?
+  status         BillingRunStatus @default(RUNNING)
+  scannedCount   Int              @default(0)
+  importedCount  Int              @default(0)
+  exceptionCount Int              @default(0)
+  totalsSnapshot Json?
+  operatorUserId String?
+  policyId       String?
+  startedAt      DateTime         @default(now())
+  completedAt    DateTime?
+  failureReason  String?
+
+  @@index([jobType, status])
+  @@map("billing_run")
+}
+
+enum BillingRunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
 }

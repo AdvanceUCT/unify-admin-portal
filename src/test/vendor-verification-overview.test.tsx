@@ -14,7 +14,17 @@ describe("VendorVerificationOverview", () => {
         companyName: "Demo Vendor",
         vendorId: "vendor_1",
         verificationUrl: null,
-        stats: { total: 1, approved: 1, pending: 0, thisMonth: 1 },
+        stats: {
+          total: 1,
+          approved: 1,
+          pending: 0,
+          thisMonth: 1,
+          currentMonthFailedOrDeclined: 0,
+          currentMonthRunningCostCurrency: "ZAR",
+          currentMonthRunningCostMinor: 1_000_000_00,
+          currentMonthSuccessful: 1,
+          currentMonthTotal: 1,
+        },
         recentVerifications: [
           {
             id: "verification_1",
@@ -35,6 +45,12 @@ describe("VendorVerificationOverview", () => {
               studentNumber: "VSKCAL001",
               programme: "Computer Science",
             },
+            billingStatus: "BILLABLE",
+            verificationFeeMinor: 125,
+            verificationFeeCurrency: "ZAR",
+            billingPeriodKey: "2026-07",
+            pricingSnapshotAt: new Date("2026-07-03T10:01:05.000Z"),
+            billingReason: "APPROVED_VERIFICATION",
             schemaId: "schema_1",
             credentialDefinitionId: "cred_def_1",
             createdAt: new Date("2026-07-03T10:00:00.000Z"),
@@ -48,6 +64,9 @@ describe("VendorVerificationOverview", () => {
     );
 
     expect(screen.getByText(/Checkout cart_1/)).toBeInTheDocument();
+    expect(screen.getByText("Running cost")).toBeInTheDocument();
+    expect(screen.getAllByText("1")[0]).toHaveClass("text-lg");
+    expect(screen.getByText(/R\s*1 000 000,00/)).toHaveClass("text-lg");
     expect(screen.getByText("Caleb Voskuil")).toBeInTheDocument();
     expect(screen.getByText("VSKCAL001 / University of Cape Town")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View all" })).toHaveAttribute("href", "/vendor/verifications");
@@ -61,7 +80,17 @@ describe("VendorVerificationOverview", () => {
         companyName: "Demo Vendor",
         vendorId: "vendor_1",
         verificationUrl: "https://voskuils.com/verify/sp-public-demo",
-        stats: { total: 0, approved: 0, pending: 0, thisMonth: 0 },
+        stats: {
+          total: 0,
+          approved: 0,
+          pending: 0,
+          thisMonth: 0,
+          currentMonthFailedOrDeclined: 0,
+          currentMonthRunningCostCurrency: "ZAR",
+          currentMonthRunningCostMinor: 0,
+          currentMonthSuccessful: 0,
+          currentMonthTotal: 0,
+        },
         recentVerifications: [],
       }),
     );
