@@ -10,9 +10,12 @@ const mocks = vi.hoisted(() => ({
   batchIssuanceRunUpdate: vi.fn(),
   createBatchActivationLinks: vi.fn(),
   createCredentialIssuanceFromOffer: vi.fn(),
+  credentialIssuanceUpdate: vi.fn(),
+  credentialIssuanceUpdateMany: vi.fn(),
   findActiveCredentialIssuance: vi.fn(),
   getAllStudents: vi.fn(),
   recordCredentialOfferSentAudit: vi.fn(),
+  selectStudentRecordsForCredentialIssuance: vi.fn(),
   sendCredentialActivationEmail: vi.fn(),
   writeAuditLog: vi.fn(),
 }));
@@ -23,6 +26,10 @@ vi.mock("@/lib/agentClient", () => ({
 
 vi.mock("@/lib/audit/audit", () => ({
   writeAuditLog: mocks.writeAuditLog,
+}));
+
+vi.mock("@/lib/config/env", () => ({
+  env: { BATCH_ISSUANCE_PROCESSING_CONCURRENCY: 4 },
 }));
 
 vi.mock("@/lib/credentials/audit", () => ({
@@ -46,6 +53,10 @@ vi.mock("@/lib/db/prisma", () => ({
       findUniqueOrThrow: mocks.batchIssuanceRunFindUniqueOrThrow,
       update: mocks.batchIssuanceRunUpdate,
     },
+    credentialIssuance: {
+      update: mocks.credentialIssuanceUpdate,
+      updateMany: mocks.credentialIssuanceUpdateMany,
+    },
   },
 }));
 
@@ -65,6 +76,7 @@ vi.mock("@/lib/issuance/batchIssuance", () => ({
     schemaAttributes: ["studentNumber"],
     schemaVersion: "1.0",
   })),
+  MAX_BATCH_ISSUANCE_LIMIT: 100,
   parseBatchIssuanceSelection: vi.fn((selection) => selection ?? {}),
 }));
 
@@ -73,11 +85,11 @@ vi.mock("@/lib/students/repository", () => ({
 }));
 
 vi.mock("@/lib/student-records/simulatedUniversityRecords", () => ({
-  selectStudentRecordsForCredentialIssuance: vi.fn(() => []),
+  selectStudentRecordsForCredentialIssuance: mocks.selectStudentRecordsForCredentialIssuance,
   SIMULATED_STUDENT_COHORT_ID: "simulated-2026-cohort",
 }));
 
-import { processBatchRun } from "@/lib/issuance/batchRuns";
+import { previewBatchIssuance, processBatchRun } from "@/lib/issuance/batchRuns";
 
 const student: StudentRecord = {
   credential: {
@@ -141,8 +153,40 @@ describe("persisted batch runs", () => {
       deliveryStatus: "DELIVERED",
       id: "issuance-1",
     });
+    mocks.credentialIssuanceUpdate.mockResolvedValue({});
+    mocks.credentialIssuanceUpdateMany.mockResolvedValue({ count: 1 });
     mocks.recordCredentialOfferSentAudit.mockResolvedValue(undefined);
+    mocks.selectStudentRecordsForCredentialIssuance.mockReturnValue([]);
     mocks.sendCredentialActivationEmail.mockResolvedValue(undefined);
+  });
+
+  it("caps previews at one hundred eligible students and reports overflow", async () => {
+    const students = Array.from({ length: 101 }, (_, index) => ({
+      ...student,
+      credential: {
+        ...student.credential,
+        id: `credential-${index + 1}`,
+        studentNumber: `STU${index + 1}`,
+      },
+      profile: {
+        ...student.profile,
+        email: `student-${index + 1}@example.edu`,
+        id: `student-profile-${index + 1}`,
+      },
+    }));
+    mocks.getAllStudents.mockResolvedValue(students);
+    mocks.selectStudentRecordsForCredentialIssuance.mockReturnValue(students);
+
+    const result = await previewBatchIssuance();
+
+    expect(result.eligibleCount).toBe(100);
+    expect(result.requestedCount).toBe(101);
+    expect(result.skippedCount).toBe(1);
+    expect(result.items.at(-1)).toMatchObject({
+      reason: "Batch maximum of 100 students reached.",
+      status: "Skipped",
+      studentId: "STU101",
+    });
   });
 
   it("fails pending items and finalizes the run when the agent batch call times out", async () => {
@@ -268,6 +312,9 @@ describe("persisted batch runs", () => {
         credentialExchangeId: "credential-exchange-1",
         studentId: "STU001",
       }),
+    );
+    expect(mocks.createCredentialIssuanceFromOffer.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.sendCredentialActivationEmail.mock.invocationCallOrder[0],
     );
     expect(result.status).toBe("Completed");
     expect(result.items[0]).toMatchObject({

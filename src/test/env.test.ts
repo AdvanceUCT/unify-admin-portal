@@ -67,6 +67,7 @@ describe("environment configuration", () => {
         AGENT_HEALTH_TIMEOUT_MS: 5_000,
         AGENT_LONG_TIMEOUT_MS: 60_000,
         AGENT_STANDARD_TIMEOUT_MS: 15_000,
+        BATCH_ISSUANCE_PROCESSING_CONCURRENCY: 4,
       }),
     });
   });
@@ -89,6 +90,20 @@ describe("environment configuration", () => {
 
   it("rejects non-positive agent timeout values", async () => {
     stubValidEnv({ AGENT_STANDARD_TIMEOUT_MS: "0" });
+
+    await expect(import("@/lib/config/env")).rejects.toThrow();
+  });
+
+  it("accepts bounded batch issuance concurrency", async () => {
+    stubValidEnv({ BATCH_ISSUANCE_PROCESSING_CONCURRENCY: "8" });
+
+    await expect(import("@/lib/config/env")).resolves.toMatchObject({
+      env: expect.objectContaining({ BATCH_ISSUANCE_PROCESSING_CONCURRENCY: 8 }),
+    });
+  });
+
+  it("rejects batch issuance concurrency above sixteen", async () => {
+    stubValidEnv({ BATCH_ISSUANCE_PROCESSING_CONCURRENCY: "17" });
 
     await expect(import("@/lib/config/env")).rejects.toThrow();
   });

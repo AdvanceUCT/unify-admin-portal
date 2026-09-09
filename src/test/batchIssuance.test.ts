@@ -3,7 +3,13 @@ import { createBatchActivationLinks } from "@/lib/agentClient";
 import { sendCredentialActivationEmail } from "@/lib/email/credential-activation";
 import { resetMockActivationStore } from "@/lib/api/mockActivationStore";
 import { recordCredentialOfferSentAudit } from "@/lib/credentials/audit";
-import { queueRealBatchIssuance, queueRealStudentIssuance, queueRealStudentRenewal, StudentIssuanceError } from "@/lib/issuance/batchIssuance";
+import {
+  parseBatchIssuanceSelection,
+  queueRealBatchIssuance,
+  queueRealStudentIssuance,
+  queueRealStudentRenewal,
+  StudentIssuanceError,
+} from "@/lib/issuance/batchIssuance";
 import { assertCredentialIssuanceAllowed, createCredentialIssuanceFromOffer, overlayCredentialStatus, overlayCredentialStatusForStudent } from "@/lib/credentials/status";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfile } from "@/lib/university/profile";
@@ -23,6 +29,10 @@ vi.mock("@/lib/agentClient", () => ({
 
 vi.mock("@/lib/email/credential-activation", () => ({
   sendCredentialActivationEmail: vi.fn(),
+}));
+
+vi.mock("@/lib/config/env", () => ({
+  env: { BATCH_ISSUANCE_PROCESSING_CONCURRENCY: 4 },
 }));
 
 vi.mock("@/lib/credentials/audit", () => ({
@@ -137,6 +147,12 @@ describe("real batch issuance orchestration", () => {
         credentialAuditLog: { create: prismaMocks.auditCreate },
         credentialIssuance: { update: prismaMocks.issuanceUpdate },
       }),
+    );
+  });
+
+  it("rejects synchronous batch limits above one hundred", () => {
+    expect(() => parseBatchIssuanceSelection({ limit: 101 })).toThrow(
+      "Batch issuance limit must be an integer between 1 and 100.",
     );
   });
 
