@@ -3,23 +3,17 @@
  * @module app/(admin)/settings/page
  */
 
-import { Activity, Building, Clock, CreditCard, FileText, Link as LinkIcon, Webhook } from "lucide-react";
+import { Activity, Building, Clock, FileText, Link as LinkIcon, Webhook } from "lucide-react";
 
 import { checkAgentHealth } from "@/lib/agentClient";
 import { ADMIN_ROLES, ROLE_LABELS, type AdminRole } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
 import { env } from "@/lib/config/env";
-import { getUniversityPaymentSettings } from "@/lib/payments/settings";
 import { getDocumentSignedUrl } from "@/lib/storage/supabase";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfile } from "@/lib/university/profile";
 import { saveRenewalSettingsAction } from "./actions";
 import { AgentServiceHealthCard } from "./AgentServiceHealthCard";
-import {
-  PaymentContactsForm,
-  PaymentServicesEnableForm,
-  PaystackKeyForm,
-} from "./PaymentSettingsForm";
 import { SettingsCard, SettingsField } from "./SettingsCard";
 import { UniversityLogoUpload } from "./UniversityLogoUpload";
 import { UniversityProfileForm } from "./UniversityProfileForm";
@@ -37,7 +31,6 @@ export default async function SettingsPage() {
   const profile = await getUniversityProfile();
   const universityLogoUrl = profile?.logoPath ? await getDocumentSignedUrl(profile.logoPath) : null;
   const activeSchema = profile ? await getActiveCredentialSchema(profile.id) : null;
-  const paymentSettings = profile ? await getUniversityPaymentSettings(profile.id) : null;
   const agentHealth = await checkAgentHealth();
   const webhookEndpoint = new URL("/api/webhooks/agent", env.APP_URL).toString();
 
@@ -127,52 +120,6 @@ export default async function SettingsPage() {
               </button>
             </div>
           </form>
-        ) : (
-          <p className="text-sm text-fg-subtle">
-            No university profile exists yet. Complete the setup wizard first.
-          </p>
-        )}
-      </SettingsCard>
-
-      <SettingsCard
-        description="Enable Paystack-backed wallet payments, set finance/technical contacts and payout cadence, and store Paystack keys."
-        icon={CreditCard}
-        title="Payment services"
-      >
-        {profile ? (
-          <div className="space-y-5">
-            <PaymentServicesEnableForm enabled={profile.paymentServicesEnabled} />
-            <div className="border-t border-border pt-5">
-              <PaymentContactsForm
-                financeContactEmail={paymentSettings?.financeContactEmail ?? ""}
-                financeContactName={paymentSettings?.financeContactName ?? ""}
-                payoutCadence={paymentSettings?.payoutCadence ?? "WEEKLY"}
-                technicalContactEmail={paymentSettings?.technicalContactEmail ?? ""}
-                technicalContactName={paymentSettings?.technicalContactName ?? ""}
-              />
-            </div>
-            <div className="border-t border-border pt-5">
-              <div className="mb-3 divide-y divide-border">
-                <SettingsField
-                  label="Test key"
-                  value={
-                    paymentSettings?.paystackTestKeyValidatedAt
-                      ? `Configured, validated ${paymentSettings.paystackTestKeyValidatedAt.toLocaleDateString("en-GB")}`
-                      : "Not set"
-                  }
-                />
-                <SettingsField
-                  label="Live key"
-                  value={
-                    paymentSettings?.paystackLiveKeyValidatedAt
-                      ? `Configured, validated ${paymentSettings.paystackLiveKeyValidatedAt.toLocaleDateString("en-GB")}`
-                      : "Not set"
-                  }
-                />
-              </div>
-              <PaystackKeyForm />
-            </div>
-          </div>
         ) : (
           <p className="text-sm text-fg-subtle">
             No university profile exists yet. Complete the setup wizard first.

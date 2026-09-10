@@ -42,7 +42,12 @@ const navItems: (PortalNavItem & { allowedRoles?: readonly AdminRole[] })[] = [
     label: "Payments",
     icon: "payments",
     allowedRoles: ["SUPER_ADMIN", "ADMIN"] as const,
-    children: [{ href: "/payments/applications", label: "Applications" }],
+    hasOwnPage: true,
+    children: [
+      { href: "/payments/about", label: "About" },
+      { href: "/payments/setup", label: "Setup" },
+      { href: "/payments/applications", label: "Applications" },
+    ],
   },
   { href: "/audit", label: "Audit", icon: "audit" },
   { href: "/users", label: "Users", icon: "users" },

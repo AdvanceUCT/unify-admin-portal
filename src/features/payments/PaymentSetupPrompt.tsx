@@ -38,8 +38,8 @@ export function PaymentSetupPrompt({ universityId }: { universityId: string }) {
         <p className="mt-1 text-sm text-brand-700">
           Enable Paystack-backed wallet payments so students can pre-load funds and on-campus
           vendors can accept them.{" "}
-          <Link className="underline hover:no-underline" href="/settings">
-            Go to Settings
+          <Link className="underline hover:no-underline" href="/payments/setup">
+            Go to Payments
           </Link>
         </p>
       </div>

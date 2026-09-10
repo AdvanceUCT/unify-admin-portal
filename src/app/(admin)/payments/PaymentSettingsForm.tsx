@@ -1,6 +1,6 @@
 /**
  * @fileoverview Owns the payment-services enablement, contacts, and Paystack key forms.
- * @module app/(admin)/settings/PaymentSettingsForm
+ * @module app/(admin)/payments/PaymentSettingsForm
  */
 
 "use client";

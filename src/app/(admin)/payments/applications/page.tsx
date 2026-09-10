@@ -3,20 +3,28 @@
  * @module app/(admin)/payments/applications/page
  */
 
-import { Check, Mail } from "lucide-react";
+import { Building2, Check, Mail } from "lucide-react";
 
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { PageTabs } from "@/components/layout/PageTabs";
 import { requireRole } from "@/lib/auth/session";
-import { listVendorPaymentApplications } from "@/lib/payments/partnerships";
+import { listVendorPartnerships, listVendorPaymentApplications } from "@/lib/payments/partnerships";
 import {
   approveVendorPaymentApplicationAction,
   rejectVendorPaymentApplicationAction,
   revokeVendorPaymentApplicationAction,
+  setCampusStatusAction,
 } from "../actions";
 import { RejectPaymentForm } from "../RejectPaymentForm";
 import { RevokePaymentButton } from "../RevokePaymentButton";
+
+const PAYMENT_ACCEPTANCE_BADGE: Record<string, { tone: "success" | "warning" | "danger"; label: string }> = {
+  PENDING: { tone: "warning", label: "Pending review" },
+  APPROVED: { tone: "success", label: "Accepts payments" },
+  REJECTED: { tone: "danger", label: "Rejected" },
+  REVOKED: { tone: "danger", label: "Revoked" },
+};
 
 function decisionDate(value: Date | string) {
   return new Date(value).toLocaleDateString("en-GB", {
@@ -36,14 +44,77 @@ export default async function PaymentApplicationsPage({
   const { tab } = await searchParams;
   const activeTab = tab === "approved" ? "approved" : tab === "rejected" ? "rejected" : "pending";
 
-  const [pendingApplications, approvedApplications, rejectedApplications] = await Promise.all([
+  const [pendingApplications, approvedApplications, rejectedApplications, partnerships] = await Promise.all([
     listVendorPaymentApplications({ status: "PENDING" }),
     listVendorPaymentApplications({ status: "APPROVED" }),
     listVendorPaymentApplications({ status: "REJECTED" }),
+    listVendorPartnerships(),
   ]);
 
   return (
     <div className="space-y-6">
+      <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+        <div className="flex items-center gap-3 border-b border-border px-5 py-4">
+          <Building2 className="size-4.5 text-fg-subtle" aria-hidden="true" />
+          <h2 className="text-section-title text-fg">Vendor partnerships</h2>
+        </div>
+        <div className="divide-y divide-border">
+          {partnerships.map((partnership) => {
+            const acceptance = partnership.paymentAcceptanceStatus
+              ? PAYMENT_ACCEPTANCE_BADGE[partnership.paymentAcceptanceStatus]
+              : null;
+
+            return (
+              <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between" key={partnership.id}>
+                <div className="flex min-w-0 items-center gap-3">
+                  <Avatar name={partnership.vendorProfile.companyName} size="md" />
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-fg">{partnership.vendorProfile.companyName}</p>
+                    <p className="truncate text-sm text-fg-subtle">{partnership.vendorProfile.serviceCategory}</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  {acceptance && <Badge tone={acceptance.tone}>{acceptance.label}</Badge>}
+                  {partnership.campusStatus ? (
+                    <Badge tone={partnership.campusStatus === "ON_CAMPUS" ? "success" : "version"}>
+                      {partnership.campusStatus === "ON_CAMPUS" ? "On campus" : "Off campus"}
+                    </Badge>
+                  ) : (
+                    <form action={setCampusStatusAction} className="flex items-center gap-2">
+                      <input type="hidden" name="partnershipId" value={partnership.id} />
+                      <select
+                        className="h-9 rounded-md border border-border bg-surface px-2 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+                        defaultValue=""
+                        name="campusStatus"
+                        required
+                      >
+                        <option disabled value="">
+                          Classify campus status
+                        </option>
+                        <option value="ON_CAMPUS">On campus</option>
+                        <option value="OFF_CAMPUS">Off campus</option>
+                      </select>
+                      <button
+                        className="h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
+                        type="submit"
+                      >
+                        Save
+                      </button>
+                    </form>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {partnerships.length === 0 && (
+            <p className="px-5 py-8 text-center text-sm text-fg-subtle">
+              No vendor partnerships yet.
+            </p>
+          )}
+        </div>
+      </section>
+
       <PageTabs
         tabs={[
           {

@@ -4,118 +4,106 @@
  */
 
 import Link from "next/link";
-import { Building2, Wallet } from "lucide-react";
+import { Wallet } from "lucide-react";
 
-import { Avatar } from "@/components/ui/Avatar";
-import { Badge } from "@/components/ui/Badge";
+import { Metric } from "@/components/ui/Metric";
+import { formatCurrency } from "@/lib/formatters";
 import { requireRole } from "@/lib/auth/session";
-import { listVendorPartnerships } from "@/lib/payments/partnerships";
+import { getVendorPayoutSummaries } from "@/lib/payments/payouts";
 import { getUniversityProfile } from "@/lib/university/profile";
-import { setCampusStatusAction } from "./actions";
 
-const PAYMENT_ACCEPTANCE_BADGE: Record<string, { tone: "success" | "warning" | "danger"; label: string }> = {
-  PENDING: { tone: "warning", label: "Pending review" },
-  APPROVED: { tone: "success", label: "Accepts payments" },
-  REJECTED: { tone: "danger", label: "Rejected" },
-  REVOKED: { tone: "danger", label: "Revoked" },
-};
+function payoutDate(value: Date | null) {
+  if (!value) return "Never";
+  return value.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
 
 export default async function PaymentsPage() {
   await requireRole(["SUPER_ADMIN", "ADMIN"]);
 
-  const [profile, partnerships] = await Promise.all([
-    getUniversityProfile(),
-    listVendorPartnerships(),
-  ]);
+  const profile = await getUniversityProfile();
+
+  if (!profile?.paymentServicesEnabled) {
+    return (
+      <div className="space-y-6">
+        <section className="flex items-start gap-3 rounded-xl border border-brand-200 bg-brand-50 p-5">
+          <Wallet className="mt-0.5 shrink-0 text-brand-700" size={20} aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-brand-700">Payment services aren&apos;t enabled yet</p>
+            <p className="mt-1 text-sm text-brand-700">
+              Students pre-load a UNIFY wallet and spend it with approved on-campus vendors, with
+              funds settling to your university&apos;s own Paystack account. Enabling it means your
+              university takes on real payout and safeguarding responsibilities &mdash; see{" "}
+              <Link className="underline hover:no-underline" href="/payments/about">
+                About
+              </Link>{" "}
+              for the full picture.
+            </p>
+            <Link
+              className="mt-4 inline-flex h-9 items-center rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700"
+              href="/payments/setup"
+            >
+              Set up payment services
+            </Link>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  const payoutSummaries = await getVendorPayoutSummaries();
+  const totalOwed = payoutSummaries.reduce((sum, entry) => sum + entry.accruedSinceLastPayout, 0);
+  const hasPayoutData = payoutSummaries.length > 0;
 
   return (
     <div className="space-y-6">
-      {!profile?.paymentServicesEnabled && (
-        <section className="flex items-start gap-3 rounded-xl border border-brand-200 bg-brand-50 p-4">
-          <Wallet className="mt-0.5 shrink-0 text-brand-700" size={20} aria-hidden="true" />
-          <div>
-            <p className="font-medium text-brand-700">Payment services are not enabled yet</p>
-            <p className="mt-1 text-sm text-brand-700">
-              Set up finance/technical contacts and a validated Paystack key, then enable payment
-              services from{" "}
-              <Link className="underline hover:no-underline" href="/settings">
-                Settings
-              </Link>
-              .
-            </p>
-          </div>
-        </section>
-      )}
-
-      <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
-        <div className="flex items-center gap-3 border-b border-border px-5 py-4">
-          <Building2 className="size-4.5 text-fg-subtle" aria-hidden="true" />
-          <h2 className="text-section-title text-fg">Vendor partnerships</h2>
-        </div>
-        <div className="divide-y divide-border">
-          {partnerships.map((partnership) => {
-            const acceptance = partnership.paymentAcceptanceStatus
-              ? PAYMENT_ACCEPTANCE_BADGE[partnership.paymentAcceptanceStatus]
-              : null;
-
-            return (
-              <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between" key={partnership.id}>
-                <div className="flex min-w-0 items-center gap-3">
-                  <Avatar name={partnership.vendorProfile.companyName} size="md" />
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-fg">{partnership.vendorProfile.companyName}</p>
-                    <p className="truncate text-sm text-fg-subtle">{partnership.vendorProfile.serviceCategory}</p>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  {acceptance && <Badge tone={acceptance.tone}>{acceptance.label}</Badge>}
-                  {partnership.campusStatus ? (
-                    <Badge tone={partnership.campusStatus === "ON_CAMPUS" ? "success" : "version"}>
-                      {partnership.campusStatus === "ON_CAMPUS" ? "On campus" : "Off campus"}
-                    </Badge>
-                  ) : (
-                    <form action={setCampusStatusAction} className="flex items-center gap-2">
-                      <input type="hidden" name="partnershipId" value={partnership.id} />
-                      <select
-                        className="h-9 rounded-md border border-border bg-surface px-2 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-                        defaultValue=""
-                        name="campusStatus"
-                        required
-                      >
-                        <option disabled value="">
-                          Classify campus status
-                        </option>
-                        <option value="ON_CAMPUS">On campus</option>
-                        <option value="OFF_CAMPUS">Off campus</option>
-                      </select>
-                      <button
-                        className="h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
-                        type="submit"
-                      >
-                        Save
-                      </button>
-                    </form>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-          {partnerships.length === 0 && (
-            <p className="px-5 py-8 text-center text-sm text-fg-subtle">
-              No vendor partnerships yet.
-            </p>
-          )}
-        </div>
-      </section>
+      <Metric
+        detail={hasPayoutData ? `Across ${payoutSummaries.length} vendors` : "Payout reporting isn't available yet"}
+        label="Total owed to vendors"
+        tone="brand"
+        value={hasPayoutData ? formatCurrency(totalOwed) : "—"}
+      />
 
       <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
         <div className="border-b border-border px-5 py-4">
-          <h2 className="text-section-title text-fg">Transactions &amp; payouts</h2>
+          <h2 className="text-section-title text-fg">Vendor payouts</h2>
         </div>
-        <p className="px-5 py-8 text-center text-sm text-fg-subtle">
-          Wallet transaction and payout reporting will appear here once payment services are live.
-        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-body">
+            <thead className="border-b border-border">
+              <tr className="whitespace-nowrap text-caption uppercase tracking-wide text-fg-subtle">
+                <th className="px-5 py-3 font-medium">Vendor</th>
+                <th className="px-5 py-3 font-medium">Accrued since last payout</th>
+                <th className="px-5 py-3 font-medium">Last payout date</th>
+                <th className="px-5 py-3 font-medium">Last payout amount</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {!hasPayoutData ? (
+                <tr>
+                  <td className="px-5 py-10 text-center text-fg-subtle" colSpan={4}>
+                    No payout data yet &mdash; wallet transaction reporting isn&apos;t available in
+                    this build.
+                  </td>
+                </tr>
+              ) : (
+                payoutSummaries.map((entry) => (
+                  <tr className="transition hover:bg-surface-muted/60" key={entry.vendorProfileId}>
+                    <td className="px-5 py-4 font-medium text-fg">{entry.companyName}</td>
+                    <td className="px-5 py-4 tabular-nums text-fg-muted">
+                      {formatCurrency(entry.accruedSinceLastPayout)}
+                    </td>
+                    <td className="px-5 py-4 tabular-nums text-fg-muted">
+                      {payoutDate(entry.lastPayoutDate)}
+                    </td>
+                    <td className="px-5 py-4 tabular-nums text-fg-muted">
+                      {entry.lastPayoutAmount === null ? "—" : formatCurrency(entry.lastPayoutAmount)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );

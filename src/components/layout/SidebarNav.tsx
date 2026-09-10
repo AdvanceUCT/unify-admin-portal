@@ -148,10 +148,18 @@ function NavLink({
 }
 
 /**
- * A parent item with sub-routes. It's a disclosure toggle, not a link — it
- * has no page of its own. Its expanded state mirrors `isSelected` exactly:
- * expanding it is what selects it, collapsing it is what deselects it.
- * Sub-items never get their own active state; only the parent ever lights up.
+ * A parent item with sub-routes. By default it's a disclosure toggle, not a
+ * link — it has no page of its own. Its expanded state mirrors `isSelected`
+ * exactly: expanding it is what selects it, collapsing it is what deselects
+ * it. Sub-items never get their own active state; only the parent ever
+ * lights up.
+ *
+ * When `item.hasOwnPage` is set (e.g. "Payments"), the row is a real `Link`
+ * instead — clicking it navigates to the parent's own page, and expansion
+ * follows automatically because being on that route already makes
+ * `isSelected` true (see `isNavItemActive`). There's no separate toggle
+ * interaction in that case: the parent is a legitimate destination, not just
+ * a group label, so "expand without navigating" doesn't apply.
  *
  * Clicking a child doesn't touch selection at all — the parent is already
  * the selected item (that's the only way its children are visible to click
@@ -174,25 +182,48 @@ function ExpandableNavItem({
 
   return (
     <div>
-      <button
-        aria-expanded={isExpanded}
-        className={cn(rowClassName(isSelected), "w-full")}
-        onClick={onToggle}
-        type="button"
-      >
-        <Icon
-          aria-hidden="true"
-          className={cn("shrink-0", isSelected ? "text-brand-600" : "text-current")}
-          size={18}
-          strokeWidth={isSelected ? 2.25 : 1.75}
-        />
-        <span className="flex-1 truncate text-left">{item.label}</span>
-        <ChevronDown
-          aria-hidden="true"
-          className={cn("shrink-0 transition-transform", !isExpanded && "-rotate-90")}
-          size={16}
-        />
-      </button>
+      {item.hasOwnPage ? (
+        <Link
+          aria-current={isSelected ? "page" : undefined}
+          aria-expanded={isExpanded}
+          className={cn(rowClassName(isSelected), "w-full")}
+          href={item.href}
+          onClick={onChildNavigate}
+        >
+          <Icon
+            aria-hidden="true"
+            className={cn("shrink-0", isSelected ? "text-brand-600" : "text-current")}
+            size={18}
+            strokeWidth={isSelected ? 2.25 : 1.75}
+          />
+          <span className="flex-1 truncate text-left">{item.label}</span>
+          <ChevronDown
+            aria-hidden="true"
+            className={cn("shrink-0 transition-transform", !isExpanded && "-rotate-90")}
+            size={16}
+          />
+        </Link>
+      ) : (
+        <button
+          aria-expanded={isExpanded}
+          className={cn(rowClassName(isSelected), "w-full")}
+          onClick={onToggle}
+          type="button"
+        >
+          <Icon
+            aria-hidden="true"
+            className={cn("shrink-0", isSelected ? "text-brand-600" : "text-current")}
+            size={18}
+            strokeWidth={isSelected ? 2.25 : 1.75}
+          />
+          <span className="flex-1 truncate text-left">{item.label}</span>
+          <ChevronDown
+            aria-hidden="true"
+            className={cn("shrink-0 transition-transform", !isExpanded && "-rotate-90")}
+            size={16}
+          />
+        </button>
+      )}
 
       {isExpanded ? (
         <div className="mt-1 flex flex-col gap-1">

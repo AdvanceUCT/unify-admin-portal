@@ -69,6 +69,15 @@ export function formatDateTime(value: string) {
   return dateTimeFormatter.format(new Date(value));
 }
 
+const currencyFormatter = new Intl.NumberFormat("en-ZA", {
+  currency: "ZAR",
+  style: "currency",
+});
+
+export function formatCurrency(value: number) {
+  return currencyFormatter.format(value);
+}
+
 export function formatCredentialStatus(value: CredentialLifecycleState) {
   return credentialStatusLabels[value];
 }

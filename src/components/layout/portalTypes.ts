@@ -15,13 +15,20 @@ export type PortalNavItem = {
   icon: NavIconName;
   /**
    * Sub-routes shown as a collapsible group under this item (e.g. Batch /
-   * Individual under "Issue Credentials"). `href` on the parent is a route
-   * prefix used for active-state matching only — it doesn't need a page of
-   * its own, and the parent renders as a disclosure toggle rather than a
-   * link when children are present. Children never get their own active
-   * styling; only the parent lights up.
+   * Individual under "Issue Credentials"). By default `href` on the parent
+   * is a route prefix used for active-state matching only — it doesn't need
+   * a page of its own, and the parent renders as a disclosure toggle rather
+   * than a link when children are present. Children never get their own
+   * active styling; only the parent lights up.
    */
   children?: PortalNavChild[];
+  /**
+   * Set when the parent itself has a real page at `href` (e.g. "Payments").
+   * Renders the parent as a clickable link instead of a toggle-only button —
+   * navigating to it selects it the same way any other route does, which
+   * naturally expands its children too. Ignored when there are no children.
+   */
+  hasOwnPage?: boolean;
 };
 
 export type PortalNavChild = {
