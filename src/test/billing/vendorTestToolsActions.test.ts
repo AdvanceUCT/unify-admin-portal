@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/lib/config/env", () => ({ env: { VERIFICATION_FEE_CURRENCY: "ZAR", VERIFICATION_FEE_MINOR: 125 } }));
 vi.mock("@/lib/billing/vendorAuthorization", () => ({ requireVendorInvoiceOwnerContext: vi.fn() }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: {} }));
 vi.mock("@/lib/billing/demoSeed", () => ({
@@ -73,8 +74,25 @@ describe("generateOwnInvoicesAction", () => {
     const result = await generateOwnInvoicesAction();
 
     expect(runVerificationBillingBackfill).toHaveBeenCalledWith(prisma, { apply: true, vendorProfileId: "vendor-001" });
-    expect(runVendorInvoiceGenerationForVendor).toHaveBeenCalledWith(prisma, "vendor-001");
+    expect(runVendorInvoiceGenerationForVendor).toHaveBeenCalledWith(prisma, "vendor-001", { now: expect.any(Date) });
     expect(result.backfill.imported).toBe(5);
     expect(result.invoices.invoicesIssued).toBe(2);
+  });
+
+  it("forces the current billing period closed so freshly-seeded current-month history is invoiceable immediately", async () => {
+    vi.mocked(requireVendorInvoiceOwnerContext).mockResolvedValue(ownerContext as never);
+    vi.mocked(runVerificationBillingBackfill).mockResolvedValue({
+      scanned: 1, imported: 1, alreadyImported: 0, notBillable: 0, pending: 0, exceptions: 0, nextCursor: null,
+    });
+    vi.mocked(runVendorInvoiceGenerationForVendor).mockResolvedValue({
+      vendorsScanned: 1, invoicesIssued: 1, zeroTotalInvoices: 0, skippedDisabled: false,
+    });
+
+    await generateOwnInvoicesAction();
+
+    const passedNow = vi.mocked(runVendorInvoiceGenerationForVendor).mock.calls[0][2]?.now;
+    expect(passedNow).toBeInstanceOf(Date);
+    // Must be safely in the future relative to real "now" — otherwise it wouldn't force-close the current period at all.
+    expect(passedNow!.getTime()).toBeGreaterThan(Date.now());
   });
 });

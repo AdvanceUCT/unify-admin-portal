@@ -93,7 +93,8 @@ export function TestToolsPanel() {
         <h3 className="text-sm font-medium text-fg">2. Generate invoices</h3>
         <p className="mt-1 text-sm text-fg-muted">
           Turns your vendor&apos;s unbilled verification history into charges, then issues any invoices now due — only for
-          your vendor.
+          your vendor. Treats the current month as already closed, so freshly-seeded current-month history is invoiceable
+          immediately instead of waiting for the real month to end.
         </p>
         <div className="mt-3">
           <button
