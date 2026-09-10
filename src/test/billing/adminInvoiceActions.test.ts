@@ -6,8 +6,12 @@ vi.mock("@/lib/audit/audit", () => ({ writeAuditLog: vi.fn() }));
 vi.mock("@/lib/billing/invoices", () => ({ runVendorInvoiceGeneration: vi.fn() }));
 vi.mock("@/lib/billing/paymentConfirmation", () => ({ confirmInvoicePayment: vi.fn() }));
 vi.mock("@/lib/paymentProviders/paystack/config", () => ({ resolvePaystackProviderConfig: vi.fn() }));
+vi.mock("@/lib/vendors/applications", () => ({ getApprovedApplicationIdForVendorProfile: vi.fn() }));
 vi.mock("@/lib/db/prisma", () => ({
-  prisma: { vendorInvoicePaymentAttempt: { findFirst: vi.fn() } },
+  prisma: {
+    vendorInvoicePaymentAttempt: { findFirst: vi.fn() },
+    vendorInvoice: { findUnique: vi.fn() },
+  },
 }));
 
 import { requireRole } from "@/lib/auth/session";
@@ -15,8 +19,9 @@ import { writeAuditLog } from "@/lib/audit/audit";
 import { runVendorInvoiceGeneration } from "@/lib/billing/invoices";
 import { confirmInvoicePayment } from "@/lib/billing/paymentConfirmation";
 import { resolvePaystackProviderConfig } from "@/lib/paymentProviders/paystack/config";
+import { getApprovedApplicationIdForVendorProfile } from "@/lib/vendors/applications";
 import { prisma } from "@/lib/db/prisma";
-import { generateMissingInvoicesAction } from "@/app/(admin)/vendors/invoices/actions";
+import { generateMissingInvoicesAction } from "@/app/(admin)/settings/verification-billing/actions";
 import { reconcileInvoicePaymentAction } from "@/app/(admin)/vendors/invoices/[invoiceId]/actions";
 
 const adminSession = { user: { id: "admin-1", role: "ADMIN" } } as Awaited<ReturnType<typeof requireRole>>;
@@ -95,6 +100,8 @@ describe("reconcileInvoicePaymentAction", () => {
     vi.mocked(prisma.vendorInvoicePaymentAttempt.findFirst).mockResolvedValue({ reference: "unify-inv-abc" } as never);
     vi.mocked(resolvePaystackProviderConfig).mockReturnValue(CONFIG);
     vi.mocked(confirmInvoicePayment).mockResolvedValue({ outcome: "confirmed", invoiceId: "invoice-1", paymentId: "payment-1" });
+    vi.mocked(prisma.vendorInvoice.findUnique).mockResolvedValue({ vendorProfileId: "vendor-1" } as never);
+    vi.mocked(getApprovedApplicationIdForVendorProfile).mockResolvedValue("application-1");
 
     await reconcileInvoicePaymentAction("invoice-1");
 
@@ -102,5 +109,6 @@ describe("reconcileInvoicePaymentAction", () => {
     expect(writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ action: "INVOICE_PAYMENT_RECONCILED", actorId: "admin-1", targetId: "invoice-1", meta: { outcome: "confirmed" } }),
     );
+    expect(getApprovedApplicationIdForVendorProfile).toHaveBeenCalledWith("vendor-1");
   });
 });

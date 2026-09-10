@@ -96,6 +96,42 @@ export async function getVendorInvoiceDocument(vendorProfileId: string, invoiceI
   };
 }
 
+export type VendorInvoiceYearHistory = {
+  selectedYear: number;
+  availableYears: number[];
+  invoices: VendorInvoiceSummary[];
+};
+
+function yearFromPeriodKey(periodKey: string): number {
+  return Number(periodKey.slice(0, 4));
+}
+
+/**
+ * The vendor's own invoice history, scoped to one calendar year — powers the
+ * admin verification-history page's "Invoices" section, one vendor at a
+ * time, so a growing vendor roster never means one giant cross-vendor table.
+ * Falls back to the current year if the requested one has no invoices,
+ * mirroring `getVendorMonthlyVerificationHistory`'s year-selection behavior.
+ */
+export async function getVendorInvoiceHistory(
+  vendorProfileId: string,
+  options: { year?: number; now?: Date } = {},
+): Promise<VendorInvoiceYearHistory> {
+  const invoices = await listVendorInvoices(vendorProfileId);
+  const currentYear = (options.now ?? new Date()).getUTCFullYear();
+
+  const years = new Set<number>([currentYear]);
+  for (const invoice of invoices) years.add(yearFromPeriodKey(invoice.periodKey));
+  const availableYears = Array.from(years).sort((left, right) => right - left);
+  const selectedYear = options.year && availableYears.includes(options.year) ? options.year : currentYear;
+
+  return {
+    selectedYear,
+    availableYears,
+    invoices: invoices.filter((invoice) => yearFromPeriodKey(invoice.periodKey) === selectedYear),
+  };
+}
+
 export type AdminInvoiceReceivable = VendorInvoiceSummary & {
   vendorProfileId: string;
   vendorCompanyName: string;

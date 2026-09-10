@@ -3,14 +3,24 @@
  * @module app/(admin)/vendors/[applicationId]/verification-history/page
  */
 
+import { ChevronRight } from "lucide-react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { BackButton } from "@/components/ui/BackButton";
 import { Metric } from "@/components/ui/Metric";
+import { StatusText, type StatusTone } from "@/components/ui/StatusText";
 import { requireRole } from "@/lib/auth/session";
+import { getVendorInvoiceHistory } from "@/lib/billing/invoiceQueries";
 import { formatMoneyMinor } from "@/lib/formatters";
 import { getVendorApplicationById } from "@/lib/vendors/applications";
 import { getVendorMonthlyVerificationHistory } from "@/lib/vendors/monthlyVerificationHistory";
+
+const PAYMENT_TONE: Record<string, StatusTone> = {
+  UNPAID: "warning",
+  PAID: "success",
+  NO_PAYMENT_REQUIRED: "neutral",
+};
 
 function yearParam(value: string | string[] | undefined) {
   const raw = Array.isArray(value) ? value[0] : value;
@@ -40,7 +50,8 @@ export default async function VendorVerificationHistoryPage({
     application.snapshotCompanyName ?? application.vendorProfile.companyName;
   const serviceCategory =
     application.snapshotServiceCategory ?? application.vendorProfile.serviceCategory;
-  const history = await getVendorMonthlyVerificationHistory(application.vendorProfileId, {
+  const history = await getVendorMonthlyVerificationHistory(application.vendorProfileId);
+  const invoiceHistory = await getVendorInvoiceHistory(application.vendorProfileId, {
     year: yearParam(filters.year),
   });
   const compactValueClassName = "text-lg leading-tight break-all sm:text-xl xl:text-2xl";
@@ -62,7 +73,7 @@ export default async function VendorVerificationHistoryPage({
         <Metric
           label="Current month"
           value={history.currentMonth.successfulVerifications}
-          detail={`${history.currentMonth.label} successful verifications / ${formatMoneyMinor(history.currentMonth.amountDueMinor, history.currentMonth.currency)} due`}
+          detail={`${history.currentMonth.label} successful verifications`}
           valueClassName={compactValueClassName}
         />
         <Metric
@@ -76,18 +87,20 @@ export default async function VendorVerificationHistoryPage({
       <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
         <div className="flex flex-col gap-4 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-section-title text-fg">Monthly verification billing</h2>
-            <p className="mt-1 text-sm text-fg-subtle">Reporting timezone: {history.timezone}</p>
+            <h2 className="text-section-title text-fg">Invoices</h2>
+            <p className="mt-1 text-sm text-fg-subtle">
+              {invoiceHistory.invoices.length} invoice{invoiceHistory.invoices.length === 1 ? "" : "s"} in {invoiceHistory.selectedYear}
+            </p>
           </div>
           <form className="flex items-end gap-2" method="get">
             <label className="grid gap-1 text-xs font-medium text-fg-muted">
               Year
               <select
                 className="h-10 rounded-md border border-border bg-surface px-3 text-sm font-normal text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-                defaultValue={history.selectedYear}
+                defaultValue={invoiceHistory.selectedYear}
                 name="year"
               >
-                {history.availableYears.map((year) => (
+                {invoiceHistory.availableYears.map((year) => (
                   <option key={year} value={year}>{year}</option>
                 ))}
               </select>
@@ -101,28 +114,57 @@ export default async function VendorVerificationHistoryPage({
           </form>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-center text-body">
-            <thead className="border-b border-border">
+          <table className="w-full min-w-[40rem] text-left text-body">
+            <thead className="border-b border-border bg-surface-muted/60">
               <tr className="whitespace-nowrap text-caption uppercase tracking-wide text-fg-subtle">
-                <th className="px-5 py-3 font-medium">Month</th>
-                <th className="px-5 py-3 font-medium">Successful verifications</th>
-                <th className="px-5 py-3 font-medium">Amount due</th>
+                <th className="px-4 py-3 font-medium">Invoice</th>
+                <th className="px-4 py-3 font-medium">Period</th>
+                <th className="px-4 py-3 font-medium">Total</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium" />
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {history.months.map((month) => (
-                <tr className="transition hover:bg-surface-muted/60" key={month.month}>
-                  <td className="px-5 py-3 font-medium text-fg">{month.rowLabel}</td>
-                  <td className="px-5 py-3 tabular-nums text-fg-muted">
-                    {month.successfulVerifications}
+              {invoiceHistory.invoices.map((invoice) => (
+                <tr className="align-middle transition hover:bg-surface-muted/60" key={invoice.id}>
+                  <td className="px-4 py-3 font-medium text-fg">
+                    <Link
+                      className="text-brand-600 underline-offset-2 hover:underline"
+                      href={`/vendors/invoices/${invoice.id}`}
+                    >
+                      {invoice.invoiceNumber}
+                    </Link>
                   </td>
-                  <td className="px-5 py-3 font-medium tabular-nums text-fg">
-                    {formatMoneyMinor(month.amountDueMinor, month.currency)}
+                  <td className="px-4 py-3 text-fg-muted">{invoice.periodLabel}</td>
+                  <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-fg">
+                    {invoice.currency} {invoice.totalDisplay}
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusText tone={PAYMENT_TONE[invoice.paymentStatus] ?? "neutral"}>
+                      {invoice.paymentStatus.replaceAll("_", " ")}
+                    </StatusText>
+                    {invoice.hasUnresolvedException && (
+                      <p className="mt-1 text-xs text-danger-fg">Needs review</p>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Link
+                      aria-label={`View invoice ${invoice.invoiceNumber}`}
+                      className="inline-flex items-center text-fg-subtle transition hover:text-fg"
+                      href={`/vendors/invoices/${invoice.id}`}
+                    >
+                      <ChevronRight aria-hidden="true" size={18} />
+                    </Link>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {invoiceHistory.invoices.length === 0 && (
+            <p className="px-5 py-8 text-center text-sm text-fg-subtle">
+              No invoices for {invoiceHistory.selectedYear}.
+            </p>
+          )}
         </div>
       </section>
     </div>

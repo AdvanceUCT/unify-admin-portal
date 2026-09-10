@@ -63,9 +63,6 @@ export function renderInvoicePdf(data: InvoiceDocumentData): Promise<Buffer> {
     doc.text(`Period: ${data.periodLabel}`);
     doc.text(`Issued: ${data.issuedAtIso ? new Date(data.issuedAtIso).toISOString().slice(0, 10) : "Not yet issued"}`);
     doc.text(`Status: ${data.paymentStatus}`);
-    if (data.isDemo) {
-      doc.fillColor("#b45309").text("Demo invoice — no real payment required.").fillColor("black");
-    }
     doc.moveDown(1);
 
     doc.font("Helvetica-Bold").text("Bill to");
@@ -95,8 +92,6 @@ export function renderInvoicePdf(data: InvoiceDocumentData): Promise<Buffer> {
     doc.moveTo(PAGE_MARGIN, doc.y).lineTo(545, doc.y).strokeColor("#999999").stroke();
     doc.moveDown(0.5);
     doc.fontSize(10);
-    doc.text(`University share: ${data.currency} ${data.universityShareDisplay}`, { align: "right" });
-    doc.text(`Platform share: ${data.currency} ${data.platformShareDisplay}`, { align: "right" });
     doc.font("Helvetica-Bold").text(`Total: ${data.currency} ${data.totalDisplay}`, { align: "right" });
 
     // Page numbers, added last so bufferPages can report the final count.

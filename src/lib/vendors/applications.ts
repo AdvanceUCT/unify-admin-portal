@@ -984,3 +984,21 @@ export function computeDraftProgress(application: {
   if (!application.declarationAccepted) return 5;
   return 6;
 }
+
+/**
+ * Resolves the application id backing a vendor's admin-facing detail pages
+ * (e.g. `/vendors/[applicationId]/verification-history`) from its
+ * `vendorProfileId` alone — used where a caller only has the vendor profile
+ * (an invoice, a charge) and needs to link or revalidate back to the
+ * vendor's own admin page. Returns null if the vendor has no approved
+ * application (e.g. revoked), in which case callers should fall back to the
+ * general `/vendors` list.
+ */
+export async function getApprovedApplicationIdForVendorProfile(vendorProfileId: string): Promise<string | null> {
+  const application = await prisma.vendorApplication.findFirst({
+    where: { vendorProfileId, status: "APPROVED" },
+    select: { id: true },
+  });
+
+  return application?.id ?? null;
+}
