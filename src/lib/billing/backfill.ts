@@ -40,6 +40,8 @@ export type RunVerificationBillingBackfillOptions = {
   cursor?: string | null;
   /** Bounds how many verifications one call scans, for resumable batches. */
   batchSize?: number;
+  /** When set, scans only this vendor's verifications — e.g. a vendor-scoped self-service tool. Omit for the global CLI/cron import. */
+  vendorProfileId?: string;
 };
 
 export type VerificationBillingBackfillSummary = {
@@ -92,6 +94,7 @@ export async function runVerificationBillingBackfill(
     where: {
       createdAt: { lte: cutoff },
       ...(options.cursor ? { id: { gt: options.cursor } } : {}),
+      ...(options.vendorProfileId ? { vendorProfileId: options.vendorProfileId } : {}),
     },
     include: { branch: { select: { name: true } }, charge: true },
     orderBy: { id: "asc" },
