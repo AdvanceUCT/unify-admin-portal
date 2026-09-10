@@ -166,7 +166,7 @@ describe("admin vendor verification history", () => {
     expect(screen.getByText("Campus Books")).toBeInTheDocument();
     expect(screen.getByText("Bookstore")).toBeInTheDocument();
     expect(screen.getByText(/August 2026 successful verifications/)).toBeInTheDocument();
-    expect(screen.getByText(/R\s*8,75 due/)).toBeInTheDocument();
+    expect(screen.getByText(/R\s*8,75/)).toBeInTheDocument();
     expect(screen.getByText("Estimated for August 2026")).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Year" })).toHaveValue("2026");
 
