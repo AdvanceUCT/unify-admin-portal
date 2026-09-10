@@ -44,6 +44,21 @@ if (result.status !== 0) {
 }
 
 if (runPreviewMigrations && process.env.PAYMENT_WALLET_BOOTSTRAP_ON_PREVIEW === "true") {
+  console.log("Generating Prisma client before preview payment wallet bootstrap...");
+  const generateResult = spawnSync(process.execPath, [prismaCliPath, "generate"], {
+    env: process.env,
+    stdio: "inherit",
+  });
+
+  if (generateResult.error) {
+    console.error("Unable to start Prisma generate:", generateResult.error.message);
+    process.exit(1);
+  }
+
+  if (generateResult.status !== 0) {
+    process.exit(generateResult.status ?? 1);
+  }
+
   console.log("Bootstrapping payment wallet foundation for preview deployment...");
   const bootstrapResult = spawnSync(process.execPath, [
     "node_modules/tsx/dist/cli.mjs",
