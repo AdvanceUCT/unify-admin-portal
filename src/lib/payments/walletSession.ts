@@ -203,12 +203,20 @@ export async function requestStudentPaymentActivation(input: {
   });
 
   if (student) {
-    await sendPaymentOtpEmail({
-      to: student.email,
-      otp,
-      studentName: `${student.firstName} ${student.lastName}`.trim() || "student",
-      challengeId,
-    });
+    try {
+      await sendPaymentOtpEmail({
+        to: student.email,
+        otp,
+        studentName: `${student.firstName} ${student.lastName}`.trim() || "student",
+        challengeId,
+      });
+    } catch (error) {
+      console.error("[wallet-activation] Failed to send payment OTP email:", error);
+      throw new WalletDomainError(
+        "PAYMENT_OTP_DELIVERY_FAILED",
+        "The activation code could not be sent. Check the payment OTP email configuration and try again.",
+      );
+    }
   }
 
   return {
