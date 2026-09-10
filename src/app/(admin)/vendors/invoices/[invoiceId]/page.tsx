@@ -10,6 +10,7 @@ import { StatusText, type StatusTone } from "@/components/ui/StatusText";
 import { assertCan } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
 import { getAdminInvoiceDetail } from "@/lib/billing/invoiceQueries";
+import { getApprovedApplicationIdForVendorProfile } from "@/lib/vendors/applications";
 
 import { reconcileInvoicePaymentAction } from "./actions";
 
@@ -37,10 +38,13 @@ export default async function AdminVendorInvoiceDetailPage({
   const { document } = detail;
   const canReconcile = detail.paymentStatus === "UNPAID" && detail.attempts.some((attempt) => UNRESOLVED_ATTEMPT_STATUSES.has(attempt.status));
   const reconcileAction = reconcileInvoicePaymentAction.bind(null, invoiceId);
+  const applicationId = await getApprovedApplicationIdForVendorProfile(detail.vendorProfileId);
+  const backHref = applicationId ? `/vendors/${applicationId}/verification-history` : "/vendors";
+  const backLabel = applicationId ? "Back to verification history" : "Back to vendors";
 
   return (
     <div className="space-y-6">
-      <BackButton href="/vendors/invoices" label="Back to invoices" />
+      <BackButton href={backHref} label={backLabel} />
       <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
           <div>

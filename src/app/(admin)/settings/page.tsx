@@ -37,6 +37,7 @@ export default async function SettingsPage() {
   const agentHealth = await checkAgentHealth();
   const webhookEndpoint = new URL("/api/webhooks/agent", env.APP_URL).toString();
   const canViewBillingOperations = role === "SUPER_ADMIN" || role === "ADMIN";
+  const canManageVerificationBilling = role === "SUPER_ADMIN" || role === "ADMIN";
   const billingOperationsSummary = canViewBillingOperations ? await getBillingOperationsSummary() : null;
 
   return (
@@ -175,14 +176,14 @@ export default async function SettingsPage() {
         </div>
       </SettingsCard>
 
-      {role === "SUPER_ADMIN" && (
+      {canManageVerificationBilling && (
         <SettingsCard
-          description="Set the demo verification fee and platform revenue share. Separate from the student payment wallet."
+          description="Verification fee policy and invoice generation. Separate from the student payment wallet."
           icon={Receipt}
           title="Vendor verification billing"
         >
           <Link className="text-sm font-medium text-brand-700 hover:underline" href="/settings/verification-billing">
-            Manage verification billing policy →
+            Manage verification billing →
           </Link>
         </SettingsCard>
       )}
