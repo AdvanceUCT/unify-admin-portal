@@ -314,6 +314,27 @@ describe("runVerificationBillingBackfill", () => {
     );
   });
 
+  it("scopes the scan to one vendor when vendorProfileId is given, so it can never touch another vendor's rows", async () => {
+    database.vendorVerification.findMany.mockResolvedValue([]);
+
+    await runVerificationBillingBackfill(client, { vendorProfileId: "vendor-001" });
+
+    expect(database.vendorVerification.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ vendorProfileId: "vendor-001" }),
+      }),
+    );
+  });
+
+  it("does not filter by vendorProfileId at all when omitted (the global CLI/cron scan)", async () => {
+    database.vendorVerification.findMany.mockResolvedValue([]);
+
+    await runVerificationBillingBackfill(client, {});
+
+    const where = database.vendorVerification.findMany.mock.calls.at(-1)![0].where;
+    expect(where).not.toHaveProperty("vendorProfileId");
+  });
+
   it("treats a concurrent unique-constraint violation as already-imported instead of failing", async () => {
     database.vendorVerification.findMany.mockResolvedValue([verification()]);
     database.verificationCharge.create.mockRejectedValue({ code: "P2002" });
