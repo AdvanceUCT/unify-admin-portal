@@ -74,7 +74,7 @@ function addMs(now: Date, ms: number) {
 }
 
 function shouldLogPreviewOtpCode() {
-  return env.PAYMENT_OTP_DEBUG_LOG_CODE && process.env.VERCEL_ENV === "preview";
+  return env.PAYMENT_OTP_DEBUG_LOG_CODE;
 }
 
 function assertActivationEnabled() {
