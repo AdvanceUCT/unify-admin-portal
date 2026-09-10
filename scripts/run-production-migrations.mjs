@@ -8,9 +8,13 @@ import { createRequire } from "node:module";
 
 const isProductionVercelBuild =
   process.env.VERCEL === "1" && process.env.VERCEL_ENV === "production";
+const isPreviewVercelBuild =
+  process.env.VERCEL === "1" && process.env.VERCEL_ENV === "preview";
+const runPreviewMigrations =
+  isPreviewVercelBuild && process.env.RUN_PRISMA_MIGRATIONS_ON_PREVIEW === "true";
 
-if (!isProductionVercelBuild) {
-  console.log("Skipping database migrations outside a production Vercel build.");
+if (!isProductionVercelBuild && !runPreviewMigrations) {
+  console.log("Skipping database migrations outside an enabled Vercel build.");
   process.exit(0);
 }
 
@@ -21,7 +25,7 @@ if (!process.env.DIRECT_URL) {
   process.exit(1);
 }
 
-console.log("Applying pending Prisma migrations before production deployment...");
+console.log("Applying pending Prisma migrations before Vercel deployment...");
 
 const require = createRequire(import.meta.url);
 const prismaCliPath = require.resolve("prisma/build/index.js");
@@ -35,4 +39,27 @@ if (result.error) {
   process.exit(1);
 }
 
-process.exit(result.status ?? 1);
+if (result.status !== 0) {
+  process.exit(result.status ?? 1);
+}
+
+if (runPreviewMigrations && process.env.PAYMENT_WALLET_BOOTSTRAP_ON_PREVIEW === "true") {
+  console.log("Bootstrapping payment wallet foundation for preview deployment...");
+  const bootstrapResult = spawnSync(process.execPath, [
+    "node_modules/tsx/dist/cli.mjs",
+    "scripts/bootstrap-payment-wallet.ts",
+    "--enable-payment-wallet",
+  ], {
+    env: process.env,
+    stdio: "inherit",
+  });
+
+  if (bootstrapResult.error) {
+    console.error("Unable to start payment wallet bootstrap:", bootstrapResult.error.message);
+    process.exit(1);
+  }
+
+  process.exit(bootstrapResult.status ?? 1);
+}
+
+process.exit(0);
