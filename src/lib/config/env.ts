@@ -64,6 +64,15 @@ const optionalNonNegativeInteger = z.preprocess(
   z.number().int().nonnegative().optional(),
 ).optional();
 
+const optionalPositiveInteger = z.preprocess(
+  (value) => {
+    if (value === undefined) return undefined;
+    if (typeof value === "string" && value.trim() === "") return undefined;
+    return Number(value);
+  },
+  z.number().int().positive().optional(),
+).optional();
+
 const currencyCode = z
   .preprocess(
     (value) => (value === undefined || (typeof value === "string" && value.trim() === "") ? undefined : value),
@@ -178,6 +187,11 @@ const envSchema = z.object({
   VERIFICATION_FEE_CURRENCY: currencyCode,
   VERIFICATION_INVOICING_ENABLED: strictBooleanFlag("VERIFICATION_INVOICING_ENABLED"),
   VERIFICATION_INVOICE_CHECKOUT_ENABLED: strictBooleanFlag("VERIFICATION_INVOICE_CHECKOUT_ENABLED"),
+  PAYMENT_WALLET_TOPUPS_ENABLED: strictBooleanFlag("PAYMENT_WALLET_TOPUPS_ENABLED"),
+  PAYMENT_TOPUP_MIN_MINOR: optionalPositiveInteger,
+  PAYMENT_TOPUP_MAX_MINOR: optionalPositiveInteger,
+  PAYMENT_OTP_EMAIL_FROM: optionalNonEmptyString,
+  PAYMENT_OTP_PEPPER: optionalNonEmptyString,
   PAYSTACK_MODE: paystackMode,
   PAYSTACK_SECRET_KEY: paystackSecretKey,
   PAYSTACK_ACCOUNT_REF: optionalNonEmptyString,
@@ -208,8 +222,36 @@ if (parsedEnv.VERIFICATION_INVOICE_CHECKOUT_ENABLED) {
   }
 }
 
+if (parsedEnv.PAYMENT_WALLET_TOPUPS_ENABLED) {
+  const missing = [
+    ["PAYSTACK_SECRET_KEY", parsedEnv.PAYSTACK_SECRET_KEY],
+    ["PAYSTACK_EXPECTED_INTEGRATION_ID", parsedEnv.PAYSTACK_EXPECTED_INTEGRATION_ID],
+    ["PAYMENT_OTP_EMAIL_FROM", parsedEnv.PAYMENT_OTP_EMAIL_FROM],
+    ["PAYMENT_OTP_PEPPER", parsedEnv.PAYMENT_OTP_PEPPER],
+    ["RESEND_API_KEY", parsedEnv.RESEND_API_KEY],
+  ].filter(([, value]) => value === undefined).map(([name]) => name);
+
+  if (missing.length > 0) {
+    throw new Error(
+      `PAYMENT_WALLET_TOPUPS_ENABLED requires ${missing.join(", ")} to be configured.`,
+    );
+  }
+  if ((parsedEnv.PAYMENT_OTP_PEPPER?.length ?? 0) < 32) {
+    throw new Error("PAYMENT_OTP_PEPPER must be at least 32 characters.");
+  }
+}
+
+const paymentTopupMinMinor = parsedEnv.PAYMENT_TOPUP_MIN_MINOR ?? 1_000;
+const paymentTopupMaxMinor = parsedEnv.PAYMENT_TOPUP_MAX_MINOR ?? 500_000;
+
+if (paymentTopupMinMinor > paymentTopupMaxMinor) {
+  throw new Error("PAYMENT_TOPUP_MIN_MINOR must be less than or equal to PAYMENT_TOPUP_MAX_MINOR.");
+}
+
 export const env = {
   ...parsedEnv,
   VERIFICATION_FEE_MINOR: parsedEnv.VERIFICATION_FEE_MINOR ?? 0,
+  PAYMENT_TOPUP_MIN_MINOR: paymentTopupMinMinor,
+  PAYMENT_TOPUP_MAX_MINOR: paymentTopupMaxMinor,
   PAYSTACK_ACCOUNT_REF: parsedEnv.PAYSTACK_ACCOUNT_REF ?? "university-demo",
 };

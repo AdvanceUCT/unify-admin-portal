@@ -3,7 +3,10 @@ import { createHmac } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/db/prisma", () => ({ prisma: {} }));
-vi.mock("@/lib/paymentProviders/paystack/config", () => ({ resolvePaystackProviderConfig: vi.fn() }));
+vi.mock("@/lib/paymentProviders/paystack/config", () => ({
+  resolvePaystackProviderConfig: vi.fn(),
+  resolvePaystackWalletTopupConfig: vi.fn(),
+}));
 vi.mock("@/lib/billing/gatewayEvents", () => ({
   recordGatewayEvent: vi.fn(),
   markGatewayEventProcessed: vi.fn(),
@@ -11,12 +14,14 @@ vi.mock("@/lib/billing/gatewayEvents", () => ({
 }));
 vi.mock("@/lib/billing/paymentConfirmation", () => ({ confirmInvoicePayment: vi.fn() }));
 vi.mock("@/lib/billing/exceptions", () => ({ recordBillingException: vi.fn() }));
+vi.mock("@/lib/payments/topups", () => ({ reconcileWalletTopupByReference: vi.fn() }));
 
 import { POST } from "@/app/api/webhooks/paystack/route";
-import { resolvePaystackProviderConfig } from "@/lib/paymentProviders/paystack/config";
+import { resolvePaystackProviderConfig, resolvePaystackWalletTopupConfig } from "@/lib/paymentProviders/paystack/config";
 import { recordGatewayEvent, markGatewayEventProcessed, recordGatewayEventFailure } from "@/lib/billing/gatewayEvents";
 import { confirmInvoicePayment } from "@/lib/billing/paymentConfirmation";
 import { recordBillingException } from "@/lib/billing/exceptions";
+import { reconcileWalletTopupByReference } from "@/lib/payments/topups";
 
 const SECRET_KEY = "sk_test_fixture";
 const CONFIG = {
@@ -44,6 +49,7 @@ describe("POST /api/webhooks/paystack", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(resolvePaystackProviderConfig).mockReturnValue(CONFIG);
+    vi.mocked(resolvePaystackWalletTopupConfig).mockReturnValue(CONFIG);
   });
 
   it("rejects a request with an invalid signature", async () => {
@@ -92,7 +98,7 @@ describe("POST /api/webhooks/paystack", () => {
 
     const response = await POST(webhookRequest(body));
 
-    expect(response.status).toBe(202);
+    expect(response.status).toBe(200);
     expect(recordGatewayEvent).not.toHaveBeenCalled();
     expect(confirmInvoicePayment).not.toHaveBeenCalled();
   });
@@ -102,7 +108,7 @@ describe("POST /api/webhooks/paystack", () => {
 
     const response = await POST(webhookRequest(body));
 
-    expect(response.status).toBe(202);
+    expect(response.status).toBe(200);
     expect(recordBillingException).toHaveBeenCalledWith(
       {},
       expect.objectContaining({ type: "PAYMENT_REVIEW_EVENT" }),
@@ -116,7 +122,7 @@ describe("POST /api/webhooks/paystack", () => {
 
     const response = await POST(webhookRequest(body));
 
-    expect(response.status).toBe(202);
+    expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ received: true, duplicate: true });
     expect(confirmInvoicePayment).not.toHaveBeenCalled();
   });
@@ -128,10 +134,29 @@ describe("POST /api/webhooks/paystack", () => {
 
     const response = await POST(webhookRequest(body));
 
-    expect(response.status).toBe(202);
+    expect(response.status).toBe(200);
     expect(confirmInvoicePayment).toHaveBeenCalledWith({}, { reference: "unify-inv-abc", config: CONFIG });
     expect(markGatewayEventProcessed).toHaveBeenCalledWith({}, "event-1");
     await expect(response.json()).resolves.toEqual({ received: true, outcome: "confirmed" });
+  });
+
+  it("routes wallet top-up charge.success events through wallet reconciliation", async () => {
+    const body = JSON.stringify({ event: "charge.success", data: { reference: "unify-wlt-abc" } });
+    vi.mocked(recordGatewayEvent).mockResolvedValue({ id: "event-1", duplicate: false });
+    vi.mocked(reconcileWalletTopupByReference).mockResolvedValue({
+      topUpId: "topup-1",
+      reference: "unify-wlt-abc",
+      status: "SUCCEEDED",
+      amountMinor: 1000,
+      currency: "ZAR",
+    });
+
+    const response = await POST(webhookRequest(body));
+
+    expect(response.status).toBe(200);
+    expect(reconcileWalletTopupByReference).toHaveBeenCalledWith({ reference: "unify-wlt-abc", config: CONFIG });
+    expect(confirmInvoicePayment).not.toHaveBeenCalled();
+    expect(markGatewayEventProcessed).toHaveBeenCalledWith({}, "event-1");
   });
 
   it("records a durable failure and returns 500 so Paystack retries, without acknowledging success", async () => {

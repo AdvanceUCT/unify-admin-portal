@@ -6,7 +6,7 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_ROUTES = ["/sign-in", "/accept-invite", "/forgot-password", "/reset-password", "/activate", "/verify"];
+const PUBLIC_ROUTES = ["/sign-in", "/accept-invite", "/forgot-password", "/reset-password", "/activate", "/verify", "/wallet/topups/return"];
 const VENDOR_PUBLIC_ROUTES = ["/vendor/sign-in", "/vendor/sign-up", "/vendor/accept-invite"];
 const PUBLIC_FILE = /\.(.*)$/;
 
@@ -36,6 +36,7 @@ function shouldSkipProxy(pathname: string) {
     // something introduced by billing — fixed narrowly for these prefixes
     // rather than exempting all of `/api`, per the vendor invoicing handoff.
     pathname.startsWith("/api/vendor") ||
+    pathname.startsWith("/api/wallet") ||
     pathname.startsWith("/api/webhooks") ||
     pathname.startsWith("/api/cron") ||
     pathname === "/favicon.ico" ||
