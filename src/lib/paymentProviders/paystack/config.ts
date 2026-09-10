@@ -20,6 +20,14 @@ export type PaystackProviderConfig = {
   baseUrl: string;
 };
 
+export type PaystackWalletTopupConfig = {
+  secretKey: string;
+  mode: string;
+  accountRef: string;
+  expectedIntegrationId: string;
+  baseUrl: string;
+};
+
 /**
  * Throws if the Paystack identity variables required for checkout aren't
  * configured — `env.ts` only requires them when
@@ -39,6 +47,23 @@ export function resolvePaystackProviderConfig(): PaystackProviderConfig {
     mode: env.PAYSTACK_MODE,
     accountRef: env.PAYSTACK_ACCOUNT_REF,
     subaccountCode: env.PAYSTACK_PLATFORM_SUBACCOUNT_CODE,
+    expectedIntegrationId: env.PAYSTACK_EXPECTED_INTEGRATION_ID,
+    baseUrl: PAYSTACK_API_BASE_URL,
+  };
+}
+
+export function resolvePaystackWalletTopupConfig(): PaystackWalletTopupConfig {
+  if (!env.PAYSTACK_SECRET_KEY || !env.PAYSTACK_EXPECTED_INTEGRATION_ID) {
+    throw new PaystackProviderError(
+      "NOT_CONFIGURED",
+      "Paystack wallet top-ups are not configured: PAYSTACK_SECRET_KEY and PAYSTACK_EXPECTED_INTEGRATION_ID are required.",
+    );
+  }
+
+  return {
+    secretKey: env.PAYSTACK_SECRET_KEY,
+    mode: env.PAYSTACK_MODE,
+    accountRef: env.PAYSTACK_ACCOUNT_REF,
     expectedIntegrationId: env.PAYSTACK_EXPECTED_INTEGRATION_ID,
     baseUrl: PAYSTACK_API_BASE_URL,
   };

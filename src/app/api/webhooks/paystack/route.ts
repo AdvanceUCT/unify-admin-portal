@@ -9,11 +9,14 @@ import { recordBillingException } from "@/lib/billing/exceptions";
 import { recordGatewayEvent, recordGatewayEventFailure, markGatewayEventProcessed } from "@/lib/billing/gatewayEvents";
 import { confirmInvoicePayment } from "@/lib/billing/paymentConfirmation";
 import { prisma } from "@/lib/db/prisma";
-import { resolvePaystackProviderConfig } from "@/lib/paymentProviders/paystack/config";
+import { resolvePaystackProviderConfig, resolvePaystackWalletTopupConfig } from "@/lib/paymentProviders/paystack/config";
 import { isPaystackWebhookBodyWithinLimit, verifyPaystackWebhookSignature } from "@/lib/paymentProviders/paystack/signature";
+import { WALLET_TOPUP_REFERENCE_PREFIX } from "@/lib/payments/constants";
+import { reconcileWalletTopupByReference } from "@/lib/payments/topups";
 
 const HANDLED_EVENT_TYPE = "charge.success";
 const REVIEW_EVENT_KEYWORDS = ["dispute", "refund", "reversal", "chargeback"];
+const INVOICE_REFERENCE_PREFIX = "unify-inv-";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -51,14 +54,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: { message: "Payload too large." } }, { status: 413 });
   }
 
-  let config;
+  let signatureConfig;
   try {
-    config = resolvePaystackProviderConfig();
+    signatureConfig = resolvePaystackWalletTopupConfig();
   } catch {
     return NextResponse.json({ error: { message: "Paystack is not configured." } }, { status: 500 });
   }
 
-  if (!verifyPaystackWebhookSignature(rawBody, request.headers.get("x-paystack-signature"), config.secretKey)) {
+  if (!verifyPaystackWebhookSignature(rawBody, request.headers.get("x-paystack-signature"), signatureConfig.secretKey)) {
     return NextResponse.json({ error: { message: "Invalid webhook signature." } }, { status: 401 });
   }
 
@@ -70,7 +73,7 @@ export async function POST(request: Request) {
   }
 
   if (!isRecord(payload) || typeof payload.event !== "string") {
-    return NextResponse.json({ received: true, ignored: true }, { status: 202 });
+    return NextResponse.json({ received: true, ignored: true }, { status: 200 });
   }
 
   const eventType = payload.event;
@@ -88,17 +91,21 @@ export async function POST(request: Request) {
         details: { event: eventType, reference },
       });
     }
-    return NextResponse.json({ received: true, ignored: true }, { status: 202 });
+    return NextResponse.json({ received: true, ignored: true }, { status: 200 });
   }
 
   if (!reference) {
-    return NextResponse.json({ received: true, ignored: true }, { status: 202 });
+    return NextResponse.json({ received: true, ignored: true }, { status: 200 });
+  }
+
+  if (!reference.startsWith(INVOICE_REFERENCE_PREFIX) && !reference.startsWith(WALLET_TOPUP_REFERENCE_PREFIX)) {
+    return NextResponse.json({ received: true, ignored: true }, { status: 200 });
   }
 
   const dedupe = await recordGatewayEvent(prisma, {
     provider: "paystack",
-    providerAccountRef: config.accountRef,
-    providerMode: config.mode,
+    providerAccountRef: signatureConfig.accountRef,
+    providerMode: signatureConfig.mode,
     eventType,
     resourceKey: reference,
     rawBody,
@@ -106,13 +113,15 @@ export async function POST(request: Request) {
   });
 
   if (dedupe.duplicate) {
-    return NextResponse.json({ received: true, duplicate: true }, { status: 202 });
+    return NextResponse.json({ received: true, duplicate: true }, { status: 200 });
   }
 
   try {
-    const result = await confirmInvoicePayment(prisma, { reference, config });
+    const result = reference.startsWith(WALLET_TOPUP_REFERENCE_PREFIX)
+      ? await reconcileWalletTopupByReference({ reference, config: signatureConfig })
+      : await confirmInvoicePayment(prisma, { reference, config: resolvePaystackProviderConfig() });
     await markGatewayEventProcessed(prisma, dedupe.id);
-    return NextResponse.json({ received: true, outcome: result.outcome }, { status: 202 });
+    return NextResponse.json({ received: true, outcome: "outcome" in result ? result.outcome : result.status }, { status: 200 });
   } catch (error) {
     await recordGatewayEventFailure(prisma, dedupe.id, error, 60);
     return NextResponse.json({ error: { message: "Failed to process webhook event." } }, { status: 500 });

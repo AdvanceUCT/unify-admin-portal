@@ -47,6 +47,12 @@ export type PostRefundInput = PostingBase & {
   originalTransactionId: string;
 };
 
+export type CompletePendingTopupInput = {
+  walletTransactionId: string;
+  studentAccountId: string;
+  completedAt?: Date;
+};
+
 type WalletPostingEntry = {
   accountId: string;
   direction: LedgerDirection;
@@ -480,4 +486,95 @@ export function postSpend(input: PostSpendInput) {
 
 export function postRefund(input: PostRefundInput) {
   return postWalletOperation({ kind: "REFUND", input });
+}
+
+export async function completePendingTopup(input: CompletePendingTopupInput) {
+  const walletTransactionId = normalizeRequired(input.walletTransactionId, "Wallet transaction id");
+  const studentAccountId = normalizeRequired(input.studentAccountId, "Student account id");
+
+  return runSerializableTransaction(async (transaction) => {
+    const existing = await transaction.walletTransaction.findUnique({
+      where: { id: walletTransactionId },
+      include: { entries: true },
+    });
+
+    if (!existing || existing.type !== WalletTransactionType.TOPUP || existing.initiatorAccountId !== studentAccountId) {
+      throw new WalletDomainError("INVALID_POSTING", "Top-up transaction was not found.");
+    }
+    if (existing.status === WalletTransactionStatus.COMPLETED) {
+      return existing;
+    }
+    if (existing.status === WalletTransactionStatus.FAILED || existing.entries.length > 0) {
+      throw new WalletDomainError("INVALID_POSTING", "Top-up transaction is not completable.");
+    }
+
+    const gateway = await transaction.walletAccount.findUnique({
+      where: { systemCode: "GATEWAY_CLEARING" },
+      select: { id: true },
+    });
+    if (!gateway) {
+      throw new WalletDomainError("ACCOUNT_NOT_FOUND", "Gateway clearing account was not found.");
+    }
+
+    const accountIds = [gateway.id, studentAccountId].sort((a, b) => a.localeCompare(b));
+    await transaction.$queryRaw(
+      Prisma.sql`
+        SELECT "accountId"
+        FROM "wallet_account_balance"
+        WHERE "accountId" IN (${Prisma.join(accountIds)})
+        ORDER BY "accountId"
+        FOR UPDATE
+      `,
+    );
+
+    const accounts = await transaction.walletAccount.findMany({
+      where: { id: { in: accountIds } },
+      include: { balance: true },
+    });
+    if (accounts.length !== accountIds.length || accounts.some((account) => !account.balance)) {
+      throw new WalletDomainError("ACCOUNT_NOT_FOUND", "One or more wallet accounts were not found.");
+    }
+
+    assertAccountStatuses(
+      {
+        type: WalletTransactionType.TOPUP,
+        amountMinor: existing.amountMinor,
+        initiatorAccountId: studentAccountId,
+        idempotencyKey: existing.idempotencyKey ?? walletTransactionId,
+        entries: [],
+      },
+      accounts,
+    );
+
+    await transaction.ledgerEntry.createMany({
+      data: [
+        {
+          walletTransactionId: existing.id,
+          accountId: gateway.id,
+          sequence: 0,
+          direction: LedgerDirection.DEBIT,
+          amountMinor: existing.amountMinor,
+          currency: WALLET_CURRENCY,
+        },
+        {
+          walletTransactionId: existing.id,
+          accountId: studentAccountId,
+          sequence: 1,
+          direction: LedgerDirection.CREDIT,
+          amountMinor: existing.amountMinor,
+          currency: WALLET_CURRENCY,
+        },
+      ],
+    });
+
+    await transaction.walletTransaction.update({
+      where: { id: existing.id },
+      data: { status: WalletTransactionStatus.COMPLETED, completedAt: input.completedAt ?? new Date() },
+    });
+
+    return transaction.walletTransaction.findUniqueOrThrow({
+      where: { id: existing.id },
+      include: { entries: { orderBy: { sequence: "asc" } } },
+    });
+  });
 }

@@ -33,7 +33,7 @@ describe("proxy", () => {
   it("allows public auth and recovery routes without a session", () => {
     getSessionCookieMock.mockReturnValue(null);
 
-    for (const route of ["/sign-in", "/accept-invite", "/forgot-password", "/reset-password", "/verify", "/verify/sp-public-001", "/verify/checkout/verification-001"]) {
+    for (const route of ["/sign-in", "/accept-invite", "/forgot-password", "/reset-password", "/verify", "/verify/sp-public-001", "/verify/checkout/verification-001", "/wallet/topups/return"]) {
       expect(proxy(request(route)).status, route).toBe(200);
     }
   });
@@ -73,10 +73,18 @@ describe("proxy", () => {
       "/api/vendor/verifications/export",
       "/api/vendor/integrations/api-keys",
       "/api/vendor/integrations/webhook",
+      "/api/wallet/v1/activations/request",
+      "/api/wallet/v1/activations/verify",
+      "/api/wallet/v1/sessions/refresh",
+      "/api/wallet/v1/sessions/revoke",
+      "/api/wallet/v1/topups",
+      "/api/wallet/v1/topups/topup-1",
+      "/api/wallet/v1/topups/topup-1/reconcile",
       // Server-to-server: HMAC-signed webhooks and CRON_SECRET-guarded jobs.
       "/api/webhooks/agent",
       "/api/webhooks/paystack",
       "/api/cron/credential-automation",
+      "/api/cron/wallet-topups-reconcile",
     ]) {
       expect(proxy(request(route)).status, route).toBe(200);
     }
