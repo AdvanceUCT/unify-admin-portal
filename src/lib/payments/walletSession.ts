@@ -73,6 +73,10 @@ function addMs(now: Date, ms: number) {
   return new Date(now.getTime() + ms);
 }
 
+function shouldLogPreviewOtpCode() {
+  return env.PAYMENT_OTP_DEBUG_LOG_CODE && process.env.VERCEL_ENV === "preview";
+}
+
 function assertActivationEnabled() {
   if (!env.PAYMENT_WALLET_TOPUPS_ENABLED) {
     throw new WalletDomainError("PAYMENT_WALLET_DISABLED", "Payment wallet activation is disabled.");
@@ -114,7 +118,7 @@ async function sendPaymentOtpEmail(input: { to: string; otp: string; studentName
   if (env.PAYMENT_OTP_EMAIL_OVERRIDE_TO) {
     console.warn("[wallet-activation] Sending payment OTP to configured test override recipient.");
   }
-  await sendResendEmail({
+  const delivery = await sendResendEmail({
     apiKey: env.RESEND_API_KEY,
     from: env.PAYMENT_OTP_EMAIL_FROM,
     to: recipient,
@@ -122,6 +126,11 @@ async function sendPaymentOtpEmail(input: { to: string; otp: string; studentName
     text: `Your UNIFY wallet activation code is ${input.otp}. It expires in 10 minutes.`,
     html: `<p>Hi ${safeName},</p><p>Your UNIFY wallet activation code is <strong>${safeOtp}</strong>.</p><p>It expires in 10 minutes.</p>`,
   });
+  if (shouldLogPreviewOtpCode()) {
+    console.warn(
+      `[wallet-activation] Preview OTP debug code for challenge ${input.challengeId}: ${input.otp} (delivery=${delivery.provider}:${delivery.messageId ?? "unknown"})`,
+    );
+  }
 }
 
 export async function requestStudentPaymentActivation(input: {
