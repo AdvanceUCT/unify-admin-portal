@@ -191,6 +191,7 @@ const envSchema = z.object({
   PAYMENT_TOPUP_MIN_MINOR: optionalPositiveInteger,
   PAYMENT_TOPUP_MAX_MINOR: optionalPositiveInteger,
   PAYMENT_OTP_EMAIL_FROM: optionalNonEmptyString,
+  PAYMENT_OTP_EMAIL_OVERRIDE_TO: optionalNonEmptyString,
   PAYMENT_OTP_PEPPER: optionalNonEmptyString,
   PAYSTACK_MODE: paystackMode,
   PAYSTACK_SECRET_KEY: paystackSecretKey,

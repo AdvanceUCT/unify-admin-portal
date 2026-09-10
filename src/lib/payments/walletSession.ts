@@ -110,10 +110,14 @@ async function sendPaymentOtpEmail(input: { to: string; otp: string; studentName
 
   const safeName = escapeHtml(input.studentName);
   const safeOtp = escapeHtml(input.otp);
+  const recipient = env.PAYMENT_OTP_EMAIL_OVERRIDE_TO ?? input.to;
+  if (env.PAYMENT_OTP_EMAIL_OVERRIDE_TO) {
+    console.warn("[wallet-activation] Sending payment OTP to configured test override recipient.");
+  }
   await sendResendEmail({
     apiKey: env.RESEND_API_KEY,
     from: env.PAYMENT_OTP_EMAIL_FROM,
-    to: input.to,
+    to: recipient,
     subject: "Your UNIFY wallet activation code",
     text: `Your UNIFY wallet activation code is ${input.otp}. It expires in 10 minutes.`,
     html: `<p>Hi ${safeName},</p><p>Your UNIFY wallet activation code is <strong>${safeOtp}</strong>.</p><p>It expires in 10 minutes.</p>`,
