@@ -5,6 +5,7 @@
 
 import { notFound } from "next/navigation";
 
+import { BackButton } from "@/components/ui/BackButton";
 import { StatusText, type StatusTone } from "@/components/ui/StatusText";
 import { env } from "@/lib/config/env";
 import { getVendorInvoiceDocument } from "@/lib/billing/invoiceQueries";
@@ -33,6 +34,7 @@ export default async function VendorInvoiceDetailPage({
 
   return (
     <div className="space-y-6">
+      <BackButton href="/vendor/invoices" label="Back to invoices" />
       <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
           <div>
@@ -53,11 +55,6 @@ export default async function VendorInvoiceDetailPage({
           </div>
         </div>
 
-        {document.isDemo && (
-          <div className="border-b border-border bg-warning-fg/10 px-5 py-3 text-sm text-warning-fg">
-            Demo invoice — no real payment required.
-          </div>
-        )}
         {hasUnresolvedException && (
           <div className="border-b border-border bg-danger-fg/10 px-5 py-3 text-sm text-danger-fg">
             This invoice has an unresolved billing exception under review.
@@ -107,12 +104,6 @@ export default async function VendorInvoiceDetailPage({
         </div>
 
         <div className="space-y-1 border-t border-border px-5 py-4 text-right text-sm">
-          <p className="text-fg-muted">
-            University share: {document.currency} {document.universityShareDisplay}
-          </p>
-          <p className="text-fg-muted">
-            Platform share: {document.currency} {document.platformShareDisplay}
-          </p>
           <p className="text-base font-semibold text-fg">
             Total: {document.currency} {document.totalDisplay}
           </p>

@@ -3,6 +3,7 @@
  * @module app/vendor/(portal)/invoices/page
  */
 
+import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 
 import { StatusText, type StatusTone } from "@/components/ui/StatusText";
@@ -43,12 +44,12 @@ export default async function VendorInvoicesPage() {
               {invoices.map((invoice) => (
                 <tr className="align-middle transition hover:bg-surface-muted/60" key={invoice.id}>
                   <td className="px-4 py-3 font-medium text-fg">
-                    {invoice.invoiceNumber}
-                    {invoice.isDemo && (
-                      <span className="ml-2 text-xs font-normal text-fg-subtle">
-                        Demo invoice — no real payment required
-                      </span>
-                    )}
+                    <Link
+                      className="text-brand-600 underline-offset-2 hover:underline"
+                      href={`/vendor/invoices/${invoice.id}`}
+                    >
+                      {invoice.invoiceNumber}
+                    </Link>
                   </td>
                   <td className="px-4 py-3 text-fg-muted">{invoice.periodLabel}</td>
                   <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-fg">
@@ -64,10 +65,11 @@ export default async function VendorInvoicesPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link
-                      className="text-sm font-medium text-fg-muted hover:text-fg"
+                      aria-label={`View invoice ${invoice.invoiceNumber}`}
+                      className="inline-flex items-center text-fg-subtle transition hover:text-fg"
                       href={`/vendor/invoices/${invoice.id}`}
                     >
-                      View
+                      <ChevronRight aria-hidden="true" size={18} />
                     </Link>
                   </td>
                 </tr>

@@ -3,21 +3,28 @@
  * @module app/(admin)/settings/verification-billing/page
  */
 
-import { History, Percent, Receipt } from "lucide-react";
+import { FileText, History, Percent, Receipt } from "lucide-react";
 
 import { requireRole } from "@/lib/auth/session";
 import { minorToDecimalString } from "@/lib/billing/money";
 import { prisma } from "@/lib/db/prisma";
 import { SettingsCard } from "../SettingsCard";
+import { generateMissingInvoicesAction } from "./actions";
 import { UpdateVerificationBillingPolicyForm } from "./UpdateVerificationBillingPolicyForm";
 
 function formatBasisPoints(basisPoints: number) {
   return `${(basisPoints / 100).toFixed(2)}%`;
 }
 
-/** Only `SUPER_ADMIN` may reach this page — see `billing-policy:manage` in `src/lib/auth/permissions.ts`. */
+/**
+ * `SUPER_ADMIN` and `ADMIN` may both reach this page (invoice generation is
+ * an `invoice:issue` action available to both), but editing the fee/revenue
+ * split itself stays `SUPER_ADMIN`-only — see `billing-policy:manage` in
+ * `src/lib/auth/permissions.ts`.
+ */
 export default async function VerificationBillingSettingsPage() {
-  await requireRole(["SUPER_ADMIN"]);
+  const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
+  const canManagePolicy = session.user.role === "SUPER_ADMIN";
 
   const policies = await prisma.verificationBillingPolicy.findMany({ orderBy: { version: "desc" } });
   const openPolicy = policies.find((policy) => policy.effectiveTo === null) ?? null;
@@ -63,7 +70,7 @@ export default async function VerificationBillingSettingsPage() {
         )}
       </SettingsCard>
 
-      {openPolicy && (
+      {canManagePolicy && openPolicy && (
         <SettingsCard
           description="Creates a new policy version effective immediately."
           icon={Percent}
@@ -72,6 +79,21 @@ export default async function VerificationBillingSettingsPage() {
           <UpdateVerificationBillingPolicyForm />
         </SettingsCard>
       )}
+
+      <SettingsCard
+        description="Issues any invoices now due across every vendor — the same idempotent job the monthly schedule runs, triggered on demand."
+        icon={FileText}
+        title="Generate missing invoices"
+      >
+        <form action={generateMissingInvoicesAction}>
+          <button
+            className="h-9 rounded-md border border-border px-3 text-sm font-medium text-fg hover:bg-surface-muted"
+            type="submit"
+          >
+            Generate missing invoices
+          </button>
+        </form>
+      </SettingsCard>
 
       <SettingsCard description="Every policy version, newest first." icon={History} title="Policy history">
         <div className="overflow-x-auto">

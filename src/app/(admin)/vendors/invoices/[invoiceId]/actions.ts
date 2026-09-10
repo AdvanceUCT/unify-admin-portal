@@ -13,6 +13,7 @@ import { requireRole } from "@/lib/auth/session";
 import { confirmInvoicePayment } from "@/lib/billing/paymentConfirmation";
 import { prisma } from "@/lib/db/prisma";
 import { resolvePaystackProviderConfig } from "@/lib/paymentProviders/paystack/config";
+import { getApprovedApplicationIdForVendorProfile } from "@/lib/vendors/applications";
 
 /**
  * `invoice:reconcile`. Manual support recovery for one invoice's most
@@ -44,5 +45,8 @@ export async function reconcileInvoicePaymentAction(invoiceId: string) {
   });
 
   revalidatePath(`/vendors/invoices/${invoiceId}`);
-  revalidatePath("/vendors/invoices");
+
+  const invoice = await prisma.vendorInvoice.findUnique({ where: { id: invoiceId }, select: { vendorProfileId: true } });
+  const applicationId = invoice ? await getApprovedApplicationIdForVendorProfile(invoice.vendorProfileId) : null;
+  if (applicationId) revalidatePath(`/vendors/${applicationId}/verification-history`);
 }

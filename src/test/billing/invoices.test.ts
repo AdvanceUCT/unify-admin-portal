@@ -10,6 +10,7 @@ import {
   previewVendorInvoiceGeneration,
   resolveNextInvoicePeriodForVendor,
   runVendorInvoiceGeneration,
+  runVendorInvoiceGenerationForVendor,
   type InvoiceGenerationRunner,
   type ReadClient,
 } from "@/lib/billing/invoices";
@@ -311,6 +312,56 @@ describe("previewVendorInvoiceGeneration and runVendorInvoiceGeneration", () => 
       const summary = await runVendorInvoiceGeneration(db);
       expect(summary).toEqual({ vendorsScanned: 0, invoicesIssued: 0, zeroTotalInvoices: 0, skippedDisabled: true });
       expect(findManySpy).not.toHaveBeenCalled();
+    } finally {
+      envMock.VERIFICATION_INVOICING_ENABLED = true;
+    }
+  });
+});
+
+describe("runVendorInvoiceGenerationForVendor", () => {
+  function makeSingleVendorDb(unclaimedCharges: ReturnType<typeof charge>[]) {
+    let claimed = false;
+    const db = {
+      verificationCharge: {
+        findMany: vi.fn().mockImplementation(() => Promise.resolve(claimed ? [] : unclaimedCharges)),
+        findFirst: vi.fn().mockImplementation(() => Promise.resolve(claimed || unclaimedCharges.length === 0 ? null : { servicePeriodKey: unclaimedCharges[0].servicePeriodKey })),
+      },
+      vendorInvoice: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue({ id: "invoice-1", periodKey: unclaimedCharges[0]?.servicePeriodKey }),
+        update: vi.fn().mockImplementation(({ data, where }) => {
+          claimed = true;
+          return Promise.resolve({ id: where.id, totalMinor: BigInt(250), ...data });
+        }),
+      },
+      vendorProfile: { findUniqueOrThrow: vi.fn().mockResolvedValue({ companyName: "Library Cafe", contactEmail: "cafe@example.test" }) },
+      universityProfile: { findFirstOrThrow: vi.fn().mockResolvedValue({ name: "UNIFY U", abbreviation: "UU", contactEmail: "admin@example.test" }) },
+      $queryRaw: vi.fn().mockResolvedValue([{ nextval: BigInt(1) }]),
+      vendorInvoiceItem: { createMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    };
+    (db as unknown as { $transaction: unknown }).$transaction = vi.fn((fn: (tx: typeof db) => unknown) => fn(db));
+    return db;
+  }
+
+  it("issues due invoices for exactly the given vendor, without scanning for other vendors with unclaimed charges", async () => {
+    const now = new Date("2026-10-05T12:00:00.000Z");
+    const db = makeSingleVendorDb([charge({ servicePeriodKey: "2026-09" })]);
+
+    const summary = await runVendorInvoiceGenerationForVendor(db as never, "vendor-001", { now });
+
+    expect(summary).toEqual({ vendorsScanned: 1, invoicesIssued: 1, zeroTotalInvoices: 0, skippedDisabled: false });
+    // The per-vendor path never runs the "which vendors have unclaimed charges" distinct scan.
+    expect(db.verificationCharge.findMany).not.toHaveBeenCalledWith(expect.objectContaining({ distinct: expect.anything() }));
+  });
+
+  it("reports skippedDisabled when VERIFICATION_INVOICING_ENABLED is off, matching the global function's behavior", async () => {
+    const db = makeSingleVendorDb([charge({ servicePeriodKey: "2026-09" })]);
+
+    envMock.VERIFICATION_INVOICING_ENABLED = false;
+    try {
+      const summary = await runVendorInvoiceGenerationForVendor(db as never, "vendor-001");
+      expect(summary).toEqual({ vendorsScanned: 0, invoicesIssued: 0, zeroTotalInvoices: 0, skippedDisabled: true });
+      expect(db.vendorInvoice.create).not.toHaveBeenCalled();
     } finally {
       envMock.VERIFICATION_INVOICING_ENABLED = true;
     }

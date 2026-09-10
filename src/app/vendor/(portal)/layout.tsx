@@ -50,7 +50,12 @@ const applicantNavItems: PortalNavItem[] = [
 function navItemsForVendorContext(context: ApprovedVendorContext | null, hasInvoiceAccess: boolean) {
   const baseItems = !context ? applicantNavItems : context.role === "STAFF" ? staffNavItems : ownerNavItems;
   if (!hasInvoiceAccess) return baseItems;
-  return [...baseItems, { href: "/vendor/invoices", label: "Invoices", icon: "invoices" } satisfies PortalNavItem];
+
+  const invoicesItem: PortalNavItem = { href: "/vendor/invoices", label: "Invoices", icon: "invoices" };
+  const profileIndex = baseItems.findIndex((item) => item.href === "/vendor/profile");
+  if (profileIndex === -1) return [...baseItems, invoicesItem];
+
+  return [...baseItems.slice(0, profileIndex + 1), invoicesItem, ...baseItems.slice(profileIndex + 1)];
 }
 
 function roleLabelForVendorContext(context: ApprovedVendorContext | null) {

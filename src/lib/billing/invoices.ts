@@ -331,17 +331,51 @@ export async function runVendorInvoiceGeneration(
   };
 
   for (const { vendorProfileId } of candidateRows) {
-    for (let iteration = 0; iteration < MAX_INVOICES_PER_VENDOR_PER_RUN; iteration += 1) {
-      const periodKey = await resolveNextInvoicePeriodForVendor(db, vendorProfileId, currency, now);
-      if (!periodKey) break;
-
-      const invoice = await issueInvoiceForVendorPeriod(db, { vendorProfileId, periodKey, currency, now });
-      if (!invoice) break;
-
-      summary.invoicesIssued += 1;
-      if (invoice.totalMinor === BigInt(0)) summary.zeroTotalInvoices += 1;
-    }
+    const forVendor = await issueDueInvoicesForVendor(db, vendorProfileId, currency, now);
+    summary.invoicesIssued += forVendor.invoicesIssued;
+    summary.zeroTotalInvoices += forVendor.zeroTotalInvoices;
   }
 
   return summary;
+}
+
+async function issueDueInvoicesForVendor(db: TransactionRunner & ReadClient, vendorProfileId: string, currency: string, now: Date) {
+  let invoicesIssued = 0;
+  let zeroTotalInvoices = 0;
+
+  for (let iteration = 0; iteration < MAX_INVOICES_PER_VENDOR_PER_RUN; iteration += 1) {
+    const periodKey = await resolveNextInvoicePeriodForVendor(db, vendorProfileId, currency, now);
+    if (!periodKey) break;
+
+    const invoice = await issueInvoiceForVendorPeriod(db, { vendorProfileId, periodKey, currency, now });
+    if (!invoice) break;
+
+    invoicesIssued += 1;
+    if (invoice.totalMinor === BigInt(0)) zeroTotalInvoices += 1;
+  }
+
+  return { invoicesIssued, zeroTotalInvoices };
+}
+
+/**
+ * Issues every currently-due invoice for exactly one vendor — the same
+ * bounded per-vendor loop `runVendorInvoiceGeneration` uses, without the
+ * outer scan across every vendor with unclaimed charges. Used by the vendor
+ * self-service test tool so a vendor can only ever generate their own
+ * invoices, never anyone else's. Also respects
+ * `VERIFICATION_INVOICING_ENABLED`, for the same reason the global version does.
+ */
+export async function runVendorInvoiceGenerationForVendor(
+  db: TransactionRunner & ReadClient,
+  vendorProfileId: string,
+  options: { now?: Date; currency?: string } = {},
+): Promise<VendorInvoiceGenerationSummary> {
+  if (!env.VERIFICATION_INVOICING_ENABLED) return DISABLED_SUMMARY;
+
+  const now = options.now ?? new Date();
+  const currency = options.currency ?? "ZAR";
+
+  const { invoicesIssued, zeroTotalInvoices } = await issueDueInvoicesForVendor(db, vendorProfileId, currency, now);
+
+  return { vendorsScanned: 1, invoicesIssued, zeroTotalInvoices, skippedDisabled: false };
 }

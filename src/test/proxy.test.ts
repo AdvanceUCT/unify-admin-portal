@@ -96,6 +96,6 @@ describe("proxy", () => {
     // The exemption is scoped to /api/vendor, /api/webhooks, and /api/cron —
     // it must not silently become "skip auth for everything under /api" or
     // "skip auth for /vendors" (an admin page, not a vendor-portal route).
-    expect(proxy(request("/vendors/invoices")).status).toBe(307);
+    expect(proxy(request("/vendors/invoices/inv-1")).status).toBe(307);
   });
 });

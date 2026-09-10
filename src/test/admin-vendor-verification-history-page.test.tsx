@@ -15,6 +15,9 @@ const applications = vi.hoisted(() => ({
 const reports = vi.hoisted(() => ({
   getVendorMonthlyVerificationHistory: vi.fn(),
 }));
+const invoiceQueries = vi.hoisted(() => ({
+  getVendorInvoiceHistory: vi.fn(),
+}));
 
 vi.mock("next/navigation", () => ({
   notFound: vi.fn(() => {
@@ -28,6 +31,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/auth/session", () => auth);
 vi.mock("@/lib/vendors/applications", () => applications);
 vi.mock("@/lib/vendors/monthlyVerificationHistory", () => reports);
+vi.mock("@/lib/billing/invoiceQueries", () => invoiceQueries);
 vi.mock("@/app/(admin)/vendors/actions", () => ({
   approveVendorApplicationAction: vi.fn(),
   createVendorVerificationQrAction: vi.fn(),
@@ -75,24 +79,38 @@ const history = {
     successfulVerifications: 7,
   },
   allTimeSuccessfulVerifications: 32,
-  months: [
+  months: [],
+};
+
+const invoiceHistory = {
+  selectedYear: 2026,
+  availableYears: [2026, 2025],
+  invoices: [
     {
-      amountDueMinor: 875,
+      id: "invoice-1",
+      invoiceNumber: "INV-0001",
+      periodKey: "2026-08",
+      periodLabel: "August 2026",
       currency: "ZAR",
-      label: "August 2026",
-      rowLabel: "August",
-      isCurrentMonth: true,
-      month: "2026-08",
-      successfulVerifications: 7,
+      totalDisplay: "8.75",
+      documentStatus: "ISSUED",
+      paymentStatus: "UNPAID",
+      hasUnresolvedException: false,
+      isDemo: false,
+      issuedAtIso: "2026-09-01T00:00:00.000Z",
     },
     {
-      amountDueMinor: 3125,
+      id: "invoice-2",
+      invoiceNumber: "INV-0002",
+      periodKey: "2026-07",
+      periodLabel: "July 2026",
       currency: "ZAR",
-      label: "July 2026",
-      rowLabel: "July",
-      isCurrentMonth: false,
-      month: "2026-07",
-      successfulVerifications: 25,
+      totalDisplay: "31.25",
+      documentStatus: "ISSUED",
+      paymentStatus: "PAID",
+      hasUnresolvedException: false,
+      isDemo: false,
+      issuedAtIso: "2026-08-01T00:00:00.000Z",
     },
   ],
 };
@@ -107,6 +125,7 @@ describe("admin vendor verification history", () => {
       status === "APPROVED" ? [approvedApplication] : []
     ));
     reports.getVendorMonthlyVerificationHistory.mockResolvedValue(history);
+    invoiceQueries.getVendorInvoiceHistory.mockResolvedValue(invoiceHistory);
   });
 
   afterEach(() => {
@@ -121,20 +140,21 @@ describe("admin vendor verification history", () => {
     ).toHaveAttribute("href", "/vendors/application-1/verification-history");
   });
 
-  it("requires admin access before rendering the monthly history page", async () => {
+  it("requires admin access before rendering the page", async () => {
     await VendorVerificationHistoryPage({
       params: Promise.resolve({ applicationId: "application-1" }),
     });
 
     expect(auth.requireRole).toHaveBeenCalledWith(["SUPER_ADMIN", "ADMIN"]);
     expect(applications.getVendorApplicationById).toHaveBeenCalledWith("application-1");
-    expect(reports.getVendorMonthlyVerificationHistory).toHaveBeenCalledWith(
+    expect(reports.getVendorMonthlyVerificationHistory).toHaveBeenCalledWith("vendor-profile-1");
+    expect(invoiceQueries.getVendorInvoiceHistory).toHaveBeenCalledWith(
       "vendor-profile-1",
       { year: undefined },
     );
   });
 
-  it("renders high-level current month amount due, year filter, and monthly billing rows", async () => {
+  it("renders high-level current month amount due, year filter, and the vendor's own invoices", async () => {
     render(
       await VendorVerificationHistoryPage({
         params: Promise.resolve({ applicationId: "application-1" }),
@@ -146,19 +166,35 @@ describe("admin vendor verification history", () => {
     expect(screen.getByText("Campus Books")).toBeInTheDocument();
     expect(screen.getByText("Bookstore")).toBeInTheDocument();
     expect(screen.getByText(/August 2026 successful verifications/)).toBeInTheDocument();
-    expect(screen.getByText(/R\s*8,75 due/)).toBeInTheDocument();
+    expect(screen.getByText(/R\s*8,75/)).toBeInTheDocument();
     expect(screen.getByText("Estimated for August 2026")).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Year" })).toHaveValue("2026");
-    expect(screen.getByRole("row", { name: /August 7 R\s*8,75/ })).toBeInTheDocument();
-    expect(screen.getByRole("row", { name: /July 25 R\s*31,25/ })).toBeInTheDocument();
+
+    expect(screen.getByRole("link", { name: "INV-0001" })).toHaveAttribute("href", "/vendors/invoices/invoice-1");
+    expect(screen.getByRole("link", { name: "INV-0002" })).toHaveAttribute("href", "/vendors/invoices/invoice-2");
+    expect(screen.getByText("UNPAID")).toBeInTheDocument();
+    expect(screen.getByText("PAID")).toBeInTheDocument();
     expect(screen.queryByText(/student/i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Back to vendors/ })).toHaveAttribute(
       "href",
       "/vendors",
     );
-    expect(reports.getVendorMonthlyVerificationHistory).toHaveBeenCalledWith(
+    expect(invoiceQueries.getVendorInvoiceHistory).toHaveBeenCalledWith(
       "vendor-profile-1",
       { year: 2026 },
     );
+  });
+
+  it("shows a plain empty-state message when the vendor has no invoices for the selected year", async () => {
+    invoiceQueries.getVendorInvoiceHistory.mockResolvedValue({ selectedYear: 2024, availableYears: [2026, 2024], invoices: [] });
+
+    render(
+      await VendorVerificationHistoryPage({
+        params: Promise.resolve({ applicationId: "application-1" }),
+        searchParams: Promise.resolve({ year: "2024" }),
+      }),
+    );
+
+    expect(screen.getByText("No invoices for 2024.")).toBeInTheDocument();
   });
 });
