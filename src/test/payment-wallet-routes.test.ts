@@ -77,6 +77,18 @@ describe("payment wallet API route contracts", () => {
     });
   });
 
+  it("returns a payment session directly when activation bypass is enabled", async () => {
+    vi.mocked(requestStudentPaymentActivation).mockResolvedValue(tokenResponse);
+
+    const response = await requestActivation(jsonRequest("/api/wallet/v1/activations/request", {
+      studentNumber: "STU001",
+      deviceId: "device-1",
+    }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual(tokenResponse);
+  });
+
   it("returns the locked token shape from activation verify and session refresh", async () => {
     vi.mocked(verifyStudentPaymentActivation).mockResolvedValue(tokenResponse);
     vi.mocked(refreshStudentPaymentSession).mockResolvedValue(tokenResponse);
