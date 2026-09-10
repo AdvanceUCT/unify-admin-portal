@@ -5,6 +5,7 @@
 
 import { notFound } from "next/navigation";
 
+import { BackButton } from "@/components/ui/BackButton";
 import { StatusText, type StatusTone } from "@/components/ui/StatusText";
 import { assertCan } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
@@ -39,6 +40,7 @@ export default async function AdminVendorInvoiceDetailPage({
 
   return (
     <div className="space-y-6">
+      <BackButton href="/vendors/invoices" label="Back to invoices" />
       <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
           <div>
@@ -69,6 +71,35 @@ export default async function AdminVendorInvoiceDetailPage({
             This invoice has an unresolved billing exception under review.
           </div>
         )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[48rem] text-left text-body">
+            <thead className="border-b border-border bg-surface-muted/60">
+              <tr className="whitespace-nowrap text-caption uppercase tracking-wide text-fg-subtle">
+                <th className="px-4 py-3 font-medium">Branch</th>
+                <th className="px-4 py-3 font-medium">Service period</th>
+                <th className="px-4 py-3 font-medium">Qty</th>
+                <th className="px-4 py-3 font-medium">Unit price</th>
+                <th className="px-4 py-3 font-medium">Line total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {document.items.map((item, index) => (
+                <tr className="align-middle" key={index}>
+                  <td className="px-4 py-3 font-medium text-fg">{item.branchName}</td>
+                  <td className="px-4 py-3 text-fg-muted">{item.servicePeriodLabel}</td>
+                  <td className="px-4 py-3 text-fg-muted">{item.quantity}</td>
+                  <td className="whitespace-nowrap px-4 py-3 tabular-nums text-fg-muted">
+                    {document.currency} {item.unitPriceDisplay}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 tabular-nums text-fg">
+                    {document.currency} {item.lineTotalDisplay}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
         <div className="space-y-1 border-b border-border px-5 py-4 text-right text-sm">
           <p className="text-fg-muted">

@@ -31,7 +31,7 @@ export default async function AdminVendorInvoicesPage() {
     <div className="space-y-6">
       <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
-          <h2 className="text-section-title text-fg">Vendor invoices (receivables)</h2>
+          <h2 className="text-section-title text-fg">Vendor invoices</h2>
           <div className="flex items-center gap-4">
             <p className="text-sm text-fg-muted">
               {invoices.length} invoice{invoices.length === 1 ? "" : "s"} · {outstandingCount} outstanding ·{" "}
@@ -67,7 +67,6 @@ export default async function AdminVendorInvoicesPage() {
                     <Link className="text-brand-600 underline hover:no-underline" href={`/vendors/invoices/${invoice.id}`}>
                       {invoice.invoiceNumber}
                     </Link>
-                    {invoice.isDemo && <span className="ml-2 text-xs text-fg-subtle">(demo)</span>}
                   </td>
                   <td className="px-4 py-3 text-fg-muted">{invoice.periodLabel}</td>
                   <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-fg">
@@ -88,8 +87,7 @@ export default async function AdminVendorInvoicesPage() {
           </table>
           {invoices.length === 0 && (
             <p className="px-5 py-8 text-center text-sm text-fg-subtle">
-              No invoices have been issued yet. Run <code className="font-mono">npm run billing:invoices</code>{" "}
-              once a billing period has closed.
+              No invoices have been issued yet. Invoices are generated automatically once a billing period closes.
             </p>
           )}
         </div>
