@@ -22,6 +22,13 @@ const walletSettingsRenameMigration = readFileSync(
   ),
   "utf8",
 );
+const walletTopupProviderIdMigration = readFileSync(
+  resolve(
+    process.cwd(),
+    "prisma/migrations/20260911133000_relax_pending_wallet_topup_provider_id/migration.sql",
+  ),
+  "utf8",
+);
 
 describe("payment wallet foundation migration", () => {
   it("creates the immutable ledger and rebuildable balance projection", () => {
@@ -61,6 +68,19 @@ describe("payment wallet foundation migration", () => {
     expect(migration).toContain('"payoutDestinationReference" TEXT NOT NULL');
     expect(migration).toContain('CONSTRAINT "payout_batch_manual_initiator_check"');
     expect(migration).toContain("CREATE TRIGGER payout_batch_traceability_guard");
+  });
+
+  it("allows pending hosted top-ups before provider transaction attribution", () => {
+    expect(walletTopupProviderIdMigration).toContain(
+      'DROP CONSTRAINT "wallet_transaction_topup_provider_check"',
+    );
+    expect(walletTopupProviderIdMigration).toContain('"status" <> \'COMPLETED\'');
+    expect(walletTopupProviderIdMigration).toContain(
+      'Completed top-up requires provider attribution',
+    );
+    expect(walletTopupProviderIdMigration).toContain(
+      'Wallet transaction provider payment id is immutable after attribution',
+    );
   });
 
   it("makes wallet identity immutable and enforces semantic postings", () => {
