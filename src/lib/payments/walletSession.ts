@@ -93,6 +93,26 @@ async function assertInstitutionPaymentWalletEnabled() {
   }
 }
 
+async function assertStudentPaymentEligible(studentId: string) {
+  const eligibleCredential = await prisma.credentialIssuance.findFirst({
+    where: {
+      studentId,
+      status: { in: ["ACCEPTED", "ISSUED"] },
+      OR: [
+        { lifecycleStatus: null },
+        { lifecycleStatus: "ACTIVE" },
+      ],
+    },
+    select: { id: true },
+  });
+  if (!eligibleCredential) {
+    throw new WalletDomainError(
+      "PAYMENT_WALLET_NOT_ELIGIBLE",
+      "Accept an active student credential before activating payments.",
+    );
+  }
+}
+
 function toTokenResponse(session: {
   id: string;
   accessTokenExpiresAt: Date;
@@ -138,14 +158,40 @@ export async function requestStudentPaymentActivation(input: {
   deviceId: string;
   ipAddress?: string | null;
   now?: Date;
-}) {
+}): Promise<
+  | {
+      challengeId: string;
+      expiresAt: string;
+      resendAvailableAt: string;
+      destinationHint: string | null;
+    }
+  | SessionTokenBundle
+> {
   assertActivationEnabled();
   await assertInstitutionPaymentWalletEnabled();
   const now = input.now ?? new Date();
   const studentNumber = normalizeStudentNumber(input.studentNumber);
   const deviceId = normalizeDeviceId(input.deviceId);
-  const studentNumberHash = hmac(`student:${studentNumber}`);
   const deviceIdHash = sha256(deviceId);
+
+  if (env.PAYMENT_OTP_BYPASS_ENABLED) {
+    const student = await prisma.student.findUnique({
+      where: { studentNumber },
+      select: { id: true },
+    });
+    if (!student) {
+      throw new WalletDomainError(
+        "PAYMENT_WALLET_NOT_ELIGIBLE",
+        "Accept an active student credential before activating payments.",
+      );
+    }
+    await assertStudentPaymentEligible(student.id);
+    await ensureStudentWalletAccount(student.id);
+    console.warn("[wallet-activation] PAYMENT_OTP_BYPASS_ENABLED created a test payment session without OTP.");
+    return createSession(student.id, deviceIdHash, now);
+  }
+
+  const studentNumberHash = hmac(`student:${studentNumber}`);
   const requestedIpHash = input.ipAddress ? hmac(`ip:${input.ipAddress}`) : null;
   const windowStart = addMs(now, -ACTIVATION_RATE_WINDOW_MS);
 
@@ -304,23 +350,7 @@ export async function verifyStudentPaymentActivation(input: {
   }
   const studentId = challenge.studentId;
 
-  const eligibleCredential = await prisma.credentialIssuance.findFirst({
-    where: {
-      studentId,
-      status: { in: ["ACCEPTED", "ISSUED"] },
-      OR: [
-        { lifecycleStatus: null },
-        { lifecycleStatus: "ACTIVE" },
-      ],
-    },
-    select: { id: true },
-  });
-  if (!eligibleCredential) {
-    throw new WalletDomainError(
-      "PAYMENT_WALLET_NOT_ELIGIBLE",
-      "Accept an active student credential before activating payments.",
-    );
-  }
+  await assertStudentPaymentEligible(studentId);
 
   const consumed = await prisma.studentPaymentActivationChallenge.updateMany({
     where: {

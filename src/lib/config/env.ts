@@ -193,6 +193,7 @@ const envSchema = z.object({
   PAYMENT_OTP_EMAIL_FROM: optionalNonEmptyString,
   PAYMENT_OTP_EMAIL_OVERRIDE_TO: optionalNonEmptyString,
   PAYMENT_OTP_DEBUG_LOG_CODE: strictBooleanFlag("PAYMENT_OTP_DEBUG_LOG_CODE"),
+  PAYMENT_OTP_BYPASS_ENABLED: strictBooleanFlag("PAYMENT_OTP_BYPASS_ENABLED"),
   PAYMENT_OTP_PEPPER: optionalNonEmptyString,
   PAYSTACK_MODE: paystackMode,
   PAYSTACK_SECRET_KEY: paystackSecretKey,
@@ -228,9 +229,13 @@ if (parsedEnv.PAYMENT_WALLET_TOPUPS_ENABLED) {
   const missing = [
     ["PAYSTACK_SECRET_KEY", parsedEnv.PAYSTACK_SECRET_KEY],
     ["PAYSTACK_EXPECTED_INTEGRATION_ID", parsedEnv.PAYSTACK_EXPECTED_INTEGRATION_ID],
-    ["PAYMENT_OTP_EMAIL_FROM", parsedEnv.PAYMENT_OTP_EMAIL_FROM],
-    ["PAYMENT_OTP_PEPPER", parsedEnv.PAYMENT_OTP_PEPPER],
-    ["RESEND_API_KEY", parsedEnv.RESEND_API_KEY],
+    ...(parsedEnv.PAYMENT_OTP_BYPASS_ENABLED
+      ? []
+      : [
+          ["PAYMENT_OTP_EMAIL_FROM", parsedEnv.PAYMENT_OTP_EMAIL_FROM],
+          ["PAYMENT_OTP_PEPPER", parsedEnv.PAYMENT_OTP_PEPPER],
+          ["RESEND_API_KEY", parsedEnv.RESEND_API_KEY],
+        ]),
   ].filter(([, value]) => value === undefined).map(([name]) => name);
 
   if (missing.length > 0) {
@@ -238,7 +243,7 @@ if (parsedEnv.PAYMENT_WALLET_TOPUPS_ENABLED) {
       `PAYMENT_WALLET_TOPUPS_ENABLED requires ${missing.join(", ")} to be configured.`,
     );
   }
-  if ((parsedEnv.PAYMENT_OTP_PEPPER?.length ?? 0) < 32) {
+  if (!parsedEnv.PAYMENT_OTP_BYPASS_ENABLED && (parsedEnv.PAYMENT_OTP_PEPPER?.length ?? 0) < 32) {
     throw new Error("PAYMENT_OTP_PEPPER must be at least 32 characters.");
   }
 }
