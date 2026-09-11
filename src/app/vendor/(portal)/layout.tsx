@@ -6,6 +6,7 @@
 import { PortalShell } from "@/components/layout/PortalShell";
 import type { PortalNavItem } from "@/components/layout/portalTypes";
 import { AgentStatusIndicator } from "@/features/agent/AgentStatusIndicator";
+import { LivePaymentNotifications } from "@/features/vendors/LivePaymentNotifications";
 import { LiveVerificationNotifications } from "@/features/vendors/LiveVerificationNotifications";
 import { requireVendorSessionForRender } from "@/lib/auth/session";
 import { getVendorInvoiceOwnerContextForRender } from "@/lib/billing/vendorAuthorization";
@@ -15,6 +16,7 @@ import {
   getApprovedVendorContextForUserForRender,
   type ApprovedVendorContext,
 } from "@/lib/vendors/context";
+import { encodeLivePaymentCursor } from "@/lib/vendors/livePayments";
 import { encodeLiveVerificationCursor } from "@/lib/vendors/liveVerifications";
 
 import { checkVendorAgentHealthAction } from "./actions";
@@ -23,6 +25,7 @@ const ownerNavItems: PortalNavItem[] = [
   { href: "/vendor", label: "Overview", icon: "overview" },
   { href: "/vendor/verifications", label: "Verifications", icon: "verifications" },
   { href: "/vendor/branches", label: "Branches", icon: "branches" },
+  { href: "/vendor/payments", label: "Payments", icon: "payments" },
   { href: "/vendor/staff", label: "Staff", icon: "staff" },
   { href: "/vendor/application", label: "Application", icon: "application" },
   { href: "/vendor/profile", label: "Profile", icon: "profile" },
@@ -34,6 +37,7 @@ const staffNavItems: PortalNavItem[] = [
   { href: "/vendor", label: "Overview", icon: "overview" },
   { href: "/vendor/verifications", label: "Verifications", icon: "verifications" },
   { href: "/vendor/branches", label: "Branches", icon: "branches" },
+  { href: "/vendor/payments", label: "Payments", icon: "payments" },
   { href: "/vendor/help", label: "Help", icon: "help" },
 ];
 
@@ -102,6 +106,7 @@ export default async function VendorPortalLayout({
   const notificationBranchIds = vendorContext
     ? notificationBranchIdsFor(vendorContext, chromeProfile?.defaultBranchId ?? null)
     : [];
+  const paymentNotificationBranchIds = vendorContext ? vendorContext.branchIds : [];
 
   return (
     <PortalShell
@@ -132,10 +137,16 @@ export default async function VendorPortalLayout({
       }}
     >
       {vendorContext ? (
-        <LiveVerificationNotifications
-          branchIds={notificationBranchIds}
-          initialCursor={encodeLiveVerificationCursor({ completedAt: new Date().toISOString(), id: "_" })}
-        />
+        <>
+          <LiveVerificationNotifications
+            branchIds={notificationBranchIds}
+            initialCursor={encodeLiveVerificationCursor({ completedAt: new Date().toISOString(), id: "_" })}
+          />
+          <LivePaymentNotifications
+            branchIds={paymentNotificationBranchIds}
+            initialCursor={encodeLivePaymentCursor({ completedAt: new Date().toISOString(), id: "_" })}
+          />
+        </>
       ) : null}
       {children}
     </PortalShell>
