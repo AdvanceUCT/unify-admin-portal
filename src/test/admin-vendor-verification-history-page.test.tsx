@@ -51,12 +51,6 @@ vi.mock("@/app/(admin)/vendors/RevokeButton", () => ({
 vi.mock("@/app/(admin)/vendors/RejectForm", () => ({
   RejectForm: () => <button type="button">Reject</button>,
 }));
-vi.mock("@/app/(admin)/vendors/RejectPaymentForm", () => ({
-  RejectPaymentForm: () => <button type="button">Reject payment</button>,
-}));
-vi.mock("@/app/(admin)/vendors/PaymentAccessToggle", () => ({
-  PaymentAccessToggle: () => <span>Payment access toggle</span>,
-}));
 
 const approvedApplication = {
   id: "application-1",

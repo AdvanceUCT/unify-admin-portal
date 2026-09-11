@@ -92,6 +92,22 @@ export async function listVendorPaymentApplications({
   });
 }
 
+/** Single partnership by id, with the vendor's most recent payment application, for the detail view. */
+export async function getVendorPartnershipById(partnershipId: string) {
+  return prisma.vendorUniversityPartnership.findUnique({
+    where: { id: partnershipId },
+    include: {
+      vendorProfile: {
+        select: { companyName: true, serviceCategory: true, contactEmail: true },
+      },
+      paymentApplications: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+    },
+  });
+}
+
 export async function listVendorPartnerships() {
   return prisma.vendorUniversityPartnership.findMany({
     include: {

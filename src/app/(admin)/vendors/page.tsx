@@ -4,7 +4,7 @@
  */
 
 import Link from "next/link";
-import { Building2, Check, Eye, Globe, History, Link as LinkIcon, Mail, QrCode, TriangleAlert, User } from "lucide-react";
+import { Check, Eye, Globe, History, Link as LinkIcon, Mail, QrCode, TriangleAlert, User } from "lucide-react";
 
 import { PageTabs } from "@/components/layout/PageTabs";
 import { Avatar } from "@/components/ui/Avatar";
@@ -20,19 +20,20 @@ import {
 import { applicationReasonLabels } from "@/lib/vendors/application-reasons";
 import {
   approveVendorApplicationAction,
-  approveVendorPaymentApplicationAction,
   createVendorVerificationQrAction,
   rejectVendorApplicationAction,
-  rejectVendorPaymentApplicationAction,
   revokeVendorApplicationAction,
-  revokeVendorPaymentApplicationAction,
-  setCampusStatusAction,
 } from "./actions";
 import { ApproveForm } from "./ApproveForm";
-import { PaymentAccessToggle } from "./PaymentAccessToggle";
 import { RejectForm } from "./RejectForm";
-import { RejectPaymentForm } from "./RejectPaymentForm";
 import { RevokeButton } from "./RevokeButton";
+
+const PAYMENT_ACCEPTANCE_BADGE: Record<string, { tone: "success" | "warning" | "danger"; label: string }> = {
+  PENDING: { tone: "warning", label: "Pending review" },
+  APPROVED: { tone: "success", label: "Accepts payments" },
+  REJECTED: { tone: "danger", label: "Rejected" },
+  REVOKED: { tone: "danger", label: "Revoked" },
+};
 
 function decisionDate(value: Date | string) {
   return new Date(value).toLocaleDateString("en-GB", {
@@ -45,11 +46,11 @@ function decisionDate(value: Date | string) {
 export default async function VendorsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; filter?: string }>;
 }) {
   await requireRole(["SUPER_ADMIN", "ADMIN"]);
 
-  const { tab } = await searchParams;
+  const { tab, filter } = await searchParams;
   const activeTab =
     tab === "applications"
       ? "applications"
@@ -58,6 +59,7 @@ export default async function VendorsPage({
         : tab === "log"
           ? "log"
           : "vendors";
+  const showAllPartnerships = filter === "all";
 
   const [
     approvedApplications,
@@ -66,7 +68,6 @@ export default async function VendorsPage({
     decidedApplications,
     partnerships,
     pendingPaymentApplications,
-    rejectedPaymentApplications,
   ] = await Promise.all([
     listVendorApplications({ status: "APPROVED" }),
     listVendorApplications({ status: "PENDING" }),
@@ -74,12 +75,11 @@ export default async function VendorsPage({
     listDecidedVendorApplications(),
     listVendorPartnerships(),
     listVendorPaymentApplications({ status: "PENDING" }),
-    listVendorPaymentApplications({ status: "REJECTED" }),
   ]);
 
-  const partnershipByVendorProfileId = new Map(
-    partnerships.map((partnership) => [partnership.vendorProfileId, partnership]),
-  );
+  const visiblePartnerships = showAllPartnerships
+    ? partnerships
+    : partnerships.filter((partnership) => partnership.campusStatus === "ON_CAMPUS");
 
   return (
     <div className="space-y-6">
@@ -183,22 +183,6 @@ export default async function VendorsPage({
                   </div>
 
                   <div className="flex shrink-0 flex-col items-start gap-3 lg:items-end">
-                    {(() => {
-                      const partnership = partnershipByVendorProfileId.get(application.vendorProfileId);
-                      const latestPaymentApplication = partnership?.paymentApplications[0] ?? null;
-                      return (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-fg-muted">Payment access</span>
-                          <PaymentAccessToggle
-                            applicationId={latestPaymentApplication?.id ?? null}
-                            approveAction={approveVendorPaymentApplicationAction}
-                            companyName={application.vendorProfile.companyName}
-                            revokeAction={revokeVendorPaymentApplicationAction}
-                            status={partnership?.paymentAcceptanceStatus ?? null}
-                          />
-                        </div>
-                      );
-                    })()}
                     {application.reviewedAt && (
                       <p className="text-xs text-fg-subtle">
                         Approved {decisionDate(application.reviewedAt)}
@@ -375,21 +359,29 @@ export default async function VendorsPage({
       {/* Payment Access tab */}
       {activeTab === "payments" && (
         <div className="space-y-6">
-          {/* Vendor partnerships / campus classification */}
-          <div>
-            <h2 className="mb-3 text-caption font-medium uppercase tracking-wide text-fg-subtle">
-              Vendor partnerships
-            </h2>
-            <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
-              <div className="flex items-center gap-3 border-b border-border px-5 py-4">
-                <Building2 className="size-4.5 text-fg-subtle" aria-hidden="true" />
-                <p className="text-sm text-fg-muted">
-                  Classify or correct which vendors operate on campus. Payment access can only be
-                  approved for on-campus vendors.
-                </p>
-              </div>
-              <div className="divide-y divide-border">
-                {partnerships.map((partnership) => (
+          <PageTabs
+            tabs={[
+              {
+                href: "/vendors?tab=payments",
+                isActive: !showAllPartnerships,
+                label: "On-campus",
+              },
+              {
+                href: "/vendors?tab=payments&filter=all",
+                isActive: showAllPartnerships,
+                label: "All vendors",
+              },
+            ]}
+          />
+
+          <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+            <div className="divide-y divide-border">
+              {visiblePartnerships.map((partnership) => {
+                const acceptance = partnership.paymentAcceptanceStatus
+                  ? PAYMENT_ACCEPTANCE_BADGE[partnership.paymentAcceptanceStatus]
+                  : null;
+
+                return (
                   <div
                     className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between"
                     key={partnership.id}
@@ -402,124 +394,35 @@ export default async function VendorsPage({
                       </div>
                     </div>
 
-                    <form action={setCampusStatusAction} className="flex items-center gap-2">
-                      <input type="hidden" name="partnershipId" value={partnership.id} />
-                      <select
-                        className="h-9 rounded-md border border-border bg-surface px-2 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-                        defaultValue={partnership.campusStatus ?? ""}
-                        name="campusStatus"
-                        required
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Badge tone={partnership.campusStatus === "ON_CAMPUS" ? "success" : "version"}>
+                        {partnership.campusStatus === "ON_CAMPUS"
+                          ? "On campus"
+                          : partnership.campusStatus === "OFF_CAMPUS"
+                            ? "Off campus"
+                            : "Not classified"}
+                      </Badge>
+                      {acceptance && <Badge tone={acceptance.tone}>{acceptance.label}</Badge>}
+                      <Link
+                        className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
+                        href={`/vendors/payment-access/${partnership.id}`}
                       >
-                        <option disabled value="">
-                          Classify campus status
-                        </option>
-                        <option value="ON_CAMPUS">On campus</option>
-                        <option value="OFF_CAMPUS">Off campus</option>
-                      </select>
-                      <button
-                        className="h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
-                        type="submit"
-                      >
-                        Save
-                      </button>
-                    </form>
-                  </div>
-                ))}
-                {partnerships.length === 0 && (
-                  <p className="px-5 py-8 text-center text-sm text-fg-subtle">
-                    No vendor partnerships yet.
-                  </p>
-                )}
-              </div>
-            </section>
-          </div>
-
-          {/* Pending payment-acceptance requests */}
-          <div>
-            <h2 className="mb-3 text-caption font-medium uppercase tracking-wide text-fg-subtle">
-              Pending ({pendingPaymentApplications.length})
-            </h2>
-            <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
-              <div className="divide-y divide-border">
-                {pendingPaymentApplications.map((application) => (
-                  <div key={application.id} className="p-5">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="flex min-w-0 flex-1 gap-4">
-                        <Avatar className="mt-0.5" name={application.partnership.vendorProfile.companyName} size="lg" />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-section-title text-fg">
-                              {application.partnership.vendorProfile.companyName}
-                            </h3>
-                            <Badge tone="warning">Pending</Badge>
-                          </div>
-                          <p className="mt-0.5 text-sm text-fg-subtle">
-                            {application.partnership.vendorProfile.serviceCategory}
-                          </p>
-                          <div className="mt-3 flex items-center gap-1.5 text-sm text-fg-muted">
-                            <Mail className="size-3.5 shrink-0 text-fg-subtle" />
-                            {application.partnership.vendorProfile.contactEmail}
-                          </div>
-                          {application.justification && (
-                            <p className="mt-3 text-sm text-fg-muted">{application.justification}</p>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex shrink-0 flex-col items-start gap-3 lg:items-end">
-                        <p className="text-xs text-fg-subtle">Submitted {decisionDate(application.createdAt)}</p>
-                        <div className="flex flex-col items-stretch gap-2">
-                          <form action={approveVendorPaymentApplicationAction}>
-                            <input type="hidden" name="applicationId" value={application.id} />
-                            <button
-                              className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-success-border bg-success-bg px-3 text-sm font-medium text-success-fg transition hover:bg-success-border"
-                              type="submit"
-                            >
-                              <Check aria-hidden className="size-4" />
-                              Approve
-                            </button>
-                          </form>
-                          <RejectPaymentForm
-                            action={rejectVendorPaymentApplicationAction}
-                            applicationId={application.id}
-                          />
-                        </div>
-                      </div>
+                        <Eye aria-hidden className="size-4" />
+                        View
+                      </Link>
                     </div>
                   </div>
-                ))}
-                {pendingPaymentApplications.length === 0 && (
-                  <p className="px-5 py-6 text-sm text-fg-subtle">No pending payment-acceptance requests.</p>
-                )}
-              </div>
-            </section>
-          </div>
-
-          {/* Rejected payment-acceptance requests */}
-          {rejectedPaymentApplications.length > 0 && (
-            <div>
-              <h2 className="mb-3 text-caption font-medium uppercase tracking-wide text-fg-subtle">
-                Rejected ({rejectedPaymentApplications.length})
-              </h2>
-              <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
-                <div className="divide-y divide-border">
-                  {rejectedPaymentApplications.map((application) => (
-                    <div key={application.id} className="p-5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-section-title text-fg">
-                          {application.partnership.vendorProfile.companyName}
-                        </h3>
-                        <Badge tone="danger">Rejected</Badge>
-                      </div>
-                      {application.reviewNotes && (
-                        <p className="mt-3 text-sm text-fg-muted">Note: {application.reviewNotes}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </section>
+                );
+              })}
+              {visiblePartnerships.length === 0 && (
+                <p className="px-5 py-8 text-center text-sm text-fg-subtle">
+                  {showAllPartnerships
+                    ? "No vendor partnerships yet."
+                    : "No on-campus vendors yet. Switch to “All vendors” to classify one."}
+                </p>
+              )}
             </div>
-          )}
+          </section>
         </div>
       )}
 
