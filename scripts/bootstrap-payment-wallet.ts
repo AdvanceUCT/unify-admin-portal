@@ -29,7 +29,8 @@ async function main() {
   }
 
   const enablePaymentWalletForDevelopment = process.argv.includes(ENABLE_PAYMENT_WALLET_FLAG);
-  if (enablePaymentWalletForDevelopment && process.env.NODE_ENV === "production") {
+  const isPreviewVercelBuild = process.env.VERCEL === "1" && process.env.VERCEL_ENV === "preview";
+  if (enablePaymentWalletForDevelopment && process.env.NODE_ENV === "production" && !isPreviewVercelBuild) {
     throw new Error(
       "Refusing to enable the payment wallet from the bootstrap command in production. Use the future controlled activation workflow.",
     );

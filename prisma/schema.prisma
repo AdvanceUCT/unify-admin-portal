@@ -409,18 +409,21 @@ enum VendorVerificationBillingStatus {
 }
 
 model Student {
-  id            String         @id @default(cuid())
-  studentNumber String         @unique
-  email         String
-  firstName     String
-  lastName      String
-  faculty       String?
-  programme     String?
-  attributes    Json           @default("{}")
-  source        String         @default("csv")
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  walletAccount WalletAccount?
+  id                          String                              @id @default(cuid())
+  studentNumber               String                              @unique
+  email                       String
+  firstName                   String
+  lastName                    String
+  faculty                     String?
+  programme                   String?
+  attributes                  Json                                @default("{}")
+  source                      String                              @default("csv")
+  createdAt                   DateTime                            @default(now())
+  updatedAt                   DateTime                            @updatedAt
+  walletAccount               WalletAccount?
+  paymentActivationChallenges StudentPaymentActivationChallenge[]
+  paymentSessions             StudentPaymentSession[]
+  walletTopupAttempts         WalletTopupAttempt[]
 
   @@index([faculty])
   @@index([programme])
@@ -513,6 +516,7 @@ model WalletTransaction {
   entries                LedgerEntry[]
   gatewayEvents          PaymentGatewayEvent[]
   payoutBatch            PayoutBatch?
+  topupAttempt           WalletTopupAttempt?
 
   @@unique([initiatorAccountId, type, idempotencyKey], map: "wallet_transaction_idempotency_key", where: raw("\"idempotencyKey\" IS NOT NULL"))
   @@unique([paymentProvider, providerPaymentId], map: "wallet_transaction_provider_payment_key", where: raw("\"providerPaymentId\" IS NOT NULL"))
@@ -521,6 +525,85 @@ model WalletTransaction {
   @@index([linkedTransactionId])
   @@index([initiatedByUserId, createdAt])
   @@map("wallet_transaction")
+}
+
+model StudentPaymentActivationChallenge {
+  id                  String    @id @default(cuid())
+  studentId           String?
+  student             Student?  @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  studentNumberHash   String
+  deviceIdHash        String
+  otpHash             String
+  destinationHint     String?
+  expiresAt           DateTime
+  resendAvailableAt   DateTime
+  maxAttempts         Int       @default(5)
+  attemptCount        Int       @default(0)
+  verifiedAt          DateTime?
+  consumedAt          DateTime?
+  requestedIpHash     String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([studentId, createdAt])
+  @@index([studentNumberHash, createdAt])
+  @@index([expiresAt])
+  @@map("student_payment_activation_challenge")
+}
+
+model StudentPaymentSession {
+  id                    String                @id @default(cuid())
+  studentId             String
+  student               Student               @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  deviceIdHash          String
+  accessTokenHash       String                @unique
+  accessTokenExpiresAt  DateTime
+  refreshTokenHash      String                @unique
+  refreshTokenExpiresAt DateTime
+  revokedAt             DateTime?
+  refreshReusedAt       DateTime?
+  lastUsedAt            DateTime?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  topupAttempts         WalletTopupAttempt[]
+
+  @@index([studentId, revokedAt])
+  @@index([accessTokenExpiresAt])
+  @@index([refreshTokenExpiresAt])
+  @@map("student_payment_session")
+}
+
+model WalletTopupAttempt {
+  id                         String                   @id @default(cuid())
+  walletTransactionId        String                   @unique
+  walletTransaction          WalletTransaction        @relation(fields: [walletTransactionId], references: [id], onDelete: Restrict)
+  studentId                  String
+  student                    Student                  @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  sessionId                  String?
+  session                    StudentPaymentSession?   @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  provider                   String
+  providerAccountRef         String
+  providerMode               String                   @default("test")
+  reference                  String                   @unique
+  accessCode                 String?
+  authorizationUrl           String?
+  providerTransactionId      String?
+  amountMinor                BigInt
+  currency                   String                   @default("ZAR")
+  idempotencyKey             String
+  initializationFingerprint  String
+  status                     WalletTopupAttemptStatus @default(PENDING)
+  failureCode                String?
+  lastCheckedAt              DateTime?
+  completedAt                DateTime?
+  createdAt                  DateTime                 @default(now())
+  updatedAt                  DateTime                 @updatedAt
+
+  @@unique([studentId, idempotencyKey])
+  @@unique([provider, providerAccountRef, providerMode, providerTransactionId], map: "wallet_topup_provider_transaction_key", where: raw("\"providerTransactionId\" IS NOT NULL"))
+  @@index([studentId, status, createdAt])
+  @@index([status, updatedAt])
+  @@map("wallet_topup_attempt")
 }
 
 model LedgerEntry {
@@ -710,6 +793,13 @@ enum PayoutBatchStatus {
 enum PayoutInitiationSource {
   SCHEDULED
   MANUAL
+}
+
+enum WalletTopupAttemptStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  UNKNOWN
 }
 
 model ImportMapping {

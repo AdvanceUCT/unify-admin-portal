@@ -31,6 +31,15 @@ export type PaystackInitializeTransactionResult = {
   reference: string;
 };
 
+export type PaystackInitializeTopupTransactionInput = {
+  email: string;
+  amountMinor: bigint;
+  currency: string;
+  reference: string;
+  callbackUrl: string;
+  metadata: Record<string, unknown>;
+};
+
 export type PaystackVerifyTransactionResult = {
   providerTransactionId: string;
   reference: string;
@@ -164,6 +173,47 @@ export async function initializeTransaction(
       subaccount: input.subaccountCode,
       transaction_charge: transactionCharge,
       bearer: "account",
+      channels: ["card"],
+      callback_url: input.callbackUrl,
+      metadata: input.metadata,
+    },
+  });
+
+  const data = assertSuccessEnvelope(status, json, "/transaction/initialize");
+  if (
+    typeof data.authorization_url !== "string" ||
+    typeof data.access_code !== "string" ||
+    typeof data.reference !== "string"
+  ) {
+    throw new PaystackProviderError("MALFORMED_RESPONSE", "Paystack initialize response was missing required fields.");
+  }
+
+  return {
+    authorizationUrl: data.authorization_url,
+    accessCode: data.access_code,
+    reference: data.reference,
+  };
+}
+
+/**
+ * Initializes a student wallet top-up into the university's main Paystack
+ * account. This intentionally omits subaccount, transaction_charge, and
+ * bearer fields: student top-ups are not vendor invoice split payments.
+ */
+export async function initializeTopupTransaction(
+  secretKey: string,
+  baseUrl: string,
+  input: PaystackInitializeTopupTransactionInput,
+): Promise<PaystackInitializeTransactionResult> {
+  const amount = toSafeAmountNumber(input.amountMinor, "amountMinor");
+
+  const { status, json } = await paystackFetch(secretKey, baseUrl, "/transaction/initialize", {
+    method: "POST",
+    body: {
+      email: input.email,
+      amount: String(amount),
+      currency: input.currency,
+      reference: input.reference,
       channels: ["card"],
       callback_url: input.callbackUrl,
       metadata: input.metadata,
