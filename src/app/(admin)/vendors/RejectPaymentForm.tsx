@@ -1,6 +1,6 @@
 /**
  * @fileoverview Owns the Reject Payment Form fields, validation state, and submission feedback.
- * @module app/(admin)/payments/RejectPaymentForm
+ * @module app/(admin)/vendors/RejectPaymentForm
  */
 
 "use client";

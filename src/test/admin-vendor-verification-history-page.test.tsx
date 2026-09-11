@@ -15,6 +15,10 @@ const applications = vi.hoisted(() => ({
 const reports = vi.hoisted(() => ({
   getVendorMonthlyVerificationHistory: vi.fn(),
 }));
+const partnerships = vi.hoisted(() => ({
+  listVendorPartnerships: vi.fn(() => Promise.resolve([])),
+  listVendorPaymentApplications: vi.fn(() => Promise.resolve([])),
+}));
 
 vi.mock("next/navigation", () => ({
   notFound: vi.fn(() => {
@@ -28,11 +32,16 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/auth/session", () => auth);
 vi.mock("@/lib/vendors/applications", () => applications);
 vi.mock("@/lib/vendors/monthlyVerificationHistory", () => reports);
+vi.mock("@/lib/payments/partnerships", () => partnerships);
 vi.mock("@/app/(admin)/vendors/actions", () => ({
   approveVendorApplicationAction: vi.fn(),
+  approveVendorPaymentApplicationAction: vi.fn(),
   createVendorVerificationQrAction: vi.fn(),
   rejectVendorApplicationAction: vi.fn(),
+  rejectVendorPaymentApplicationAction: vi.fn(),
   revokeVendorApplicationAction: vi.fn(),
+  revokeVendorPaymentApplicationAction: vi.fn(),
+  setCampusStatusAction: vi.fn(),
 }));
 vi.mock("@/app/(admin)/vendors/RevokeButton", () => ({
   RevokeButton: ({ companyName }: { companyName: string }) => (
@@ -41,6 +50,12 @@ vi.mock("@/app/(admin)/vendors/RevokeButton", () => ({
 }));
 vi.mock("@/app/(admin)/vendors/RejectForm", () => ({
   RejectForm: () => <button type="button">Reject</button>,
+}));
+vi.mock("@/app/(admin)/vendors/RejectPaymentForm", () => ({
+  RejectPaymentForm: () => <button type="button">Reject payment</button>,
+}));
+vi.mock("@/app/(admin)/vendors/PaymentAccessToggle", () => ({
+  PaymentAccessToggle: () => <span>Payment access toggle</span>,
 }));
 
 const approvedApplication = {

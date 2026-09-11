@@ -32,18 +32,22 @@ export default async function PaymentsPage() {
             <p className="mt-1 text-sm text-brand-700">
               Students pre-load a UNIFY wallet and spend it with approved on-campus vendors, with
               funds settling to your university&apos;s own Paystack account. Enabling it means your
-              university takes on real payout and safeguarding responsibilities &mdash; see{" "}
-              <Link className="underline hover:no-underline" href="/payments/about">
-                About
-              </Link>{" "}
-              for the full picture.
+              university takes on real payout and safeguarding responsibilities.
             </p>
-            <Link
-              className="mt-4 inline-flex h-9 items-center rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700"
-              href="/payments/setup"
-            >
-              Set up payment services
-            </Link>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Link
+                className="inline-flex h-9 items-center rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700"
+                href="/settings"
+              >
+                Set up payment services
+              </Link>
+              <Link
+                className="inline-flex h-9 items-center rounded-md border border-border bg-surface px-4 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
+                href="/payments/about"
+              >
+                Learn how this works
+              </Link>
+            </div>
           </div>
         </section>
       </div>

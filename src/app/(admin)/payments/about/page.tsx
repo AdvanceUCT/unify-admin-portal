@@ -90,7 +90,7 @@ export default async function PaymentsAboutPage() {
               <li>
                 <strong className="font-medium text-fg">Deciding the payout cadence.</strong> You
                 choose how often vendors are paid (weekly, monthly, etc.) in{" "}
-                <Link className="text-info-fg underline hover:no-underline" href="/payments/setup">
+                <Link className="text-info-fg underline hover:no-underline" href="/settings">
                   Payment Setup
                 </Link>
                 . More frequent payouts are friendlier to vendor cash flow; less frequent ones are
@@ -161,7 +161,7 @@ export default async function PaymentsAboutPage() {
               <li>
                 <strong className="font-medium text-fg">
                   Enter your Secret Key in{" "}
-                  <Link className="text-info-fg underline hover:no-underline" href="/payments/setup">
+                  <Link className="text-info-fg underline hover:no-underline" href="/settings">
                     Payment Setup
                   </Link>
                   .
@@ -182,7 +182,7 @@ export default async function PaymentsAboutPage() {
             <p className="text-sm leading-relaxed text-fg-muted">
               Once your key is entered and validated, and you&apos;ve set your payout cadence and
               preferences, you can enable Payment Services from{" "}
-              <Link className="text-info-fg underline hover:no-underline" href="/payments/setup">
+              <Link className="text-info-fg underline hover:no-underline" href="/settings">
                 Payment Setup
               </Link>
               .

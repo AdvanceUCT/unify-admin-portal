@@ -30,6 +30,12 @@ vi.mock("@/lib/vendors/applications", () => ({
   revokeVendorApplication: vi.fn(),
 }));
 
+vi.mock("@/lib/payments/partnerships", () => ({
+  reviewVendorPaymentApplication: vi.fn(),
+  revokeVendorPaymentApplication: vi.fn(),
+  setCampusStatus: vi.fn(),
+}));
+
 const requireRoleMock = vi.mocked(requireRole);
 const ensureVendorVerificationServicePointMock = vi.mocked(ensureVendorVerificationServicePoint);
 const markApplicationViewedMock = vi.mocked(markApplicationViewed);

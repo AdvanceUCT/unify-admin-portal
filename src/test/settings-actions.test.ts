@@ -35,6 +35,14 @@ vi.mock("@/lib/db/prisma", () => ({
     ),
   },
 }));
+vi.mock("@/lib/payments/settings", () => ({
+  enablePaymentServices: vi.fn(),
+  savePaystackKey: vi.fn(),
+  upsertPaymentContacts: vi.fn(),
+}));
+vi.mock("@/lib/payments/paystackClient", () => ({
+  PaystackKeyError: class PaystackKeyError extends Error {},
+}));
 
 const requireRoleMock = vi.mocked(requireRole);
 const getUniversityProfileMock = vi.mocked(getUniversityProfile);

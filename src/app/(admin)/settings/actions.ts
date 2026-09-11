@@ -15,6 +15,8 @@ import { ADMIN_ROLES } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { validateLogoFile } from "@/lib/images/logoValidation";
+import { PaystackKeyError } from "@/lib/payments/paystackClient";
+import { enablePaymentServices, savePaystackKey, upsertPaymentContacts } from "@/lib/payments/settings";
 import { deleteVendorDocument, uploadUniversityLogo } from "@/lib/storage/supabase";
 import {
   getUniversityProfile,
@@ -233,4 +235,107 @@ export async function saveRenewalSettingsAction(formData: FormData) {
   });
 
   revalidatePath("/settings");
+}
+
+export type PaymentSettingsActionState = {
+  status: "idle" | "success" | "error";
+  message?: string;
+};
+
+const paymentContactsSchema = z.object({
+  financeContactName: z.string().trim().max(200).optional(),
+  financeContactEmail: z.union([z.string().trim().email(), z.literal("")]).optional(),
+  technicalContactName: z.string().trim().max(200).optional(),
+  technicalContactEmail: z.union([z.string().trim().email(), z.literal("")]).optional(),
+  payoutCadence: z.enum(["DAILY", "WEEKLY", "MONTHLY"]),
+});
+
+export async function savePaymentContactsAction(
+  _previousState: PaymentSettingsActionState,
+  formData: FormData,
+): Promise<PaymentSettingsActionState> {
+  const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
+  const parsed = paymentContactsSchema.safeParse({
+    financeContactName: String(formData.get("financeContactName") ?? ""),
+    financeContactEmail: String(formData.get("financeContactEmail") ?? ""),
+    technicalContactName: String(formData.get("technicalContactName") ?? ""),
+    technicalContactEmail: String(formData.get("technicalContactEmail") ?? ""),
+    payoutCadence: String(formData.get("payoutCadence") ?? "WEEKLY"),
+  });
+
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: parsed.error.issues[0]?.message ?? "Please check the form and try again.",
+    };
+  }
+
+  const profile = await getUniversityProfile();
+  if (!profile) {
+    return { status: "error", message: "No university profile exists yet. Complete setup first." };
+  }
+
+  try {
+    await upsertPaymentContacts(profile.id, session.user.id, parsed.data);
+    revalidatePath("/settings");
+    return { status: "success", message: "Payment contacts updated." };
+  } catch {
+    return { status: "error", message: "Unable to update payment contacts. Please try again." };
+  }
+}
+
+const paystackKeySchema = z.object({
+  apiKey: z.string().trim().min(1, "Enter a Paystack secret key."),
+});
+
+export async function savePaystackKeyAction(
+  _previousState: PaymentSettingsActionState,
+  formData: FormData,
+): Promise<PaymentSettingsActionState> {
+  const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
+  const parsed = paystackKeySchema.safeParse({ apiKey: String(formData.get("apiKey") ?? "") });
+
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: parsed.error.issues[0]?.message ?? "Enter a Paystack secret key.",
+    };
+  }
+
+  const profile = await getUniversityProfile();
+  if (!profile) {
+    return { status: "error", message: "No university profile exists yet. Complete setup first." };
+  }
+
+  try {
+    const { mode } = await savePaystackKey(profile.id, session.user.id, parsed.data.apiKey);
+    revalidatePath("/settings");
+    return {
+      status: "success",
+      message: `Paystack ${mode.toLowerCase()} key validated and saved.`,
+    };
+  } catch (error) {
+    if (error instanceof PaystackKeyError) {
+      return { status: "error", message: error.message };
+    }
+    return { status: "error", message: "Unable to save this Paystack key. Please try again." };
+  }
+}
+
+export async function enablePaymentServicesAction(): Promise<PaymentSettingsActionState> {
+  const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
+
+  const profile = await getUniversityProfile();
+  if (!profile) {
+    return { status: "error", message: "No university profile exists yet. Complete setup first." };
+  }
+
+  try {
+    await enablePaymentServices(profile.id, session.user.id);
+    revalidatePath("/settings");
+    revalidatePath("/", "layout");
+    return { status: "success", message: "Payment services enabled." };
+  } catch {
+    return { status: "error", message: "Unable to enable payment services. Please try again." };
+  }
 }
