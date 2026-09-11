@@ -93,10 +93,19 @@ async function assertInstitutionPaymentWalletEnabled() {
   }
 }
 
+async function credentialStudentReferences(studentId: string) {
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    select: { studentNumber: true },
+  });
+  return Array.from(new Set([studentId, student?.studentNumber].filter((value): value is string => Boolean(value))));
+}
+
 async function assertStudentPaymentEligible(studentId: string) {
+  const studentReferences = await credentialStudentReferences(studentId);
   const eligibleCredential = await prisma.credentialIssuance.findFirst({
     where: {
-      studentId,
+      studentId: { in: studentReferences },
       status: { in: ["ACCEPTED", "ISSUED"] },
       OR: [
         { lifecycleStatus: null },
