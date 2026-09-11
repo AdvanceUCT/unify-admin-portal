@@ -8,7 +8,7 @@ import Link from "next/link";
 
 import { StatusText, type StatusTone } from "@/components/ui/StatusText";
 import { listVendorInvoices } from "@/lib/billing/invoiceQueries";
-import { requireVendorInvoiceOwnerContext } from "@/lib/billing/vendorAuthorization";
+import { requireVendorInvoiceOwnerContextForRender } from "@/lib/billing/vendorAuthorization";
 
 const PAYMENT_TONE: Record<string, StatusTone> = {
   UNPAID: "warning",
@@ -17,7 +17,7 @@ const PAYMENT_TONE: Record<string, StatusTone> = {
 };
 
 export default async function VendorInvoicesPage() {
-  const { context } = await requireVendorInvoiceOwnerContext();
+  const { context } = await requireVendorInvoiceOwnerContextForRender();
   const invoices = await listVendorInvoices(context.vendorProfileId);
 
   return (

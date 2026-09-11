@@ -5,9 +5,10 @@
 
 import "server-only";
 
+import { cache } from "react";
 import { forbidden } from "next/navigation";
 
-import { requireVendorSession } from "@/lib/auth/session";
+import { requireVendorSession, requireVendorSessionForRender } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 
 export type ApprovedVendorContext = {
@@ -18,16 +19,21 @@ export type ApprovedVendorContext = {
   branchIds: string[];
 };
 
-export async function getApprovedVendorContextForUser(userId: string): Promise<ApprovedVendorContext | null> {
+async function resolveApprovedVendorContextForUser(userId: string): Promise<ApprovedVendorContext | null> {
   const membership = await prisma.vendorMembership.findFirst({
     where: {
       userId,
       active: true,
       vendorProfile: { applications: { some: { status: "APPROVED" } } },
     },
-    include: {
+    select: {
+      vendorProfileId: true,
+      role: true,
       vendorProfile: {
-        include: { branches: { select: { id: true } } },
+        select: {
+          companyName: true,
+          branches: { select: { id: true } },
+        },
       },
       branches: { where: { vendorBranch: { active: true } }, select: { vendorBranchId: true } },
     },
@@ -46,6 +52,18 @@ export async function getApprovedVendorContextForUser(userId: string): Promise<A
   };
 }
 
+const getApprovedVendorContextForUserCachedForRender = cache(resolveApprovedVendorContextForUser);
+
+export async function getApprovedVendorContextForUser(userId: string): Promise<ApprovedVendorContext | null> {
+  return resolveApprovedVendorContextForUser(userId);
+}
+
+export async function getApprovedVendorContextForUserForRender(
+  userId: string,
+): Promise<ApprovedVendorContext | null> {
+  return getApprovedVendorContextForUserCachedForRender(userId);
+}
+
 export async function requireApprovedVendorContext() {
   const session = await requireVendorSession();
   const context = await getApprovedVendorContextForUser(session.user.id);
@@ -53,8 +71,21 @@ export async function requireApprovedVendorContext() {
   return { session, context };
 }
 
+export async function requireApprovedVendorContextForRender() {
+  const session = await requireVendorSessionForRender();
+  const context = await getApprovedVendorContextForUserForRender(session.user.id);
+  if (!context) forbidden();
+  return { session, context };
+}
+
 export async function requireVendorOwnerContext() {
   const result = await requireApprovedVendorContext();
+  if (result.context.role !== "OWNER") forbidden();
+  return result;
+}
+
+export async function requireVendorOwnerContextForRender() {
+  const result = await requireApprovedVendorContextForRender();
   if (result.context.role !== "OWNER") forbidden();
   return result;
 }

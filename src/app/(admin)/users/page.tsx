@@ -8,7 +8,7 @@ import { Ban, LogOut, RotateCcw } from "lucide-react";
 import { PageTabs } from "@/components/layout/PageTabs";
 import { StatusText } from "@/components/ui/StatusText";
 import { ROLE_LABELS, type AdminRole } from "@/lib/auth/roles";
-import { requireRole } from "@/lib/auth/session";
+import { requireRoleForRender } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { formatDateTime } from "@/lib/formatters";
 import {
@@ -24,7 +24,7 @@ function getRoleLabel(role: string | null) {
 }
 
 export default async function UsersPage() {
-  const session = await requireRole(["SUPER_ADMIN"]);
+  const session = await requireRoleForRender(["SUPER_ADMIN"]);
   const now = new Date();
   const users = await prisma.user.findMany({
     where: {

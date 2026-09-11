@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import VendorVerificationsPage from "@/app/vendor/(portal)/verifications/page";
 
 const auth = vi.hoisted(() => ({
-  requireApprovedVendorContext: vi.fn(),
+  requireApprovedVendorContextForRender: vi.fn(),
 }));
 const database = vi.hoisted(() => ({
   vendorBranch: { findMany: vi.fn() },
@@ -27,7 +27,7 @@ vi.mock("@/app/vendor/(portal)/verifications/VendorVerificationsFilterBar", () =
 describe("VendorVerificationsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    auth.requireApprovedVendorContext.mockResolvedValue({
+    auth.requireApprovedVendorContextForRender.mockResolvedValue({
       context: {
         branchIds: ["branch-001"],
         companyName: "Vendor",

@@ -6,11 +6,11 @@
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { BackButton } from "@/components/ui/BackButton";
 import { BatchRunsTable } from "@/features/credentials/BatchRunsTable";
-import { requireRole } from "@/lib/auth/session";
+import { requireRoleForRender } from "@/lib/auth/session";
 import { listBatchRuns } from "@/lib/issuance/batchRuns";
 
 export default async function BatchRunsPage() {
-  await requireRole(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
+  await requireRoleForRender(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
 
   const runs = await listBatchRuns();
 

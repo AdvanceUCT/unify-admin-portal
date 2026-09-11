@@ -7,7 +7,7 @@ import { Metric } from "@/components/ui/Metric";
 import { StatusText } from "@/components/ui/StatusText";
 import { getDashboardSummary, getRecentCredentialEvents } from "@/lib/api/server";
 import { ADMIN_ROLES } from "@/lib/auth/permissions";
-import { requireRole } from "@/lib/auth/session";
+import { requireRoleForRender } from "@/lib/auth/session";
 import {
   credentialStatusTone,
   formatCredentialActivityEventStatus,
@@ -15,7 +15,7 @@ import {
 } from "@/lib/formatters";
 
 export default async function AdminOverviewPage() {
-  await requireRole(ADMIN_ROLES);
+  await requireRoleForRender(ADMIN_ROLES);
 
   const [summary, credentialEvents] = await Promise.all([
     getDashboardSummary(),

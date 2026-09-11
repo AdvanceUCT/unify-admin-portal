@@ -5,7 +5,7 @@
 
 import { FileText, History, Percent, Receipt } from "lucide-react";
 
-import { requireRole } from "@/lib/auth/session";
+import { requireRoleForRender } from "@/lib/auth/session";
 import { minorToDecimalString } from "@/lib/billing/money";
 import { prisma } from "@/lib/db/prisma";
 import { SettingsCard } from "../SettingsCard";
@@ -23,7 +23,7 @@ function formatBasisPoints(basisPoints: number) {
  * `src/lib/auth/permissions.ts`.
  */
 export default async function VerificationBillingSettingsPage() {
-  const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
+  const session = await requireRoleForRender(["SUPER_ADMIN", "ADMIN"]);
   const canManagePolicy = session.user.role === "SUPER_ADMIN";
 
   const policies = await prisma.verificationBillingPolicy.findMany({ orderBy: { version: "desc" } });

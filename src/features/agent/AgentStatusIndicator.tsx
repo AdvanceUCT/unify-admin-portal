@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 
@@ -47,8 +47,9 @@ export function AgentStatusIndicator({
   offlineHref?: string | null;
 }) {
   const [health, setHealth] = useState<AgentHealth | null>(initialHealth ?? null);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
   const [, forceTick] = useState(0);
+  const inFlightRef = useRef(false);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -58,11 +59,30 @@ export function AgentStatusIndicator({
     };
   }, []);
 
-  const refresh = useCallback(() => {
-    startTransition(async () => {
-      const next = await checkHealth();
-      if (mountedRef.current) setHealth(next);
-    });
+  const refresh = useCallback((options: { force?: boolean } = {}) => {
+    if (inFlightRef.current) return;
+    if (!options.force && document.visibilityState !== "visible") return;
+
+    inFlightRef.current = true;
+    if (mountedRef.current) setIsPending(true);
+
+    void (async () => {
+      try {
+        const next = await checkHealth();
+        if (mountedRef.current) setHealth(next);
+      } catch (error) {
+        if (mountedRef.current) {
+          setHealth({
+            checkedAt: new Date().toISOString(),
+            error: error instanceof Error ? error.message : "Connection failed.",
+            ok: false,
+          });
+        }
+      } finally {
+        inFlightRef.current = false;
+        if (mountedRef.current) setIsPending(false);
+      }
+    })();
   }, [checkHealth]);
 
   useEffect(() => {
@@ -77,6 +97,15 @@ export function AgentStatusIndicator({
       clearInterval(clock);
     };
   }, [initialHealth, refresh]);
+
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") refresh();
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [refresh]);
 
   const isChecking = health === null;
   const isOk = health?.ok ?? false;
@@ -137,7 +166,7 @@ export function AgentStatusIndicator({
         aria-label="Refresh agent connection status"
         className="grid size-6 shrink-0 place-items-center rounded-full text-fg-subtle transition hover:bg-surface-muted hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
         disabled={isPending}
-        onClick={refresh}
+        onClick={() => refresh({ force: true })}
         type="button"
       >
         <RefreshCw className={cn("size-3.5", isPending && "animate-spin")} aria-hidden="true" />

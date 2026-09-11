@@ -6,7 +6,7 @@
 "use client";
 
 import { CheckCircle2, ShieldX, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { IconButton } from "@/components/ui/IconButton";
 import { formatDateTime } from "@/lib/formatters";
@@ -40,18 +40,27 @@ export function LiveVerificationNotifications({
   const [queue, setQueue] = useState<LiveEvent[]>([]);
   const cursor = useRef<string>(initialCursor);
   const polling = useRef(false);
+  const branchIdsKey = useMemo(() => branchIds.join("\u0000"), [branchIds]);
 
   useEffect(() => {
     let cancelled = false;
+    let controller: AbortController | null = null;
     async function poll() {
       if (cancelled || document.visibilityState !== "visible" || polling.current) return;
       polling.current = true;
+      controller = new AbortController();
       try {
         const params = new URLSearchParams({ cursor: cursor.current });
-        for (const branchId of branchIds) params.append("branchId", branchId);
-        const response = await fetch(`/api/vendor/live-verifications?${params.toString()}`, { cache: "no-store" });
+        for (const branchId of branchIdsKey ? branchIdsKey.split("\u0000") : []) {
+          params.append("branchId", branchId);
+        }
+        const response = await fetch(`/api/vendor/live-verifications?${params.toString()}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
         if (!response.ok) return;
         const result = await response.json() as { events: LiveEvent[]; nextCursor: string };
+        if (cancelled) return;
         cursor.current = result.nextCursor;
         if (result.events.length > 0) {
           setQueue((current) => {
@@ -59,7 +68,11 @@ export function LiveVerificationNotifications({
             return [...current, ...result.events.filter((event) => !known.has(event.eventId))];
           });
         }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        // Keep the cursor unchanged so the next visible poll can retry the same window.
       } finally {
+        controller = null;
         polling.current = false;
       }
     }
@@ -67,8 +80,13 @@ export function LiveVerificationNotifications({
     const timer = window.setInterval(() => void poll(), 2_000);
     const onVisibility = () => { if (document.visibilityState === "visible") void poll(); };
     document.addEventListener("visibilitychange", onVisibility);
-    return () => { cancelled = true; window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisibility); };
-  }, [branchIds]);
+    return () => {
+      cancelled = true;
+      controller?.abort();
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [branchIdsKey]);
 
   const event = queue[0];
   if (!event) return null;

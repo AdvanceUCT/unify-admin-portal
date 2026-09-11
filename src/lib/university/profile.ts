@@ -3,14 +3,26 @@
  * @module lib/university/profile
  */
 
+import { cache } from "react";
+
 import { prisma } from "@/lib/db/prisma";
 import type { UniversityProfile } from "@/generated/prisma/client";
 import { AuditAction } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit/audit";
 
 
-export async function getUniversityProfile(): Promise<UniversityProfile | null> {
+async function resolveUniversityProfile(): Promise<UniversityProfile | null> {
   return prisma.universityProfile.findFirst();
+}
+
+const getUniversityProfileCachedForRender = cache(resolveUniversityProfile);
+
+export async function getUniversityProfile(): Promise<UniversityProfile | null> {
+  return resolveUniversityProfile();
+}
+
+export async function getUniversityProfileForRender(): Promise<UniversityProfile | null> {
+  return getUniversityProfileCachedForRender();
 }
 
 /**

@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 
 import { SignInForm } from "@/app/(public)/sign-in/SignInForm";
 import { sanitizeCallbackUrl } from "@/lib/auth/redirects";
-import { getCurrentAdminSession } from "@/lib/auth/session";
+import { getCurrentAdminSessionForRender } from "@/lib/auth/session";
 
 export default async function SignInPage({
   searchParams,
@@ -17,7 +17,7 @@ export default async function SignInPage({
     inviteAccepted?: string | string[];
   }>;
 }) {
-  const session = await getCurrentAdminSession();
+  const session = await getCurrentAdminSessionForRender();
 
   if (session) {
     redirect(session.user.userType === "VENDOR" ? "/vendor" : "/");

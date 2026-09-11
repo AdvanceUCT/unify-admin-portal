@@ -5,9 +5,10 @@
 
 import "server-only";
 
+import { cache } from "react";
 import { forbidden } from "next/navigation";
 
-import { requireVendorSession } from "@/lib/auth/session";
+import { requireVendorSession, requireVendorSessionForRender } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 
 export type VendorInvoiceOwnerContext = {
@@ -26,7 +27,9 @@ export type VendorInvoiceOwnerContext = {
  * URL-supplied IDs, branch membership, or the legacy vendor-profile owner
  * field.
  */
-export async function getVendorInvoiceOwnerContext(userId: string): Promise<VendorInvoiceOwnerContext | null> {
+async function resolveVendorInvoiceOwnerContext(
+  userId: string,
+): Promise<VendorInvoiceOwnerContext | null> {
   const membership = await prisma.vendorMembership.findFirst({
     where: { userId, active: true, role: "OWNER" },
     select: {
@@ -43,10 +46,31 @@ export async function getVendorInvoiceOwnerContext(userId: string): Promise<Vend
   };
 }
 
+const getVendorInvoiceOwnerContextCachedForRender = cache(resolveVendorInvoiceOwnerContext);
+
+export async function getVendorInvoiceOwnerContext(
+  userId: string,
+): Promise<VendorInvoiceOwnerContext | null> {
+  return resolveVendorInvoiceOwnerContext(userId);
+}
+
+export async function getVendorInvoiceOwnerContextForRender(
+  userId: string,
+): Promise<VendorInvoiceOwnerContext | null> {
+  return getVendorInvoiceOwnerContextCachedForRender(userId);
+}
+
 /** For Server Component pages: redirects to sign-in or 403s, matching the rest of the vendor portal. */
 export async function requireVendorInvoiceOwnerContext() {
   const session = await requireVendorSession();
   const context = await getVendorInvoiceOwnerContext(session.user.id);
+  if (!context) forbidden();
+  return { session, context };
+}
+
+export async function requireVendorInvoiceOwnerContextForRender() {
+  const session = await requireVendorSessionForRender();
+  const context = await getVendorInvoiceOwnerContextForRender(session.user.id);
   if (!context) forbidden();
   return { session, context };
 }

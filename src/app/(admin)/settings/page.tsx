@@ -3,17 +3,19 @@
  * @module app/(admin)/settings/page
  */
 
+import { Suspense } from "react";
 import { Activity, Building, Clock, FileText, Gauge, Link as LinkIcon, Receipt, Webhook } from "lucide-react";
 import Link from "next/link";
 
-import { checkAgentHealth } from "@/lib/agentClient";
+import { SettingsSectionLoading } from "@/components/layout/PortalRouteLoading";
+import { checkAgentHealth, type AgentHealth } from "@/lib/agentClient";
 import { ADMIN_ROLES, type AdminRole, ROLE_LABELS } from "@/lib/auth/permissions";
-import { requireRole } from "@/lib/auth/session";
-import { getBillingOperationsSummary } from "@/lib/billing/operationsSummary";
+import { requireRoleForRender } from "@/lib/auth/session";
+import { getBillingOperationsSummary, type BillingOperationsSummary } from "@/lib/billing/operationsSummary";
 import { env } from "@/lib/config/env";
-import { getDocumentSignedUrl } from "@/lib/storage/supabase";
+import { getDocumentSignedUrlForRender } from "@/lib/storage/supabase";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
-import { getUniversityProfile } from "@/lib/university/profile";
+import { getUniversityProfileForRender } from "@/lib/university/profile";
 import { RenewalSettingsForm } from "./RenewalSettingsForm";
 import { AgentServiceHealthCard } from "./AgentServiceHealthCard";
 import { BillingOperationsCard } from "./BillingOperationsCard";
@@ -25,20 +27,63 @@ function configuredStatus(value: string | undefined | null): "Configured" | "Not
   return value ? "Configured" : "Not set";
 }
 
+function handledResult<T>(promise: Promise<T>): Promise<PromiseSettledResult<T>> {
+  return promise.then(
+    (value) => ({ status: "fulfilled", value }),
+    (reason) => ({ status: "rejected", reason }),
+  );
+}
+
+async function readHandledResult<T>(resultPromise: Promise<PromiseSettledResult<T>>): Promise<T> {
+  const result = await resultPromise;
+  if (result.status === "rejected") throw result.reason;
+  return result.value;
+}
+
+async function AgentServiceHealthSection({
+  healthPromise,
+}: {
+  healthPromise: Promise<PromiseSettledResult<AgentHealth>>;
+}) {
+  const agentHealth = await readHandledResult(healthPromise);
+
+  return (
+    <AgentServiceHealthCard
+      apiKeyStatus={configuredStatus(env.AGENT_API_KEY)}
+      initialHealth={agentHealth}
+      serviceUrlDisplay={env.AGENT_SERVICE_URL ?? "Not set"}
+    />
+  );
+}
+
+async function BillingOperationsSection({
+  summaryPromise,
+}: {
+  summaryPromise: Promise<PromiseSettledResult<BillingOperationsSummary>>;
+}) {
+  const billingOperationsSummary = await readHandledResult(summaryPromise);
+
+  return <BillingOperationsCard initialSummary={billingOperationsSummary} />;
+}
+
 export default async function SettingsPage() {
-  const session = await requireRole(ADMIN_ROLES);
+  const session = await requireRoleForRender(ADMIN_ROLES);
 
   const role = session.user.role as AdminRole;
   const canEditProfile = role === "SUPER_ADMIN" || role === "ADMIN";
-
-  const profile = await getUniversityProfile();
-  const universityLogoUrl = profile?.logoPath ? await getDocumentSignedUrl(profile.logoPath) : null;
-  const activeSchema = profile ? await getActiveCredentialSchema(profile.id) : null;
-  const agentHealth = await checkAgentHealth();
-  const webhookEndpoint = new URL("/api/webhooks/agent", env.APP_URL).toString();
   const canViewBillingOperations = role === "SUPER_ADMIN" || role === "ADMIN";
   const canManageVerificationBilling = role === "SUPER_ADMIN" || role === "ADMIN";
-  const billingOperationsSummary = canViewBillingOperations ? await getBillingOperationsSummary() : null;
+  const agentHealthPromise = handledResult(checkAgentHealth());
+  const billingOperationsSummaryPromise = canViewBillingOperations
+    ? handledResult(getBillingOperationsSummary())
+    : null;
+
+  const profile = await getUniversityProfileForRender();
+  const [universityLogoUrl, activeSchema] = await Promise.all([
+    profile?.logoPath ? getDocumentSignedUrlForRender(profile.logoPath) : null,
+    profile ? getActiveCredentialSchema(profile.id) : null,
+  ]);
+  const webhookEndpoint = new URL("/api/webhooks/agent", env.APP_URL).toString();
 
   return (
     <div className="space-y-6">
@@ -111,11 +156,17 @@ export default async function SettingsPage() {
         icon={Activity}
         title="Agent service health"
       >
-        <AgentServiceHealthCard
-          apiKeyStatus={configuredStatus(env.AGENT_API_KEY)}
-          initialHealth={agentHealth}
-          serviceUrlDisplay={env.AGENT_SERVICE_URL ?? "Not set"}
-        />
+        <Suspense
+          fallback={
+            <SettingsSectionLoading
+              action
+              label="Loading agent service health"
+              rows={4}
+            />
+          }
+        >
+          <AgentServiceHealthSection healthPromise={agentHealthPromise} />
+        </Suspense>
       </SettingsCard>
 
       <SettingsCard
@@ -188,13 +239,23 @@ export default async function SettingsPage() {
         </SettingsCard>
       )}
 
-      {billingOperationsSummary && (
+      {billingOperationsSummaryPromise && (
         <SettingsCard
           description="Job run history, backlog, and exception counts for vendor invoicing and Paystack payments."
           icon={Gauge}
           title="Billing operations"
         >
-          <BillingOperationsCard initialSummary={billingOperationsSummary} />
+          <Suspense
+            fallback={
+              <SettingsSectionLoading
+                action
+                label="Loading billing operations"
+                rows={8}
+              />
+            }
+          >
+            <BillingOperationsSection summaryPromise={billingOperationsSummaryPromise} />
+          </Suspense>
         </SettingsCard>
       )}
     </div>

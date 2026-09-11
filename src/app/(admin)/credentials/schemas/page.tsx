@@ -4,15 +4,18 @@
  */
 
 import { SchemaVersionManager } from "@/features/credentials/SchemaVersionManager";
-import { requireRole } from "@/lib/auth/session";
+import { requireRoleForRender } from "@/lib/auth/session";
 import {
   getSchemaAttributeAvailability,
   listCredentialSchemaVersions,
 } from "@/lib/university/credentialSchema";
-import { getUniversityProfile } from "@/lib/university/profile";
+import { getUniversityProfileForRender } from "@/lib/university/profile";
 
 export default async function CredentialSchemasPage() {
-  const [, profile] = await Promise.all([requireRole(["SUPER_ADMIN", "ADMIN"]), getUniversityProfile()]);
+  const [, profile] = await Promise.all([
+    requireRoleForRender(["SUPER_ADMIN", "ADMIN"]),
+    getUniversityProfileForRender(),
+  ]);
   if (!profile) throw new Error("University profile was not found.");
 
   const [versions, attributeAvailability] = await Promise.all([

@@ -13,7 +13,7 @@ import { StaffInviteForm } from "@/features/vendors/StaffInviteForm";
 import { cn } from "@/lib/cn";
 import { prisma } from "@/lib/db/prisma";
 import { formatDateTime } from "@/lib/formatters";
-import { requireVendorOwnerContext } from "@/lib/vendors/context";
+import { requireVendorOwnerContextForRender } from "@/lib/vendors/context";
 
 import {
   revokeStaffInviteAction,
@@ -22,7 +22,7 @@ import {
 } from "./actions";
 
 export default async function VendorStaffPage() {
-  const { context } = await requireVendorOwnerContext();
+  const { context } = await requireVendorOwnerContextForRender();
   const [branches, staff, invites] = await Promise.all([
     prisma.vendorBranch.findMany({
       where: { vendorProfileId: context.vendorProfileId, active: true },

@@ -4,8 +4,8 @@
  */
 
 import { Suspense } from "react";
-import { getStudents } from "@/lib/api/client";
-import { requireRole } from "@/lib/auth/session";
+import { getStudents } from "@/lib/api/server";
+import { requireRoleForRender } from "@/lib/auth/session";
 import { StudentSearch } from "@/features/students/StudentSearch";
 
 function parseCount(value: string | string[] | undefined) {
@@ -19,9 +19,11 @@ export default async function StudentsPage({
 }: {
   searchParams: Promise<{ imported?: string | string[]; updated?: string | string[] }>;
 }) {
-  await requireRole(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
-  const students = await getStudents();
-  const params = await searchParams;
+  await requireRoleForRender(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
+  const [students, params] = await Promise.all([
+    getStudents(),
+    searchParams,
+  ]);
   const imported = parseCount(params.imported);
   const updated = parseCount(params.updated);
 

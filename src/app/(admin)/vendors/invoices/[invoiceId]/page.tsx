@@ -8,7 +8,7 @@ import { notFound } from "next/navigation";
 import { BackButton } from "@/components/ui/BackButton";
 import { StatusText, type StatusTone } from "@/components/ui/StatusText";
 import { assertCan } from "@/lib/auth/permissions";
-import { requireRole } from "@/lib/auth/session";
+import { requireRoleForRender } from "@/lib/auth/session";
 import { getAdminInvoiceDetail } from "@/lib/billing/invoiceQueries";
 import { getApprovedApplicationIdForVendorProfile } from "@/lib/vendors/applications";
 
@@ -27,7 +27,7 @@ export default async function AdminVendorInvoiceDetailPage({
 }: {
   params: Promise<{ invoiceId: string }>;
 }) {
-  const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
+  const session = await requireRoleForRender(["SUPER_ADMIN", "ADMIN"]);
   assertCan("invoice:read", session);
   assertCan("invoice:reconcile", session);
 

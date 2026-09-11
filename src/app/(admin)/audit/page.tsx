@@ -8,7 +8,7 @@ import { StatusText } from "@/components/ui/StatusText";
 import { CredentialAuditLogTable } from "@/features/audit/CredentialAuditLogTable";
 import { DecisionNoteButton } from "@/features/audit/DecisionNoteButton";
 import { StudentImportAuditLogTable } from "@/features/audit/StudentImportAuditLogTable";
-import { requireRole } from "@/lib/auth/session";
+import { requireRoleForRender } from "@/lib/auth/session";
 import { getPaginatedCredentialOfferSentAuditLogs } from "@/lib/credentials/audit";
 import { getPaginatedStudentImportAuditLogs } from "@/lib/imports/audit";
 import { listDecidedVendorApplications } from "@/lib/vendors/applications";
@@ -35,7 +35,7 @@ export default async function AuditPage({
 }: {
   searchParams: Promise<{ credentialPage?: string | string[]; importPage?: string | string[]; tab?: string }>;
 }) {
-  await requireRole(["SUPER_ADMIN", "ADMIN", "VIEWER"]);
+  await requireRoleForRender(["SUPER_ADMIN", "ADMIN", "VIEWER"]);
 
   const params = await searchParams;
   const activeTab =

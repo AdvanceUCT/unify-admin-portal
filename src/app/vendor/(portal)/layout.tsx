@@ -7,13 +7,15 @@ import { PortalShell } from "@/components/layout/PortalShell";
 import type { PortalNavItem } from "@/components/layout/portalTypes";
 import { AgentStatusIndicator } from "@/features/agent/AgentStatusIndicator";
 import { LiveVerificationNotifications } from "@/features/vendors/LiveVerificationNotifications";
-import { requireVendorSession } from "@/lib/auth/session";
-import { getVendorInvoiceOwnerContext } from "@/lib/billing/vendorAuthorization";
+import { requireVendorSessionForRender } from "@/lib/auth/session";
+import { getVendorInvoiceOwnerContextForRender } from "@/lib/billing/vendorAuthorization";
 import { prisma } from "@/lib/db/prisma";
-import { getDocumentSignedUrl } from "@/lib/storage/supabase";
-import { getApprovedVendorContextForUser, type ApprovedVendorContext } from "@/lib/vendors/context";
+import { getDocumentSignedUrlForRender } from "@/lib/storage/supabase";
+import {
+  getApprovedVendorContextForUserForRender,
+  type ApprovedVendorContext,
+} from "@/lib/vendors/context";
 import { encodeLiveVerificationCursor } from "@/lib/vendors/liveVerifications";
-import { getVendorProfileLogoPath } from "@/lib/vendors/profile";
 
 import { checkVendorAgentHealthAction } from "./actions";
 
@@ -63,14 +65,19 @@ function roleLabelForVendorContext(context: ApprovedVendorContext | null) {
   return context.role === "STAFF" ? "Staff" : "Owner";
 }
 
-async function notificationBranchIdsFor(context: ApprovedVendorContext) {
+async function getVendorPortalChromeProfile(vendorProfileId: string) {
+  return prisma.vendorProfile.findUnique({
+    where: { id: vendorProfileId },
+    select: { defaultBranchId: true, logoPath: true },
+  });
+}
+
+function notificationBranchIdsFor(
+  context: ApprovedVendorContext,
+  defaultBranchId: string | null,
+) {
   if (context.role === "STAFF") return context.branchIds;
 
-  const vendor = await prisma.vendorProfile.findUnique({
-    where: { id: context.vendorProfileId },
-    select: { defaultBranchId: true },
-  });
-  const defaultBranchId = vendor?.defaultBranchId;
   return defaultBranchId && context.branchIds.includes(defaultBranchId)
     ? [defaultBranchId]
     : context.branchIds.slice(0, 1);
@@ -81,16 +88,20 @@ export default async function VendorPortalLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await requireVendorSession();
-  const vendorContext = await getApprovedVendorContextForUser(session.user.id);
-  const invoiceOwnerContext = await getVendorInvoiceOwnerContext(session.user.id);
-  const logoPath = vendorContext
-    ? await getVendorProfileLogoPath(vendorContext.vendorProfileId)
-    : null;
-  const [logoUrl, notificationBranchIds] = await Promise.all([
-    logoPath ? getDocumentSignedUrl(logoPath) : null,
-    vendorContext ? notificationBranchIdsFor(vendorContext) : [],
+  const session = await requireVendorSessionForRender();
+  const [vendorContext, invoiceOwnerContext] = await Promise.all([
+    getApprovedVendorContextForUserForRender(session.user.id),
+    getVendorInvoiceOwnerContextForRender(session.user.id),
   ]);
+  const chromeProfile = vendorContext
+    ? await getVendorPortalChromeProfile(vendorContext.vendorProfileId)
+    : null;
+  const logoUrl = chromeProfile?.logoPath
+    ? await getDocumentSignedUrlForRender(chromeProfile.logoPath)
+    : null;
+  const notificationBranchIds = vendorContext
+    ? notificationBranchIdsFor(vendorContext, chromeProfile?.defaultBranchId ?? null)
+    : [];
 
   return (
     <PortalShell

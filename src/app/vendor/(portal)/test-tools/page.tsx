@@ -3,12 +3,12 @@
  * @module app/vendor/(portal)/test-tools/page
  */
 
-import { requireVendorInvoiceOwnerContext } from "@/lib/billing/vendorAuthorization";
+import { requireVendorInvoiceOwnerContextForRender } from "@/lib/billing/vendorAuthorization";
 
 import { TestToolsPanel } from "./TestToolsPanel";
 
 export default async function VendorTestToolsPage() {
-  const { context } = await requireVendorInvoiceOwnerContext();
+  const { context } = await requireVendorInvoiceOwnerContextForRender();
 
   return (
     <div className="space-y-6">

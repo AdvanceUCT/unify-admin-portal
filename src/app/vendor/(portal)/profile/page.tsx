@@ -6,22 +6,22 @@
 import { forbidden } from "next/navigation";
 
 import { VendorLogoUpload } from "@/features/vendors/VendorLogoUpload";
-import { requireVendorSession } from "@/lib/auth/session";
+import { requireVendorSessionForRender } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
-import { getDocumentSignedUrl } from "@/lib/storage/supabase";
-import { getApprovedVendorContextForUser } from "@/lib/vendors/context";
+import { getDocumentSignedUrlForRender } from "@/lib/storage/supabase";
+import { getApprovedVendorContextForUserForRender } from "@/lib/vendors/context";
 
 import { VendorProfileForm } from "./VendorProfileForm";
 
 export default async function VendorProfilePage() {
-  const session = await requireVendorSession();
-  const context = await getApprovedVendorContextForUser(session.user.id);
+  const session = await requireVendorSessionForRender();
+  const context = await getApprovedVendorContextForUserForRender(session.user.id);
   if (context?.role === "STAFF") forbidden();
   const profile = await prisma.vendorProfile.findUnique({
     where: { userId: session.user.id },
   });
   const logoUrl = profile?.logoPath
-    ? await getDocumentSignedUrl(profile.logoPath)
+    ? await getDocumentSignedUrlForRender(profile.logoPath)
     : null;
 
   return (

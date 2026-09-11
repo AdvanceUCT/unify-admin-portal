@@ -13,10 +13,10 @@ import { VendorApplicationHistory } from "@/features/vendors/VendorApplicationHi
 import { VendorApplicationSummary } from "@/features/vendors/VendorApplicationSummary";
 import { TOTAL_STEPS, VendorApplicationWizard } from "@/features/vendors/application/VendorApplicationWizard";
 import type { DraftApplicationData } from "@/features/vendors/application/VendorApplicationWizard";
-import { requireVendorSession } from "@/lib/auth/session";
+import { requireVendorSessionForRender } from "@/lib/auth/session";
 import { formatDateTime } from "@/lib/formatters";
-import { filenameFromStoragePath, getDocumentSignedUrl } from "@/lib/storage/supabase";
-import { getApprovedVendorContextForUser } from "@/lib/vendors/context";
+import { filenameFromStoragePath, getDocumentSignedUrlForRender } from "@/lib/storage/supabase";
+import { getApprovedVendorContextForUserForRender } from "@/lib/vendors/context";
 import {
   computeDraftProgress,
   listVendorApplicationsForUser,
@@ -37,8 +37,8 @@ export default async function VendorApplicationPage({
   searchParams: Promise<{ start?: string; step?: string }>;
 }) {
   const { start, step } = await searchParams;
-  const session = await requireVendorSession();
-  const context = await getApprovedVendorContextForUser(session.user.id);
+  const session = await requireVendorSessionForRender();
+  const context = await getApprovedVendorContextForUserForRender(session.user.id);
   if (context?.role === "STAFF") forbidden();
   const applications = await listVendorApplicationsForUser(session.user.id);
   const application = applications[0] ?? null;
@@ -200,14 +200,14 @@ export default async function VendorApplicationPage({
         DOCUMENT_FIELD_KEYS.map(async (key) => {
           const path = application[key];
           if (!path) return;
-          const url = await getDocumentSignedUrl(path);
+          const url = await getDocumentSignedUrlForRender(path);
           if (url) urls[key] = url;
         }),
       );
       return urls;
     })(),
     application.vendorProfile.logoPath
-      ? getDocumentSignedUrl(application.vendorProfile.logoPath)
+      ? getDocumentSignedUrlForRender(application.vendorProfile.logoPath)
       : Promise.resolve(null),
   ]);
 
