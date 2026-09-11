@@ -69,6 +69,25 @@ export type ConfirmInvoicePaymentResult =
   | { outcome: "not_successful"; providerStatus: string }
   | { outcome: "attempt_not_found" };
 
+async function recordExcessPayment(
+  db: PaymentConfirmationClient,
+  input: { invoiceId: string; attemptId: string; paymentId: string; grossAmountMinor: bigint },
+) {
+  await recordBillingException(db, {
+    type: "PAYMENT_EXCESS",
+    dedupeKey: `payment-excess:${input.paymentId}`,
+    invoiceId: input.invoiceId,
+    attemptId: input.attemptId,
+    details: { paymentId: input.paymentId, grossAmountMinor: input.grossAmountMinor.toString() },
+  });
+  await db.vendorInvoice.update({ where: { id: input.invoiceId }, data: { hasUnresolvedException: true } });
+}
+
+function allocationUniqueTargetWasHit(error: unknown) {
+  const targets = prismaUniqueTargets(error);
+  return targets.some((target) => target.includes("invoiceId") || target.includes("paymentId"));
+}
+
 /**
  * Authoritative confirmation for one Paystack reference. Re-verifies with
  * Paystack itself, matches the result against the attempt's frozen snapshot
@@ -166,10 +185,41 @@ export async function confirmInvoicePayment(
   }
 
   if (!paymentIsNew) {
+    await db.vendorInvoicePaymentAttempt.update({
+      where: { id: attempt.id },
+      data: { status: VendorInvoicePaymentAttemptStatus.SUCCEEDED, lastCheckedAt: now },
+    });
+
     const allocation = await db.vendorInvoicePaymentAllocation.findUnique({ where: { paymentId: payment.id } });
-    return allocation
-      ? { outcome: "already_confirmed", invoiceId: attempt.invoiceId, paymentId: payment.id }
-      : { outcome: "excess", invoiceId: attempt.invoiceId, paymentId: payment.id };
+    if (allocation) return { outcome: "already_confirmed", invoiceId: attempt.invoiceId, paymentId: payment.id };
+
+    const invoiceAllocation = await db.vendorInvoicePaymentAllocation.findUnique({ where: { invoiceId: attempt.invoiceId } });
+    if (invoiceAllocation) {
+      if (invoiceAllocation.paymentId === payment.id) return { outcome: "already_confirmed", invoiceId: attempt.invoiceId, paymentId: payment.id };
+      await recordExcessPayment(db, { invoiceId: attempt.invoiceId, attemptId: attempt.id, paymentId: payment.id, grossAmountMinor: payment.grossAmountMinor });
+      return { outcome: "excess", invoiceId: attempt.invoiceId, paymentId: payment.id };
+    }
+
+    try {
+      await db.vendorInvoicePaymentAllocation.create({
+        data: { invoiceId: attempt.invoiceId, paymentId: payment.id, amountAppliedMinor: payment.grossAmountMinor },
+      });
+    } catch (error) {
+      if (!allocationUniqueTargetWasHit(error)) throw error;
+      const racedAllocation = await db.vendorInvoicePaymentAllocation.findUnique({ where: { invoiceId: attempt.invoiceId } });
+      if (racedAllocation?.paymentId === payment.id) return { outcome: "already_confirmed", invoiceId: attempt.invoiceId, paymentId: payment.id };
+      await recordExcessPayment(db, { invoiceId: attempt.invoiceId, attemptId: attempt.id, paymentId: payment.id, grossAmountMinor: payment.grossAmountMinor });
+      return { outcome: "excess", invoiceId: attempt.invoiceId, paymentId: payment.id };
+    }
+
+    await db.vendorInvoice.update({
+      where: { id: attempt.invoiceId },
+      data: {
+        paymentStatus: VendorInvoicePaymentStatus.PAID,
+        ...(splitMismatch ? { hasUnresolvedException: true } : {}),
+      },
+    });
+    return { outcome: "already_confirmed", invoiceId: attempt.invoiceId, paymentId: payment.id };
   }
 
   // The receipt is now durably committed regardless of what happens next —
@@ -184,18 +234,22 @@ export async function confirmInvoicePayment(
       data: { invoiceId: attempt.invoiceId, paymentId: payment.id, amountAppliedMinor: payment.grossAmountMinor },
     });
   } catch (error) {
-    if (!prismaUniqueTargets(error).some((target) => target.includes("invoiceId"))) throw error;
+    if (!allocationUniqueTargetWasHit(error)) throw error;
+    const allocation = await db.vendorInvoicePaymentAllocation.findUnique({ where: { invoiceId: attempt.invoiceId } });
+    if (allocation?.paymentId === payment.id) {
+      await db.vendorInvoice.update({
+        where: { id: attempt.invoiceId },
+        data: {
+          paymentStatus: VendorInvoicePaymentStatus.PAID,
+          ...(splitMismatch ? { hasUnresolvedException: true } : {}),
+        },
+      });
+      return { outcome: "confirmed", invoiceId: attempt.invoiceId, paymentId: payment.id };
+    }
     // The invoice already has a different, earlier allocation — this is a
     // second genuinely successful attempt. Its receipt is kept; it is
     // reported as excess awaiting resolution, never allocated again.
-    await recordBillingException(db, {
-      type: "PAYMENT_EXCESS",
-      dedupeKey: `payment-excess:${payment.id}`,
-      invoiceId: attempt.invoiceId,
-      attemptId: attempt.id,
-      details: { paymentId: payment.id, grossAmountMinor: payment.grossAmountMinor.toString() },
-    });
-    await db.vendorInvoice.update({ where: { id: attempt.invoiceId }, data: { hasUnresolvedException: true } });
+    await recordExcessPayment(db, { invoiceId: attempt.invoiceId, attemptId: attempt.id, paymentId: payment.id, grossAmountMinor: payment.grossAmountMinor });
     return { outcome: "excess", invoiceId: attempt.invoiceId, paymentId: payment.id };
   }
 
