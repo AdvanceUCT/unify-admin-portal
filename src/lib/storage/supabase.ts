@@ -3,6 +3,7 @@
  * @module lib/storage/supabase
  */
 
+import { cache } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { env } from "@/lib/config/env";
 
@@ -80,7 +81,7 @@ export function filenameFromStoragePath(path: string): string {
   return segment.replace(/^\d+-/, "");
 }
 
-export async function getDocumentSignedUrl(
+async function resolveDocumentSignedUrl(
   storagePath: string,
   expiresInSeconds = 3600,
 ): Promise<string | null> {
@@ -95,4 +96,20 @@ export async function getDocumentSignedUrl(
   } catch {
     return null;
   }
+}
+
+const getDocumentSignedUrlCachedForRender = cache(resolveDocumentSignedUrl);
+
+export async function getDocumentSignedUrl(
+  storagePath: string,
+  expiresInSeconds = 3600,
+): Promise<string | null> {
+  return resolveDocumentSignedUrl(storagePath, expiresInSeconds);
+}
+
+export async function getDocumentSignedUrlForRender(
+  storagePath: string,
+  expiresInSeconds = 3600,
+): Promise<string | null> {
+  return getDocumentSignedUrlCachedForRender(storagePath, expiresInSeconds);
 }

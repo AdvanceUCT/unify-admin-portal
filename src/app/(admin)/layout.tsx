@@ -13,10 +13,10 @@ import {
   ROLE_LABELS,
   type AdminRole,
 } from "@/lib/auth/permissions";
-import { requireRole } from "@/lib/auth/session";
+import { requireRoleForRender } from "@/lib/auth/session";
 import { env } from "@/lib/config/env";
-import { getDocumentSignedUrl } from "@/lib/storage/supabase";
-import { getUniversityProfile } from "@/lib/university/profile";
+import { getDocumentSignedUrlForRender } from "@/lib/storage/supabase";
+import { getUniversityProfileForRender } from "@/lib/university/profile";
 
 const navItems: (PortalNavItem & { allowedRoles?: readonly AdminRole[] })[] = [
   { href: "/", label: "Overview", icon: "overview" },
@@ -47,8 +47,8 @@ export default async function AdminLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await requireRole(ADMIN_ROLES);
-  const profile = await getUniversityProfile();
+  const session = await requireRoleForRender(ADMIN_ROLES);
+  const profile = await getUniversityProfileForRender();
   const bypassSetup = env.SETUP_BYPASS;
   const isComplete = bypassSetup || profile?.setupStatus === "COMPLETE";
   const isSuperAdmin = session.user.role === "SUPER_ADMIN";
@@ -67,7 +67,9 @@ export default async function AdminLayout({
       canAccessRoute(role, item.href) &&
       (item.allowedRoles?.some((allowedRole) => allowedRole === role) ?? true),
   );
-  const logoUrl = profile?.logoPath ? await getDocumentSignedUrl(profile.logoPath) : null;
+  const logoUrl = profile?.logoPath
+    ? await getDocumentSignedUrlForRender(profile.logoPath)
+    : null;
 
   return (
     <PortalShell

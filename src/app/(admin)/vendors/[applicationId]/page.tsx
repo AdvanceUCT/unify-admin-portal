@@ -8,8 +8,8 @@ import { notFound } from "next/navigation";
 
 import { BackButton } from "@/components/ui/BackButton";
 import { VendorApplicationDetails } from "@/features/vendors/VendorApplicationDetails";
-import { requireRole } from "@/lib/auth/session";
-import { getDocumentSignedUrl } from "@/lib/storage/supabase";
+import { requireRoleForRender } from "@/lib/auth/session";
+import { getDocumentSignedUrlForRender } from "@/lib/storage/supabase";
 import { getVendorApplicationById } from "@/lib/vendors/applications";
 import {
   approveVendorApplicationAction,
@@ -36,7 +36,7 @@ export default async function VendorApplicationDetailPage({
   params: Promise<{ applicationId: string }>;
   searchParams: Promise<{ tab?: string }>;
 }) {
-  await requireRole(["SUPER_ADMIN", "ADMIN"]);
+  await requireRoleForRender(["SUPER_ADMIN", "ADMIN"]);
   const { applicationId } = await params;
   const { tab } = await searchParams;
   const application = await getVendorApplicationById(applicationId);
@@ -57,7 +57,7 @@ export default async function VendorApplicationDetailPage({
     DOCUMENT_KEYS.map(async (key) => {
       const path = application[key];
       if (!path) return;
-      const url = await getDocumentSignedUrl(path);
+      const url = await getDocumentSignedUrlForRender(path);
       if (url) documentUrls[key] = url;
     }),
   );

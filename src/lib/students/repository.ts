@@ -101,3 +101,26 @@ export async function searchStudents(query: string): Promise<StudentRecord[]> {
     .filter((student) => matchesQuery(student, normalizedQuery))
     .map((student) => toStudentRecord(student, settings.name, settings.validityDays));
 }
+
+export async function getStudentProgrammesByFaculty(): Promise<Record<string, string[]>> {
+  const rows = await prisma.student.findMany({
+    orderBy: { lastName: "asc" },
+    select: { faculty: true, programme: true },
+    where: {
+      faculty: { not: null },
+      programme: { not: null },
+    },
+  });
+
+  const programmesByFaculty: Record<string, string[]> = {};
+
+  for (const { faculty, programme } of rows) {
+    if (!faculty || !programme) continue;
+    const programmes = (programmesByFaculty[faculty] ??= []);
+    if (!programmes.includes(programme)) {
+      programmes.push(programme);
+    }
+  }
+
+  return programmesByFaculty;
+}

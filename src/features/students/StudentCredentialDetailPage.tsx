@@ -7,9 +7,8 @@ import { notFound } from "next/navigation";
 
 import { BackButton } from "@/components/ui/BackButton";
 import { StudentCredentialIssueView } from "@/features/students/StudentCredentialIssueView";
-import { getStudentById } from "@/lib/api/client";
-import { getActivationDeliveryByCredentialId } from "@/lib/api/server";
-import { requireRole } from "@/lib/auth/session";
+import { getActivationDeliveryByCredentialId, getStudentById } from "@/lib/api/server";
+import { requireRoleForRender } from "@/lib/auth/session";
 
 type StudentCredentialDetailPageProps = {
   backHref: string;
@@ -22,7 +21,7 @@ export async function StudentCredentialDetailPage({
   backLabel,
   studentId,
 }: StudentCredentialDetailPageProps) {
-  await requireRole(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
+  await requireRoleForRender(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
 
   const student = await getStudentById(studentId);
 

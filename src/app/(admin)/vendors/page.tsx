@@ -11,7 +11,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { StatusText } from "@/components/ui/StatusText";
 import { DecisionNoteButton } from "@/features/audit/DecisionNoteButton";
-import { requireRole } from "@/lib/auth/session";
+import { requireRoleForRender } from "@/lib/auth/session";
 import {
   listDecidedVendorApplications,
   listVendorApplications,
@@ -39,7 +39,7 @@ export default async function VendorsPage({
 }: {
   searchParams: Promise<{ tab?: string }>;
 }) {
-  await requireRole(["SUPER_ADMIN", "ADMIN"]);
+  await requireRoleForRender(["SUPER_ADMIN", "ADMIN"]);
 
   const { tab } = await searchParams;
   const activeTab =

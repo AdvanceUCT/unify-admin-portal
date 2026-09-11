@@ -6,7 +6,7 @@
 import { notFound } from "next/navigation";
 
 import { getVendorInvoiceDocument } from "@/lib/billing/invoiceQueries";
-import { requireVendorInvoiceOwnerContext } from "@/lib/billing/vendorAuthorization";
+import { requireVendorInvoiceOwnerContextForRender } from "@/lib/billing/vendorAuthorization";
 
 import { PaymentReturnStatus } from "./PaymentReturnStatus";
 
@@ -20,7 +20,7 @@ export default async function VendorInvoicePaymentReturnPage({
 }: {
   params: Promise<{ invoiceId: string }>;
 }) {
-  const { context } = await requireVendorInvoiceOwnerContext();
+  const { context } = await requireVendorInvoiceOwnerContextForRender();
   const { invoiceId } = await params;
   const result = await getVendorInvoiceDocument(context.vendorProfileId, invoiceId);
   if (!result) notFound();

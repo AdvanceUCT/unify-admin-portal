@@ -9,7 +9,7 @@ import { BackButton } from "@/components/ui/BackButton";
 import { StatusText, type StatusTone } from "@/components/ui/StatusText";
 import { env } from "@/lib/config/env";
 import { getVendorInvoiceDocument } from "@/lib/billing/invoiceQueries";
-import { requireVendorInvoiceOwnerContext } from "@/lib/billing/vendorAuthorization";
+import { requireVendorInvoiceOwnerContextForRender } from "@/lib/billing/vendorAuthorization";
 
 import { PayInvoiceButton } from "./PayInvoiceButton";
 
@@ -24,7 +24,7 @@ export default async function VendorInvoiceDetailPage({
 }: {
   params: Promise<{ invoiceId: string }>;
 }) {
-  const { context } = await requireVendorInvoiceOwnerContext();
+  const { context } = await requireVendorInvoiceOwnerContextForRender();
   const { invoiceId } = await params;
   const result = await getVendorInvoiceDocument(context.vendorProfileId, invoiceId);
   if (!result) notFound();

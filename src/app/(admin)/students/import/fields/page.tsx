@@ -5,19 +5,19 @@
 
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
-import { requireRole } from "@/lib/auth/session";
+import { requireRoleForRender } from "@/lib/auth/session";
 import { getActiveCustomFieldDefinitions } from "@/lib/imports/customFields";
 import { isRequiredByActiveSchema, SYSTEM_FIELDS } from "@/lib/imports/mapping";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
-import { getUniversityProfile } from "@/lib/university/profile";
+import { getUniversityProfileForRender } from "@/lib/university/profile";
 import { ImportSectionTabs } from "../ImportSectionTabs";
 import { AddCustomFieldForm } from "./AddCustomFieldForm";
 import { RemoveCustomFieldButton } from "./RemoveCustomFieldButton";
 
 export default async function ManageFieldsPage() {
-  await requireRole(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
+  await requireRoleForRender(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
 
-  const profile = await getUniversityProfile();
+  const profile = await getUniversityProfileForRender();
 
   if (!profile) {
     return (

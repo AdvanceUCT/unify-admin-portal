@@ -5,33 +5,20 @@
 
 import { BatchIssuancePanel } from "@/features/credentials/BatchIssuancePanel";
 import { NoActiveSchemaBanner } from "@/features/credentials/NoActiveSchemaBanner";
-import { getBatchIssuancePreview, getStudents } from "@/lib/api/client";
-import { requireRole } from "@/lib/auth/session";
+import { getInitialBatchIssuancePreview, getProgrammesByFaculty } from "@/lib/api/server";
+import { requireRoleForRender } from "@/lib/auth/session";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
-import { getUniversityProfile } from "@/lib/university/profile";
-
-function programmesByFacultyFrom(students: Awaited<ReturnType<typeof getStudents>>) {
-  const programmesByFaculty: Record<string, string[]> = {};
-
-  for (const student of students) {
-    const { faculty, programme } = student.credential;
-    if (!faculty || !programme) continue;
-    const programmes = (programmesByFaculty[faculty] ??= []);
-    if (!programmes.includes(programme)) {
-      programmes.push(programme);
-    }
-  }
-
-  return programmesByFaculty;
-}
+import { getUniversityProfileForRender } from "@/lib/university/profile";
 
 export default async function BatchIssuePage() {
-  await requireRole(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
+  await requireRoleForRender(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
 
-  const profile = await getUniversityProfile();
-  const activeSchema = profile ? await getActiveCredentialSchema(profile.id) : null;
-  const [preview, students] = await Promise.all([getBatchIssuancePreview(), getStudents()]);
-  const programmesByFaculty = programmesByFacultyFrom(students);
+  const profilePromise = getUniversityProfileForRender();
+  const [activeSchema, preview, programmesByFaculty] = await Promise.all([
+    profilePromise.then((profile) => profile ? getActiveCredentialSchema(profile.id) : null),
+    getInitialBatchIssuancePreview(),
+    getProgrammesByFaculty(),
+  ]);
 
   return (
     <div className="space-y-6">

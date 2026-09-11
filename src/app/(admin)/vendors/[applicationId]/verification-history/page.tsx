@@ -10,7 +10,7 @@ import { notFound } from "next/navigation";
 import { BackButton } from "@/components/ui/BackButton";
 import { Metric } from "@/components/ui/Metric";
 import { StatusText, type StatusTone } from "@/components/ui/StatusText";
-import { requireRole } from "@/lib/auth/session";
+import { requireRoleForRender } from "@/lib/auth/session";
 import { getVendorInvoiceHistory } from "@/lib/billing/invoiceQueries";
 import { formatMoneyMinor } from "@/lib/formatters";
 import { getVendorApplicationById } from "@/lib/vendors/applications";
@@ -36,7 +36,7 @@ export default async function VendorVerificationHistoryPage({
   params: Promise<{ applicationId: string }>;
   searchParams?: Promise<{ year?: string | string[] }>;
 }) {
-  await requireRole(["SUPER_ADMIN", "ADMIN"]);
+  await requireRoleForRender(["SUPER_ADMIN", "ADMIN"]);
 
   const { applicationId } = await params;
   const filters = searchParams ? await searchParams : {};

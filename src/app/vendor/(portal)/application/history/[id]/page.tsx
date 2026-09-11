@@ -7,8 +7,8 @@ import { notFound } from "next/navigation";
 
 import { BackButton } from "@/components/ui/BackButton";
 import { VendorApplicationDetails } from "@/features/vendors/VendorApplicationDetails";
-import { requireVendorSession } from "@/lib/auth/session";
-import { getDocumentSignedUrl } from "@/lib/storage/supabase";
+import { requireVendorSessionForRender } from "@/lib/auth/session";
+import { getDocumentSignedUrlForRender } from "@/lib/storage/supabase";
 import { getVendorApplicationByIdForUser } from "@/lib/vendors/applications";
 
 const DOCUMENT_FIELD_KEYS = [
@@ -26,7 +26,7 @@ export default async function VendorApplicationHistoryDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const session = await requireVendorSession();
+  const session = await requireVendorSessionForRender();
   const application = await getVendorApplicationByIdForUser(id, session.user.id);
 
   if (!application) {
@@ -38,7 +38,7 @@ export default async function VendorApplicationHistoryDetailPage({
     DOCUMENT_FIELD_KEYS.map(async (key) => {
       const path = application[key];
       if (!path) return;
-      const url = await getDocumentSignedUrl(path);
+      const url = await getDocumentSignedUrlForRender(path);
       if (url) documentUrls[key] = url;
     }),
   );

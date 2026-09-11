@@ -5,7 +5,7 @@ import VendorsPage from "@/app/(admin)/vendors/page";
 import VendorVerificationHistoryPage from "@/app/(admin)/vendors/[applicationId]/verification-history/page";
 
 const auth = vi.hoisted(() => ({
-  requireRole: vi.fn(),
+  requireRoleForRender: vi.fn(),
 }));
 const applications = vi.hoisted(() => ({
   getVendorApplicationById: vi.fn(),
@@ -118,7 +118,7 @@ const invoiceHistory = {
 describe("admin vendor verification history", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    auth.requireRole.mockResolvedValue({ id: "admin-1" });
+    auth.requireRoleForRender.mockResolvedValue({ id: "admin-1" });
     applications.getVendorApplicationById.mockResolvedValue(approvedApplication);
     applications.listDecidedVendorApplications.mockResolvedValue([]);
     applications.listVendorApplications.mockImplementation(({ status }) => (
@@ -145,7 +145,7 @@ describe("admin vendor verification history", () => {
       params: Promise.resolve({ applicationId: "application-1" }),
     });
 
-    expect(auth.requireRole).toHaveBeenCalledWith(["SUPER_ADMIN", "ADMIN"]);
+    expect(auth.requireRoleForRender).toHaveBeenCalledWith(["SUPER_ADMIN", "ADMIN"]);
     expect(applications.getVendorApplicationById).toHaveBeenCalledWith("application-1");
     expect(reports.getVendorMonthlyVerificationHistory).toHaveBeenCalledWith("vendor-profile-1");
     expect(invoiceQueries.getVendorInvoiceHistory).toHaveBeenCalledWith(

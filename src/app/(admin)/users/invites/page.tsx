@@ -6,7 +6,7 @@
 import { PageTabs } from "@/components/layout/PageTabs";
 import { StatusText, type StatusTone } from "@/components/ui/StatusText";
 import { getInviteRoleLabel } from "@/lib/auth/invites";
-import { requireRole } from "@/lib/auth/session";
+import { requireRoleForRender } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { formatDateTime } from "@/lib/formatters";
 import { revokeInviteAction } from "../actions";
@@ -40,7 +40,7 @@ const statusTone: Record<ReturnType<typeof getInviteStatus>, StatusTone> = {
 };
 
 export default async function AdminInvitesPage() {
-  await requireRole(["SUPER_ADMIN"]);
+  await requireRoleForRender(["SUPER_ADMIN"]);
 
   const invites = await prisma.adminInvite.findMany({
     orderBy: {

@@ -5,6 +5,7 @@
 
 import "server-only";
 
+import { cache } from "react";
 import { forbidden, redirect } from "next/navigation";
 import { headers } from "next/headers";
 
@@ -30,6 +31,17 @@ export async function getCurrentAdminSession() {
   return session;
 }
 
+const getCurrentAdminSessionCachedForRender = cache(async () => getCurrentAdminSession());
+
+/**
+ * Request-scoped session reader for React Server Component renders. Keep
+ * server actions and route handlers on `getCurrentAdminSession()` so mutation
+ * flows can make fresh authorization checks.
+ */
+export async function getCurrentAdminSessionForRender() {
+  return getCurrentAdminSessionCachedForRender();
+}
+
 /**
  * Gets the current session or redirects to `/sign-in` if there isn't one.
  * Use this in server components or route handlers that require authentication.
@@ -50,12 +62,30 @@ export async function requireAdminSession() {
   return session;
 }
 
+export async function requireAdminSessionForRender() {
+  const session = await getCurrentAdminSessionForRender();
+
+  if (!session) {
+    redirect("/sign-in");
+  }
+
+  if (session.user.userType !== "ADMIN") {
+    redirect("/vendor");
+  }
+
+  return session;
+}
+
 /**
  * Gets the current vendor session without redirecting, for callers that need
  * to branch on whether a vendor is signed in (e.g. the vendor sign-in page).
  */
 export async function getCurrentVendorSession() {
   return getCurrentAdminSession();
+}
+
+export async function getCurrentVendorSessionForRender() {
+  return getCurrentAdminSessionForRender();
 }
 
 /**
@@ -65,6 +95,20 @@ export async function getCurrentVendorSession() {
  */
 export async function requireVendorSession() {
   const session = await getCurrentVendorSession();
+
+  if (!session) {
+    redirect("/vendor/sign-in");
+  }
+
+  if (session.user.userType !== "VENDOR") {
+    redirect("/");
+  }
+
+  return session;
+}
+
+export async function requireVendorSessionForRender() {
+  const session = await getCurrentVendorSessionForRender();
 
   if (!session) {
     redirect("/vendor/sign-in");
@@ -101,6 +145,24 @@ export async function requireApprovedVendorSession() {
   return session;
 }
 
+export async function requireApprovedVendorSessionForRender() {
+  const session = await requireVendorSessionForRender();
+
+  const approvedApplication = await prisma.vendorApplication.findFirst({
+    where: {
+      vendorProfile: { userId: session.user.id },
+      status: VendorApplicationStatus.APPROVED,
+    },
+    select: { id: true },
+  });
+
+  if (!approvedApplication) {
+    forbidden();
+  }
+
+  return session;
+}
+
 /**
  * Requires an authenticated session with one of the given roles.
  * Calls Next.js `forbidden()` (returning a 403) if the role doesn't match,
@@ -111,6 +173,18 @@ export async function requireApprovedVendorSession() {
  */
 export async function requireRole(allowedRoles: readonly AdminRole[]) {
   const session = await requireAdminSession();
+
+  try {
+    assertRole(session as SessionWithRole, allowedRoles);
+  } catch {
+    forbidden();
+  }
+
+  return session;
+}
+
+export async function requireRoleForRender(allowedRoles: readonly AdminRole[]) {
+  const session = await requireAdminSessionForRender();
 
   try {
     assertRole(session as SessionWithRole, allowedRoles);

@@ -9,10 +9,10 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { BranchCreateForm } from "@/features/vendors/BranchCreateForm";
 import { prisma } from "@/lib/db/prisma";
-import { requireApprovedVendorContext } from "@/lib/vendors/context";
+import { requireApprovedVendorContextForRender } from "@/lib/vendors/context";
 
 export default async function VendorBranchesPage() {
-  const { context } = await requireApprovedVendorContext();
+  const { context } = await requireApprovedVendorContextForRender();
   const branches = await prisma.vendorBranch.findMany({
     where: {
       vendorProfileId: context.vendorProfileId,

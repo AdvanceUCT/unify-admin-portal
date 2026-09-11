@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db/prisma";
 import {
   requireApprovedVendorSession,
+  requireApprovedVendorSessionForRender,
   requireVendorSession,
+  requireVendorSessionForRender,
 } from "@/lib/auth/session";
 
 vi.mock("server-only", () => ({}));
@@ -79,6 +81,26 @@ describe("requireVendorSession", () => {
 
     await expect(requireVendorSession()).resolves.toEqual(session);
   });
+
+  it("applies the same missing-session redirect in render vendor guards", async () => {
+    getSessionMock.mockResolvedValueOnce(null);
+
+    await expect(requireVendorSessionForRender()).rejects.toThrow("redirect:/vendor/sign-in");
+    expect(redirect).toHaveBeenCalledWith("/vendor/sign-in");
+  });
+
+  it("applies the same wrong-type redirect in render vendor guards", async () => {
+    getSessionMock.mockResolvedValueOnce({
+      user: {
+        id: "admin_1",
+        role: "SUPER_ADMIN",
+        userType: "ADMIN",
+      },
+    } as Awaited<ReturnType<typeof auth.api.getSession>>);
+
+    await expect(requireVendorSessionForRender()).rejects.toThrow("redirect:/");
+    expect(redirect).toHaveBeenCalledWith("/");
+  });
 });
 
 describe("requireApprovedVendorSession", () => {
@@ -113,5 +135,30 @@ describe("requireApprovedVendorSession", () => {
     vendorApplication.findFirst.mockResolvedValueOnce(null);
 
     await expect(requireApprovedVendorSession()).rejects.toThrow("forbidden");
+  });
+
+  it("applies the same approval check in render vendor guards", async () => {
+    getSessionMock.mockResolvedValueOnce(
+      vendorSession as Awaited<ReturnType<typeof auth.api.getSession>>,
+    );
+    vendorApplication.findFirst.mockResolvedValueOnce({ id: "application_1" } as never);
+
+    await expect(requireApprovedVendorSessionForRender()).resolves.toEqual(vendorSession);
+    expect(vendorApplication.findFirst).toHaveBeenCalledWith({
+      where: {
+        vendorProfile: { userId: "vendor_1" },
+        status: "APPROVED",
+      },
+      select: { id: true },
+    });
+  });
+
+  it("forbids a render vendor session without current approval", async () => {
+    getSessionMock.mockResolvedValueOnce(
+      vendorSession as Awaited<ReturnType<typeof auth.api.getSession>>,
+    );
+    vendorApplication.findFirst.mockResolvedValueOnce(null);
+
+    await expect(requireApprovedVendorSessionForRender()).rejects.toThrow("forbidden");
   });
 });

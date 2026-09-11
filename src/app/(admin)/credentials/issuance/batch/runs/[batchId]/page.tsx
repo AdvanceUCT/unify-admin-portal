@@ -8,11 +8,11 @@ import { notFound } from "next/navigation";
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { BackButton } from "@/components/ui/BackButton";
 import { BatchRunDetailView } from "@/features/credentials/BatchRunDetailView";
-import { requireRole } from "@/lib/auth/session";
+import { requireRoleForRender } from "@/lib/auth/session";
 import { getBatchRunDetail } from "@/lib/issuance/batchRuns";
 
 export default async function BatchRunDetailPage({ params }: { params: Promise<{ batchId: string }> }) {
-  await requireRole(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
+  await requireRoleForRender(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
 
   const { batchId } = await params;
   const run = await getBatchRunDetail(batchId).catch(() => undefined);

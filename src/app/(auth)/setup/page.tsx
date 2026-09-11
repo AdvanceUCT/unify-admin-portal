@@ -3,12 +3,12 @@
  * @module app/(auth)/setup/page
  */
 
-import { getUniversityProfile } from "@/lib/university/profile";
+import { getUniversityProfileForRender } from "@/lib/university/profile";
 import { SetupWizard } from "@/features/setup/SetupWizard";
 import { serializeSetupProfile } from "./actions";
 
 export default async function SetupPage() {
-  const profile = await getUniversityProfile();
+  const profile = await getUniversityProfileForRender();
   const serializedProfile = profile ? await serializeSetupProfile(profile) : null;
 
   return <SetupWizard profile={serializedProfile} />;

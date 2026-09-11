@@ -2,14 +2,14 @@ import { redirect } from "next/navigation";
 import { describe, expect, it, vi } from "vitest";
 
 import SignInPage from "@/app/(public)/sign-in/page";
-import { getCurrentAdminSession } from "@/lib/auth/session";
+import { getCurrentAdminSessionForRender } from "@/lib/auth/session";
 
 vi.mock("@/app/(public)/sign-in/SignInForm", () => ({
   SignInForm: vi.fn(() => null),
 }));
 
 vi.mock("@/lib/auth/session", () => ({
-  getCurrentAdminSession: vi.fn(),
+  getCurrentAdminSessionForRender: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -22,16 +22,16 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
-const getCurrentAdminSessionMock = vi.mocked(getCurrentAdminSession);
+const getCurrentAdminSessionForRenderMock = vi.mocked(getCurrentAdminSessionForRender);
 
 describe("sign-in page", () => {
   it("redirects signed-in users to the dashboard", async () => {
-    getCurrentAdminSessionMock.mockResolvedValueOnce({
+    getCurrentAdminSessionForRenderMock.mockResolvedValueOnce({
       user: {
         id: "user_1",
         role: "SUPER_ADMIN",
       },
-    } as Awaited<ReturnType<typeof getCurrentAdminSession>>);
+    } as Awaited<ReturnType<typeof getCurrentAdminSessionForRender>>);
 
     await expect(
       SignInPage({

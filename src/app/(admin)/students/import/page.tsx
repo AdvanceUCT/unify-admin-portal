@@ -5,16 +5,16 @@
 
 import { SectionHeader } from "@/components/layout/SectionHeader";
 import { ImportWizard } from "@/features/imports/ImportWizard";
-import { requireRole } from "@/lib/auth/session";
+import { requireRoleForRender } from "@/lib/auth/session";
 import { getActiveCustomFieldDefinitions } from "@/lib/imports/customFields";
 import { getImportFieldDefinitions, getImportMapping } from "@/lib/imports/mapping";
-import { getUniversityProfile } from "@/lib/university/profile";
+import { getUniversityProfileForRender } from "@/lib/university/profile";
 import { ImportSectionTabs } from "./ImportSectionTabs";
 
 export default async function StudentsImportPage() {
-  await requireRole(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
+  await requireRoleForRender(["SUPER_ADMIN", "ADMIN", "ISSUER"]);
 
-  const profile = await getUniversityProfile();
+  const profile = await getUniversityProfileForRender();
 
   if (!profile) {
     return (

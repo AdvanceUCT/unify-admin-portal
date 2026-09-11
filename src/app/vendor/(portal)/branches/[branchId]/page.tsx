@@ -16,7 +16,7 @@ import { prisma } from "@/lib/db/prisma";
 import { formatMoneyMinor } from "@/lib/formatters";
 import {
   assertBranchAccess,
-  requireApprovedVendorContext,
+  requireApprovedVendorContextForRender,
 } from "@/lib/vendors/context";
 import { encodeLiveVerificationCursor } from "@/lib/vendors/liveVerifications";
 import {
@@ -48,7 +48,7 @@ export default async function VendorBranchPage({
 }: {
   params: Promise<{ branchId: string }>;
 }) {
-  const { context } = await requireApprovedVendorContext();
+  const { context } = await requireApprovedVendorContextForRender();
   const { branchId } = await params;
   assertBranchAccess(context, branchId);
   const branch = await prisma.vendorBranch.findFirst({

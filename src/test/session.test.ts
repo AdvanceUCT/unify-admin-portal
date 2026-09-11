@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   requireAdminSession,
+  requireAdminSessionForRender,
   requireRole,
+  requireRoleForRender,
 } from "@/lib/auth/session";
 
 vi.mock("server-only", () => ({}));
@@ -90,5 +92,38 @@ describe("session helpers", () => {
 
     await expect(requireRole(["SUPER_ADMIN"])).rejects.toThrow("redirect:/vendor");
     expect(redirect).toHaveBeenCalledWith("/vendor");
+  });
+
+  it("applies the same missing-session redirect in render admin guards", async () => {
+    getSessionMock.mockResolvedValueOnce(null);
+
+    await expect(requireAdminSessionForRender()).rejects.toThrow("redirect:/sign-in");
+    expect(redirect).toHaveBeenCalledWith("/sign-in");
+  });
+
+  it("applies the same wrong-type redirect in render admin guards", async () => {
+    getSessionMock.mockResolvedValueOnce({
+      user: {
+        id: "vendor_1",
+        role: null,
+        userType: "VENDOR",
+      },
+    } as Awaited<ReturnType<typeof auth.api.getSession>>);
+
+    await expect(requireRoleForRender(["SUPER_ADMIN"])).rejects.toThrow("redirect:/vendor");
+    expect(redirect).toHaveBeenCalledWith("/vendor");
+  });
+
+  it("applies the same role check in render admin guards", async () => {
+    getSessionMock.mockResolvedValueOnce({
+      user: {
+        id: "user_2",
+        role: "VIEWER",
+        userType: "ADMIN",
+      },
+    } as Awaited<ReturnType<typeof auth.api.getSession>>);
+
+    await expect(requireRoleForRender(["SUPER_ADMIN"])).rejects.toThrow("forbidden");
+    expect(forbidden).toHaveBeenCalled();
   });
 });

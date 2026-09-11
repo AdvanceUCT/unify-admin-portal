@@ -10,16 +10,16 @@ import { Badge } from "@/components/ui/Badge";
 import { VendorApplicationLanding } from "@/features/vendors/VendorApplicationLanding";
 import { VendorVerificationOverview } from "@/features/vendors/VendorVerificationOverview";
 import { prisma } from "@/lib/db/prisma";
-import { requireVendorSession } from "@/lib/auth/session";
-import { getUniversityProfile } from "@/lib/university/profile";
+import { requireVendorSessionForRender } from "@/lib/auth/session";
+import { getUniversityProfileForRender } from "@/lib/university/profile";
 import { getVendorApplicationForUser } from "@/lib/vendors/applications";
-import { getApprovedVendorContextForUser } from "@/lib/vendors/context";
+import { getApprovedVendorContextForUserForRender } from "@/lib/vendors/context";
 import { encodeLiveVerificationCursor } from "@/lib/vendors/liveVerifications";
 import { getVendorVerificationStats, listRecentVendorVerifications } from "@/lib/vendors/verifications";
 
 export default async function VendorDashboardPage() {
-  const session = await requireVendorSession();
-  const context = await getApprovedVendorContextForUser(session.user.id);
+  const session = await requireVendorSessionForRender();
+  const context = await getApprovedVendorContextForUserForRender(session.user.id);
 
   if (context) {
     const vendor = await prisma.vendorProfile.findUnique({
@@ -40,7 +40,7 @@ export default async function VendorDashboardPage() {
     const [stats, recentVerifications, universityProfile] = await Promise.all([
       getVendorVerificationStats(context.vendorProfileId, { branchIds: context.branchIds, inPersonOnly: true }),
       listRecentVendorVerifications(context.vendorProfileId, 5, { branchIds: context.branchIds, inPersonOnly: true }),
-      getUniversityProfile(),
+      getUniversityProfileForRender(),
     ]);
     const viewAllHref = context.branchIds.length === 1
       ? `/vendor/verifications?branchId=${encodeURIComponent(context.branchIds[0])}`
@@ -114,7 +114,7 @@ export default async function VendorDashboardPage() {
 
   const application = await getVendorApplicationForUser(session.user.id);
 
-  const universityProfile = await getUniversityProfile();
+  const universityProfile = await getUniversityProfileForRender();
 
   return (
     <div className="space-y-6">

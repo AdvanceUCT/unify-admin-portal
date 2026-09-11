@@ -8,7 +8,7 @@ import Link from "next/link";
 import { StatusText } from "@/components/ui/StatusText";
 import { prisma } from "@/lib/db/prisma";
 import { formatDateTime, formatMoneyMinor } from "@/lib/formatters";
-import { requireApprovedVendorContext } from "@/lib/vendors/context";
+import { requireApprovedVendorContextForRender } from "@/lib/vendors/context";
 import {
   listVendorVerificationEvents,
   listVendorVerificationUniversities,
@@ -62,7 +62,7 @@ export default async function VendorVerificationsPage({
     university?: string | string[];
   }>;
 }) {
-  const { context } = await requireApprovedVendorContext();
+  const { context } = await requireApprovedVendorContextForRender();
   const params = await searchParams;
   const filters: VendorVerificationEventFilters = {
     branchId: firstParam(params.branchId),

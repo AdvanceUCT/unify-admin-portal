@@ -6,7 +6,7 @@
 "use client";
 
 import { RefreshCw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Avatar } from "@/components/ui/Avatar";
 import { StatusText } from "@/components/ui/StatusText";
@@ -83,15 +83,41 @@ export function LiveVerificationList({
 }) {
   const [items, setItems] = useState(initialItems);
   const [retrying, setRetrying] = useState<string | null>(null);
+  const itemsRef = useRef(initialItems);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    const pending = items.filter((item) => item.status === "PENDING" && item.verificationRequestId);
-    if (pending.length === 0) return;
+    itemsRef.current = items;
+  }, [items]);
 
-    const timer = window.setInterval(async () => {
-      const updates = await Promise.all(pending.map(async (item) => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let controller: AbortController | null = null;
+    let polling = false;
+
+    async function pollPending() {
+      if (cancelled || polling || document.visibilityState !== "visible") return;
+
+      const pending = itemsRef.current.filter((item) => item.status === "PENDING" && item.verificationRequestId);
+      if (pending.length === 0) return;
+
+      polling = true;
+      controller = new AbortController();
+
+      try {
+        const updates = await Promise.all(pending.map(async (item) => {
         try {
-          const response = await fetch(`/api/vendor/verifications/${encodeURIComponent(item.verificationRequestId as string)}`, { cache: "no-store" });
+          const response = await fetch(`/api/vendor/verifications/${encodeURIComponent(item.verificationRequestId as string)}`, {
+            cache: "no-store",
+            signal: controller?.signal,
+          });
           if (!response.ok) return item;
           const result = await response.json();
           return {
@@ -108,24 +134,49 @@ export function LiveVerificationList({
           return item;
         }
       }));
-      setItems((current) => current.map((item) => updates.find((update) => update.id === item.id) ?? item));
-    }, 2_000);
-    return () => window.clearInterval(timer);
-  }, [items]);
+        if (!cancelled) {
+          setItems((current) => current.map((item) => updates.find((update) => update.id === item.id) ?? item));
+        }
+      } finally {
+        controller = null;
+        polling = false;
+      }
+    }
+
+    void pollPending();
+    const timer = window.setInterval(() => void pollPending(), 2_000);
+    const onVisibility = () => { if (document.visibilityState === "visible") void pollPending(); };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      cancelled = true;
+      controller?.abort();
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
 
   useEffect(() => {
     if (!liveCursor) return;
     let cancelled = false;
+    let controller: AbortController | null = null;
     let cursor = liveCursor;
     let polling = false;
 
     async function poll() {
       if (cancelled || document.visibilityState !== "visible" || polling) return;
       polling = true;
+      controller = new AbortController();
       try {
-        const response = await fetch(`/api/vendor/live-verifications?cursor=${encodeURIComponent(cursor)}`, { cache: "no-store" });
+        const params = new URLSearchParams({ cursor });
+        if (branchId) params.set("branchId", branchId);
+        const response = await fetch(`/api/vendor/live-verifications?${params.toString()}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
         if (!response.ok) return;
         const result = await response.json() as { events: LiveEvent[]; nextCursor: string };
+        if (cancelled) return;
         cursor = result.nextCursor;
         const incoming = result.events
           .filter((event) => !branchId || event.branchId === branchId)
@@ -137,7 +188,11 @@ export function LiveVerificationList({
           const next = incoming.filter((item) => !known.has(item.id));
           return next.length > 0 ? [...next, ...current].slice(0, 20) : current;
         });
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        // Keep the cursor unchanged so the next visible poll can retry the same window.
       } finally {
+        controller = null;
         polling = false;
       }
     }
@@ -148,6 +203,7 @@ export function LiveVerificationList({
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       cancelled = true;
+      controller?.abort();
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
@@ -160,12 +216,14 @@ export function LiveVerificationList({
       const response = await fetch(`/api/vendor/verifications/${encodeURIComponent(item.verificationRequestId)}/retry`, { method: "POST" });
       if (response.ok) {
         const result = await response.json();
-        setItems((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, latestDeliveryStatus: result.status ?? currentItem.latestDeliveryStatus } : currentItem));
+        if (mountedRef.current) {
+          setItems((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, latestDeliveryStatus: result.status ?? currentItem.latestDeliveryStatus } : currentItem));
+        }
       }
     } catch {
       // The failed delivery remains visible so the vendor can retry again.
     } finally {
-      setRetrying(null);
+      if (mountedRef.current) setRetrying(null);
     }
   }
 

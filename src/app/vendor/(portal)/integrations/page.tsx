@@ -4,11 +4,11 @@
  */
 
 import { VendorIntegrationSettings } from "@/features/vendors/VendorIntegrationSettings";
-import { requireVendorOwnerContext } from "@/lib/vendors/context";
+import { requireVendorOwnerContextForRender } from "@/lib/vendors/context";
 import { getVendorWebhookConfig, listVendorApiCredentials } from "@/lib/vendors/integrations";
 
 export default async function VendorIntegrationsPage() {
-  const { context } = await requireVendorOwnerContext();
+  const { context } = await requireVendorOwnerContextForRender();
 
   const [apiKeys, webhook] = await Promise.all([
     listVendorApiCredentials(context.vendorProfileId),
