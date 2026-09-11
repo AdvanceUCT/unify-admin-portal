@@ -11,6 +11,9 @@ import type { ApprovedVendorContext } from "@/lib/vendors/context";
 
 const DEFAULT_PAYMENT_LIMIT = 20;
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
+const ZERO_MINOR = BigInt(0);
+
+type RefundStatus = "REFUNDABLE" | "EXPIRED" | "FULLY_REFUNDED";
 
 type Cursor = { completedAt: string; id: string };
 
@@ -61,11 +64,27 @@ function serializePayment(transaction: {
       lastName: string;
     } | null;
   } | null;
+  linkedTransactions: Array<{
+    amountMinor: bigint;
+    status: WalletTransactionStatus;
+    type: WalletTransactionType;
+  }>;
 }) {
   const student = transaction.initiatorAccount?.student;
   const studentName = student
     ? `${student.firstName} ${student.lastName}`.trim() || "Student"
     : "Student";
+  const totalRefundedMinor = transaction.linkedTransactions.reduce((total, linkedTransaction) => (
+    linkedTransaction.type === WalletTransactionType.REFUND &&
+      linkedTransaction.status === WalletTransactionStatus.COMPLETED
+      ? total + linkedTransaction.amountMinor
+      : total
+  ), ZERO_MINOR);
+  const remainingRefundableMinor = transaction.amountMinor - totalRefundedMinor;
+  const refundStatus: RefundStatus =
+    remainingRefundableMinor <= ZERO_MINOR ? "FULLY_REFUNDED" :
+    !transaction.refundableUntil || Date.now() > transaction.refundableUntil.getTime() ? "EXPIRED" :
+    "REFUNDABLE";
 
   return {
     eventId: transaction.id,
@@ -77,6 +96,9 @@ function serializePayment(transaction: {
     amountMinor: toSafeNumber(transaction.amountMinor),
     currency: transaction.currency as "ZAR",
     completedAt: (transaction.completedAt ?? transaction.createdAt).toISOString(),
+    totalRefundedMinor: toSafeNumber(totalRefundedMinor),
+    remainingRefundableMinor: toSafeNumber(remainingRefundableMinor > ZERO_MINOR ? remainingRefundableMinor : ZERO_MINOR),
+    refundStatus,
     ...(transaction.reference ? { reference: transaction.reference } : {}),
     ...(transaction.refundableUntil ? { refundableUntil: transaction.refundableUntil.toISOString() } : {}),
   };
@@ -97,6 +119,10 @@ export async function listRecentVendorPayments(
       completedAt: { not: null },
     },
     include: {
+      linkedTransactions: {
+        where: { type: WalletTransactionType.REFUND, status: WalletTransactionStatus.COMPLETED },
+        select: { amountMinor: true, status: true, type: true },
+      },
       vendorBranch: { select: { name: true } },
       initiatorAccount: {
         select: {
@@ -146,6 +172,10 @@ export async function getLivePaymentEvents(
       ],
     },
     include: {
+      linkedTransactions: {
+        where: { type: WalletTransactionType.REFUND, status: WalletTransactionStatus.COMPLETED },
+        select: { amountMinor: true, status: true, type: true },
+      },
       vendorBranch: { select: { name: true } },
       initiatorAccount: {
         select: {

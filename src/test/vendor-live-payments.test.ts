@@ -26,8 +26,9 @@ const payment = {
   createdAt: new Date("2026-09-11T08:09:58.000Z"),
   reference: "spend-1",
   vendorBranchId: "branch-1",
-  refundableUntil: new Date("2026-09-11T08:20:00.000Z"),
+  refundableUntil: new Date("2999-09-11T08:20:00.000Z"),
   vendorBranch: { name: "Main Branch" },
+  linkedTransactions: [],
   initiatorAccount: {
     student: {
       studentNumber: "VOSCAL099",
@@ -59,12 +60,20 @@ describe("live vendor payment feed", () => {
       studentNumber: "VOSCAL099",
       amountMinor: 1250,
       reference: "spend-1",
+      totalRefundedMinor: 0,
+      remainingRefundableMinor: 1250,
+      refundStatus: "REFUNDABLE",
     });
     expect(database.walletTransaction.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         type: "SPEND",
         status: "COMPLETED",
         vendorBranchId: { in: ["branch-1"] },
+      }),
+      include: expect.objectContaining({
+        linkedTransactions: expect.objectContaining({
+          where: { type: "REFUND", status: "COMPLETED" },
+        }),
       }),
     }));
   });
