@@ -76,33 +76,27 @@ export default async function PaymentApplicationsPage({
 
                 <div className="flex flex-wrap items-center gap-3">
                   {acceptance && <Badge tone={acceptance.tone}>{acceptance.label}</Badge>}
-                  {partnership.campusStatus ? (
-                    <Badge tone={partnership.campusStatus === "ON_CAMPUS" ? "success" : "version"}>
-                      {partnership.campusStatus === "ON_CAMPUS" ? "On campus" : "Off campus"}
-                    </Badge>
-                  ) : (
-                    <form action={setCampusStatusAction} className="flex items-center gap-2">
-                      <input type="hidden" name="partnershipId" value={partnership.id} />
-                      <select
-                        className="h-9 rounded-md border border-border bg-surface px-2 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-                        defaultValue=""
-                        name="campusStatus"
-                        required
-                      >
-                        <option disabled value="">
-                          Classify campus status
-                        </option>
-                        <option value="ON_CAMPUS">On campus</option>
-                        <option value="OFF_CAMPUS">Off campus</option>
-                      </select>
-                      <button
-                        className="h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
-                        type="submit"
-                      >
-                        Save
-                      </button>
-                    </form>
-                  )}
+                  <form action={setCampusStatusAction} className="flex items-center gap-2">
+                    <input type="hidden" name="partnershipId" value={partnership.id} />
+                    <select
+                      className="h-9 rounded-md border border-border bg-surface px-2 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+                      defaultValue={partnership.campusStatus ?? ""}
+                      name="campusStatus"
+                      required
+                    >
+                      <option disabled value="">
+                        Classify campus status
+                      </option>
+                      <option value="ON_CAMPUS">On campus</option>
+                      <option value="OFF_CAMPUS">Off campus</option>
+                    </select>
+                    <button
+                      className="h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
+                      type="submit"
+                    >
+                      Save
+                    </button>
+                  </form>
                 </div>
               </div>
             );

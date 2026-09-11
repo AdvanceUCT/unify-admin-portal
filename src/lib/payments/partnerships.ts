@@ -8,7 +8,7 @@ import "server-only";
 import { z } from "zod";
 
 import type { Prisma } from "@/generated/prisma/client";
-import { AuditAction, VendorApplicationStatus } from "@/generated/prisma/enums";
+import { AuditAction, CampusStatus, VendorApplicationStatus } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit/audit";
 import { prisma } from "@/lib/db/prisma";
 import { runSerializableTransaction } from "@/lib/db/transaction";
@@ -20,12 +20,17 @@ type Database = Pick<
 
 /**
  * Called when a vendor's verifier application is approved (see
- * `reviewVendorApplication` in `lib/vendors/applications.ts`). Creates the
- * partnership row for this deployment's single university, if one exists and
- * a partnership doesn't already exist. Runs inside the caller's transaction.
+ * `reviewVendorApplication` in `lib/vendors/applications.ts`), which now
+ * collects campusStatus as part of that same approval. Creates the
+ * partnership row for this deployment's single university if one doesn't
+ * already exist, and sets campusStatus on it either way — the admin's
+ * selection at approval time takes precedence over whatever was there
+ * before (e.g. a stale value from an earlier rejected/revoked cycle). Runs
+ * inside the caller's transaction.
  */
 export async function ensurePartnershipForApprovedVendor(
   vendorProfileId: string,
+  campusStatus: CampusStatus,
   database: Database = prisma,
 ) {
   const university = await database.universityProfile.findFirst({ select: { id: true } });
@@ -38,8 +43,8 @@ export async function ensurePartnershipForApprovedVendor(
         universityProfileId: university.id,
       },
     },
-    create: { vendorProfileId, universityProfileId: university.id },
-    update: {},
+    create: { vendorProfileId, universityProfileId: university.id, campusStatus },
+    update: { campusStatus },
   });
 }
 
@@ -211,10 +216,19 @@ export async function reviewVendorPaymentApplication({
   return runSerializableTransaction(async (transaction) => {
     const application = await transaction.vendorPaymentApplication.findUnique({
       where: { id: applicationId },
+      include: { partnership: { select: { campusStatus: true } } },
     });
 
     if (!application || application.status !== VendorApplicationStatus.PENDING) {
       throw new Error("This request is not pending review.");
+    }
+
+    // Re-read fresh here rather than trusting the value at submission time —
+    // classification can change between a vendor applying and an admin
+    // reviewing, and this transaction is the actual access-control gate for
+    // payment acceptance, not just a workflow nicety.
+    if (decision === VendorApplicationStatus.APPROVED && application.partnership.campusStatus !== CampusStatus.ON_CAMPUS) {
+      throw new Error("This vendor must be classified as on-campus before payment acceptance can be approved.");
     }
 
     const updateResult = await transaction.vendorPaymentApplication.updateMany({

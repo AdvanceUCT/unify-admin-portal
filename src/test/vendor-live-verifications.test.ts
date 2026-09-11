@@ -17,6 +17,7 @@ const context = {
   companyName: "Cafe",
   role: "STAFF" as const,
   branchIds: ["branch-1"],
+  campusStatus: null,
 };
 const completedAt = new Date("2026-08-04T12:00:01.000Z");
 const verification = {

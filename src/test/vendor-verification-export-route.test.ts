@@ -17,6 +17,7 @@ describe("vendor verification CSV export route", () => {
     } as Awaited<ReturnType<typeof getCurrentVendorSession>>);
     vi.mocked(getApprovedVendorContextForUser).mockResolvedValue({
       branchIds: ["branch-001"],
+      campusStatus: null,
       companyName: "Vendor",
       role: "OWNER",
       userId: "user-001",

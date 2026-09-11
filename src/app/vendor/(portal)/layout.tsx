@@ -22,6 +22,10 @@ const ownerNavItems: PortalNavItem[] = [
   { href: "/vendor/branches", label: "Branches", icon: "branches" },
   { href: "/vendor/staff", label: "Staff", icon: "staff" },
   { href: "/vendor/application", label: "Application", icon: "application" },
+  // Shown to every owner regardless of campusStatus (see ApprovedVendorContext.campusStatus)
+  // — an off-campus or unclassified vendor still needs to see this tab exists and land on
+  // an explanation, not have it silently disappear. `/vendor/payments` itself branches on
+  // campusStatus to decide what to render.
   { href: "/vendor/payments", label: "Payments", icon: "payments" },
   { href: "/vendor/profile", label: "Profile", icon: "profile" },
   { href: "/vendor/integrations", label: "Integrations", icon: "integrations" },

@@ -19,6 +19,30 @@ const STATUS_BADGE = {
 export default async function VendorPaymentsPage() {
   const { context } = await requireVendorOwnerContext();
 
+  if (context.campusStatus !== "ON_CAMPUS") {
+    return (
+      <div className="space-y-6">
+        <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+          <div className="border-b border-border px-5 py-4">
+            <h2 className="text-section-title text-fg">Payment acceptance</h2>
+          </div>
+          <div className="p-5">
+            <p className="text-sm text-fg-muted">
+              Payment acceptance is currently available to on-campus vendors only.
+            </p>
+            <p className="mt-2 text-sm text-fg-subtle">
+              {context.campusStatus === "OFF_CAMPUS"
+                ? "Your business is classified as off-campus, so this isn't available right now."
+                : "Your campus status hasn't been classified yet."}{" "}
+              If this doesn&apos;t match your situation, contact your university administrator to
+              have it corrected.
+            </p>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   const partnership = await getPartnershipForVendor(context.vendorProfileId);
   const application = partnership?.paymentApplications[0] ?? null;
   const canApply = !application || application.status === "REJECTED" || application.status === "REVOKED";

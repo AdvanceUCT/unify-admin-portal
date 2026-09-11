@@ -14,7 +14,11 @@ describe("approved vendor context", () => {
     database.vendorMembership.findFirst.mockResolvedValue({
       vendorProfileId: "vendor-1",
       role: "OWNER",
-      vendorProfile: { companyName: "Cafe", branches: [{ id: "branch-1" }, { id: "branch-2" }] },
+      vendorProfile: {
+        companyName: "Cafe",
+        branches: [{ id: "branch-1" }, { id: "branch-2" }],
+        partnerships: [{ campusStatus: "ON_CAMPUS" }],
+      },
       branches: [],
     });
     await expect(getApprovedVendorContextForUser("user-1")).resolves.toEqual({
@@ -23,6 +27,7 @@ describe("approved vendor context", () => {
       companyName: "Cafe",
       role: "OWNER",
       branchIds: ["branch-1", "branch-2"],
+      campusStatus: "ON_CAMPUS",
     });
   });
 
@@ -30,10 +35,15 @@ describe("approved vendor context", () => {
     database.vendorMembership.findFirst.mockResolvedValue({
       vendorProfileId: "vendor-1",
       role: "STAFF",
-      vendorProfile: { companyName: "Cafe", branches: [{ id: "branch-1" }, { id: "branch-2" }] },
+      vendorProfile: {
+        companyName: "Cafe",
+        branches: [{ id: "branch-1" }, { id: "branch-2" }],
+        partnerships: [],
+      },
       branches: [{ vendorBranchId: "branch-2" }],
     });
     const context = await getApprovedVendorContextForUser("staff-1");
     expect(context?.branchIds).toEqual(["branch-2"]);
+    expect(context?.campusStatus).toBeNull();
   });
 });

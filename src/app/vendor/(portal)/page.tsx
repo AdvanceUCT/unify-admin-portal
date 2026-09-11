@@ -47,7 +47,8 @@ export default async function VendorDashboardPage() {
     const viewAllHref = context.branchIds.length === 1
       ? `/vendor/verifications?branchId=${encodeURIComponent(context.branchIds[0])}`
       : "/vendor/verifications";
-    const hasNotAppliedForPayments = partnership && partnership.paymentApplications.length === 0;
+    const hasNotAppliedForPayments =
+      context.campusStatus === "ON_CAMPUS" && partnership && partnership.paymentApplications.length === 0;
 
     return (
       <div className="space-y-6">

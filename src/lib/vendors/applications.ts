@@ -7,7 +7,7 @@ import "server-only";
 
 import { z } from "zod";
 
-import { AuditAction, VendorApplicationStatus } from "@/generated/prisma/enums";
+import { AuditAction, CampusStatus, VendorApplicationStatus } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit/audit";
 import { env } from "@/lib/config/env";
 import { hasPrismaErrorCode, runSerializableTransaction } from "@/lib/db/transaction";
@@ -381,15 +381,21 @@ export async function reviewVendorApplication({
   decision,
   reviewerId,
   notes,
+  campusStatus,
 }: {
   applicationId: string;
   decision: "APPROVED" | "REJECTED";
   reviewerId: string;
   notes?: string;
+  /** Required when decision is APPROVED — see ensurePartnershipForApprovedVendor. */
+  campusStatus?: CampusStatus;
 }) {
   const normalizedNotes = notes?.trim();
   if (decision === VendorApplicationStatus.REJECTED && !normalizedNotes) {
     throw new Error("A rejection reason is required.");
+  }
+  if (decision === VendorApplicationStatus.APPROVED && !campusStatus) {
+    throw new Error("Select whether this vendor operates on campus before approving.");
   }
 
   let approvedVendor: { vendorProfileId: string; companyName: string } | undefined;
@@ -461,7 +467,7 @@ export async function reviewVendorApplication({
           update: { role: "OWNER", active: true },
         });
 
-        await ensurePartnershipForApprovedVendor(application.vendorProfileId, transaction);
+        await ensurePartnershipForApprovedVendor(application.vendorProfileId, campusStatus!, transaction);
 
         approvedVendor = { vendorProfileId: application.vendorProfileId, companyName };
       }

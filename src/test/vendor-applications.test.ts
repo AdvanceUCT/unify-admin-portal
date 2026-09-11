@@ -246,8 +246,21 @@ describe("reviewVendorApplication", () => {
         applicationId: "app_1",
         decision: "APPROVED",
         reviewerId: "admin_1",
+        campusStatus: "ON_CAMPUS",
       }),
     ).rejects.toThrow("This application is not pending review.");
+  });
+
+  it("requires a campus status before approving an application", async () => {
+    await expect(
+      reviewVendorApplication({
+        applicationId: "app_1",
+        decision: "APPROVED",
+        reviewerId: "admin_1",
+      }),
+    ).rejects.toThrow("Select whether this vendor operates on campus before approving.");
+
+    expect(database.runTransaction).not.toHaveBeenCalled();
   });
 
   it("applies the submitted snapshot to the live profile on approval", async () => {
@@ -289,6 +302,7 @@ describe("reviewVendorApplication", () => {
       applicationId: "app_1",
       decision: "APPROVED",
       reviewerId: "admin_1",
+      campusStatus: "ON_CAMPUS",
     });
 
     expect(database.transaction.vendorProfile.update).toHaveBeenCalledWith({
@@ -322,6 +336,46 @@ describe("reviewVendorApplication", () => {
       }),
       database.transaction,
     );
+  });
+
+  it("sets the admin's campusStatus selection on the vendor's partnership atomically on approval", async () => {
+    database.transaction.vendorApplication.findUnique.mockResolvedValueOnce(pendingApplication);
+    database.transaction.vendorApplication.updateMany.mockResolvedValueOnce({ count: 1 });
+    database.transaction.vendorApplication.findUniqueOrThrow.mockResolvedValueOnce({
+      id: "app_1",
+      status: VendorApplicationStatus.APPROVED,
+    });
+    database.transaction.vendorProfile.findUnique.mockResolvedValueOnce({
+      ...vendorProfile,
+      companyName: "Acme Corp",
+      verificationUrl: "https://verify.example.com/verify/existing",
+      agentServicePointId: "sp_existing",
+      defaultBranchId: "branch_1",
+      branches: [{
+        id: "branch_1",
+        agentServicePointId: "sp_existing",
+        verificationUrl: "https://verify.example.com/verify/existing",
+      }],
+    });
+    database.transaction.universityProfile.findFirst.mockResolvedValueOnce({ id: "university_1" });
+
+    await reviewVendorApplication({
+      applicationId: "app_1",
+      decision: "APPROVED",
+      reviewerId: "admin_1",
+      campusStatus: "OFF_CAMPUS",
+    });
+
+    expect(database.transaction.vendorUniversityPartnership.upsert).toHaveBeenCalledWith({
+      where: {
+        vendorProfileId_universityProfileId: {
+          vendorProfileId: "profile_1",
+          universityProfileId: "university_1",
+        },
+      },
+      create: { vendorProfileId: "profile_1", universityProfileId: "university_1", campusStatus: "OFF_CAMPUS" },
+      update: { campusStatus: "OFF_CAMPUS" },
+    });
   });
 
   it("does not change the live profile when rejecting an application", async () => {

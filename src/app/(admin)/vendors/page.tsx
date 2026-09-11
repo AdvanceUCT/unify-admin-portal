@@ -23,6 +23,7 @@ import {
   rejectVendorApplicationAction,
   revokeVendorApplicationAction,
 } from "./actions";
+import { ApproveForm } from "./ApproveForm";
 import { RejectForm } from "./RejectForm";
 import { RevokeButton } from "./RevokeButton";
 
@@ -257,16 +258,7 @@ export default async function VendorsPage({
                               <Eye aria-hidden className="size-4" />
                               View
                             </Link>
-                            <form action={approveVendorApplicationAction}>
-                              <input type="hidden" name="applicationId" value={application.id} />
-                              <button
-                                className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-success-border bg-success-bg px-3 text-sm font-medium text-success-fg transition hover:bg-success-border"
-                                type="submit"
-                              >
-                                <Check aria-hidden className="size-4" />
-                                Approve
-                              </button>
-                            </form>
+                            <ApproveForm action={approveVendorApplicationAction} applicationId={application.id} />
                             <RejectForm
                               action={rejectVendorApplicationAction}
                               applicationId={application.id}

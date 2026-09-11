@@ -28,11 +28,21 @@ async function reviewAction(formData: FormData, decision: "APPROVED" | "REJECTED
     throw new Error("A rejection reason is required.");
   }
 
+  let campusStatus: "ON_CAMPUS" | "OFF_CAMPUS" | undefined;
+  if (decision === "APPROVED") {
+    const rawCampusStatus = String(formData.get("campusStatus") ?? "");
+    if (rawCampusStatus !== "ON_CAMPUS" && rawCampusStatus !== "OFF_CAMPUS") {
+      throw new Error("Select whether this vendor operates on campus before approving.");
+    }
+    campusStatus = rawCampusStatus;
+  }
+
   await reviewVendorApplication({
     applicationId,
     decision,
     reviewerId: session.user.id,
     notes: notes || undefined,
+    campusStatus,
   });
 
   revalidatePath("/vendors", "layout");

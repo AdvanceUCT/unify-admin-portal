@@ -3,7 +3,6 @@
  * @module app/(admin)/vendors/[applicationId]/page
  */
 
-import { Check } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import { BackButton } from "@/components/ui/BackButton";
@@ -16,6 +15,7 @@ import {
   rejectVendorApplicationAction,
   revokeVendorApplicationAction,
 } from "../actions";
+import { ApproveForm } from "../ApproveForm";
 import { RejectForm } from "../RejectForm";
 import { RevokeButton } from "../RevokeButton";
 import { MarkApplicationViewed } from "./MarkApplicationViewed";
@@ -85,16 +85,7 @@ export default async function VendorApplicationDetailPage({
           )}
           {application.status === "PENDING" && (
             <>
-              <form action={approveVendorApplicationAction}>
-                <input name="applicationId" type="hidden" value={application.id} />
-                <button
-                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-success-border bg-success-bg px-3 text-sm font-medium text-success-fg transition hover:bg-success-border"
-                  type="submit"
-                >
-                  <Check aria-hidden className="size-4" />
-                  Approve
-                </button>
-              </form>
+              <ApproveForm action={approveVendorApplicationAction} applicationId={application.id} />
               <RejectForm action={rejectVendorApplicationAction} applicationId={application.id} />
             </>
           )}
