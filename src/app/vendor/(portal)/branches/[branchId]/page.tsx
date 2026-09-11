@@ -53,7 +53,16 @@ export default async function VendorBranchPage({
   assertBranchAccess(context, branchId);
   const branch = await prisma.vendorBranch.findFirst({
     where: { id: branchId, vendorProfileId: context.vendorProfileId },
-    include: { vendorProfile: { select: { defaultBranchId: true } } },
+    include: {
+      paymentAcceptance: { select: { qrIdentifier: true, status: true } },
+      vendorProfile: {
+        select: {
+          defaultBranchId: true,
+          paymentProfile: { select: { status: true } },
+          walletAccount: { select: { status: true, currency: true } },
+        },
+      },
+    },
   });
   if (!branch) notFound();
 
@@ -69,6 +78,21 @@ export default async function VendorBranchPage({
   ]);
   const qrSvg = branch.verificationUrl
     ? await QRCode.toString(branch.verificationUrl, { type: "svg", margin: 1 })
+    : null;
+  const paymentQrUrl = branch.paymentAcceptance?.qrIdentifier
+    ? `unifywallet://pay/${branch.paymentAcceptance.qrIdentifier}`
+    : null;
+  const paymentQrEnabled = Boolean(
+    paymentQrUrl &&
+      branch.active &&
+      branch.status === "ACTIVE" &&
+      branch.paymentAcceptance?.status === "ACTIVE" &&
+      branch.vendorProfile.paymentProfile?.status === "APPROVED" &&
+      branch.vendorProfile.walletAccount?.status === "ACTIVE" &&
+      branch.vendorProfile.walletAccount.currency === "ZAR",
+  );
+  const paymentQrSvg = paymentQrEnabled && paymentQrUrl
+    ? await QRCode.toString(paymentQrUrl, { type: "svg", margin: 1 })
     : null;
   const isDefault = branch.vendorProfile.defaultBranchId === branch.id;
 
@@ -134,6 +158,10 @@ export default async function VendorBranchPage({
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="flex flex-col items-center gap-4 rounded-xl border border-border bg-surface p-6 text-center shadow-md">
+          <div>
+            <h2 className="text-section-title text-fg">Verification QR</h2>
+            <p className="mt-1 text-sm text-fg-subtle">Students scan this to present their credential.</p>
+          </div>
           {qrSvg ? (
             <div
               className="size-52"
@@ -154,6 +182,35 @@ export default async function VendorBranchPage({
           {branch.verificationUrl ? (
             <p className="max-w-full break-all text-xs text-fg-subtle">
               {branch.verificationUrl}
+            </p>
+          ) : null}
+        </section>
+
+        <section className="flex flex-col items-center gap-4 rounded-xl border border-border bg-surface p-6 text-center shadow-md">
+          <div>
+            <h2 className="text-section-title text-fg">Payment QR</h2>
+            <p className="mt-1 text-sm text-fg-subtle">Students scan this to pay this branch from their UNIFY wallet.</p>
+          </div>
+          {paymentQrSvg ? (
+            <div
+              className="size-52"
+              dangerouslySetInnerHTML={{ __html: paymentQrSvg }}
+              aria-label={`${branch.name} payment QR code`}
+            />
+          ) : (
+            <p className="py-20 text-sm text-fg-subtle">
+              Payment QR unavailable — this branch is not approved for wallet payments.
+            </p>
+          )}
+          {paymentQrSvg ? (
+            <QrCodeActions
+              svg={paymentQrSvg}
+              filename={`${branch.name.toLowerCase().replace(/\s+/g, "-")}-payment-qr`}
+            />
+          ) : null}
+          {paymentQrUrl && paymentQrEnabled ? (
+            <p className="max-w-full break-all text-xs text-fg-subtle">
+              {paymentQrUrl}
             </p>
           ) : null}
         </section>

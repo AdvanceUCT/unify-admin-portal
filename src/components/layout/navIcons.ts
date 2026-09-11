@@ -6,6 +6,7 @@
 import {
   Building2,
   ClipboardList,
+  CreditCard,
   Gauge,
   KeyRound,
   Layers3,
@@ -34,6 +35,7 @@ export const NAV_ICONS = {
   integrations: KeyRound,
   invoices: Receipt,
   overview: Gauge,
+  payments: CreditCard,
   profile: UserCog,
   schemas: Layers3,
   settings: Settings,
