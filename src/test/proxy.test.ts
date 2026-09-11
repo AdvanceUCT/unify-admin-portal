@@ -77,9 +77,13 @@ describe("proxy", () => {
       "/api/wallet/v1/activations/verify",
       "/api/wallet/v1/sessions/refresh",
       "/api/wallet/v1/sessions/revoke",
+      "/api/wallet/v1/activity",
+      "/api/wallet/v1/balance",
+      "/api/wallet/v1/payments",
       "/api/wallet/v1/topups",
       "/api/wallet/v1/topups/topup-1",
       "/api/wallet/v1/topups/topup-1/reconcile",
+      "/api/wallet/v1/vendors/qr-12345678",
       // Server-to-server: HMAC-signed webhooks and CRON_SECRET-guarded jobs.
       "/api/webhooks/agent",
       "/api/webhooks/paystack",
