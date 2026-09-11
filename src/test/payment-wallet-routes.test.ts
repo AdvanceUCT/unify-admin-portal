@@ -12,14 +12,24 @@ vi.mock("@/lib/payments/topups", () => ({
   getWalletTopup: vi.fn(),
   reconcileWalletTopup: vi.fn(),
 }));
+vi.mock("@/lib/payments/walletMobile", () => ({
+  getMobileWalletBalance: vi.fn(),
+  listMobileWalletActivity: vi.fn(),
+  resolveWalletPaymentDestination: vi.fn(),
+  submitWalletPayment: vi.fn(),
+}));
 
 import { POST as requestActivation } from "@/app/api/wallet/v1/activations/request/route";
+import { GET as getActivity } from "@/app/api/wallet/v1/activity/route";
+import { GET as getBalance } from "@/app/api/wallet/v1/balance/route";
+import { POST as submitPayment } from "@/app/api/wallet/v1/payments/route";
 import { POST as verifyActivation } from "@/app/api/wallet/v1/activations/verify/route";
 import { POST as refreshSession } from "@/app/api/wallet/v1/sessions/refresh/route";
 import { POST as revokeSession } from "@/app/api/wallet/v1/sessions/revoke/route";
 import { POST as createTopup } from "@/app/api/wallet/v1/topups/route";
 import { GET as getTopup } from "@/app/api/wallet/v1/topups/[topUpId]/route";
 import { POST as reconcileTopup } from "@/app/api/wallet/v1/topups/[topUpId]/reconcile/route";
+import { GET as resolveVendor } from "@/app/api/wallet/v1/vendors/[qrIdentifier]/route";
 import {
   authenticateWalletBearer,
   refreshStudentPaymentSession,
@@ -28,6 +38,12 @@ import {
   verifyStudentPaymentActivation,
 } from "@/lib/payments/walletSession";
 import { createWalletTopup, getWalletTopup, reconcileWalletTopup } from "@/lib/payments/topups";
+import {
+  getMobileWalletBalance,
+  listMobileWalletActivity,
+  resolveWalletPaymentDestination,
+  submitWalletPayment,
+} from "@/lib/payments/walletMobile";
 
 function jsonRequest(path: string, body: unknown, token = "access-token") {
   return new Request(`http://localhost:3000${path}`, {
@@ -151,5 +167,109 @@ describe("payment wallet API route contracts", () => {
     });
     await expect(getResponse.json()).resolves.toEqual(topup);
     await expect(reconcileResponse.json()).resolves.toEqual({ ...topup, status: "UNKNOWN", authorizationUrl: undefined });
+  });
+
+  it("returns balance and activity for the authenticated student", async () => {
+    vi.mocked(getMobileWalletBalance).mockResolvedValue({
+      postedBalanceMinor: 5000,
+      currency: "ZAR",
+      accountStatus: "ACTIVE",
+      updatedAt: "2026-09-10T10:00:00.000Z",
+    });
+    vi.mocked(listMobileWalletActivity).mockResolvedValue([
+      {
+        id: "txn-1",
+        type: "TOPUP",
+        status: "COMPLETED",
+        direction: "CREDIT",
+        amountMinor: 5000,
+        currency: "ZAR",
+        title: "Wallet top-up",
+        reference: "unify-wlt-abc",
+        completedAt: "2026-09-10T10:00:00.000Z",
+        createdAt: "2026-09-10T10:00:00.000Z",
+      },
+    ]);
+
+    const balanceResponse = await getBalance(new Request("http://localhost:3000/api/wallet/v1/balance", {
+      headers: { authorization: "Bearer access-token" },
+    }));
+    const activityResponse = await getActivity(new Request("http://localhost:3000/api/wallet/v1/activity?limit=10", {
+      headers: { authorization: "Bearer access-token" },
+    }));
+
+    expect(getMobileWalletBalance).toHaveBeenCalledWith("student-1");
+    expect(listMobileWalletActivity).toHaveBeenCalledWith("student-1", 10);
+    await expect(balanceResponse.json()).resolves.toEqual({
+      postedBalanceMinor: 5000,
+      currency: "ZAR",
+      accountStatus: "ACTIVE",
+      updatedAt: "2026-09-10T10:00:00.000Z",
+    });
+    await expect(activityResponse.json()).resolves.toEqual([
+      {
+        id: "txn-1",
+        type: "TOPUP",
+        status: "COMPLETED",
+        direction: "CREDIT",
+        amountMinor: 5000,
+        currency: "ZAR",
+        title: "Wallet top-up",
+        reference: "unify-wlt-abc",
+        completedAt: "2026-09-10T10:00:00.000Z",
+        createdAt: "2026-09-10T10:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("resolves vendor destinations and submits internal wallet payments", async () => {
+    vi.mocked(resolveWalletPaymentDestination).mockResolvedValue({
+      vendorName: "Campus Cafe",
+      branchName: "Main Campus",
+      currency: "ZAR",
+      vendorBranchId: "branch-1",
+    });
+    vi.mocked(submitWalletPayment).mockResolvedValue({
+      vendorName: "Campus Cafe",
+      branchName: "Main Campus",
+      currency: "ZAR",
+      transactionId: "txn-1",
+      amountMinor: 1250,
+      resultingBalanceMinor: 3750,
+      completedAt: "2026-09-10T10:00:00.000Z",
+      status: "COMPLETED",
+    });
+
+    const vendorResponse = await resolveVendor(new Request("http://localhost:3000/api/wallet/v1/vendors/qr-12345678", {
+      headers: { authorization: "Bearer access-token" },
+    }), { params: Promise.resolve({ qrIdentifier: "qr-12345678" }) });
+    const paymentResponse = await submitPayment(jsonRequest("/api/wallet/v1/payments", {
+      qrIdentifier: "qr-12345678",
+      amountMinor: 1250,
+      idempotencyKey: "spend-1",
+    }));
+
+    expect(resolveWalletPaymentDestination).toHaveBeenCalledWith("qr-12345678");
+    expect(submitWalletPayment).toHaveBeenCalledWith({
+      studentId: "student-1",
+      qrIdentifier: "qr-12345678",
+      amountMinor: 1250,
+      idempotencyKey: "spend-1",
+    });
+    await expect(vendorResponse.json()).resolves.toEqual({
+      vendorName: "Campus Cafe",
+      branchName: "Main Campus",
+      currency: "ZAR",
+    });
+    await expect(paymentResponse.json()).resolves.toEqual({
+      vendorName: "Campus Cafe",
+      branchName: "Main Campus",
+      currency: "ZAR",
+      transactionId: "txn-1",
+      amountMinor: 1250,
+      resultingBalanceMinor: 3750,
+      completedAt: "2026-09-10T10:00:00.000Z",
+      status: "COMPLETED",
+    });
   });
 });
