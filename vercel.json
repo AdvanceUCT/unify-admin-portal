@@ -5,6 +5,7 @@
   "crons": [
     { "path": "/api/cron/credential-automation", "schedule": "5 22 * * *" },
     { "path": "/api/cron/vendor-billing", "schedule": "15 22 * * *" },
-    { "path": "/api/cron/wallet-topups-reconcile", "schedule": "25 22 * * *" }
+    { "path": "/api/cron/wallet-topups-reconcile", "schedule": "25 22 * * *" },
+    { "path": "/api/cron/vendor-wallet-payouts", "schedule": "35 22 * * *" }
   ]
 }
