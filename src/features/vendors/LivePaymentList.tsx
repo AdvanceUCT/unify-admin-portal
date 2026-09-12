@@ -22,7 +22,37 @@ export type LivePaymentEvent = {
   completedAt: string;
   reference?: string;
   refundableUntil?: string;
+  totalRefundedMinor: number;
+  remainingRefundableMinor: number;
+  refundStatus: "REFUNDABLE" | "EXPIRED" | "FULLY_REFUNDED";
 };
+
+type RefundResponse = {
+  originalTransactionId: string;
+  refundTransactionId: string;
+  refundedAmountMinor: number;
+  totalRefundedMinor: number;
+  remainingRefundableMinor: number;
+  refundStatus: LivePaymentEvent["refundStatus"];
+  refundableUntil?: string;
+};
+
+function parseRefundAmountMinor(value: string) {
+  const normalized = value.trim().replace(",", ".");
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) return null;
+  const [rand, cents = ""] = normalized.split(".");
+  const amountMinor = Number(rand) * 100 + Number(cents.padEnd(2, "0"));
+  return Number.isSafeInteger(amountMinor) && amountMinor > 0 ? amountMinor : null;
+}
+
+async function parseErrorMessage(response: Response) {
+  try {
+    const body = await response.json() as { error?: { message?: string } };
+    return body.error?.message ?? "Refund could not be completed.";
+  } catch {
+    return "Refund could not be completed.";
+  }
+}
 
 export function LivePaymentList({
   branchId,
@@ -34,6 +64,8 @@ export function LivePaymentList({
   liveCursor?: string;
 }) {
   const [items, setItems] = useState(initialItems);
+  const [refundMessage, setRefundMessage] = useState<string>();
+  const [refundingTransactionId, setRefundingTransactionId] = useState<string>();
   const itemsRef = useRef(initialItems);
 
   useEffect(() => {
@@ -91,9 +123,64 @@ export function LivePaymentList({
     };
   }, [branchId, liveCursor]);
 
+  async function refundPayment(payment: LivePaymentEvent) {
+    if (payment.refundStatus !== "REFUNDABLE") return;
+    setRefundMessage(undefined);
+    const amountText = window.prompt(
+      `Refund amount for ${payment.studentName}. Maximum ${formatMoneyMinor(payment.remainingRefundableMinor, payment.currency)}.`,
+      (payment.remainingRefundableMinor / 100).toFixed(2),
+    );
+    if (amountText === null) return;
+    const amountMinor = parseRefundAmountMinor(amountText);
+    if (!amountMinor || amountMinor > payment.remainingRefundableMinor) {
+      setRefundMessage("Enter a valid refund amount that is not more than the remaining refundable amount.");
+      return;
+    }
+    const confirmed = window.confirm(
+      `Refund ${formatMoneyMinor(amountMinor, payment.currency)} to ${payment.studentName} for ${payment.branchName}?`,
+    );
+    if (!confirmed) return;
+
+    setRefundingTransactionId(payment.transactionId);
+    try {
+      const response = await fetch(`/api/vendor/payments/${encodeURIComponent(payment.transactionId)}/refund`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          amountMinor,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      });
+      if (!response.ok) throw new Error(await parseErrorMessage(response));
+      const result = await response.json() as RefundResponse;
+      setItems((current) => current.map((item) => (
+        item.transactionId === result.originalTransactionId
+          ? {
+              ...item,
+              totalRefundedMinor: result.totalRefundedMinor,
+              remainingRefundableMinor: result.remainingRefundableMinor,
+              refundStatus: result.refundStatus,
+              refundableUntil: result.refundableUntil ?? item.refundableUntil,
+            }
+          : item
+      )));
+      setRefundMessage(`Refunded ${formatMoneyMinor(result.refundedAmountMinor, payment.currency)}.`);
+    } catch (error) {
+      setRefundMessage(error instanceof Error ? error.message : "Refund could not be completed.");
+    } finally {
+      setRefundingTransactionId(undefined);
+    }
+  }
+
   return (
-    <div className="divide-y divide-border">
-      {items.map((payment) => (
+    <div>
+      {refundMessage ? (
+        <p className="border-b border-border bg-surface-muted px-5 py-3 text-sm text-fg-muted">
+          {refundMessage}
+        </p>
+      ) : null}
+      <div className="divide-y divide-border">
+        {items.map((payment) => (
         <div
           className="flex flex-col gap-3 px-5 py-4 transition hover:bg-surface-muted/60 sm:flex-row sm:items-center sm:justify-between"
           key={payment.transactionId}
@@ -115,17 +202,37 @@ export function LivePaymentList({
             <p className="text-lg font-semibold tabular-nums text-success-fg">
               {formatMoneyMinor(payment.amountMinor, payment.currency)}
             </p>
+            {payment.totalRefundedMinor > 0 ? (
+              <p className="text-xs text-warning-fg">
+                Refunded {formatMoneyMinor(payment.totalRefundedMinor, payment.currency)}
+              </p>
+            ) : null}
             {payment.refundableUntil ? (
               <p className="text-xs text-fg-subtle">Refundable until {formatDateTime(payment.refundableUntil)}</p>
             ) : null}
+            {payment.refundStatus === "REFUNDABLE" ? (
+              <button
+                className="mt-1 rounded-md border border-border px-3 py-1 text-xs font-medium text-fg-muted transition hover:border-border-strong hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={refundingTransactionId === payment.transactionId}
+                onClick={() => void refundPayment(payment)}
+                type="button"
+              >
+                {refundingTransactionId === payment.transactionId ? "Refunding…" : "Refund"}
+              </button>
+            ) : (
+              <p className="text-xs text-fg-subtle">
+                {payment.refundStatus === "FULLY_REFUNDED" ? "Fully refunded" : "Refund window closed"}
+              </p>
+            )}
           </div>
         </div>
-      ))}
-      {items.length === 0 ? (
-        <p className="px-5 py-8 text-center text-sm text-fg-subtle">
-          No wallet payments yet. New payments will appear here after students pay through your payment QR.
-        </p>
-      ) : null}
+        ))}
+        {items.length === 0 ? (
+          <p className="px-5 py-8 text-center text-sm text-fg-subtle">
+            No wallet payments yet. New payments will appear here after students pay through your payment QR.
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
