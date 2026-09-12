@@ -146,6 +146,7 @@ model VendorBranch {
   verificationUrl     String?
   status              VendorBranchStatus               @default(PROVISIONING)
   active              Boolean                          @default(true)
+  campusStatus        CampusStatus?
   createdByUserId     String?
   createdBy           User?                            @relation("VendorBranchCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   createdAt           DateTime                         @default(now())
@@ -169,6 +170,11 @@ enum VendorBranchStatus {
   ACTIVE
   DISABLED
   PROVISIONING_FAILED
+}
+
+enum CampusStatus {
+  ON_CAMPUS
+  OFF_CAMPUS
 }
 
 model VendorMembership {
@@ -773,6 +779,7 @@ enum BranchPaymentApplicationStatus {
   PENDING
   APPROVED
   REJECTED
+  REVOKED
   WITHDRAWN
 }
 
@@ -1209,6 +1216,11 @@ enum AuditAction {
   VENDOR_BRANCH_CREATED
   VENDOR_BRANCH_UPDATED
   VENDOR_BRANCH_STATUS_CHANGED
+  VENDOR_BRANCH_CAMPUS_STATUS_CHANGED
+  VENDOR_BRANCH_PAYMENT_APPLICATION_SUBMITTED
+  VENDOR_BRANCH_PAYMENT_APPLICATION_APPROVED
+  VENDOR_BRANCH_PAYMENT_APPLICATION_REJECTED
+  VENDOR_BRANCH_PAYMENT_ACCEPTANCE_CLOSED
   VENDOR_DEFAULT_BRANCH_CHANGED
   VENDOR_STAFF_INVITE_CREATED
   VENDOR_STAFF_INVITE_ACCEPTED

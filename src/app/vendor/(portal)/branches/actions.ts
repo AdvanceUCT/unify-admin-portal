@@ -15,6 +15,7 @@ import {
   setVendorBranchActive,
   updateVendorBranch,
 } from "@/lib/vendors/branches";
+import { submitBranchPaymentApplication } from "@/lib/payments/branchOnboarding";
 import { requireVendorOwnerContext } from "@/lib/vendors/context";
 
 export type BranchActionState = { error?: string };
@@ -75,6 +76,19 @@ export async function setDefaultBranchAction(formData: FormData) {
   const { session, context } = await requireVendorOwnerContext();
   const branchId = String(formData.get("branchId") ?? "");
   await setDefaultVendorBranch(context.vendorProfileId, branchId, session.user.id);
+  revalidatePath("/vendor");
+  revalidatePath("/vendor/branches");
+  revalidatePath(`/vendor/branches/${branchId}`);
+}
+
+export async function requestBranchPaymentAccessAction(formData: FormData) {
+  const { session, context } = await requireVendorOwnerContext();
+  const branchId = String(formData.get("branchId") ?? "");
+  await submitBranchPaymentApplication({
+    vendorProfileId: context.vendorProfileId,
+    branchId,
+    actorId: session.user.id,
+  });
   revalidatePath("/vendor");
   revalidatePath("/vendor/branches");
   revalidatePath(`/vendor/branches/${branchId}`);
