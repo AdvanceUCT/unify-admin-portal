@@ -18,6 +18,9 @@ const reports = vi.hoisted(() => ({
 const invoiceQueries = vi.hoisted(() => ({
   getVendorInvoiceHistory: vi.fn(),
 }));
+const branchPaymentOnboarding = vi.hoisted(() => ({
+  listBranchPaymentAccessQueue: vi.fn(),
+}));
 
 vi.mock("next/navigation", () => ({
   notFound: vi.fn(() => {
@@ -32,6 +35,7 @@ vi.mock("@/lib/auth/session", () => auth);
 vi.mock("@/lib/vendors/applications", () => applications);
 vi.mock("@/lib/vendors/monthlyVerificationHistory", () => reports);
 vi.mock("@/lib/billing/invoiceQueries", () => invoiceQueries);
+vi.mock("@/lib/payments/branchOnboarding", () => branchPaymentOnboarding);
 vi.mock("@/app/(admin)/vendors/actions", () => ({
   approveVendorApplicationAction: vi.fn(),
   createVendorVerificationQrAction: vi.fn(),
@@ -126,6 +130,11 @@ describe("admin vendor verification history", () => {
     ));
     reports.getVendorMonthlyVerificationHistory.mockResolvedValue(history);
     invoiceQueries.getVendorInvoiceHistory.mockResolvedValue(invoiceHistory);
+    branchPaymentOnboarding.listBranchPaymentAccessQueue.mockResolvedValue({
+      activeAcceptances: [],
+      pendingApplications: [],
+      recentApplications: [],
+    });
   });
 
   afterEach(() => {

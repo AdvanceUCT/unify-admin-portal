@@ -15,7 +15,6 @@ import {
   setVendorBranchActive,
   updateVendorBranch,
 } from "@/lib/vendors/branches";
-import { submitBranchPaymentApplication } from "@/lib/payments/branchOnboarding";
 import { requireVendorOwnerContext } from "@/lib/vendors/context";
 
 export type BranchActionState = { error?: string };
@@ -84,6 +83,7 @@ export async function setDefaultBranchAction(formData: FormData) {
 export async function requestBranchPaymentAccessAction(formData: FormData) {
   const { session, context } = await requireVendorOwnerContext();
   const branchId = String(formData.get("branchId") ?? "");
+  const { submitBranchPaymentApplication } = await import("@/lib/payments/branchOnboarding");
   await submitBranchPaymentApplication({
     vendorProfileId: context.vendorProfileId,
     branchId,

@@ -10,12 +10,6 @@ import { revalidatePath } from "next/cache";
 import { assertCan } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
 import {
-  approveBranchPaymentApplication,
-  closeBranchPaymentAcceptance,
-  rejectBranchPaymentApplication,
-  setBranchCampusStatus,
-} from "@/lib/payments/branchOnboarding";
-import {
   ensureVendorVerificationServicePoint,
   markApplicationViewed,
   reviewVendorApplication,
@@ -104,6 +98,7 @@ export async function setBranchCampusStatusAction(formData: FormData) {
     throw new Error("Select whether this branch operates on campus.");
   }
 
+  const { setBranchCampusStatus } = await import("@/lib/payments/branchOnboarding");
   await setBranchCampusStatus({
     branchId,
     campusStatus,
@@ -119,6 +114,7 @@ export async function approveBranchPaymentApplicationAction(formData: FormData) 
 
   const applicationId = String(formData.get("applicationId") ?? "");
   const branchId = String(formData.get("branchId") ?? "");
+  const { approveBranchPaymentApplication } = await import("@/lib/payments/branchOnboarding");
   await approveBranchPaymentApplication({
     applicationId,
     reviewerId: session.user.id,
@@ -134,6 +130,7 @@ export async function rejectBranchPaymentApplicationAction(formData: FormData) {
 
   const applicationId = String(formData.get("applicationId") ?? "");
   const branchId = String(formData.get("branchId") ?? "");
+  const { rejectBranchPaymentApplication } = await import("@/lib/payments/branchOnboarding");
   await rejectBranchPaymentApplication({
     applicationId,
     reviewerId: session.user.id,
@@ -148,6 +145,7 @@ export async function closeBranchPaymentAcceptanceAction(formData: FormData) {
   assertCan("vendor:write", session);
 
   const branchId = String(formData.get("branchId") ?? "");
+  const { closeBranchPaymentAcceptance } = await import("@/lib/payments/branchOnboarding");
   await closeBranchPaymentAcceptance({
     branchId,
     actorId: session.user.id,
