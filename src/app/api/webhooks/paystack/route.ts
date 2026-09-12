@@ -13,7 +13,6 @@ import { resolvePaystackProviderConfig, resolvePaystackWalletTopupConfig } from 
 import { isPaystackWebhookBodyWithinLimit, verifyPaystackWebhookSignature } from "@/lib/paymentProviders/paystack/signature";
 import { WALLET_TOPUP_REFERENCE_PREFIX } from "@/lib/payments/constants";
 import { reconcileWalletTopupByReference } from "@/lib/payments/topups";
-import { handlePaystackTransferWebhook } from "@/lib/vendors/payouts";
 
 const HANDLED_EVENT_TYPE = "charge.success";
 const TRANSFER_EVENT_TYPES = new Set(["transfer.success", "transfer.failed", "transfer.reversed"]);
@@ -119,6 +118,7 @@ export async function POST(request: Request) {
     }
 
     try {
+      const { handlePaystackTransferWebhook } = await import("@/lib/vendors/payouts");
       const outcome = await handlePaystackTransferWebhook(transfer);
       await markGatewayEventProcessed(prisma, dedupe.id);
       return NextResponse.json({ received: true, outcome }, { status: 200 });
