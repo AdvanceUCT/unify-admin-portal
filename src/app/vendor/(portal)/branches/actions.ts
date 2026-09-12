@@ -79,3 +79,17 @@ export async function setDefaultBranchAction(formData: FormData) {
   revalidatePath("/vendor/branches");
   revalidatePath(`/vendor/branches/${branchId}`);
 }
+
+export async function requestBranchPaymentAccessAction(formData: FormData) {
+  const { session, context } = await requireVendorOwnerContext();
+  const branchId = String(formData.get("branchId") ?? "");
+  const { submitBranchPaymentApplication } = await import("@/lib/payments/branchOnboarding");
+  await submitBranchPaymentApplication({
+    vendorProfileId: context.vendorProfileId,
+    branchId,
+    actorId: session.user.id,
+  });
+  revalidatePath("/vendor");
+  revalidatePath("/vendor/branches");
+  revalidatePath(`/vendor/branches/${branchId}`);
+}

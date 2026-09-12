@@ -30,6 +30,7 @@ import {
 } from "@/lib/vendors/verificationContract";
 
 import {
+  requestBranchPaymentAccessAction,
   retryBranchProvisioningAction,
   setBranchActiveAction,
   setDefaultBranchAction,
@@ -55,6 +56,17 @@ export default async function VendorBranchPage({
     where: { id: branchId, vendorProfileId: context.vendorProfileId },
     include: {
       paymentAcceptance: { select: { qrIdentifier: true, status: true } },
+      paymentApplications: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          status: true,
+          submittedAt: true,
+          reviewedAt: true,
+          reviewNotes: true,
+        },
+        take: 1,
+      },
       vendorProfile: {
         select: {
           defaultBranchId: true,
@@ -95,6 +107,16 @@ export default async function VendorBranchPage({
     ? await QRCode.toString(paymentQrUrl, { type: "svg", margin: 1 })
     : null;
   const isDefault = branch.vendorProfile.defaultBranchId === branch.id;
+  const latestPaymentApplication = branch.paymentApplications[0] ?? null;
+  const canRequestPaymentAccess =
+    context.role === "OWNER" &&
+    branch.active &&
+    branch.status === "ACTIVE" &&
+    !paymentQrEnabled &&
+    (!latestPaymentApplication ||
+      latestPaymentApplication.status === "REJECTED" ||
+      latestPaymentApplication.status === "REVOKED" ||
+      latestPaymentApplication.status === "WITHDRAWN");
 
   return (
     <div className="space-y-6">
@@ -212,6 +234,46 @@ export default async function VendorBranchPage({
             <p className="max-w-full break-all text-xs text-fg-subtle">
               {paymentQrUrl}
             </p>
+          ) : null}
+          {!paymentQrEnabled ? (
+            <div className="w-full rounded-lg border border-border bg-surface-muted/60 p-3 text-left text-sm">
+              {latestPaymentApplication?.status === "PENDING" ? (
+                <p className="text-fg-muted">
+                  Payment access request submitted. An administrator still needs to mark this branch on-campus and approve it.
+                </p>
+              ) : latestPaymentApplication?.status === "APPROVED" ? (
+                <p className="text-warning-fg">
+                  Payment access was approved, but this QR is not currently usable. Ask an administrator to check the vendor payment profile and wallet account.
+                </p>
+              ) : canRequestPaymentAccess ? (
+                <form action={requestBranchPaymentAccessAction} className="space-y-3">
+                  <input name="branchId" type="hidden" value={branch.id} />
+                  <p className="text-fg-muted">
+                    Request approval to accept UNIFY wallet payments at this branch.
+                    Admins approve payment QR access per branch.
+                  </p>
+                  {latestPaymentApplication?.reviewNotes ? (
+                    <p className="text-xs text-danger-fg">
+                      Last review note: {latestPaymentApplication.reviewNotes}
+                    </p>
+                  ) : null}
+                  <button
+                    className="h-9 rounded-md bg-brand-600 px-3 text-sm font-medium text-white transition hover:bg-brand-700"
+                    type="submit"
+                  >
+                    Request payment access
+                  </button>
+                </form>
+              ) : context.role === "OWNER" ? (
+                <p className="text-fg-muted">
+                  Payment access can be requested once this branch is active.
+                </p>
+              ) : (
+                <p className="text-fg-muted">
+                  Ask the vendor owner to request payment access for this branch.
+                </p>
+              )}
+            </div>
           ) : null}
         </section>
 

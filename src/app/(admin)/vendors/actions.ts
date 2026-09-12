@@ -87,3 +87,70 @@ export async function createVendorVerificationQrAction(formData: FormData) {
   revalidatePath("/vendors", "layout");
   revalidatePath("/vendor");
 }
+
+export async function setBranchCampusStatusAction(formData: FormData) {
+  const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
+  assertCan("vendor:write", session);
+
+  const branchId = String(formData.get("branchId") ?? "");
+  const campusStatus = String(formData.get("campusStatus") ?? "");
+  if (campusStatus !== "ON_CAMPUS" && campusStatus !== "OFF_CAMPUS") {
+    throw new Error("Select whether this branch operates on campus.");
+  }
+
+  const { setBranchCampusStatus } = await import("@/lib/payments/branchOnboarding");
+  await setBranchCampusStatus({
+    branchId,
+    campusStatus,
+    actorId: session.user.id,
+  });
+  revalidatePath("/vendors", "layout");
+  revalidatePath(`/vendor/branches/${branchId}`);
+}
+
+export async function approveBranchPaymentApplicationAction(formData: FormData) {
+  const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
+  assertCan("vendor:write", session);
+
+  const applicationId = String(formData.get("applicationId") ?? "");
+  const branchId = String(formData.get("branchId") ?? "");
+  const { approveBranchPaymentApplication } = await import("@/lib/payments/branchOnboarding");
+  await approveBranchPaymentApplication({
+    applicationId,
+    reviewerId: session.user.id,
+    notes: String(formData.get("notes") ?? ""),
+  });
+  revalidatePath("/vendors", "layout");
+  if (branchId) revalidatePath(`/vendor/branches/${branchId}`);
+}
+
+export async function rejectBranchPaymentApplicationAction(formData: FormData) {
+  const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
+  assertCan("vendor:write", session);
+
+  const applicationId = String(formData.get("applicationId") ?? "");
+  const branchId = String(formData.get("branchId") ?? "");
+  const { rejectBranchPaymentApplication } = await import("@/lib/payments/branchOnboarding");
+  await rejectBranchPaymentApplication({
+    applicationId,
+    reviewerId: session.user.id,
+    notes: String(formData.get("notes") ?? ""),
+  });
+  revalidatePath("/vendors", "layout");
+  if (branchId) revalidatePath(`/vendor/branches/${branchId}`);
+}
+
+export async function closeBranchPaymentAcceptanceAction(formData: FormData) {
+  const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
+  assertCan("vendor:write", session);
+
+  const branchId = String(formData.get("branchId") ?? "");
+  const { closeBranchPaymentAcceptance } = await import("@/lib/payments/branchOnboarding");
+  await closeBranchPaymentAcceptance({
+    branchId,
+    actorId: session.user.id,
+    notes: String(formData.get("notes") ?? ""),
+  });
+  revalidatePath("/vendors", "layout");
+  revalidatePath(`/vendor/branches/${branchId}`);
+}

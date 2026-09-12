@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/Badge";
 import { StatusText } from "@/components/ui/StatusText";
 import { DecisionNoteButton } from "@/features/audit/DecisionNoteButton";
 import { requireRoleForRender } from "@/lib/auth/session";
+import { listBranchPaymentAccessQueue } from "@/lib/payments/branchOnboarding";
 import {
   listDecidedVendorApplications,
   listVendorApplications,
@@ -34,6 +35,12 @@ function decisionDate(value: Date | string) {
   });
 }
 
+function campusStatusLabel(value: "ON_CAMPUS" | "OFF_CAMPUS" | null) {
+  if (value === "ON_CAMPUS") return "On campus";
+  if (value === "OFF_CAMPUS") return "Off campus";
+  return "Unclassified";
+}
+
 export default async function VendorsPage({
   searchParams,
 }: {
@@ -43,14 +50,15 @@ export default async function VendorsPage({
 
   const { tab } = await searchParams;
   const activeTab =
-    tab === "applications" ? "applications" : tab === "log" ? "log" : "vendors";
+    tab === "applications" ? "applications" : tab === "payments" ? "payments" : tab === "log" ? "log" : "vendors";
 
-  const [approvedApplications, pendingApplications, rejectedApplications, decidedApplications] =
+  const [approvedApplications, pendingApplications, rejectedApplications, decidedApplications, paymentAccess] =
     await Promise.all([
       listVendorApplications({ status: "APPROVED" }),
       listVendorApplications({ status: "PENDING" }),
       listVendorApplications({ status: "REJECTED" }),
       listDecidedVendorApplications(),
+      listBranchPaymentAccessQueue(),
     ]);
 
   return (
@@ -68,6 +76,12 @@ export default async function VendorsPage({
             href: "/vendors?tab=applications",
             isActive: activeTab === "applications",
             label: "Applications",
+          },
+          {
+            count: paymentAccess.pendingApplications.length,
+            href: "/vendors?tab=payments",
+            isActive: activeTab === "payments",
+            label: "Payment Access",
           },
           { href: "/vendors?tab=log", isActive: activeTab === "log", label: "Decision Log" },
         ]}
@@ -328,6 +342,111 @@ export default async function VendorsPage({
               </section>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Payment Access tab */}
+      {activeTab === "payments" && (
+        <div className="space-y-6">
+          <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-section-title text-fg">Branch payment access</h2>
+                <p className="mt-1 text-sm text-fg-subtle">
+                  Review branch-level requests to accept UNIFY wallet payments. A branch must be
+                  classified as on-campus before its payment QR can be approved.
+                </p>
+              </div>
+              <Link
+                className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
+                href="/payments/about"
+              >
+                How payments work
+              </Link>
+            </div>
+          </section>
+
+          <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+            <div className="border-b border-border px-5 py-4">
+              <h3 className="text-section-title text-fg">
+                Pending requests ({paymentAccess.pendingApplications.length})
+              </h3>
+            </div>
+            <div className="divide-y divide-border">
+              {paymentAccess.pendingApplications.length === 0 ? (
+                <p className="px-5 py-6 text-sm text-fg-subtle">No pending payment-access requests.</p>
+              ) : (
+                paymentAccess.pendingApplications.map((application) => (
+                  <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between" key={application.id}>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="font-medium text-fg">
+                          {application.vendorBranch.vendorProfile.companyName}
+                        </h4>
+                        <Badge tone="warning">Pending</Badge>
+                        <Badge tone={application.vendorBranch.campusStatus === "ON_CAMPUS" ? "success" : "neutral"}>
+                          {campusStatusLabel(application.vendorBranch.campusStatus)}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-sm text-fg-subtle">
+                        {application.vendorBranch.name} &middot; {application.vendorBranch.vendorProfile.serviceCategory}
+                      </p>
+                      <p className="mt-1 text-xs text-fg-subtle">
+                        Submitted {application.submittedAt ? decisionDate(application.submittedAt) : decisionDate(application.createdAt)}
+                      </p>
+                    </div>
+                    <Link
+                      className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
+                      href={`/vendors/payment-access/${application.vendorBranchId}`}
+                    >
+                      Review
+                    </Link>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+
+          <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+            <div className="border-b border-border px-5 py-4">
+              <h3 className="text-section-title text-fg">
+                Approved payment branches ({paymentAccess.activeAcceptances.length})
+              </h3>
+            </div>
+            <div className="divide-y divide-border">
+              {paymentAccess.activeAcceptances.length === 0 ? (
+                <p className="px-5 py-6 text-sm text-fg-subtle">No branches are approved for wallet payments yet.</p>
+              ) : (
+                paymentAccess.activeAcceptances.map((acceptance) => (
+                  <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between" key={acceptance.id}>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="font-medium text-fg">
+                          {acceptance.vendorBranch.vendorProfile.companyName}
+                        </h4>
+                        <Badge tone="success">Approved</Badge>
+                        <Badge tone={acceptance.vendorBranch.campusStatus === "OFF_CAMPUS" ? "warning" : "neutral"}>
+                          {campusStatusLabel(acceptance.vendorBranch.campusStatus)}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-sm text-fg-subtle">
+                        {acceptance.vendorBranch.name} &middot; QR {acceptance.qrIdentifier}
+                      </p>
+                      <p className="mt-1 text-xs text-fg-subtle">
+                        Approved {decisionDate(acceptance.approvedAt)}
+                      </p>
+                    </div>
+                    <Link
+                      className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
+                      href={`/vendors/payment-access/${acceptance.vendorBranchId}`}
+                    >
+                      Manage
+                    </Link>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
         </div>
       )}
 
