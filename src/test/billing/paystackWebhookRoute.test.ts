@@ -15,6 +15,7 @@ vi.mock("@/lib/billing/gatewayEvents", () => ({
 vi.mock("@/lib/billing/paymentConfirmation", () => ({ confirmInvoicePayment: vi.fn() }));
 vi.mock("@/lib/billing/exceptions", () => ({ recordBillingException: vi.fn() }));
 vi.mock("@/lib/payments/topups", () => ({ reconcileWalletTopupByReference: vi.fn() }));
+vi.mock("@/lib/vendors/payouts", () => ({ handlePaystackTransferWebhook: vi.fn() }));
 
 import { POST } from "@/app/api/webhooks/paystack/route";
 import { resolvePaystackProviderConfig, resolvePaystackWalletTopupConfig } from "@/lib/paymentProviders/paystack/config";
@@ -22,6 +23,7 @@ import { recordGatewayEvent, markGatewayEventProcessed, recordGatewayEventFailur
 import { confirmInvoicePayment } from "@/lib/billing/paymentConfirmation";
 import { recordBillingException } from "@/lib/billing/exceptions";
 import { reconcileWalletTopupByReference } from "@/lib/payments/topups";
+import { handlePaystackTransferWebhook } from "@/lib/vendors/payouts";
 
 const SECRET_KEY = "sk_test_fixture";
 const CONFIG = {
@@ -157,6 +159,35 @@ describe("POST /api/webhooks/paystack", () => {
     expect(reconcileWalletTopupByReference).toHaveBeenCalledWith({ reference: "unify-wlt-abc", config: CONFIG });
     expect(confirmInvoicePayment).not.toHaveBeenCalled();
     expect(markGatewayEventProcessed).toHaveBeenCalledWith({}, "event-1");
+  });
+
+  it("routes Paystack transfer webhooks through the payout handler", async () => {
+    const body = JSON.stringify({
+      event: "transfer.success",
+      data: {
+        id: 4123,
+        reference: "unify-payout-abc",
+        transfer_code: "TRF_test_transfer",
+        status: "success",
+        amount: 1500,
+      },
+    });
+    vi.mocked(recordGatewayEvent).mockResolvedValue({ id: "event-1", duplicate: false });
+    vi.mocked(handlePaystackTransferWebhook).mockResolvedValue("completed");
+
+    const response = await POST(webhookRequest(body));
+
+    expect(response.status).toBe(200);
+    expect(handlePaystackTransferWebhook).toHaveBeenCalledWith({
+      eventType: "transfer.success",
+      reference: "unify-payout-abc",
+      providerTransferId: "4123",
+      transferCode: "TRF_test_transfer",
+      status: "success",
+      amountMinor: BigInt(1500),
+    });
+    expect(markGatewayEventProcessed).toHaveBeenCalledWith({}, "event-1");
+    await expect(response.json()).resolves.toEqual({ received: true, outcome: "completed" });
   });
 
   it("records a durable failure and returns 500 so Paystack retries, without acknowledging success", async () => {

@@ -15,6 +15,7 @@ import { WALLET_TOPUP_REFERENCE_PREFIX } from "@/lib/payments/constants";
 import { reconcileWalletTopupByReference } from "@/lib/payments/topups";
 
 const HANDLED_EVENT_TYPE = "charge.success";
+const TRANSFER_EVENT_TYPES = new Set(["transfer.success", "transfer.failed", "transfer.reversed"]);
 const REVIEW_EVENT_KEYWORDS = ["dispute", "refund", "reversal", "chargeback"];
 const INVOICE_REFERENCE_PREFIX = "unify-inv-";
 
@@ -36,7 +37,24 @@ function safePayloadSnapshot(payload: Record<string, unknown>) {
       domain: data.domain,
       paid_at: data.paid_at,
       gateway_response: data.gateway_response,
+      transfer_code: data.transfer_code,
     },
+  };
+}
+
+function parseTransferWebhookPayload(eventType: string, payload: Record<string, unknown>) {
+  const data = isRecord(payload.data) ? payload.data : {};
+  const reference = typeof data.reference === "string" ? data.reference : null;
+  if (!reference) return null;
+
+  return {
+    eventType,
+    reference,
+    providerTransferId:
+      typeof data.id === "number" || typeof data.id === "string" ? String(data.id) : undefined,
+    transferCode: typeof data.transfer_code === "string" ? data.transfer_code : undefined,
+    status: typeof data.status === "string" ? data.status : undefined,
+    amountMinor: typeof data.amount === "number" ? BigInt(Math.trunc(data.amount)) : undefined,
   };
 }
 
@@ -78,6 +96,37 @@ export async function POST(request: Request) {
 
   const eventType = payload.event;
   const reference = isRecord(payload.data) && typeof payload.data.reference === "string" ? payload.data.reference : null;
+
+  if (TRANSFER_EVENT_TYPES.has(eventType)) {
+    const transfer = parseTransferWebhookPayload(eventType, payload);
+    if (!transfer) {
+      return NextResponse.json({ received: true, ignored: true }, { status: 200 });
+    }
+
+    const dedupe = await recordGatewayEvent(prisma, {
+      provider: "paystack",
+      providerAccountRef: signatureConfig.accountRef,
+      providerMode: signatureConfig.mode,
+      eventType,
+      resourceKey: transfer.reference,
+      rawBody,
+      payloadSnapshot: safePayloadSnapshot(payload),
+    });
+
+    if (dedupe.duplicate) {
+      return NextResponse.json({ received: true, duplicate: true }, { status: 200 });
+    }
+
+    try {
+      const { handlePaystackTransferWebhook } = await import("@/lib/vendors/payouts");
+      const outcome = await handlePaystackTransferWebhook(transfer);
+      await markGatewayEventProcessed(prisma, dedupe.id);
+      return NextResponse.json({ received: true, outcome }, { status: 200 });
+    } catch (error) {
+      await recordGatewayEventFailure(prisma, dedupe.id, error, 60);
+      return NextResponse.json({ error: { message: "Failed to process webhook event." } }, { status: 500 });
+    }
+  }
 
   // Dispute/refund/reversal events are recorded for admin review — no
   // automatic reversal or financial-projection change happens here, per the
