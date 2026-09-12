@@ -18,7 +18,7 @@ import {
   WalletTransactionType,
 } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/db/prisma";
-import { PAYFAST_SANDBOX_PROVIDER, WALLET_CURRENCY } from "@/lib/payments/constants";
+import { PAYFAST_SANDBOX_PROVIDER, PAYSTACK_WALLET_PROVIDER, WALLET_CURRENCY } from "@/lib/payments/constants";
 import { WalletDomainError } from "@/lib/payments/errors";
 
 const MAX_SERIALIZABLE_ATTEMPTS = 3;
@@ -45,6 +45,12 @@ export type PostSpendInput = PostingBase & {
 
 export type PostRefundInput = PostingBase & {
   originalTransactionId: string;
+};
+
+export type PostPayoutInput = PostingBase & {
+  vendorAccountId: string;
+  providerPaymentId: string;
+  payoutDestinationReference: string;
 };
 
 export type CompletePendingTopupInput = {
@@ -80,7 +86,8 @@ type PreparedPosting = {
 type WalletOperation =
   | { kind: "TOPUP"; input: PostTopupInput }
   | { kind: "SPEND"; input: PostSpendInput }
-  | { kind: "REFUND"; input: PostRefundInput };
+  | { kind: "REFUND"; input: PostRefundInput }
+  | { kind: "PAYOUT"; input: PostPayoutInput };
 
 function hasPrismaErrorCode(error: unknown, code: string) {
   return typeof error === "object" && error !== null && "code" in error && error.code === code;
@@ -306,6 +313,36 @@ async function preparePosting(
     };
   }
 
+  if (operation.kind === "PAYOUT") {
+    const vendorAccountId = normalizeRequired(operation.input.vendorAccountId, "Vendor wallet account id");
+    const providerPaymentId = normalizeRequired(operation.input.providerPaymentId, "Provider payout id");
+    const payoutDestinationReference = normalizeRequired(
+      operation.input.payoutDestinationReference,
+      "Payout destination reference",
+    );
+    const payoutClearing = await transaction.walletAccount.findUnique({
+      where: { systemCode: "PAYOUT_CLEARING" },
+      select: { id: true },
+    });
+    if (!payoutClearing) {
+      throw new WalletDomainError("ACCOUNT_NOT_FOUND", "Payout clearing account was not found.");
+    }
+
+    return {
+      ...common,
+      type: WalletTransactionType.PAYOUT,
+      amountMinor: operation.input.amountMinor,
+      initiatorAccountId: vendorAccountId,
+      paymentProvider: PAYSTACK_WALLET_PROVIDER,
+      providerPaymentId,
+      providerPayerReference: payoutDestinationReference,
+      entries: [
+        { accountId: vendorAccountId, direction: LedgerDirection.DEBIT, amountMinor: operation.input.amountMinor },
+        { accountId: payoutClearing.id, direction: LedgerDirection.CREDIT, amountMinor: operation.input.amountMinor },
+      ],
+    };
+  }
+
   const originalTransactionId = normalizeRequired(
     operation.input.originalTransactionId,
     "Original transaction id",
@@ -486,6 +523,10 @@ export function postSpend(input: PostSpendInput) {
 
 export function postRefund(input: PostRefundInput) {
   return postWalletOperation({ kind: "REFUND", input });
+}
+
+export function postPayout(input: PostPayoutInput) {
+  return postWalletOperation({ kind: "PAYOUT", input });
 }
 
 export async function completePendingTopup(input: CompletePendingTopupInput) {

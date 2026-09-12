@@ -21,7 +21,7 @@ import {
   getUniversityPaymentWalletSettings,
   requireEnabledUniversityPaymentWallet,
 } from "@/lib/payments/config";
-import { postRefund, postSpend, postTopup } from "@/lib/payments/posting";
+import { postPayout, postRefund, postSpend, postTopup } from "@/lib/payments/posting";
 
 vi.mock("server-only", () => ({}));
 
@@ -81,6 +81,14 @@ const gatewayAccount = {
   status: WalletAccountStatus.ACTIVE,
   currency: "ZAR",
   balance: { accountId: "account-gateway", postedBalanceMinor: BigInt(0), version: BigInt(0) },
+};
+
+const payoutClearingAccount = {
+  id: "account-payout-clearing",
+  type: WalletAccountType.SYSTEM,
+  status: WalletAccountStatus.ACTIVE,
+  currency: "ZAR",
+  balance: { accountId: "account-payout-clearing", postedBalanceMinor: BigInt(0), version: BigInt(0) },
 };
 
 function spendInput(overrides: Partial<Parameters<typeof postSpend>[0]> = {}) {
@@ -299,6 +307,36 @@ describe("typed wallet posting", () => {
         paymentProvider: "PAYFAST_SANDBOX",
         providerPaymentId: "payfast-payment-1",
       }),
+    });
+  });
+
+  it("posts Paystack payouts from vendor balance to payout clearing", async () => {
+    database.transaction.walletAccount.findUnique.mockResolvedValueOnce({ id: payoutClearingAccount.id });
+    database.transaction.walletAccount.findMany.mockResolvedValue([vendorAccount, payoutClearingAccount]);
+
+    await postPayout({
+      vendorAccountId: vendorAccount.id,
+      amountMinor: BigInt(1_500),
+      idempotencyKey: "payout:batch-1",
+      reference: "unify-payout-reference",
+      providerPaymentId: "TRF_test_transfer",
+      payoutDestinationReference: "RCP_test_recipient",
+    });
+
+    expect(database.transaction.walletTransaction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: WalletTransactionType.PAYOUT,
+        initiatorAccountId: vendorAccount.id,
+        paymentProvider: "PAYSTACK",
+        providerPaymentId: "TRF_test_transfer",
+        providerPayerReference: "RCP_test_recipient",
+      }),
+    });
+    expect(database.transaction.ledgerEntry.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({ accountId: vendorAccount.id, direction: LedgerDirection.DEBIT }),
+        expect.objectContaining({ accountId: payoutClearingAccount.id, direction: LedgerDirection.CREDIT }),
+      ],
     });
   });
 

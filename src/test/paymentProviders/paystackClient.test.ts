@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fetchSubaccount, initializeTransaction, verifyTransaction } from "@/lib/paymentProviders/paystack/client";
+import {
+  createTransferRecipient,
+  fetchSubaccount,
+  initializeTransaction,
+  initiateTransfer,
+  verifyTransaction,
+  verifyTransfer,
+} from "@/lib/paymentProviders/paystack/client";
 import { PaystackProviderError } from "@/lib/paymentProviders/paystack/errors";
 
 const BASE_URL = "https://api.paystack.example";
@@ -289,5 +296,123 @@ describe("fetchSubaccount", () => {
     expect(result.active).toBe(false);
     expect(result.currency).toBe("NGN");
     expect(result.integrationId).toBe("999");
+  });
+});
+
+describe("transfer recipients and transfers", () => {
+  it("creates a ZAR basa recipient without returning the raw account number", async () => {
+    const fetchMock = stubFetchOnce(
+      responseJson({
+        status: true,
+        message: "Transfer recipient created",
+        data: {
+          recipient_code: "RCP_test_recipient",
+          active: true,
+          currency: "ZAR",
+          type: "basa",
+          details: {
+            account_name: "Campus Coffee",
+            account_number: "1234567890",
+            bank_code: "250655",
+            bank_name: "Test Bank",
+          },
+        },
+      }),
+    );
+
+    const result = await createTransferRecipient(SECRET_KEY, BASE_URL, {
+      type: "basa",
+      name: "Campus Coffee",
+      accountNumber: "1234567890",
+      bankCode: "250655",
+      currency: "ZAR",
+      metadata: { vendorProfileId: "vendor-1" },
+    });
+
+    expect(result).toEqual({
+      recipientCode: "RCP_test_recipient",
+      active: true,
+      currency: "ZAR",
+      type: "basa",
+      details: {
+        accountName: "Campus Coffee",
+        accountNumberLast4: "7890",
+        bankCode: "250655",
+        bankName: "Test Bank",
+      },
+    });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({
+      type: "basa",
+      name: "Campus Coffee",
+      account_number: "1234567890",
+      bank_code: "250655",
+      currency: "ZAR",
+      metadata: { vendorProfileId: "vendor-1" },
+    });
+  });
+
+  it("initiates a single transfer using the payout reference", async () => {
+    const fetchMock = stubFetchOnce(
+      responseJson({
+        status: true,
+        message: "Transfer queued",
+        data: {
+          id: 123,
+          transfer_code: "TRF_test_transfer",
+          reference: "unify-payout-abc",
+          status: "success",
+          amount: 1500,
+          currency: "ZAR",
+        },
+      }),
+    );
+
+    const result = await initiateTransfer(SECRET_KEY, BASE_URL, {
+      amountMinor: BigInt(1_500),
+      recipientCode: "RCP_test_recipient",
+      reference: "unify-payout-abc",
+      reason: "UNIFY vendor wallet payout",
+    });
+
+    expect(result).toEqual({
+      providerTransferId: "123",
+      transferCode: "TRF_test_transfer",
+      reference: "unify-payout-abc",
+      status: "success",
+      amountMinor: BigInt(1_500),
+      currency: "ZAR",
+    });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${BASE_URL}/transfer`);
+    expect(JSON.parse(init.body as string)).toEqual({
+      source: "balance",
+      amount: 1500,
+      recipient: "RCP_test_recipient",
+      reference: "unify-payout-abc",
+      reason: "UNIFY vendor wallet payout",
+    });
+  });
+
+  it("verifies transfers by reference for reconciliation", async () => {
+    stubFetchOnce(
+      responseJson({
+        status: true,
+        message: "Transfer retrieved",
+        data: {
+          id: "123",
+          transfer_code: "TRF_test_transfer",
+          reference: "unify-payout-abc",
+          status: "pending",
+          amount: 1500,
+          currency: "ZAR",
+        },
+      }),
+    );
+
+    await expect(verifyTransfer(SECRET_KEY, BASE_URL, "unify-payout-abc")).resolves.toMatchObject({
+      transferCode: "TRF_test_transfer",
+      status: "pending",
+    });
   });
 });

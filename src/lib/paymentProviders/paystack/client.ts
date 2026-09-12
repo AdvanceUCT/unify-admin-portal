@@ -63,6 +63,46 @@ export type PaystackSubaccountResult = {
   integrationId: string;
 };
 
+export type PaystackCreateTransferRecipientInput = {
+  type: "basa";
+  name: string;
+  accountNumber: string;
+  bankCode: string;
+  currency: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type PaystackCreateTransferRecipientResult = {
+  recipientCode: string;
+  active: boolean;
+  currency: string;
+  type: string;
+  details: {
+    accountName: string | null;
+    accountNumberLast4: string | null;
+    bankCode: string | null;
+    bankName: string | null;
+  };
+};
+
+export type PaystackInitiateTransferInput = {
+  amountMinor: bigint;
+  recipientCode: string;
+  reference: string;
+  reason: string;
+};
+
+export type PaystackInitiateTransferResult = {
+  providerTransferId: string;
+  transferCode: string;
+  reference: string;
+  status: string;
+  amountMinor: bigint;
+  currency: string | null;
+};
+
+export type PaystackVerifyTransferResult = PaystackInitiateTransferResult;
+
 function toSafeAmountNumber(amountMinor: bigint, fieldName: string): number {
   if (amountMinor < BigInt(0)) {
     throw new PaystackProviderError("AMOUNT_UNSAFE", `${fieldName} must be nonnegative.`);
@@ -305,4 +345,115 @@ export async function fetchSubaccount(secretKey: string, baseUrl: string, subacc
     domain: data.domain,
     integrationId,
   };
+}
+
+function parseRecipientDetails(value: unknown) {
+  const details = isRecord(value) ? value : {};
+  const accountNumber = typeof details.account_number === "string" ? details.account_number : null;
+
+  return {
+    accountName: typeof details.account_name === "string" ? details.account_name : null,
+    accountNumberLast4: accountNumber ? accountNumber.slice(-4) : null,
+    bankCode: typeof details.bank_code === "string" ? details.bank_code : null,
+    bankName: typeof details.bank_name === "string" ? details.bank_name : null,
+  };
+}
+
+/**
+ * Creates a reusable Paystack Transfer Recipient from vendor-submitted bank
+ * details. The raw account number is only sent to Paystack and never returned
+ * by this wrapper.
+ */
+export async function createTransferRecipient(
+  secretKey: string,
+  baseUrl: string,
+  input: PaystackCreateTransferRecipientInput,
+): Promise<PaystackCreateTransferRecipientResult> {
+  const { status, json } = await paystackFetch(secretKey, baseUrl, "/transferrecipient", {
+    method: "POST",
+    body: {
+      type: input.type,
+      name: input.name,
+      account_number: input.accountNumber,
+      bank_code: input.bankCode,
+      currency: input.currency,
+      metadata: input.metadata,
+    },
+  });
+
+  const data = assertSuccessEnvelope(status, json, "/transferrecipient");
+  if (
+    typeof data.recipient_code !== "string" ||
+    typeof data.active !== "boolean" ||
+    typeof data.currency !== "string" ||
+    typeof data.type !== "string"
+  ) {
+    throw new PaystackProviderError("MALFORMED_RESPONSE", "Paystack transfer-recipient response was missing required fields.");
+  }
+
+  return {
+    recipientCode: data.recipient_code,
+    active: data.active,
+    currency: data.currency,
+    type: data.type,
+    details: parseRecipientDetails(data.details),
+  };
+}
+
+function parseTransferEnvelope(data: Record<string, unknown>, path: string): PaystackInitiateTransferResult {
+  if (
+    (typeof data.id !== "number" && typeof data.id !== "string") ||
+    typeof data.transfer_code !== "string" ||
+    typeof data.reference !== "string" ||
+    typeof data.status !== "string" ||
+    typeof data.amount !== "number"
+  ) {
+    throw new PaystackProviderError("MALFORMED_RESPONSE", `Paystack ${path} response was missing required fields.`);
+  }
+
+  return {
+    providerTransferId: String(data.id),
+    transferCode: data.transfer_code,
+    reference: data.reference,
+    status: data.status,
+    amountMinor: BigInt(Math.trunc(data.amount)),
+    currency: typeof data.currency === "string" ? data.currency : null,
+  };
+}
+
+/**
+ * Initiates a single transfer from the Paystack balance to a saved recipient.
+ * Callers should treat timeout/network errors as reconciliation cases and
+ * retry/verify by the same reference, not create a different transfer.
+ */
+export async function initiateTransfer(
+  secretKey: string,
+  baseUrl: string,
+  input: PaystackInitiateTransferInput,
+): Promise<PaystackInitiateTransferResult> {
+  const amount = toSafeAmountNumber(input.amountMinor, "amountMinor");
+  const { status, json } = await paystackFetch(secretKey, baseUrl, "/transfer", {
+    method: "POST",
+    body: {
+      source: "balance",
+      amount,
+      recipient: input.recipientCode,
+      reference: input.reference,
+      reason: input.reason,
+    },
+  });
+
+  return parseTransferEnvelope(assertSuccessEnvelope(status, json, "/transfer"), "/transfer");
+}
+
+export async function verifyTransfer(
+  secretKey: string,
+  baseUrl: string,
+  reference: string,
+): Promise<PaystackVerifyTransferResult> {
+  const { status, json } = await paystackFetch(secretKey, baseUrl, `/transfer/verify/${encodeURIComponent(reference)}`, {
+    method: "GET",
+  });
+
+  return parseTransferEnvelope(assertSuccessEnvelope(status, json, "/transfer/verify"), "/transfer/verify");
 }
