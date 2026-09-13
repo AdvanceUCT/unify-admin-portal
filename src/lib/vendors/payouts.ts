@@ -41,6 +41,7 @@ export type VendorWalletPayoutBatchResult = {
   reference: string;
   status: "completed" | "processing" | "failed" | "requires_reconciliation";
   failureCode?: string;
+  failureMessage?: string;
 };
 
 type PayoutDestinationInput = {
@@ -455,9 +456,11 @@ export async function runVendorWalletPayouts(input: {
           reference,
           status: "requires_reconciliation",
           failureCode: error.code,
+          failureMessage: error.message,
         });
       } else {
         const failureCode = error instanceof PaystackProviderError ? error.code : "PAYSTACK_TRANSFER_FAILED";
+        const failureMessage = error instanceof PaystackProviderError ? error.message : undefined;
         await markPayoutBatchFailed(reference, failureCode);
         summary.failed += 1;
         summary.batches.push({
@@ -467,6 +470,7 @@ export async function runVendorWalletPayouts(input: {
           reference,
           status: "failed",
           failureCode,
+          failureMessage,
         });
       }
     }

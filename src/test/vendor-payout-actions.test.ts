@@ -11,6 +11,7 @@ vi.mock("@/lib/vendors/payouts", () => ({
 import { revalidatePath } from "next/cache";
 
 import { runOwnPayoutAction } from "@/app/vendor/(portal)/payments/actions";
+import { PaystackProviderError } from "@/lib/paymentProviders/paystack/errors";
 import { requireVendorOwnerContext } from "@/lib/vendors/context";
 import { runVendorWalletPayoutForVendor } from "@/lib/vendors/payouts";
 
@@ -95,6 +96,50 @@ describe("runOwnPayoutAction", () => {
       amountMinor: 0,
       currency: "ZAR",
       message: "Unable to run payout. Check the payout destination and Paystack test setup before trying again.",
+    });
+  });
+
+  it("shows the safe Paystack provider message for a failed payout batch", async () => {
+    vi.mocked(runVendorWalletPayoutForVendor).mockResolvedValue({
+      vendorsScanned: 1,
+      skippedNoFunds: 0,
+      batchesCreated: 1,
+      completed: 0,
+      processing: 0,
+      failed: 1,
+      requiresReconciliation: 0,
+      batches: [{
+        vendorProfileId: "vendor-owned",
+        amountMinor: 12_500,
+        currency: "ZAR",
+        reference: "unify-payout-demo",
+        status: "failed",
+        failureCode: "HTTP_ERROR",
+        failureMessage: "Paystack /transfer returned 400: Balance is not enough to fulfil this request.",
+      }],
+    });
+
+    const result = await runOwnPayoutAction();
+
+    expect(result).toMatchObject({
+      status: "failed",
+      failureCode: "HTTP_ERROR",
+      providerMessage: "Paystack /transfer returned 400: Balance is not enough to fulfil this request.",
+      message: "Paystack /transfer returned 400: Balance is not enough to fulfil this request.",
+    });
+  });
+
+  it("shows safe Paystack setup errors that happen before a batch is created", async () => {
+    vi.mocked(runVendorWalletPayoutForVendor).mockRejectedValue(
+      new PaystackProviderError("NOT_CONFIGURED", "PAYSTACK_SECRET_KEY is not configured for Paystack payouts."),
+    );
+
+    const result = await runOwnPayoutAction();
+
+    expect(result).toMatchObject({
+      status: "failed",
+      providerMessage: "PAYSTACK_SECRET_KEY is not configured for Paystack payouts.",
+      message: "PAYSTACK_SECRET_KEY is not configured for Paystack payouts.",
     });
   });
 });

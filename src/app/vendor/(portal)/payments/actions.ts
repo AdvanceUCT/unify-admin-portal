@@ -8,6 +8,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { PaystackProviderError } from "@/lib/paymentProviders/paystack/errors";
 import { requireVendorOwnerContext } from "@/lib/vendors/context";
 import { runVendorWalletPayoutForVendor, saveVendorPayoutDestination } from "@/lib/vendors/payouts";
 
@@ -18,6 +19,7 @@ export type RunOwnPayoutResult = {
   message: string;
   reference?: string;
   failureCode?: string;
+  providerMessage?: string;
 };
 
 function readString(formData: FormData, key: string) {
@@ -91,7 +93,8 @@ export async function runOwnPayoutAction(): Promise<RunOwnPayoutResult> {
         currency: batch.currency,
         reference: batch.reference,
         failureCode: batch.failureCode,
-        message: "Paystack did not return a final outcome. The payout was reserved for reconciliation.",
+        providerMessage: batch.failureMessage,
+        message: batch.failureMessage ?? "Paystack did not return a final outcome. The payout was reserved for reconciliation.",
       };
     }
 
@@ -101,15 +104,18 @@ export async function runOwnPayoutAction(): Promise<RunOwnPayoutResult> {
       currency: batch.currency,
       reference: batch.reference,
       failureCode: batch.failureCode,
-      message: "Payout failed. Check the payout destination and Paystack test setup before trying again.",
+      providerMessage: batch.failureMessage,
+      message: batch.failureMessage ?? "Payout failed. Check the payout destination and Paystack test setup before trying again.",
     };
-  } catch {
+  } catch (error) {
     revalidatePath("/vendor/payments");
+    const providerMessage = error instanceof PaystackProviderError ? error.message : undefined;
     return {
       status: "failed",
       amountMinor: 0,
       currency: "ZAR",
-      message: "Unable to run payout. Check the payout destination and Paystack test setup before trying again.",
+      providerMessage,
+      message: providerMessage ?? "Unable to run payout. Check the payout destination and Paystack test setup before trying again.",
     };
   }
 }
