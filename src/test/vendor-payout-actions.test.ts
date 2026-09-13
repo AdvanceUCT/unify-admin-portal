@@ -55,6 +55,7 @@ describe("runOwnPayoutAction", () => {
     expect(runVendorWalletPayoutForVendor).toHaveBeenCalledWith({
       vendorProfileId: "vendor-owned",
       initiatedByUserId: "owner-user",
+      simulateProviderTransfer: true,
     });
     expect(revalidatePath).toHaveBeenCalledWith("/vendor/payments");
     expect(result).toMatchObject({

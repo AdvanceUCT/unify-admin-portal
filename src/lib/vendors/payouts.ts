@@ -357,10 +357,10 @@ export async function runVendorWalletPayouts(input: {
   cutoffAt?: Date;
   initiatedByUserId?: string;
   initiationSource?: PayoutInitiationSource;
+  simulateProviderTransfer?: boolean;
   vendorProfileId?: string;
 } = {}) {
   const cutoffAt = input.cutoffAt ?? new Date();
-  const config = resolvePaystackWalletTopupConfig();
   const profiles = await prisma.vendorPaymentProfile.findMany({
     where: {
       status: VendorPaymentProfileStatus.APPROVED,
@@ -396,6 +396,7 @@ export async function runVendorWalletPayouts(input: {
       continue;
     }
 
+    const payoutDestinationReference = profile.payoutDestinationReference;
     const reference = generatePayoutReference();
     const batch = await prisma.payoutBatch.create({
       data: {
@@ -406,7 +407,7 @@ export async function runVendorWalletPayouts(input: {
         cutoffAt,
         provider: PAYSTACK_WALLET_PROVIDER,
         providerIdempotencyKey: reference,
-        payoutDestinationReference: profile.payoutDestinationReference,
+        payoutDestinationReference,
         initiationSource: input.initiationSource ?? PayoutInitiationSource.SCHEDULED,
         initiatedByUserId: input.initiatedByUserId,
       },
@@ -423,16 +424,28 @@ export async function runVendorWalletPayouts(input: {
         },
       });
 
-      const vendor = await prisma.vendorProfile.findUnique({
-        where: { id: profile.vendorProfileId },
-        select: { companyName: true },
-      });
-      const transfer = await initiateTransfer(config.secretKey, config.baseUrl, {
-        amountMinor: batch.amountMinor,
-        recipientCode: profile.payoutDestinationReference,
-        reference,
-        reason: `UNIFY vendor wallet payout for ${vendor?.companyName ?? "vendor"}`,
-      });
+      const transfer = input.simulateProviderTransfer
+        ? {
+            providerTransferId: `simulated:${reference}`,
+            transferCode: `simulated:${reference}`,
+            reference,
+            status: "success",
+            amountMinor: batch.amountMinor,
+            currency: WALLET_CURRENCY,
+          }
+        : await (async () => {
+            const config = resolvePaystackWalletTopupConfig();
+            const vendor = await prisma.vendorProfile.findUnique({
+              where: { id: profile.vendorProfileId },
+              select: { companyName: true },
+            });
+            return initiateTransfer(config.secretKey, config.baseUrl, {
+              amountMinor: batch.amountMinor,
+              recipientCode: payoutDestinationReference,
+              reference,
+              reason: `UNIFY vendor wallet payout for ${vendor?.companyName ?? "vendor"}`,
+            });
+          })();
       const outcome = await handleTransferOutcome(reference, transfer);
       if (outcome === "completed") summary.completed += 1;
       else if (outcome === "failed") summary.failed += 1;
@@ -483,11 +496,13 @@ export async function runVendorWalletPayoutForVendor(input: {
   vendorProfileId: string;
   initiatedByUserId: string;
   cutoffAt?: Date;
+  simulateProviderTransfer?: boolean;
 }) {
   return runVendorWalletPayouts({
     cutoffAt: input.cutoffAt,
     initiatedByUserId: input.initiatedByUserId,
     initiationSource: PayoutInitiationSource.MANUAL,
+    simulateProviderTransfer: input.simulateProviderTransfer,
     vendorProfileId: input.vendorProfileId,
   });
 }

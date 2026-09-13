@@ -51,6 +51,7 @@ export async function runOwnPayoutAction(): Promise<RunOwnPayoutResult> {
     const summary = await runVendorWalletPayoutForVendor({
       vendorProfileId: context.vendorProfileId,
       initiatedByUserId: session.user.id,
+      simulateProviderTransfer: true,
     });
     revalidatePath("/vendor/payments");
 
