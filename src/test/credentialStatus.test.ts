@@ -30,6 +30,15 @@ describe("credential status mapping", () => {
     expect(
       isRelevantCredentialStateChangedPayload({
         credentialExchangeId: "credential-exchange-001",
+        previousState: "offer-sent",
+        state: "declined",
+        timestamp: "2026-05-16T09:00:00.000Z",
+        type: "credential.stateChanged",
+      }),
+    ).toBe(true);
+    expect(
+      isRelevantCredentialStateChangedPayload({
+        credentialExchangeId: "credential-exchange-001",
         previousState: "request-received",
         state: "credential-issued",
         timestamp: "2026-05-16T09:00:00.000Z",

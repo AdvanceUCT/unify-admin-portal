@@ -39,6 +39,13 @@ describe("formatters", () => {
         state: "CREDENTIAL_LIFECYCLE_ACTIVATED",
         status: "ACTIVE",
       }),
-    ).toBe("Activated");
+    ).toBe("Accepted");
+    expect(
+      formatCredentialActivityEventStatus({
+        message: "Credential declined by holder.",
+        state: "OFFER_DELIVERY_FAILED",
+        status: "FAILED",
+      }),
+    ).toBe("Declined");
   });
 });

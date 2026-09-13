@@ -142,4 +142,91 @@ describe("credential issuance persistence", () => {
     expect(credentialIssuance.update).not.toHaveBeenCalled();
     expect(credentialAuditLog.createMany).not.toHaveBeenCalled();
   });
+
+  it("records an accepted dashboard audit row even when revocation metadata is not present", async () => {
+    credentialIssuance.findUnique.mockResolvedValueOnce({
+      credentialDefinitionId: "cred-def-id",
+      credentialExchangeId: "credential-exchange-1",
+      credentialExpiresAt: null,
+      credentialRevocationId: null,
+      id: "issuance-1",
+      issuedAt: null,
+      lifecycleStatus: null,
+      lifecycleStatusUpdatedAt: null,
+      revocationRegistryDefinitionId: null,
+      status: CredentialIssuanceStatus.OFFER_SENT,
+      studentId: "WOOJOS100",
+    } as never);
+    credentialEventLog.createMany.mockResolvedValueOnce({ count: 1 } as never);
+
+    await recordCredentialStateChangedEvent({
+      credentialDefinitionId: "cred-def-id",
+      credentialExchangeId: "credential-exchange-1",
+      eventId: "event-accepted",
+      previousState: "credential-issued",
+      state: "done",
+      timestamp: "2026-04-28T10:00:00.000Z",
+      type: "credential.stateChanged",
+    });
+
+    expect(credentialAuditLog.createMany).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: "CREDENTIAL_LIFECYCLE_ACTIVATED",
+        eventId: "credential-activated:credential-exchange-1",
+        message: "Credential accepted by holder.",
+        metadata: {
+          credentialRevocationId: null,
+          revocationRegistryDefinitionId: null,
+        },
+      }),
+      skipDuplicates: true,
+    });
+    expect(credentialAutomationJob.upsert).not.toHaveBeenCalled();
+  });
+
+  it("updates declined credentials to failed and records a declined dashboard audit row", async () => {
+    credentialIssuance.findUnique.mockResolvedValueOnce({
+      credentialDefinitionId: "cred-def-id",
+      credentialExchangeId: "credential-exchange-1",
+      credentialExpiresAt: null,
+      credentialRevocationId: null,
+      id: "issuance-1",
+      issuedAt: null,
+      lifecycleStatus: null,
+      lifecycleStatusUpdatedAt: null,
+      revocationRegistryDefinitionId: null,
+      status: CredentialIssuanceStatus.OFFER_SENT,
+      studentId: "WOOJOS100",
+    } as never);
+    credentialEventLog.createMany.mockResolvedValueOnce({ count: 1 } as never);
+
+    await recordCredentialStateChangedEvent({
+      credentialDefinitionId: "cred-def-id",
+      credentialExchangeId: "credential-exchange-1",
+      eventId: "event-declined",
+      previousState: "offer-sent",
+      state: "declined",
+      timestamp: "2026-04-28T10:05:00.000Z",
+      type: "credential.stateChanged",
+    });
+
+    expect(credentialIssuance.update).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        status: CredentialIssuanceStatus.FAILED,
+      }),
+      where: { id: "issuance-1" },
+    });
+    expect(credentialAuditLog.createMany).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: "OFFER_DELIVERY_FAILED",
+        eventId: "credential-failed:credential-exchange-1:declined",
+        message: "Credential declined by holder.",
+        metadata: {
+          previousState: "offer-sent",
+          state: "declined",
+        },
+      }),
+      skipDuplicates: true,
+    });
+  });
 });

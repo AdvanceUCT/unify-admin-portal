@@ -177,6 +177,7 @@ export type DashboardSummary = {
 export type CredentialActivityEvent = {
   id: string;
   credentialExchangeId: string;
+  message?: string | null;
   previousState?: string;
   schemaVersion?: string;
   state: string;

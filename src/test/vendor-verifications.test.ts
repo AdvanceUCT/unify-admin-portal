@@ -574,18 +574,18 @@ describe("vendor checkout verification", () => {
     });
 
     expect(database.vendorVerification.count).toHaveBeenNthCalledWith(4, {
-      where: expect.objectContaining({ createdAt: { gte: expect.any(Date) } }),
+      where: expect.objectContaining({ completedAt: { gte: expect.any(Date) } }),
     });
     expect(database.vendorVerification.count).toHaveBeenNthCalledWith(5, {
       where: expect.objectContaining({
-        createdAt: { gte: expect.any(Date) },
-        NOT: { isVerified: false },
+        completedAt: { gte: expect.any(Date) },
+        OR: [{ isVerified: true }, { isVerified: null }],
         status: "APPROVED",
       }),
     });
     expect(database.vendorVerification.count).toHaveBeenNthCalledWith(6, {
       where: expect.objectContaining({
-        createdAt: { gte: expect.any(Date) },
+        completedAt: { gte: expect.any(Date) },
         status: { in: ["FAILED", "DECLINED"] },
       }),
     });

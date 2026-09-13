@@ -184,6 +184,13 @@ function universityFilters(university: string): Prisma.VendorVerificationWhereIn
   ];
 }
 
+function successfulVerificationWhere(): Prisma.VendorVerificationWhereInput {
+  return {
+    OR: [{ isVerified: true }, { isVerified: null }],
+    status: "APPROVED",
+  };
+}
+
 function verificationEventsWhere(
   vendorProfileId: string,
   allowedBranchIds: string[],
@@ -505,12 +512,12 @@ export async function getVendorVerificationStats(
     prisma.vendorVerification.count({ where }),
     prisma.vendorVerification.count({ where: { ...where, status: "APPROVED" } }),
     prisma.vendorVerification.count({ where: { ...where, status: "PENDING" } }),
-    prisma.vendorVerification.count({ where: { ...where, createdAt: { gte: startOfMonth } } }),
+    prisma.vendorVerification.count({ where: { ...where, completedAt: { gte: startOfMonth } } }),
     prisma.vendorVerification.count({
-      where: { ...where, createdAt: { gte: startOfMonth }, NOT: { isVerified: false }, status: "APPROVED" },
+      where: { ...where, ...successfulVerificationWhere(), completedAt: { gte: startOfMonth } },
     }),
     prisma.vendorVerification.count({
-      where: { ...where, createdAt: { gte: startOfMonth }, status: { in: ["FAILED", "DECLINED"] } },
+      where: { ...where, completedAt: { gte: startOfMonth }, status: { in: ["FAILED", "DECLINED"] } },
     }),
     prisma.vendorVerification.findMany({
       where: {

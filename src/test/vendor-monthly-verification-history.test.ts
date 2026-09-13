@@ -34,7 +34,7 @@ describe("getVendorMonthlyVerificationHistory", () => {
       where: {
         vendorProfileId: "vendor-profile-1",
         status: "APPROVED",
-        NOT: { isVerified: false },
+        OR: [{ isVerified: true }, { isVerified: null }],
         completedAt: { not: null },
       },
       select: {
@@ -181,9 +181,10 @@ describe("getVendorMonthlyVerificationHistory", () => {
       new Date("2026-08-08T10:00:00.000Z"),
     );
 
-    expect(database.vendorVerification.findMany.mock.calls[0]?.[0].where.NOT).toEqual({
-      isVerified: false,
-    });
+    expect(database.vendorVerification.findMany.mock.calls[0]?.[0].where.OR).toEqual([
+      { isVerified: true },
+      { isVerified: null },
+    ]);
     expect(history.allTimeSuccessfulVerifications).toBe(1);
     expect(history.currentMonth).toMatchObject({ amountDueMinor: 125 });
   });

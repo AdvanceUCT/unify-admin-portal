@@ -91,6 +91,12 @@ describe("credential audit queries", () => {
   it("builds recent dashboard events from selected audit actions without latest-state joins", async () => {
     prismaMocks.auditFindMany.mockResolvedValue([
       auditLog({
+        action: "OFFER_DELIVERY_FAILED",
+        id: "audit-declined",
+        message: "Credential declined by holder.",
+        occurredAt: new Date("2026-07-08T12:00:00.000Z"),
+      }),
+      auditLog({
         action: "CREDENTIAL_REACTIVATED",
         id: "audit-reactivated",
         occurredAt: new Date("2026-07-08T11:00:00.000Z"),
@@ -115,6 +121,7 @@ describe("credential audit queries", () => {
           action: {
             in: [
               "OFFER_SENT",
+              "OFFER_DELIVERY_FAILED",
               "CREDENTIAL_LIFECYCLE_ACTIVATED",
               "CREDENTIAL_SUSPENDED",
               "CREDENTIAL_REACTIVATED",
@@ -125,6 +132,7 @@ describe("credential audit queries", () => {
       }),
     );
     expect(events.map((event) => [event.id, event.status])).toEqual([
+      ["audit-declined", "FAILED"],
       ["audit-reactivated", "ACTIVE"],
       ["audit-suspended", "SUSPENDED"],
       ["audit-activated", "ACTIVE"],

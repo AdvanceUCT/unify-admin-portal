@@ -430,8 +430,7 @@ export async function recordCredentialStateChangedEvent(payload: CredentialState
 
       if (
         mappedStatus === CredentialIssuanceStatus.ISSUED &&
-        existingIssuance.status !== CredentialIssuanceStatus.ISSUED &&
-        hasRevocationMetadata
+        existingIssuance.status !== CredentialIssuanceStatus.ISSUED
       ) {
         await prisma.credentialAuditLog.createMany({
           data: {
@@ -441,10 +440,10 @@ export async function recordCredentialStateChangedEvent(payload: CredentialState
             credentialExchangeId: payload.credentialExchangeId,
             credentialIssuanceId: existingIssuance.id,
             eventId: `credential-activated:${payload.credentialExchangeId}`,
-            message: "Credential activated.",
+            message: "Credential accepted by holder.",
             metadata: {
-              credentialRevocationId: payload.credentialRevocationId,
-              revocationRegistryDefinitionId: payload.revocationRegistryDefinitionId,
+              credentialRevocationId: payload.credentialRevocationId ?? null,
+              revocationRegistryDefinitionId: payload.revocationRegistryDefinitionId ?? null,
             },
             occurredAt,
             studentId: existingIssuance.studentId,
@@ -452,7 +451,7 @@ export async function recordCredentialStateChangedEvent(payload: CredentialState
           skipDuplicates: true,
         });
 
-        if (existingIssuance.renewedFromIssuanceId) {
+        if (hasRevocationMetadata && existingIssuance.renewedFromIssuanceId) {
           const deduplicationKey = `revoke-replaced:${existingIssuance.renewedFromIssuanceId}:${existingIssuance.id}`;
           await prisma.credentialAutomationJob.upsert({
             create: {
@@ -466,6 +465,31 @@ export async function recordCredentialStateChangedEvent(payload: CredentialState
             where: { deduplicationKey },
           });
         }
+      }
+
+      if (
+        mappedStatus === CredentialIssuanceStatus.FAILED &&
+        existingIssuance.status !== CredentialIssuanceStatus.FAILED
+      ) {
+        const declined = payload.state === "declined" || payload.state === "proposal-declined";
+        await prisma.credentialAuditLog.createMany({
+          data: {
+            action: CredentialAuditAction.OFFER_DELIVERY_FAILED,
+            credentialDefinitionId:
+              existingIssuance.credentialDefinitionId ?? payload.credentialDefinitionId ?? "unknown",
+            credentialExchangeId: payload.credentialExchangeId,
+            credentialIssuanceId: existingIssuance.id,
+            eventId: `credential-failed:${payload.credentialExchangeId}:${payload.state}`,
+            message: declined ? "Credential declined by holder." : `Credential failed in state ${payload.state}.`,
+            metadata: {
+              previousState: payload.previousState ?? null,
+              state: payload.state,
+            },
+            occurredAt,
+            studentId: existingIssuance.studentId,
+          },
+          skipDuplicates: true,
+        });
       }
     }
   }
