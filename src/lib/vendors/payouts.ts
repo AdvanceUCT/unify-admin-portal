@@ -34,6 +34,16 @@ import type { ApprovedVendorContext } from "@/lib/vendors/context";
 const MAX_PAYOUT_BATCH_SIZE = 25;
 const PAYSTACK_ZAR_RECIPIENT_TYPE = "basa" as const;
 
+export type VendorWalletPayoutBatchResult = {
+  vendorProfileId: string;
+  amountMinor: number;
+  currency: string;
+  reference: string;
+  status: "completed" | "processing" | "failed" | "requires_reconciliation";
+  failureCode?: string;
+  failureMessage?: string;
+};
+
 type PayoutDestinationInput = {
   accountHolderName: string;
   accountNumber: string;
@@ -347,18 +357,20 @@ export async function runVendorWalletPayouts(input: {
   cutoffAt?: Date;
   initiatedByUserId?: string;
   initiationSource?: PayoutInitiationSource;
+  simulateProviderTransfer?: boolean;
+  vendorProfileId?: string;
 } = {}) {
   const cutoffAt = input.cutoffAt ?? new Date();
-  const config = resolvePaystackWalletTopupConfig();
   const profiles = await prisma.vendorPaymentProfile.findMany({
     where: {
       status: VendorPaymentProfileStatus.APPROVED,
       payoutProvider: PAYSTACK_WALLET_PROVIDER,
       payoutDestinationReference: { not: null },
       vendorProfile: { walletAccount: { isNot: null } },
+      ...(input.vendorProfileId ? { vendorProfileId: input.vendorProfileId } : {}),
     },
     orderBy: { updatedAt: "asc" },
-    take: MAX_PAYOUT_BATCH_SIZE,
+    take: input.vendorProfileId ? 1 : MAX_PAYOUT_BATCH_SIZE,
     select: {
       id: true,
       vendorProfileId: true,
@@ -374,6 +386,7 @@ export async function runVendorWalletPayouts(input: {
     processing: 0,
     failed: 0,
     requiresReconciliation: 0,
+    batches: [] as VendorWalletPayoutBatchResult[],
   };
 
   for (const profile of profiles) {
@@ -383,6 +396,7 @@ export async function runVendorWalletPayouts(input: {
       continue;
     }
 
+    const payoutDestinationReference = profile.payoutDestinationReference;
     const reference = generatePayoutReference();
     const batch = await prisma.payoutBatch.create({
       data: {
@@ -393,7 +407,7 @@ export async function runVendorWalletPayouts(input: {
         cutoffAt,
         provider: PAYSTACK_WALLET_PROVIDER,
         providerIdempotencyKey: reference,
-        payoutDestinationReference: profile.payoutDestinationReference,
+        payoutDestinationReference,
         initiationSource: input.initiationSource ?? PayoutInitiationSource.SCHEDULED,
         initiatedByUserId: input.initiatedByUserId,
       },
@@ -410,33 +424,87 @@ export async function runVendorWalletPayouts(input: {
         },
       });
 
-      const vendor = await prisma.vendorProfile.findUnique({
-        where: { id: profile.vendorProfileId },
-        select: { companyName: true },
-      });
-      const transfer = await initiateTransfer(config.secretKey, config.baseUrl, {
-        amountMinor: batch.amountMinor,
-        recipientCode: profile.payoutDestinationReference,
-        reference,
-        reason: `UNIFY vendor wallet payout for ${vendor?.companyName ?? "vendor"}`,
-      });
+      const transfer = input.simulateProviderTransfer
+        ? {
+            providerTransferId: `simulated:${reference}`,
+            transferCode: `simulated:${reference}`,
+            reference,
+            status: "success",
+            amountMinor: batch.amountMinor,
+            currency: WALLET_CURRENCY,
+          }
+        : await (async () => {
+            const config = resolvePaystackWalletTopupConfig();
+            const vendor = await prisma.vendorProfile.findUnique({
+              where: { id: profile.vendorProfileId },
+              select: { companyName: true },
+            });
+            return initiateTransfer(config.secretKey, config.baseUrl, {
+              amountMinor: batch.amountMinor,
+              recipientCode: payoutDestinationReference,
+              reference,
+              reason: `UNIFY vendor wallet payout for ${vendor?.companyName ?? "vendor"}`,
+            });
+          })();
       const outcome = await handleTransferOutcome(reference, transfer);
       if (outcome === "completed") summary.completed += 1;
       else if (outcome === "failed") summary.failed += 1;
       else summary.processing += 1;
+      summary.batches.push({
+        vendorProfileId: profile.vendorProfileId,
+        amountMinor: toSafeNumber(batch.amountMinor),
+        currency: WALLET_CURRENCY,
+        reference,
+        status: outcome,
+      });
     } catch (error) {
       const ambiguous = error instanceof PaystackProviderError && (error.code === "TIMEOUT" || error.code === "UNKNOWN_OUTCOME");
       if (ambiguous) {
         await markPayoutBatchNeedsReconciliation(reference, error.code);
         summary.requiresReconciliation += 1;
+        summary.batches.push({
+          vendorProfileId: profile.vendorProfileId,
+          amountMinor: toSafeNumber(batch.amountMinor),
+          currency: WALLET_CURRENCY,
+          reference,
+          status: "requires_reconciliation",
+          failureCode: error.code,
+          failureMessage: error.message,
+        });
       } else {
-        await markPayoutBatchFailed(reference, error instanceof PaystackProviderError ? error.code : "PAYSTACK_TRANSFER_FAILED");
+        const failureCode = error instanceof PaystackProviderError ? error.code : "PAYSTACK_TRANSFER_FAILED";
+        const failureMessage = error instanceof PaystackProviderError ? error.message : undefined;
+        await markPayoutBatchFailed(reference, failureCode);
         summary.failed += 1;
+        summary.batches.push({
+          vendorProfileId: profile.vendorProfileId,
+          amountMinor: toSafeNumber(batch.amountMinor),
+          currency: WALLET_CURRENCY,
+          reference,
+          status: "failed",
+          failureCode,
+          failureMessage,
+        });
       }
     }
   }
 
   return summary;
+}
+
+export async function runVendorWalletPayoutForVendor(input: {
+  vendorProfileId: string;
+  initiatedByUserId: string;
+  cutoffAt?: Date;
+  simulateProviderTransfer?: boolean;
+}) {
+  return runVendorWalletPayouts({
+    cutoffAt: input.cutoffAt,
+    initiatedByUserId: input.initiatedByUserId,
+    initiationSource: PayoutInitiationSource.MANUAL,
+    simulateProviderTransfer: input.simulateProviderTransfer,
+    vendorProfileId: input.vendorProfileId,
+  });
 }
 
 export async function reconcilePayoutBatchByReference(reference: string) {
