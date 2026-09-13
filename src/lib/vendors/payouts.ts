@@ -34,6 +34,15 @@ import type { ApprovedVendorContext } from "@/lib/vendors/context";
 const MAX_PAYOUT_BATCH_SIZE = 25;
 const PAYSTACK_ZAR_RECIPIENT_TYPE = "basa" as const;
 
+export type VendorWalletPayoutBatchResult = {
+  vendorProfileId: string;
+  amountMinor: number;
+  currency: string;
+  reference: string;
+  status: "completed" | "processing" | "failed" | "requires_reconciliation";
+  failureCode?: string;
+};
+
 type PayoutDestinationInput = {
   accountHolderName: string;
   accountNumber: string;
@@ -347,6 +356,7 @@ export async function runVendorWalletPayouts(input: {
   cutoffAt?: Date;
   initiatedByUserId?: string;
   initiationSource?: PayoutInitiationSource;
+  vendorProfileId?: string;
 } = {}) {
   const cutoffAt = input.cutoffAt ?? new Date();
   const config = resolvePaystackWalletTopupConfig();
@@ -356,9 +366,10 @@ export async function runVendorWalletPayouts(input: {
       payoutProvider: PAYSTACK_WALLET_PROVIDER,
       payoutDestinationReference: { not: null },
       vendorProfile: { walletAccount: { isNot: null } },
+      ...(input.vendorProfileId ? { vendorProfileId: input.vendorProfileId } : {}),
     },
     orderBy: { updatedAt: "asc" },
-    take: MAX_PAYOUT_BATCH_SIZE,
+    take: input.vendorProfileId ? 1 : MAX_PAYOUT_BATCH_SIZE,
     select: {
       id: true,
       vendorProfileId: true,
@@ -374,6 +385,7 @@ export async function runVendorWalletPayouts(input: {
     processing: 0,
     failed: 0,
     requiresReconciliation: 0,
+    batches: [] as VendorWalletPayoutBatchResult[],
   };
 
   for (const profile of profiles) {
@@ -424,19 +436,56 @@ export async function runVendorWalletPayouts(input: {
       if (outcome === "completed") summary.completed += 1;
       else if (outcome === "failed") summary.failed += 1;
       else summary.processing += 1;
+      summary.batches.push({
+        vendorProfileId: profile.vendorProfileId,
+        amountMinor: toSafeNumber(batch.amountMinor),
+        currency: WALLET_CURRENCY,
+        reference,
+        status: outcome,
+      });
     } catch (error) {
       const ambiguous = error instanceof PaystackProviderError && (error.code === "TIMEOUT" || error.code === "UNKNOWN_OUTCOME");
       if (ambiguous) {
         await markPayoutBatchNeedsReconciliation(reference, error.code);
         summary.requiresReconciliation += 1;
+        summary.batches.push({
+          vendorProfileId: profile.vendorProfileId,
+          amountMinor: toSafeNumber(batch.amountMinor),
+          currency: WALLET_CURRENCY,
+          reference,
+          status: "requires_reconciliation",
+          failureCode: error.code,
+        });
       } else {
-        await markPayoutBatchFailed(reference, error instanceof PaystackProviderError ? error.code : "PAYSTACK_TRANSFER_FAILED");
+        const failureCode = error instanceof PaystackProviderError ? error.code : "PAYSTACK_TRANSFER_FAILED";
+        await markPayoutBatchFailed(reference, failureCode);
         summary.failed += 1;
+        summary.batches.push({
+          vendorProfileId: profile.vendorProfileId,
+          amountMinor: toSafeNumber(batch.amountMinor),
+          currency: WALLET_CURRENCY,
+          reference,
+          status: "failed",
+          failureCode,
+        });
       }
     }
   }
 
   return summary;
+}
+
+export async function runVendorWalletPayoutForVendor(input: {
+  vendorProfileId: string;
+  initiatedByUserId: string;
+  cutoffAt?: Date;
+}) {
+  return runVendorWalletPayouts({
+    cutoffAt: input.cutoffAt,
+    initiatedByUserId: input.initiatedByUserId,
+    initiationSource: PayoutInitiationSource.MANUAL,
+    vendorProfileId: input.vendorProfileId,
+  });
 }
 
 export async function reconcilePayoutBatchByReference(reference: string) {

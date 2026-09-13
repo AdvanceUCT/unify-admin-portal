@@ -13,6 +13,7 @@ import { encodeLivePaymentCursor, listRecentVendorPayments } from "@/lib/vendors
 import { getVendorPayoutOverview } from "@/lib/vendors/payouts";
 
 import { savePayoutDestinationAction } from "./actions";
+import { RunPayoutButton } from "./RunPayoutButton";
 
 function formatMoney(amountMinor: number, currency = "ZAR") {
   return new Intl.NumberFormat("en-ZA", {
@@ -192,6 +193,11 @@ export default async function VendorPaymentsPage({
                   </p>
                 ) : null}
               </div>
+
+              <RunPayoutButton
+                availableMinor={payoutOverview.availableMinor}
+                hasDestination={payoutOverview.hasDestination}
+              />
 
               <div>
                 <h3 className="text-sm font-semibold text-fg">Recent payout batches</h3>
