@@ -29,6 +29,13 @@ const walletTopupProviderIdMigration = readFileSync(
   ),
   "utf8",
 );
+const walletPayoutProviderAttributionMigration = readFileSync(
+  resolve(
+    process.cwd(),
+    "prisma/migrations/20260913191000_allow_wallet_payout_provider_attribution/migration.sql",
+  ),
+  "utf8",
+);
 
 describe("payment wallet foundation migration", () => {
   it("creates the immutable ledger and rebuildable balance projection", () => {
@@ -80,6 +87,22 @@ describe("payment wallet foundation migration", () => {
     );
     expect(walletTopupProviderIdMigration).toContain(
       'Wallet transaction provider payment id is immutable after attribution',
+    );
+  });
+
+  it("allows payout transactions to retain provider attribution", () => {
+    expect(walletPayoutProviderAttributionMigration).toContain(
+      'DROP CONSTRAINT "wallet_transaction_topup_provider_check"',
+    );
+    expect(walletPayoutProviderAttributionMigration).toContain('"type" = \'PAYOUT\'');
+    expect(walletPayoutProviderAttributionMigration).toContain(
+      'NULLIF(BTRIM("providerPaymentId"), \'\') IS NOT NULL',
+    );
+    expect(walletPayoutProviderAttributionMigration).toContain(
+      'NULLIF(BTRIM("providerPayerReference"), \'\') IS NOT NULL',
+    );
+    expect(walletPayoutProviderAttributionMigration).toContain(
+      '"type" NOT IN (\'TOPUP\', \'PAYOUT\')',
     );
   });
 
