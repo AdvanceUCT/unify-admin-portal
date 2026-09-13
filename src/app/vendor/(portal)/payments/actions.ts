@@ -26,8 +26,13 @@ function readString(formData: FormData, key: string) {
   return String(formData.get(key) ?? "");
 }
 
+function safeVendorReturnPath(value: string) {
+  return value.startsWith("/vendor/") ? value : "/vendor/payments";
+}
+
 export async function savePayoutDestinationAction(formData: FormData) {
   const { session, context } = await requireVendorOwnerContext();
+  const returnTo = safeVendorReturnPath(readString(formData, "returnTo"));
   try {
     await saveVendorPayoutDestination(context, session.user.id, {
       accountHolderName: readString(formData, "accountHolderName"),
@@ -37,11 +42,13 @@ export async function savePayoutDestinationAction(formData: FormData) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to save payout details.";
-    redirect(`/vendor/payments?payoutError=${encodeURIComponent(message)}`);
+    redirect(`${returnTo}?payoutError=${encodeURIComponent(message)}`);
   }
 
+  revalidatePath(returnTo);
   revalidatePath("/vendor/payments");
-  redirect("/vendor/payments?payout=updated");
+  revalidatePath("/vendor/payments/payouts");
+  redirect(`${returnTo}?payout=updated`);
 }
 
 export async function runOwnPayoutAction(): Promise<RunOwnPayoutResult> {
@@ -54,6 +61,7 @@ export async function runOwnPayoutAction(): Promise<RunOwnPayoutResult> {
       simulateProviderTransfer: true,
     });
     revalidatePath("/vendor/payments");
+    revalidatePath("/vendor/payments/payouts");
 
     const batch = summary.batches.find((item) => item.vendorProfileId === context.vendorProfileId);
     if (!batch) {

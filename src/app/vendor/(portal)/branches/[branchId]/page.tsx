@@ -11,6 +11,7 @@ import { BackButton } from "@/components/ui/BackButton";
 import { Badge } from "@/components/ui/Badge";
 import { Metric } from "@/components/ui/Metric";
 import { LiveVerificationList } from "@/features/vendors/LiveVerificationList";
+import { PayoutDestinationCard } from "@/features/vendors/PayoutDestinationCard";
 import { QrCodeActions } from "@/features/vendors/QrCodeActions";
 import { prisma } from "@/lib/db/prisma";
 import { formatMoneyMinor } from "@/lib/formatters";
@@ -36,6 +37,7 @@ import {
   setDefaultBranchAction,
   updateBranchAction,
 } from "../actions";
+import { savePayoutDestinationAction } from "../../payments/actions";
 
 const inputClassName =
   "h-10 rounded-md border border-border bg-surface px-3 text-sm font-normal text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20";
@@ -44,13 +46,23 @@ const secondaryButtonClassName =
   "h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg";
 const metricValueClassName = "text-lg leading-tight break-all sm:text-xl xl:text-2xl";
 
+function firstParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 export default async function VendorBranchPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ branchId: string }>;
+  searchParams: Promise<{
+    payout?: string | string[];
+    payoutError?: string | string[];
+  }>;
 }) {
   const { context } = await requireApprovedVendorContextForRender();
   const { branchId } = await params;
+  const query = await searchParams;
   assertBranchAccess(context, branchId);
   const branch = await prisma.vendorBranch.findFirst({
     where: { id: branchId, vendorProfileId: context.vendorProfileId },
@@ -70,7 +82,7 @@ export default async function VendorBranchPage({
       vendorProfile: {
         select: {
           defaultBranchId: true,
-          paymentProfile: { select: { status: true } },
+          paymentProfile: { select: { payoutDestinationReference: true, status: true } },
           walletAccount: { select: { status: true, currency: true } },
         },
       },
@@ -106,6 +118,9 @@ export default async function VendorBranchPage({
   const paymentQrSvg = paymentQrEnabled && paymentQrUrl
     ? await QRCode.toString(paymentQrUrl, { type: "svg", margin: 1 })
     : null;
+  const showPayoutDestination = context.role === "OWNER" && paymentQrEnabled;
+  const payout = firstParam(query.payout);
+  const payoutError = firstParam(query.payoutError);
   const isDefault = branch.vendorProfile.defaultBranchId === branch.id;
   const latestPaymentApplication = branch.paymentApplications[0] ?? null;
   const canRequestPaymentAccess =
@@ -178,8 +193,8 @@ export default async function VendorBranchPage({
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="flex flex-col items-center gap-4 rounded-xl border border-border bg-surface p-6 text-center shadow-md">
+      <div className="grid items-stretch gap-6 lg:grid-cols-2">
+        <section className="flex h-full flex-col items-center gap-4 rounded-xl border border-border bg-surface p-6 text-center shadow-md">
           <div>
             <h2 className="text-section-title text-fg">Verification QR</h2>
             <p className="mt-1 text-sm text-fg-subtle">Students scan this to present their credential.</p>
@@ -208,7 +223,7 @@ export default async function VendorBranchPage({
           ) : null}
         </section>
 
-        <section className="flex flex-col items-center gap-4 rounded-xl border border-border bg-surface p-6 text-center shadow-md">
+        <section className="flex h-full flex-col items-center gap-4 rounded-xl border border-border bg-surface p-6 text-center shadow-md">
           <div>
             <h2 className="text-section-title text-fg">Payment QR</h2>
             <p className="mt-1 text-sm text-fg-subtle">Students scan this to pay this branch from their UNIFY wallet.</p>
@@ -276,9 +291,11 @@ export default async function VendorBranchPage({
             </div>
           ) : null}
         </section>
+      </div>
 
-        {context.role === "OWNER" ? (
-          <section className="space-y-5 rounded-xl border border-border bg-surface p-5 shadow-md">
+      {context.role === "OWNER" ? (
+        <div className={showPayoutDestination ? "grid gap-6 lg:grid-cols-2" : "grid gap-6"}>
+          <section className="h-full space-y-5 rounded-xl border border-border bg-surface p-5 shadow-md">
             <h2 className="text-section-title text-fg">Branch settings</h2>
             <form action={updateBranchAction} className="space-y-3">
               <input name="branchId" type="hidden" value={branch.id} />
@@ -338,8 +355,19 @@ export default async function VendorBranchPage({
               ) : null}
             </div>
           </section>
-        ) : null}
-      </div>
+
+          {showPayoutDestination ? (
+            <PayoutDestinationCard
+              action={savePayoutDestinationAction}
+              className="h-full"
+              hasDestination={Boolean(branch.vendorProfile.paymentProfile?.payoutDestinationReference)}
+              payout={payout}
+              payoutError={payoutError}
+              returnTo={`/vendor/branches/${branch.id}`}
+            />
+          ) : null}
+        </div>
+      ) : null}
 
       <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
         <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">

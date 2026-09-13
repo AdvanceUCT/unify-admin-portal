@@ -5,9 +5,10 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Avatar } from "@/components/ui/Avatar";
+import { RefundPaymentDialog } from "@/features/vendors/RefundPaymentDialog";
 import { formatDateTime, formatMoneyMinor } from "@/lib/formatters";
 
 export type LivePaymentEvent = {
@@ -37,14 +38,6 @@ type RefundResponse = {
   refundableUntil?: string;
 };
 
-function parseRefundAmountMinor(value: string) {
-  const normalized = value.trim().replace(",", ".");
-  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) return null;
-  const [rand, cents = ""] = normalized.split(".");
-  const amountMinor = Number(rand) * 100 + Number(cents.padEnd(2, "0"));
-  return Number.isSafeInteger(amountMinor) && amountMinor > 0 ? amountMinor : null;
-}
-
 async function parseErrorMessage(response: Response) {
   try {
     const body = await response.json() as { error?: { message?: string } };
@@ -56,17 +49,23 @@ async function parseErrorMessage(response: Response) {
 
 export function LivePaymentList({
   branchId,
+  branchIds,
   initialItems,
   liveCursor,
+  maxItems = 20,
 }: {
   branchId?: string;
+  branchIds?: string[];
   initialItems: LivePaymentEvent[];
   liveCursor?: string;
+  maxItems?: number;
 }) {
   const [items, setItems] = useState(initialItems);
   const [refundMessage, setRefundMessage] = useState<string>();
+  const [refundPaymentToConfirm, setRefundPaymentToConfirm] = useState<LivePaymentEvent | null>(null);
   const [refundingTransactionId, setRefundingTransactionId] = useState<string>();
   const itemsRef = useRef(initialItems);
+  const branchIdsKey = useMemo(() => (branchIds ?? []).join("\u0000"), [branchIds]);
 
   useEffect(() => {
     itemsRef.current = items;
@@ -85,7 +84,13 @@ export function LivePaymentList({
       controller = new AbortController();
       try {
         const params = new URLSearchParams({ cursor });
-        if (branchId) params.set("branchId", branchId);
+        if (branchId) {
+          params.set("branchId", branchId);
+        } else {
+          for (const nextBranchId of branchIdsKey ? branchIdsKey.split("\u0000") : []) {
+            params.append("branchId", nextBranchId);
+          }
+        }
         const response = await fetch(`/api/vendor/live-payments?${params.toString()}`, {
           cache: "no-store",
           signal: controller.signal,
@@ -94,14 +99,18 @@ export function LivePaymentList({
         const result = await response.json() as { events: LivePaymentEvent[]; nextCursor: string };
         if (cancelled) return;
         cursor = result.nextCursor;
+        const branchIdSet = new Set(branchIdsKey ? branchIdsKey.split("\u0000") : []);
         const incoming = result.events
-          .filter((event) => !branchId || event.branchId === branchId)
+          .filter((event) => {
+            if (branchId) return event.branchId === branchId;
+            return branchIdSet.size === 0 || branchIdSet.has(event.branchId);
+          })
           .reverse();
         if (incoming.length === 0) return;
         setItems((current) => {
           const known = new Set(current.map((item) => item.transactionId));
           const next = incoming.filter((item) => !known.has(item.transactionId));
-          return next.length > 0 ? [...next, ...current].slice(0, 20) : current;
+          return next.length > 0 ? [...next, ...current].slice(0, maxItems) : current;
         });
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
@@ -121,25 +130,12 @@ export function LivePaymentList({
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [branchId, liveCursor]);
+  }, [branchId, branchIdsKey, liveCursor, maxItems]);
 
   async function refundPayment(payment: LivePaymentEvent) {
     if (payment.refundStatus !== "REFUNDABLE") return;
     setRefundMessage(undefined);
-    const amountText = window.prompt(
-      `Refund amount for ${payment.studentName}. Maximum ${formatMoneyMinor(payment.remainingRefundableMinor, payment.currency)}.`,
-      (payment.remainingRefundableMinor / 100).toFixed(2),
-    );
-    if (amountText === null) return;
-    const amountMinor = parseRefundAmountMinor(amountText);
-    if (!amountMinor || amountMinor > payment.remainingRefundableMinor) {
-      setRefundMessage("Enter a valid refund amount that is not more than the remaining refundable amount.");
-      return;
-    }
-    const confirmed = window.confirm(
-      `Refund ${formatMoneyMinor(amountMinor, payment.currency)} to ${payment.studentName} for ${payment.branchName}?`,
-    );
-    if (!confirmed) return;
+    const amountMinor = payment.remainingRefundableMinor;
 
     setRefundingTransactionId(payment.transactionId);
     try {
@@ -165,6 +161,7 @@ export function LivePaymentList({
           : item
       )));
       setRefundMessage(`Refunded ${formatMoneyMinor(result.refundedAmountMinor, payment.currency)}.`);
+      setRefundPaymentToConfirm(null);
     } catch (error) {
       setRefundMessage(error instanceof Error ? error.message : "Refund could not be completed.");
     } finally {
@@ -214,7 +211,7 @@ export function LivePaymentList({
               <button
                 className="mt-1 rounded-md border border-border px-3 py-1 text-xs font-medium text-fg-muted transition hover:border-border-strong hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={refundingTransactionId === payment.transactionId}
-                onClick={() => void refundPayment(payment)}
+                onClick={() => setRefundPaymentToConfirm(payment)}
                 type="button"
               >
                 {refundingTransactionId === payment.transactionId ? "Refunding…" : "Refund"}
@@ -233,6 +230,14 @@ export function LivePaymentList({
           </p>
         ) : null}
       </div>
+      <RefundPaymentDialog
+        isPending={Boolean(refundingTransactionId)}
+        onClose={() => setRefundPaymentToConfirm(null)}
+        onConfirm={() => {
+          if (refundPaymentToConfirm) void refundPayment(refundPaymentToConfirm);
+        }}
+        payment={refundPaymentToConfirm}
+      />
     </div>
   );
 }

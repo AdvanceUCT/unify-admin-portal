@@ -28,9 +28,13 @@ function resultTone(result: RunOwnPayoutResult) {
 
 export function RunPayoutButton({
   availableMinor,
+  compact = false,
+  embedded = false,
   hasDestination,
 }: {
   availableMinor: number;
+  compact?: boolean;
+  embedded?: boolean;
   hasDestination: boolean;
 }) {
   const router = useRouter();
@@ -48,16 +52,18 @@ export function RunPayoutButton({
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-border bg-surface p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-fg">Demo payout run</p>
-          <p className="mt-1 text-xs text-fg-subtle">
-            Runs this vendor&apos;s eligible payout now without waiting for the scheduled cron job.
-          </p>
-        </div>
+    <div className={embedded ? "space-y-3" : "space-y-3 rounded-lg border border-border bg-surface p-4"}>
+      <div className={compact ? "space-y-3" : "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"}>
+        {compact ? null : (
+          <div>
+            <p className="text-sm font-semibold text-fg">Demo payout run</p>
+            <p className="mt-1 text-xs text-fg-subtle">
+              Runs this vendor&apos;s eligible payout now without waiting for the scheduled cron job.
+            </p>
+          </div>
+        )}
         <button
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-medium text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-fg-subtle"
+          className={`inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-medium text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-fg-subtle ${compact ? "w-full" : ""}`}
           disabled={!canRun}
           onClick={handleRunPayout}
           type="button"
@@ -75,7 +81,7 @@ export function RunPayoutButton({
           ) : (
             <>
               <WalletCards aria-hidden="true" className={canRun ? "animate-pulse" : ""} size={16} />
-              Run payout now
+              {compact ? "Run demo payout" : "Run payout now"}
             </>
           )}
         </button>
