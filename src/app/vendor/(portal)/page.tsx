@@ -8,12 +8,14 @@ import { ChevronRight, Mail } from "lucide-react";
 
 import { Badge } from "@/components/ui/Badge";
 import { VendorApplicationLanding } from "@/features/vendors/VendorApplicationLanding";
+import { LivePaymentList } from "@/features/vendors/LivePaymentList";
 import { VendorVerificationOverview } from "@/features/vendors/VendorVerificationOverview";
 import { prisma } from "@/lib/db/prisma";
 import { requireVendorSessionForRender } from "@/lib/auth/session";
 import { getUniversityProfileForRender } from "@/lib/university/profile";
 import { getVendorApplicationForUser } from "@/lib/vendors/applications";
 import { getApprovedVendorContextForUserForRender } from "@/lib/vendors/context";
+import { encodeLivePaymentCursor, listRecentVendorPayments } from "@/lib/vendors/livePayments";
 import { encodeLiveVerificationCursor } from "@/lib/vendors/liveVerifications";
 import { getVendorVerificationStats, listRecentVendorVerifications } from "@/lib/vendors/verifications";
 
@@ -37,14 +39,18 @@ export default async function VendorDashboardPage() {
       (vendor.defaultBranch && context.branchIds.includes(vendor.defaultBranch.id) ? vendor.defaultBranch : null) ??
       vendor.branches[0] ??
       null;
-    const [stats, recentVerifications, universityProfile] = await Promise.all([
+    const [stats, recentVerifications, recentPayments, universityProfile] = await Promise.all([
       getVendorVerificationStats(context.vendorProfileId, { branchIds: context.branchIds, inPersonOnly: true }),
       listRecentVendorVerifications(context.vendorProfileId, 5, { branchIds: context.branchIds, inPersonOnly: true }),
+      listRecentVendorPayments(context, { limit: 5 }),
       getUniversityProfileForRender(),
     ]);
-    const viewAllHref = context.branchIds.length === 1
+    const viewAllVerificationsHref = context.branchIds.length === 1
       ? `/vendor/verifications?branchId=${encodeURIComponent(context.branchIds[0])}`
       : "/vendor/verifications";
+    const viewAllPaymentsHref = context.branchIds.length === 1
+      ? `/vendor/payments?branchId=${encodeURIComponent(context.branchIds[0])}`
+      : "/vendor/payments";
 
     return (
       <div className="space-y-6">
@@ -55,8 +61,19 @@ export default async function VendorDashboardPage() {
           stats={stats}
           recentVerifications={recentVerifications}
           liveCursor={encodeLiveVerificationCursor({ completedAt: new Date().toISOString(), id: "_" })}
-          viewAllHref={viewAllHref}
+          viewAllHref={viewAllVerificationsHref}
         />
+        <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+          <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
+            <h2 className="text-section-title text-fg">Recent payments</h2>
+            <Link className="text-sm font-medium text-fg-muted hover:text-fg" href={viewAllPaymentsHref}>View all</Link>
+          </div>
+          <LivePaymentList
+            initialItems={recentPayments}
+            liveCursor={encodeLivePaymentCursor({ completedAt: new Date().toISOString(), id: "_" })}
+            maxItems={5}
+          />
+        </section>
         <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
           <div className="border-b border-border px-5 py-4"><h2 className="text-section-title text-fg">Branches</h2></div>
           <div className="divide-y divide-border">

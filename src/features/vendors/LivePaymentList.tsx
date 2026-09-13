@@ -58,10 +58,12 @@ export function LivePaymentList({
   branchId,
   initialItems,
   liveCursor,
+  maxItems = 20,
 }: {
   branchId?: string;
   initialItems: LivePaymentEvent[];
   liveCursor?: string;
+  maxItems?: number;
 }) {
   const [items, setItems] = useState(initialItems);
   const [refundMessage, setRefundMessage] = useState<string>();
@@ -101,7 +103,7 @@ export function LivePaymentList({
         setItems((current) => {
           const known = new Set(current.map((item) => item.transactionId));
           const next = incoming.filter((item) => !known.has(item.transactionId));
-          return next.length > 0 ? [...next, ...current].slice(0, 20) : current;
+          return next.length > 0 ? [...next, ...current].slice(0, maxItems) : current;
         });
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
@@ -121,7 +123,7 @@ export function LivePaymentList({
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [branchId, liveCursor]);
+  }, [branchId, liveCursor, maxItems]);
 
   async function refundPayment(payment: LivePaymentEvent) {
     if (payment.refundStatus !== "REFUNDABLE") return;

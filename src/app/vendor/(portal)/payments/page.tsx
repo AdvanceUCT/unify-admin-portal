@@ -6,13 +6,19 @@
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/Badge";
-import { LivePaymentList } from "@/features/vendors/LivePaymentList";
 import { prisma } from "@/lib/db/prisma";
 import { requireApprovedVendorContextForRender } from "@/lib/vendors/context";
-import { encodeLivePaymentCursor, listRecentVendorPayments } from "@/lib/vendors/livePayments";
+import {
+  encodeLivePaymentCursor,
+  listVendorPaymentEvents,
+  type VendorPaymentEventFilters,
+} from "@/lib/vendors/livePayments";
 import { getVendorPayoutOverview } from "@/lib/vendors/payouts";
+import { ExportCsvButton } from "../verifications/ExportCsvButton";
+import { LivePaymentTable } from "./LivePaymentTable";
 
 import { savePayoutDestinationAction } from "./actions";
+import { VendorPaymentsFilterBar } from "./VendorPaymentsFilterBar";
 
 function formatMoney(amountMinor: number, currency = "ZAR") {
   return new Intl.NumberFormat("en-ZA", {
@@ -27,14 +33,60 @@ function payoutStatusTone(status: string) {
   return "warning" as const;
 }
 
+function firstParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function pageParam(value: string | string[] | undefined) {
+  const page = Number(firstParam(value));
+  return Number.isInteger(page) && page > 0 ? page : 1;
+}
+
+function refundStatusParam(value: string | string[] | undefined): VendorPaymentEventFilters["refundStatus"] {
+  const status = firstParam(value);
+  return status === "REFUNDABLE" || status === "EXPIRED" || status === "FULLY_REFUNDED"
+    ? status
+    : undefined;
+}
+
+function pageHref(filters: VendorPaymentEventFilters, page: number) {
+  const params = new URLSearchParams();
+  if (filters.query) params.set("q", filters.query);
+  if (filters.refundStatus) params.set("refundStatus", filters.refundStatus);
+  if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
+  if (filters.dateTo) params.set("dateTo", filters.dateTo);
+  if (filters.branchId) params.set("branchId", filters.branchId);
+  params.set("page", String(page));
+  return `/vendor/payments?${params.toString()}`;
+}
+
+function exportHref(filters: VendorPaymentEventFilters) {
+  const params = new URLSearchParams();
+  if (filters.query) params.set("q", filters.query);
+  if (filters.refundStatus) params.set("refundStatus", filters.refundStatus);
+  if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
+  if (filters.dateTo) params.set("dateTo", filters.dateTo);
+  if (filters.branchId) params.set("branchId", filters.branchId);
+  const query = params.toString();
+  return `/api/vendor/payments/export${query ? `?${query}` : ""}`;
+}
+
 export default async function VendorPaymentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ branchId?: string; payout?: string; payoutError?: string }>;
+  searchParams: Promise<{
+    branchId?: string | string[];
+    dateFrom?: string | string[];
+    dateTo?: string | string[];
+    page?: string | string[];
+    payout?: string | string[];
+    payoutError?: string | string[];
+    q?: string | string[];
+    refundStatus?: string | string[];
+  }>;
 }) {
   const { context } = await requireApprovedVendorContextForRender();
   const params = await searchParams;
-  const payoutOverview = context.role === "OWNER" ? await getVendorPayoutOverview(context) : null;
   const branches: Array<{ id: string; name: string }> = await prisma.vendorBranch.findMany({
     where: {
       vendorProfileId: context.vendorProfileId,
@@ -43,55 +95,68 @@ export default async function VendorPaymentsPage({
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });
-  const selectedBranchId = params.branchId && context.branchIds.includes(params.branchId)
-    ? params.branchId
+  const branchId = firstParam(params.branchId);
+  const selectedBranchId = branchId && context.branchIds.includes(branchId)
+    ? branchId
     : undefined;
-  const selectedBranch = selectedBranchId
-    ? branches.find((branch) => branch.id === selectedBranchId)
-    : undefined;
-  const payments = await listRecentVendorPayments(context, {
-    branchIds: selectedBranchId ? [selectedBranchId] : undefined,
-  });
+  const filters: VendorPaymentEventFilters = {
+    branchId: selectedBranchId,
+    dateFrom: firstParam(params.dateFrom),
+    dateTo: firstParam(params.dateTo),
+    page: pageParam(params.page),
+    query: firstParam(params.q),
+    refundStatus: refundStatusParam(params.refundStatus),
+  };
+  const [payoutOverview, result] = await Promise.all([
+    context.role === "OWNER" ? getVendorPayoutOverview(context) : null,
+    listVendorPaymentEvents(context, filters),
+  ]);
+  const showBranchFilter = context.role === "OWNER" && branches.length > 1;
+  const showingStart = result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1;
+  const showingEnd = Math.min(result.total, result.page * result.pageSize);
+  const payout = firstParam(params.payout);
+  const payoutError = firstParam(params.payoutError);
 
   return (
     <div className="space-y-6">
-      <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-page-title text-fg">Wallet payments</h1>
-            <p className="mt-1 text-sm text-fg-subtle">
-              Confirm student wallet payments before handing over goods or services.
-            </p>
+      <VendorPaymentsFilterBar
+        branches={branches}
+        filters={filters}
+        showBranchFilter={showBranchFilter}
+      />
+
+      <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
+          <h2 className="text-section-title text-fg">Payments</h2>
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-fg-muted">Showing {showingStart}-{showingEnd} of {result.total}</p>
+            <ExportCsvButton href={exportHref(filters)} />
           </div>
-          <Badge tone="success">Live polling</Badge>
+        </div>
+        <LivePaymentTable
+          filters={filters}
+          initialItems={result.events}
+          key={[filters.query, filters.refundStatus, filters.dateFrom, filters.dateTo, filters.branchId, result.page].map((value) => value ?? "").join("|")}
+          liveCursor={result.page === 1 ? encodeLivePaymentCursor({ completedAt: new Date().toISOString(), id: "_" }) : undefined}
+        />
+        <div className="flex items-center justify-between border-t border-border px-5 py-4">
+          <Link
+            aria-disabled={result.page <= 1}
+            className={`text-sm font-medium ${result.page <= 1 ? "pointer-events-none text-fg-subtle/60" : "text-fg-muted hover:text-fg"}`}
+            href={pageHref(filters, Math.max(1, result.page - 1))}
+          >
+            Previous
+          </Link>
+          <p className="text-sm text-fg-muted">Page {result.page} of {result.totalPages}</p>
+          <Link
+            aria-disabled={result.page >= result.totalPages}
+            className={`text-sm font-medium ${result.page >= result.totalPages ? "pointer-events-none text-fg-subtle/60" : "text-fg-muted hover:text-fg"}`}
+            href={pageHref(filters, Math.min(result.totalPages, result.page + 1))}
+          >
+            Next
+          </Link>
         </div>
       </section>
-
-      {branches.length > 1 ? (
-        <section className="rounded-xl border border-border bg-surface p-4 shadow-md">
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                !selectedBranchId ? "bg-brand-600 text-white" : "bg-surface-muted text-fg-muted hover:text-fg"
-              }`}
-              href="/vendor/payments"
-            >
-              All branches
-            </Link>
-            {branches.map((branch) => (
-              <Link
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                  selectedBranchId === branch.id ? "bg-brand-600 text-white" : "bg-surface-muted text-fg-muted hover:text-fg"
-                }`}
-                href={`/vendor/payments?branchId=${encodeURIComponent(branch.id)}`}
-                key={branch.id}
-              >
-                {branch.name}
-              </Link>
-            ))}
-          </div>
-        </section>
-      ) : null}
 
       {payoutOverview ? (
         <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
@@ -107,14 +172,14 @@ export default async function VendorPaymentsPage({
             </Badge>
           </div>
 
-          {params.payout === "updated" ? (
+          {payout === "updated" ? (
             <div className="mt-4 rounded-lg border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">
               Payout destination saved. Future payout runs will use the new Paystack recipient.
             </div>
           ) : null}
-          {params.payoutError ? (
+          {payoutError ? (
             <div className="mt-4 rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
-              {params.payoutError}
+              {payoutError}
             </div>
           ) : null}
 
@@ -218,23 +283,6 @@ export default async function VendorPaymentsPage({
           </div>
         </section>
       ) : null}
-
-      <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
-        <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
-          <div>
-            <h2 className="text-section-title text-fg">Incoming payments</h2>
-            <p className="mt-1 text-sm text-fg-subtle">
-              {selectedBranch ? selectedBranch.name : "All permitted branches"}
-            </p>
-          </div>
-          <span className="text-xs font-medium text-fg-subtle">Refreshes every few seconds</span>
-        </div>
-        <LivePaymentList
-          branchId={selectedBranchId}
-          initialItems={payments}
-          liveCursor={encodeLivePaymentCursor({ completedAt: new Date().toISOString(), id: "_" })}
-        />
-      </section>
     </div>
   );
 }
