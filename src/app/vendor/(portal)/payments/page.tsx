@@ -18,6 +18,7 @@ import { ExportCsvButton } from "../verifications/ExportCsvButton";
 import { LivePaymentTable } from "./LivePaymentTable";
 
 import { savePayoutDestinationAction } from "./actions";
+import { RunPayoutButton } from "./RunPayoutButton";
 import { VendorPaymentsFilterBar } from "./VendorPaymentsFilterBar";
 
 function formatMoney(amountMinor: number, currency = "ZAR") {
@@ -257,6 +258,11 @@ export default async function VendorPaymentsPage({
                   </p>
                 ) : null}
               </div>
+
+              <RunPayoutButton
+                availableMinor={payoutOverview.availableMinor}
+                hasDestination={payoutOverview.hasDestination}
+              />
 
               <div>
                 <h3 className="text-sm font-semibold text-fg">Recent payout batches</h3>
