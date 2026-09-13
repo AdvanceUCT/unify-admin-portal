@@ -5,9 +5,11 @@
 
 "use client";
 
+import { Loader2, RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { StatusText, type StatusTone } from "@/components/ui/StatusText";
+import { RefundPaymentDialog } from "@/features/vendors/RefundPaymentDialog";
 import { formatDateTime, formatMoneyMinor } from "@/lib/formatters";
 import type { LivePaymentEvent } from "@/features/vendors/LivePaymentList";
 import type { VendorPaymentEventFilters } from "@/lib/vendors/livePayments";
@@ -33,14 +35,6 @@ const REFUND_STATUS_TONE: Record<LivePaymentEvent["refundStatus"], StatusTone> =
   EXPIRED: "neutral",
   FULLY_REFUNDED: "warning",
 };
-
-function parseRefundAmountMinor(value: string) {
-  const normalized = value.trim().replace(",", ".");
-  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) return null;
-  const [rand, cents = ""] = normalized.split(".");
-  const amountMinor = Number(rand) * 100 + Number(cents.padEnd(2, "0"));
-  return Number.isSafeInteger(amountMinor) && amountMinor > 0 ? amountMinor : null;
-}
 
 async function parseErrorMessage(response: Response) {
   try {
@@ -87,6 +81,7 @@ export function LivePaymentTable({
 }) {
   const [items, setItems] = useState(initialItems);
   const [refundMessage, setRefundMessage] = useState<string>();
+  const [refundPaymentToConfirm, setRefundPaymentToConfirm] = useState<LivePaymentEvent | null>(null);
   const [refundingTransactionId, setRefundingTransactionId] = useState<string>();
   const filtersKey = useMemo(() => JSON.stringify(filters), [filters]);
 
@@ -144,20 +139,7 @@ export function LivePaymentTable({
   async function refundPayment(payment: LivePaymentEvent) {
     if (payment.refundStatus !== "REFUNDABLE") return;
     setRefundMessage(undefined);
-    const amountText = window.prompt(
-      `Refund amount for ${payment.studentName}. Maximum ${formatMoneyMinor(payment.remainingRefundableMinor, payment.currency)}.`,
-      (payment.remainingRefundableMinor / 100).toFixed(2),
-    );
-    if (amountText === null) return;
-    const amountMinor = parseRefundAmountMinor(amountText);
-    if (!amountMinor || amountMinor > payment.remainingRefundableMinor) {
-      setRefundMessage("Enter a valid refund amount that is not more than the remaining refundable amount.");
-      return;
-    }
-    const confirmed = window.confirm(
-      `Refund ${formatMoneyMinor(amountMinor, payment.currency)} to ${payment.studentName} for ${payment.branchName}?`,
-    );
-    if (!confirmed) return;
+    const amountMinor = payment.remainingRefundableMinor;
 
     setRefundingTransactionId(payment.transactionId);
     try {
@@ -183,6 +165,7 @@ export function LivePaymentTable({
           : item
       )));
       setRefundMessage(`Refunded ${formatMoneyMinor(result.refundedAmountMinor, payment.currency)}.`);
+      setRefundPaymentToConfirm(null);
     } catch (error) {
       setRefundMessage(error instanceof Error ? error.message : "Refund could not be completed.");
     } finally {
@@ -239,12 +222,17 @@ export function LivePaymentTable({
                 <td className="px-4 py-3">
                   {payment.refundStatus === "REFUNDABLE" ? (
                     <button
-                      className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-fg-muted transition hover:border-border-strong hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex h-9 min-w-24 items-center justify-center gap-1.5 rounded-md bg-brand-600 px-3 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-fg-subtle disabled:shadow-none"
                       disabled={refundingTransactionId === payment.transactionId}
-                      onClick={() => void refundPayment(payment)}
+                      onClick={() => setRefundPaymentToConfirm(payment)}
                       type="button"
                     >
-                      {refundingTransactionId === payment.transactionId ? "Refunding..." : "Refund"}
+                      {refundingTransactionId === payment.transactionId ? (
+                        <Loader2 aria-hidden="true" className="animate-spin" size={14} />
+                      ) : (
+                        <RotateCcw aria-hidden="true" size={14} />
+                      )}
+                      {refundingTransactionId === payment.transactionId ? "Refunding" : "Refund"}
                     </button>
                   ) : (
                     <span className="text-xs text-fg-subtle">No action</span>
@@ -260,6 +248,14 @@ export function LivePaymentTable({
           </p>
         )}
       </div>
+      <RefundPaymentDialog
+        isPending={Boolean(refundingTransactionId)}
+        onClose={() => setRefundPaymentToConfirm(null)}
+        onConfirm={() => {
+          if (refundPaymentToConfirm) void refundPayment(refundPaymentToConfirm);
+        }}
+        payment={refundPaymentToConfirm}
+      />
     </>
   );
 }
