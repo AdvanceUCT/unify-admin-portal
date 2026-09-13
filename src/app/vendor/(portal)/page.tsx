@@ -51,6 +51,12 @@ export default async function VendorDashboardPage() {
     const viewAllPaymentsHref = context.branchIds.length === 1
       ? `/vendor/payments?branchId=${encodeURIComponent(context.branchIds[0])}`
       : "/vendor/payments";
+    const recentPaymentsCursor = recentPayments[0]
+      ? encodeLivePaymentCursor({
+          completedAt: recentPayments[0].completedAt,
+          id: recentPayments[0].transactionId,
+        })
+      : encodeLivePaymentCursor({ completedAt: new Date().toISOString(), id: "_" });
 
     return (
       <div className="space-y-6">
@@ -69,8 +75,9 @@ export default async function VendorDashboardPage() {
             <Link className="text-sm font-medium text-fg-muted hover:text-fg" href={viewAllPaymentsHref}>View all</Link>
           </div>
           <LivePaymentList
+            branchIds={context.branchIds}
             initialItems={recentPayments}
-            liveCursor={encodeLivePaymentCursor({ completedAt: new Date().toISOString(), id: "_" })}
+            liveCursor={recentPaymentsCursor}
             maxItems={5}
           />
         </section>

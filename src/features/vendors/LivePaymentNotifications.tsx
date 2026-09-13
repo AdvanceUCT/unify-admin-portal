@@ -74,7 +74,7 @@ export function LivePaymentNotifications({
   if (!event) return null;
 
   return (
-    <aside aria-live="assertive" className="fixed right-4 top-32 z-50 w-[min(23rem,calc(100vw-2rem))] rounded-xl border border-border bg-surface p-4 shadow-lg" role="status">
+    <aside aria-live="assertive" className="fixed right-4 top-4 z-50 w-[min(23rem,calc(100vw-2rem))] rounded-xl border border-border bg-surface p-4 shadow-lg" role="status">
       <div className="flex items-start gap-3">
         <CreditCard className="mt-0.5 shrink-0 text-success-fg" size={22} aria-hidden="true" />
         <div className="min-w-0 flex-1">

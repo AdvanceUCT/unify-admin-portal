@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Avatar } from "@/components/ui/Avatar";
 import { RefundPaymentDialog } from "@/features/vendors/RefundPaymentDialog";
@@ -49,11 +49,13 @@ async function parseErrorMessage(response: Response) {
 
 export function LivePaymentList({
   branchId,
+  branchIds,
   initialItems,
   liveCursor,
   maxItems = 20,
 }: {
   branchId?: string;
+  branchIds?: string[];
   initialItems: LivePaymentEvent[];
   liveCursor?: string;
   maxItems?: number;
@@ -63,6 +65,7 @@ export function LivePaymentList({
   const [refundPaymentToConfirm, setRefundPaymentToConfirm] = useState<LivePaymentEvent | null>(null);
   const [refundingTransactionId, setRefundingTransactionId] = useState<string>();
   const itemsRef = useRef(initialItems);
+  const branchIdsKey = useMemo(() => (branchIds ?? []).join("\u0000"), [branchIds]);
 
   useEffect(() => {
     itemsRef.current = items;
@@ -81,7 +84,13 @@ export function LivePaymentList({
       controller = new AbortController();
       try {
         const params = new URLSearchParams({ cursor });
-        if (branchId) params.set("branchId", branchId);
+        if (branchId) {
+          params.set("branchId", branchId);
+        } else {
+          for (const nextBranchId of branchIdsKey ? branchIdsKey.split("\u0000") : []) {
+            params.append("branchId", nextBranchId);
+          }
+        }
         const response = await fetch(`/api/vendor/live-payments?${params.toString()}`, {
           cache: "no-store",
           signal: controller.signal,
@@ -90,8 +99,12 @@ export function LivePaymentList({
         const result = await response.json() as { events: LivePaymentEvent[]; nextCursor: string };
         if (cancelled) return;
         cursor = result.nextCursor;
+        const branchIdSet = new Set(branchIdsKey ? branchIdsKey.split("\u0000") : []);
         const incoming = result.events
-          .filter((event) => !branchId || event.branchId === branchId)
+          .filter((event) => {
+            if (branchId) return event.branchId === branchId;
+            return branchIdSet.size === 0 || branchIdSet.has(event.branchId);
+          })
           .reverse();
         if (incoming.length === 0) return;
         setItems((current) => {
@@ -117,7 +130,7 @@ export function LivePaymentList({
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [branchId, liveCursor, maxItems]);
+  }, [branchId, branchIdsKey, liveCursor, maxItems]);
 
   async function refundPayment(payment: LivePaymentEvent) {
     if (payment.refundStatus !== "REFUNDABLE") return;
