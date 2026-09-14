@@ -109,7 +109,7 @@ export async function getVendorMonthlyVerificationHistory(
     where: {
       vendorProfileId,
       status: "APPROVED",
-      NOT: { isVerified: false },
+      OR: [{ isVerified: true }, { isVerified: null }],
       completedAt: { not: null },
     },
     select: {

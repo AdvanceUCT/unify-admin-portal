@@ -136,6 +136,7 @@ describe("runVerificationBillingBackfill", () => {
     database.vendorVerification.findMany.mockResolvedValue([
       verification({
         billingStatus: "PENDING",
+        isVerified: null,
         verificationFeeMinor: 0,
         billingPeriodKey: null,
         pricingSnapshotAt: null,

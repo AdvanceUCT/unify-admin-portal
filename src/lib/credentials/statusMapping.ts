@@ -65,14 +65,14 @@ export function mapCredoStateToCredentialStatus(
 
 /**
  * Checks whether a webhook payload is worth processing.
- * We only care about `offer-sent` events, and `done` events that follow
- * `credential-issued` (i.e. the holder accepted). Everything else is ignored.
+ * We care about offer delivery, holder acceptance, and terminal failure/decline
+ * states. Intermediate states such as `credential-issued` are ignored.
  *
  * @param payload - The incoming webhook payload.
  * @returns `true` if the event should be recorded, `false` to skip it.
  */
 export function isRelevantCredentialStateChangedPayload(payload: CredentialStateChangedWebhookPayload) {
-  return payload.state === "offer-sent" || (payload.previousState === "credential-issued" && payload.state === "done");
+  return Boolean(mapCredoStateToCredentialStatus(payload.state));
 }
 
 /**

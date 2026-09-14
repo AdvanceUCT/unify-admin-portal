@@ -124,6 +124,7 @@ export function credentialStatusForAuditAction(
   value: CredentialAuditLogEntry["action"],
 ): StoredCredentialLifecycleState | undefined {
   if (value === "OFFER_SENT") return "OFFER_SENT";
+  if (value === "OFFER_DELIVERY_FAILED") return "FAILED";
   if (value === "CREDENTIAL_LIFECYCLE_ACTIVATED" || value === "CREDENTIAL_REACTIVATED") return "ACTIVE";
   if (value === "CREDENTIAL_SUSPENDED") return "SUSPENDED";
   if (value === "CREDENTIAL_REVOKED") return "REVOKED";
@@ -138,7 +139,15 @@ export function formatCredentialAuditAction(value: CredentialAuditLogEntry["acti
   return credentialAuditActionLabels[value];
 }
 
-export function formatCredentialActivityEventStatus(event: Pick<CredentialActivityEvent, "state" | "status">) {
+export function formatCredentialActivityEventStatus(event: Pick<CredentialActivityEvent, "message" | "state" | "status">) {
+  if (event.state === "CREDENTIAL_LIFECYCLE_ACTIVATED") return "Accepted";
+  if (
+    event.state === "OFFER_DELIVERY_FAILED" &&
+    event.status === "FAILED" &&
+    event.message?.toLowerCase().includes("declined")
+  ) {
+    return "Declined";
+  }
   if (event.state in credentialAuditActionLabels) {
     return credentialAuditActionLabels[event.state as CredentialAuditLogEntry["action"]];
   }

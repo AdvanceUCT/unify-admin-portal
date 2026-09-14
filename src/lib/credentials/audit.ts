@@ -25,6 +25,7 @@ type RecordCredentialOfferSentAuditInput = {
 
 const DASHBOARD_CREDENTIAL_AUDIT_ACTIONS = [
   CredentialAuditAction.OFFER_SENT,
+  CredentialAuditAction.OFFER_DELIVERY_FAILED,
   CredentialAuditAction.CREDENTIAL_LIFECYCLE_ACTIVATED,
   CredentialAuditAction.CREDENTIAL_SUSPENDED,
   CredentialAuditAction.CREDENTIAL_REACTIVATED,
@@ -210,6 +211,7 @@ export async function getRecentCredentialAuditActivityEvents(limit = 10): Promis
     events.push({
       credentialExchangeId: log.credentialExchangeId ?? "",
       id: log.id,
+      message: log.message,
       occurredAt: log.occurredAt,
       schemaVersion: log.schemaVersion ?? undefined,
       state: log.action,
