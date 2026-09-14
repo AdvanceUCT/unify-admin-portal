@@ -33,7 +33,7 @@ export function decodeLiveVerificationCursor(value: string): Cursor {
 export async function getLiveVerificationEvents(
   context: ApprovedVendorContext,
   rawCursor?: string,
-  options: { branchIds?: string[] } = {},
+  options: { branchIds?: string[]; source?: "all" | "qr" | "api" } = {},
 ) {
   if (!rawCursor) {
     return {
@@ -42,13 +42,18 @@ export async function getLiveVerificationEvents(
     };
   }
   const branchIds = options.branchIds?.filter((branchId) => context.branchIds.includes(branchId)) ?? context.branchIds;
+  const sourceWhere = options.source === "qr"
+    ? { checkoutId: null }
+    : options.source === "api"
+      ? { checkoutId: { not: null } }
+      : {};
   const cursor = decodeLiveVerificationCursor(rawCursor);
   const completedAt = new Date(cursor.completedAt);
   const verifications = await prisma.vendorVerification.findMany({
     where: {
       vendorProfileId: context.vendorProfileId,
       branchId: { in: branchIds },
-      checkoutId: null,
+      ...sourceWhere,
       completedAt: { not: null },
       OR: [
         { completedAt: { gt: completedAt } },
@@ -63,10 +68,10 @@ export async function getLiveVerificationEvents(
   const events = await Promise.all(verifications.map(async (verification) => {
     let attributes = normalizedVerificationAttributes(verification.attributes);
     let isVerified = verification.isVerified ?? null;
-    if (!attributes && verification.verificationRequestId) {
+    if (!attributes && verification.verificationRequestId && verification.servicePointId) {
       try {
         const result = await getInPersonVerificationDetails(verification.verificationRequestId);
-        if (result.servicePointId === verification.servicePointId || !result.servicePointId) {
+        if (result.servicePointId === verification.servicePointId) {
           attributes = normalizedVerificationAttributes(result.attributes);
           isVerified = result.isVerified ?? null;
         }
@@ -81,6 +86,8 @@ export async function getLiveVerificationEvents(
       verificationId: verification.id,
       branchId: verification.branchId,
       branchName: verification.branch?.name ?? verification.servicePointName ?? "Branch",
+      checkoutId: verification.checkoutId,
+      source: verification.checkoutId ? "api" : "qr",
       status: verification.status,
       isVerified,
       failureCode,

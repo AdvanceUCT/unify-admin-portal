@@ -378,6 +378,81 @@ describe("vendor checkout verification", () => {
     });
   });
 
+  it("hydrates and stores checkout identity metadata when polling applies a terminal agent result", async () => {
+    database.vendorVerification.findFirst.mockResolvedValue({
+      id: "stored-verification-001",
+      vendorProfileId: "vendor-001",
+      branchId: "branch-001",
+      verificationRequestId: "verification-001",
+      checkoutId: "cart-001",
+      servicePointId: "service-point-001",
+      status: "PENDING",
+      isVerified: null,
+      failureCode: null,
+      attributes: null,
+      createdAt: new Date("2026-08-03T20:00:00.000Z"),
+      completedAt: null,
+      expiresAt: new Date("2026-08-03T20:05:00.000Z"),
+    });
+    database.vendorVerification.findUnique.mockResolvedValue({
+      isVerified: null,
+      servicePointId: "service-point-001",
+      verificationRequestId: "verification-001",
+    });
+    agent.getVerificationResult.mockResolvedValue({
+      verificationRequestId: "verification-001",
+      checkoutId: "cart-001",
+      status: "Approved",
+      createdAt: "2026-08-03T20:00:00.000Z",
+      expiresAt: "2026-08-03T20:05:00.000Z",
+      completedAt: "2026-08-03T20:02:00.000Z",
+    });
+    agent.getInPersonVerificationDetails.mockResolvedValue({
+      verificationRequestId: "verification-001",
+      servicePointId: "service-point-001",
+      status: "Approved",
+      isVerified: true,
+      attributes: {
+        fullName: "Ada Lovelace",
+        institution: "University of Cape Town",
+        studentNumber: "STU001",
+      },
+    });
+    database.vendorVerification.update.mockResolvedValue({
+      id: "stored-verification-001",
+      vendorProfileId: "vendor-001",
+      branchId: "branch-001",
+      checkoutId: "cart-001",
+      servicePointName: "Main Branch",
+      status: "APPROVED",
+      failureCode: null,
+      billingStatus: "BILLABLE",
+      verificationFeeMinor: 125,
+      verificationFeeCurrency: "ZAR",
+      billingPeriodKey: "2026-08",
+      createdAt: new Date("2026-08-03T20:00:00.000Z"),
+      expiresAt: new Date("2026-08-03T20:05:00.000Z"),
+      completedAt: new Date("2026-08-03T20:02:00.000Z"),
+      branch: { name: "Main Branch" },
+    });
+
+    const result = await getVendorCheckoutVerificationResult("vendor-001", "verification-001");
+
+    expect(database.vendorVerification.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        attributes: {
+          fullName: "Ada Lovelace",
+          institution: "University of Cape Town",
+          studentNumber: "STU001",
+        },
+        isVerified: true,
+        status: "APPROVED",
+      }),
+    }));
+    expect(result).not.toHaveProperty("attributes");
+    expect(result).not.toHaveProperty("student");
+  });
+
   it("preserves detailed attributes for branch-scoped in-person verification", async () => {
     database.vendorVerification.findFirst.mockResolvedValue({
       id: "stored-verification-001",
@@ -409,13 +484,13 @@ describe("vendor checkout verification", () => {
     });
   });
 
-  it("enriches recent in-person rows that do not have stored attributes", async () => {
+  it("enriches recent rows that do not have stored attributes, including checkout verifications", async () => {
     database.vendorVerification.findMany.mockResolvedValue([{
       id: "stored-verification-001",
       vendorProfileId: "vendor-001",
       branchId: "branch-001",
       verificationRequestId: "verification-001",
-      checkoutId: null,
+      checkoutId: "cart-001",
       eventId: "event-001",
       servicePointId: "service-point-001",
       servicePointName: "Main Branch",
@@ -443,7 +518,7 @@ describe("vendor checkout verification", () => {
         studentNumber: "STU001",
       },
     });
-    const result = await listRecentVendorVerifications("vendor-001", 10, { inPersonOnly: true });
+    const result = await listRecentVendorVerifications("vendor-001", 10);
 
     expect(result[0]).toMatchObject({
       attributes: {
@@ -514,7 +589,27 @@ describe("vendor checkout verification", () => {
           name: "Ada Lovelace",
           university: "University of Cape Town",
         },
+        source: "qr",
       }],
+    });
+  });
+
+  it("can source-filter verification events to website/API checkout rows", async () => {
+    database.vendorVerification.count.mockResolvedValue(1);
+    database.vendorVerification.findMany.mockResolvedValue([]);
+
+    await listVendorVerificationEvents("vendor-001", ["branch-001"], { source: "api" });
+
+    expect(database.vendorVerification.count).toHaveBeenCalledWith({
+      where: {
+        AND: [
+          expect.objectContaining({
+            branchId: { in: ["branch-001"] },
+            checkoutId: { not: null },
+            vendorProfileId: "vendor-001",
+          }),
+        ],
+      },
     });
   });
 
@@ -535,7 +630,6 @@ describe("vendor checkout verification", () => {
         billingPeriodKey: "2026-08",
         billingStatus: "BILLABLE",
         branchId: { in: ["branch-001"] },
-        checkoutId: null,
         vendorProfileId: "vendor-001",
       },
       select: {
@@ -570,7 +664,6 @@ describe("vendor checkout verification", () => {
 
     const stats = await getVendorVerificationStats("vendor-001", {
       branchIds: ["branch-001"],
-      inPersonOnly: true,
     });
 
     expect(database.vendorVerification.count).toHaveBeenNthCalledWith(4, {
@@ -594,7 +687,6 @@ describe("vendor checkout verification", () => {
         billingPeriodKey: "2026-08",
         billingStatus: "BILLABLE",
         branchId: { in: ["branch-001"] },
-        checkoutId: null,
         vendorProfileId: "vendor-001",
       }),
       select: {
@@ -654,7 +746,7 @@ describe("vendor checkout verification", () => {
     });
 
     expect(csv.split("\r\n")[0]).toBe(
-      '"Completed At","Created At","Branch","Status","Billing Status","Fee","Currency","Billing Period","Billing Reason","Student Name","Student Number","University","Failure Code","Failure Reason","Verification Request ID","Event ID"',
+      '"Completed At","Created At","Branch","Source","Status","Billing Status","Fee","Currency","Billing Period","Billing Reason","Student Name","Student Number","University","Failure Code","Failure Reason","Verification Request ID","Checkout ID","Event ID"',
     );
     expect(csv).toContain('"Ada ""Countess"" Lovelace"');
     expect(csv).toContain('"BILLABLE","125","ZAR","2026-08","APPROVED_VERIFICATION"');

@@ -4,7 +4,7 @@
  */
 
 import Link from "next/link";
-import { Check, Eye, Globe, History, Link as LinkIcon, Mail, QrCode, TriangleAlert, User } from "lucide-react";
+import { Banknote, Check, Eye, Globe, History, Link as LinkIcon, Mail, QrCode, TriangleAlert, User } from "lucide-react";
 
 import { PageTabs } from "@/components/layout/PageTabs";
 import { Avatar } from "@/components/ui/Avatar";
@@ -175,6 +175,13 @@ export default async function VendorsPage({
                       >
                         <History aria-hidden className="size-4" />
                         Verification history
+                      </Link>
+                      <Link
+                        href={`/vendors/${application.id}/payout-history`}
+                        className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
+                      >
+                        <Banknote aria-hidden className="size-4" />
+                        Payout history
                       </Link>
                       {!application.vendorProfile.verificationUrl && (
                         <form action={createVendorVerificationQrAction}>

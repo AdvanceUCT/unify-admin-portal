@@ -9,6 +9,10 @@ import { getApprovedVendorContextForUser } from "@/lib/vendors/context";
 import { getLiveVerificationEvents } from "@/lib/vendors/liveVerifications";
 import { getCurrentVendorSession } from "@/lib/auth/session";
 
+function sourceParam(value: string | null) {
+  return value === "qr" || value === "api" ? value : undefined;
+}
+
 /** Handles GET requests to `/api/vendor/live-verifications`. */
 export async function GET(request: Request) {
   const session = await getCurrentVendorSession();
@@ -27,7 +31,7 @@ export async function GET(request: Request) {
     const result = await getLiveVerificationEvents(
       context,
       searchParams.get("cursor") ?? undefined,
-      branchIds.length > 0 ? { branchIds } : {},
+      { ...(branchIds.length > 0 ? { branchIds } : {}), source: sourceParam(searchParams.get("source")) },
     );
     return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
   } catch (error) {

@@ -40,8 +40,8 @@ export default async function VendorDashboardPage() {
       vendor.branches[0] ??
       null;
     const [stats, recentVerifications, recentPayments, universityProfile] = await Promise.all([
-      getVendorVerificationStats(context.vendorProfileId, { branchIds: context.branchIds, inPersonOnly: true }),
-      listRecentVendorVerifications(context.vendorProfileId, 5, { branchIds: context.branchIds, inPersonOnly: true }),
+      getVendorVerificationStats(context.vendorProfileId, { branchIds: context.branchIds }),
+      listRecentVendorVerifications(context.vendorProfileId, 5, { branchIds: context.branchIds }),
       listRecentVendorPayments(context, { limit: 5 }),
       getUniversityProfileForRender(),
     ]);

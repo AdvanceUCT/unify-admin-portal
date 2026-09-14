@@ -56,6 +56,7 @@ describe("VendorVerificationsPage", () => {
         failureReason: null,
         id: "verification-001",
         isVerified: true,
+        source: "api",
         status: "APPROVED",
         student: {
           id: "STU001",
@@ -85,6 +86,6 @@ describe("VendorVerificationsPage", () => {
     expect(screen.queryByRole("columnheader", { name: "Reason" })).not.toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Request ID" })).not.toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Price" })).toBeInTheDocument();
-    expect(screen.getByRole("row", { name: /Main Branch Ada Lovelace STU001/ })).toHaveTextContent(/R\s*1,25/);
+    expect(screen.getByRole("row", { name: /Main Branch Website\/API Ada Lovelace STU001/ })).toHaveTextContent(/R\s*1,25/);
   });
 });

@@ -56,15 +56,21 @@ export type VendorVerificationEventFilters = {
   dateTo?: string;
   page?: number;
   query?: string;
+  source?: VendorVerificationSource;
   university?: string;
 };
 
+export type VendorVerificationSource = "all" | "qr" | "api";
+
 type VerificationEventRow = {
   id: string;
+  eventId: string | null;
   branchId: string | null;
   branch?: { name: string } | null;
   servicePointName: string | null;
   verificationRequestId: string | null;
+  checkoutId: string | null;
+  servicePointId: string | null;
   status: VendorVerificationStatus;
   isVerified: boolean | null;
   failureCode: string | null;
@@ -84,10 +90,11 @@ async function getAgentVerificationMetadata(
   servicePointId: string | null,
 ) {
   if (!verificationRequestId) return { attributes: null, isVerified: null };
+  if (!servicePointId) return { attributes: null, isVerified: null };
 
   try {
     const result = await getInPersonVerificationDetails(verificationRequestId);
-    if (result.servicePointId && servicePointId && result.servicePointId !== servicePointId) {
+    if (result.servicePointId !== servicePointId) {
       // Never attach disclosed attributes to a record bound to another service
       // point, even if the verification request identifier was supplied correctly.
       return { attributes: null, isVerified: null };
@@ -191,6 +198,12 @@ function successfulVerificationWhere(): Prisma.VendorVerificationWhereInput {
   };
 }
 
+function sourceFilter(source: VendorVerificationSource | undefined): Prisma.VendorVerificationWhereInput {
+  if (source === "qr") return { checkoutId: null };
+  if (source === "api") return { checkoutId: { not: null } };
+  return {};
+}
+
 function verificationEventsWhere(
   vendorProfileId: string,
   allowedBranchIds: string[],
@@ -207,7 +220,7 @@ function verificationEventsWhere(
     {
       vendorProfileId,
       branchId: { in: branchIds },
-      checkoutId: null,
+      ...sourceFilter(filters.source),
     },
   ];
 
@@ -224,6 +237,20 @@ function verificationEventsWhere(
   return { AND: and };
 }
 
+async function hydrateVerificationEventRow(verification: VerificationEventRow): Promise<VerificationEventRow> {
+  const storedAttributes = normalizedVerificationAttributes(verification.attributes);
+  if (storedAttributes || !verification.verificationRequestId) return verification;
+
+  const metadata = await getAgentVerificationMetadata(verification.verificationRequestId, verification.servicePointId);
+  if (!metadata.attributes) return verification;
+
+  return {
+    ...verification,
+    attributes: metadata.attributes,
+    isVerified: verification.isVerified ?? metadata.isVerified,
+  };
+}
+
 function verificationEventShape(verification: VerificationEventRow) {
   const attributes = normalizedVerificationAttributes(verification.attributes);
 
@@ -232,6 +259,8 @@ function verificationEventShape(verification: VerificationEventRow) {
     branchId: verification.branchId,
     branchName: verification.branch?.name ?? verification.servicePointName ?? "Branch",
     verificationRequestId: verification.verificationRequestId,
+    checkoutId: verification.checkoutId,
+    source: verification.checkoutId ? "api" : "qr",
     status: verification.status,
     isVerified: verification.isVerified,
     failureCode: verification.failureCode,
@@ -252,11 +281,21 @@ function verificationEventShape(verification: VerificationEventRow) {
 }
 
 async function applyAgentResult(id: string, result: AgentVerificationResult) {
+  const existing = await prisma.vendorVerification.findUnique({
+    where: { id },
+    select: { isVerified: true, servicePointId: true, verificationRequestId: true },
+  });
   const status = mapAgentVerificationDecision(result.status);
   const completedAt = result.completedAt ? new Date(result.completedAt) : null;
+  const metadata = completedAt
+    ? await getAgentVerificationMetadata(
+        result.verificationRequestId || existing?.verificationRequestId || null,
+        existing?.servicePointId ?? null,
+      )
+    : { attributes: null, isVerified: null };
   const billingSnapshot = resolveVerificationBillingSnapshot({
     completedAt,
-    isVerified: null,
+    isVerified: metadata.isVerified ?? existing?.isVerified ?? null,
     status,
   });
 
@@ -264,7 +303,9 @@ async function applyAgentResult(id: string, result: AgentVerificationResult) {
     where: { id },
     data: {
       status,
+      ...(metadata.isVerified !== null ? { isVerified: metadata.isVerified } : {}),
       failureCode: result.failureCode ?? null,
+      ...(metadata.attributes ? { attributes: metadata.attributes } : {}),
       expiresAt: new Date(result.expiresAt),
       completedAt,
       ...billingSnapshot,
@@ -498,7 +539,7 @@ export async function retryVendorWebhook(vendorProfileId: string, verificationId
 
 export async function getVendorVerificationStats(
   vendorProfileId: string,
-  options: { branchIds?: string[]; inPersonOnly?: boolean } = {},
+  options: { branchIds?: string[]; inPersonOnly?: boolean; source?: VendorVerificationSource } = {},
 ) {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -506,7 +547,7 @@ export async function getVendorVerificationStats(
   const where = {
     vendorProfileId,
     ...(options.branchIds ? { branchId: { in: options.branchIds } } : {}),
-    ...(options.inPersonOnly ? { checkoutId: null } : {}),
+    ...(options.inPersonOnly ? { checkoutId: null } : sourceFilter(options.source)),
   };
   const [total, approved, pending, thisMonth, currentMonthSuccessful, currentMonthFailedOrDeclined, billingRows] = await Promise.all([
     prisma.vendorVerification.count({ where }),
@@ -560,7 +601,6 @@ export async function getVendorVerificationBillingSummary(
     where: {
       vendorProfileId,
       branchId: { in: branchIds },
-      checkoutId: null,
       billingPeriodKey: periodKey,
       billingStatus: VendorVerificationBillingStatus.BILLABLE,
     },
@@ -585,13 +625,13 @@ export async function getVendorVerificationBillingSummary(
 export async function listRecentVendorVerifications(
   vendorProfileId: string,
   limit = 5,
-  options: { branchIds?: string[]; inPersonOnly?: boolean } = {},
+  options: { branchIds?: string[]; inPersonOnly?: boolean; source?: VendorVerificationSource } = {},
 ) {
   const verifications = await prisma.vendorVerification.findMany({
     where: {
       vendorProfileId,
       ...(options.branchIds ? { branchId: { in: options.branchIds } } : {}),
-      ...(options.inPersonOnly ? { checkoutId: null } : {}),
+      ...(options.inPersonOnly ? { checkoutId: null } : sourceFilter(options.source)),
     },
     include: { deliveries: { orderBy: { attemptNumber: "desc" }, take: 1 } },
     orderBy: { createdAt: "desc" },
@@ -600,7 +640,7 @@ export async function listRecentVendorVerifications(
 
   return Promise.all(verifications.map(async (verification) => {
     const storedAttributes = normalizedVerificationAttributes(verification.attributes);
-    if (storedAttributes || !verification.verificationRequestId || verification.checkoutId) return verification;
+    if (storedAttributes || !verification.verificationRequestId) return verification;
 
     const metadata = await getAgentVerificationMetadata(verification.verificationRequestId, verification.servicePointId);
     if (!metadata.attributes) return verification;
@@ -632,7 +672,7 @@ export async function listVendorVerificationEvents(
   ]);
 
   return {
-    events: rows.map(verificationEventShape),
+    events: (await Promise.all(rows.map(hydrateVerificationEventRow))).map(verificationEventShape),
     page,
     pageSize: VERIFICATION_EVENTS_PAGE_SIZE,
     total,
@@ -648,7 +688,6 @@ export async function listVendorVerificationUniversities(
     where: {
       vendorProfileId,
       branchId: { in: allowedBranchIds },
-      checkoutId: null,
       attributes: { not: Prisma.DbNull },
     },
     select: { attributes: true },
@@ -687,6 +726,7 @@ export async function exportVendorVerificationEventsCsv(
     "Completed At",
     "Created At",
     "Branch",
+    "Source",
     "Status",
     "Billing Status",
     "Fee",
@@ -699,15 +739,18 @@ export async function exportVendorVerificationEventsCsv(
     "Failure Code",
     "Failure Reason",
     "Verification Request ID",
+    "Checkout ID",
     "Event ID",
   ];
-  const body = rows.map((row) => {
+  const hydratedRows = await Promise.all(rows.map(hydrateVerificationEventRow));
+  const body = hydratedRows.map((row) => {
     const attributes = normalizedVerificationAttributes(row.attributes);
     const student = summarizeVerificationStudent(attributes);
     return [
       row.completedAt?.toISOString() ?? "",
       row.createdAt.toISOString(),
       row.branch?.name ?? row.servicePointName ?? "",
+      row.checkoutId ? "Website / API checkout" : "QR / in-person",
       row.status,
       row.billingStatus,
       row.verificationFeeMinor,
@@ -720,6 +763,7 @@ export async function exportVendorVerificationEventsCsv(
       row.failureCode,
       vendorVerificationFailureReason(row.failureCode),
       row.verificationRequestId,
+      row.checkoutId,
       row.eventId,
     ].map(csvCell).join(",");
   });

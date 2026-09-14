@@ -67,16 +67,24 @@ export function VendorVerificationsFilterBar({
   // not what's showing in the fields. Keying the form on the filter values
   // forces a remount whenever they actually change, so the fields stay in
   // sync with the URL for both Apply and Reset.
-  const filterKey = [filters.query, filters.university, filters.dateFrom, filters.dateTo, filters.branchId]
+  const filterKey = [filters.query, filters.university, filters.dateFrom, filters.dateTo, filters.branchId, filters.source]
     .map((value) => value ?? "")
     .join("|");
 
   return (
     <section className="rounded-xl border border-border bg-surface p-4 shadow-md">
-      <form className="grid gap-3 lg:grid-cols-[minmax(14rem,1fr)_repeat(3,minmax(10rem,12rem))_auto]" key={filterKey} onSubmit={handleSubmit}>
+      <form className="grid gap-3 lg:grid-cols-[minmax(14rem,1fr)_repeat(4,minmax(10rem,12rem))_auto]" key={filterKey} onSubmit={handleSubmit}>
         <label className={labelClassName}>
           Search
           <input className={inputClassName} defaultValue={filters.query ?? ""} disabled={isPending} name="q" placeholder="Name or student number" />
+        </label>
+        <label className={labelClassName}>
+          Source
+          <select className={inputClassName} defaultValue={filters.source ?? ""} disabled={isPending} name="source">
+            <option value="">All sources</option>
+            <option value="qr">QR / in-person</option>
+            <option value="api">Website / API</option>
+          </select>
         </label>
         <label className={labelClassName}>
           University
