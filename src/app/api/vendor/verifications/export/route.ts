@@ -7,11 +7,20 @@ import { NextResponse } from "next/server";
 
 import { getCurrentVendorSession } from "@/lib/auth/session";
 import { getApprovedVendorContextForUser } from "@/lib/vendors/context";
-import { exportVendorVerificationEventsCsv, type VendorVerificationEventFilters } from "@/lib/vendors/verifications";
+import {
+  exportVendorVerificationEventsCsv,
+  type VendorVerificationEventFilters,
+  type VendorVerificationSource,
+} from "@/lib/vendors/verifications";
 
 function optionalParam(searchParams: URLSearchParams, name: string) {
   const value = searchParams.get(name)?.trim();
   return value || undefined;
+}
+
+function sourceParam(searchParams: URLSearchParams): VendorVerificationSource | undefined {
+  const source = optionalParam(searchParams, "source");
+  return source === "qr" || source === "api" ? source : undefined;
 }
 
 function exportFilename() {
@@ -38,6 +47,7 @@ export async function GET(request: Request) {
     dateFrom: optionalParam(searchParams, "dateFrom"),
     dateTo: optionalParam(searchParams, "dateTo"),
     query: optionalParam(searchParams, "q"),
+    source: sourceParam(searchParams),
     university: optionalParam(searchParams, "university"),
   };
   const csv = await exportVendorVerificationEventsCsv(context.vendorProfileId, context.branchIds, filters);

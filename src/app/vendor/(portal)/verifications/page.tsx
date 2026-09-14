@@ -13,6 +13,7 @@ import {
   listVendorVerificationEvents,
   listVendorVerificationUniversities,
   type VendorVerificationEventFilters,
+  type VendorVerificationSource,
 } from "@/lib/vendors/verifications";
 import { ExportCsvButton } from "./ExportCsvButton";
 import { VendorVerificationsFilterBar } from "./VendorVerificationsFilterBar";
@@ -28,6 +29,11 @@ function pageParam(value: string | string[] | undefined) {
   return Number.isInteger(page) && page > 0 ? page : 1;
 }
 
+function sourceParam(value: string | string[] | undefined): VendorVerificationSource | undefined {
+  const source = firstParam(value);
+  return source === "qr" || source === "api" ? source : undefined;
+}
+
 function pageHref(filters: VendorVerificationEventFilters, page: number) {
   const params = new URLSearchParams();
   if (filters.query) params.set("q", filters.query);
@@ -35,6 +41,7 @@ function pageHref(filters: VendorVerificationEventFilters, page: number) {
   if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
   if (filters.dateTo) params.set("dateTo", filters.dateTo);
   if (filters.branchId) params.set("branchId", filters.branchId);
+  if (filters.source) params.set("source", filters.source);
   params.set("page", String(page));
   return `/vendor/verifications?${params.toString()}`;
 }
@@ -46,6 +53,7 @@ function exportHref(filters: VendorVerificationEventFilters) {
   if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
   if (filters.dateTo) params.set("dateTo", filters.dateTo);
   if (filters.branchId) params.set("branchId", filters.branchId);
+  if (filters.source) params.set("source", filters.source);
   const query = params.toString();
   return `/api/vendor/verifications/export${query ? `?${query}` : ""}`;
 }
@@ -59,6 +67,7 @@ export default async function VendorVerificationsPage({
     dateTo?: string | string[];
     page?: string | string[];
     q?: string | string[];
+    source?: string | string[];
     university?: string | string[];
   }>;
 }) {
@@ -70,6 +79,7 @@ export default async function VendorVerificationsPage({
     dateTo: firstParam(params.dateTo),
     page: pageParam(params.page),
     query: firstParam(params.q),
+    source: sourceParam(params.source),
     university: firstParam(params.university),
   };
   const [branches, universities, result] = await Promise.all([
@@ -111,6 +121,7 @@ export default async function VendorVerificationsPage({
               <tr className="whitespace-nowrap text-caption uppercase tracking-wide text-fg-subtle">
                 <th className="px-4 py-3 font-medium">Completed</th>
                 <th className="px-4 py-3 font-medium">Branch</th>
+                <th className="px-4 py-3 font-medium">Source</th>
                 <th className="px-4 py-3 font-medium">Student</th>
                 <th className="px-4 py-3 font-medium">Student number</th>
                 <th className="px-4 py-3 font-medium">University</th>
@@ -133,6 +144,7 @@ export default async function VendorVerificationsPage({
                       {formatDateTime(event.completedAt ?? event.createdAt)}
                     </td>
                     <td className="px-4 py-3 font-medium text-fg">{event.branchName}</td>
+                    <td className="px-4 py-3 text-fg-muted">{event.source === "api" ? "Website/API" : "QR"}</td>
                     <td className="px-4 py-3 font-medium text-fg">{studentName}</td>
                     <td className="px-4 py-3 text-fg-muted">{studentNumber}</td>
                     <td className="px-4 py-3 text-fg-muted">{university}</td>

@@ -23,6 +23,7 @@ const verification = {
   id: "verification-1",
   eventId: "event-1",
   verificationRequestId: "request-1",
+  checkoutId: null,
   branchId: "branch-1",
   servicePointId: "service-point-1",
   servicePointName: "Main Branch",
@@ -57,7 +58,17 @@ describe("live in-person verification feed", () => {
     const result = await getLiveVerificationEvents(context, cursor);
     expect(result.events[0]).toMatchObject({ studentName: "Ada Lovelace", studentNumber: "STU001" });
     expect(database.vendorVerification.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ branchId: { in: ["branch-1"] }, checkoutId: null }),
+      where: expect.objectContaining({ branchId: { in: ["branch-1"] } }),
+    }));
+  });
+
+  it("can source-filter the live feed to API checkout results", async () => {
+    database.vendorVerification.findMany.mockResolvedValue([]);
+    const cursor = encodeLiveVerificationCursor({ completedAt: "2026-08-04T12:00:00.000Z", id: "_" });
+    await getLiveVerificationEvents(context, cursor, { source: "api" });
+
+    expect(database.vendorVerification.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ checkoutId: { not: null } }),
     }));
   });
 
@@ -109,6 +120,7 @@ describe("live in-person verification feed", () => {
     database.vendorVerification.findMany.mockResolvedValue([verification]);
     agent.getInPersonVerificationDetails.mockResolvedValue({
       verificationRequestId: "request-1",
+      servicePointId: "service-point-1",
       status: "Declined",
       isVerified: false,
       attributes: { fullName: "Forged Name", studentNumber: "FORGED" },

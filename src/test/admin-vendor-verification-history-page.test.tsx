@@ -2,6 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import VendorsPage from "@/app/(admin)/vendors/page";
+import AdminVendorPayoutHistoryPage from "@/app/(admin)/vendors/[applicationId]/payout-history/page";
 import VendorVerificationHistoryPage from "@/app/(admin)/vendors/[applicationId]/verification-history/page";
 
 const auth = vi.hoisted(() => ({
@@ -17,6 +18,9 @@ const reports = vi.hoisted(() => ({
 }));
 const invoiceQueries = vi.hoisted(() => ({
   getVendorInvoiceHistory: vi.fn(),
+}));
+const payoutHistory = vi.hoisted(() => ({
+  listVendorPayoutHistoryForVendorProfile: vi.fn(),
 }));
 const branchPaymentOnboarding = vi.hoisted(() => ({
   listBranchPaymentAccessQueue: vi.fn(),
@@ -35,6 +39,9 @@ vi.mock("@/lib/auth/session", () => auth);
 vi.mock("@/lib/vendors/applications", () => applications);
 vi.mock("@/lib/vendors/monthlyVerificationHistory", () => reports);
 vi.mock("@/lib/billing/invoiceQueries", () => invoiceQueries);
+vi.mock("@/lib/vendors/payoutHistory", () => ({
+  listVendorPayoutHistoryForVendorProfile: payoutHistory.listVendorPayoutHistoryForVendorProfile,
+}));
 vi.mock("@/lib/payments/branchOnboarding", () => branchPaymentOnboarding);
 vi.mock("@/app/(admin)/vendors/actions", () => ({
   approveVendorApplicationAction: vi.fn(),
@@ -130,6 +137,30 @@ describe("admin vendor verification history", () => {
     ));
     reports.getVendorMonthlyVerificationHistory.mockResolvedValue(history);
     invoiceQueries.getVendorInvoiceHistory.mockResolvedValue(invoiceHistory);
+    payoutHistory.listVendorPayoutHistoryForVendorProfile.mockResolvedValue({
+      page: 1,
+      pageSize: 10,
+      payouts: [
+        {
+          id: "payout-1",
+          amountMinor: 12_50,
+          attemptCount: 1,
+          completedAt: "2026-09-14T12:05:00.000Z",
+          createdAt: "2026-09-14T12:00:00.000Z",
+          currency: "ZAR",
+          cutoffAt: "2026-09-14T11:59:00.000Z",
+          failureCode: null,
+          initiationSource: "MANUAL",
+          lastAttemptAt: "2026-09-14T12:01:00.000Z",
+          provider: "PAYSTACK",
+          providerPayoutId: "simulated-payout-1",
+          reference: "unify-payout-demo",
+          status: "COMPLETED",
+        },
+      ],
+      total: 1,
+      totalPages: 1,
+    });
     branchPaymentOnboarding.listBranchPaymentAccessQueue.mockResolvedValue({
       activeAcceptances: [],
       pendingApplications: [],
@@ -147,6 +178,9 @@ describe("admin vendor verification history", () => {
     expect(
       screen.getByRole("link", { name: "Verification history" }),
     ).toHaveAttribute("href", "/vendors/application-1/verification-history");
+    expect(
+      screen.getByRole("link", { name: "Payout history" }),
+    ).toHaveAttribute("href", "/vendors/application-1/payout-history");
   });
 
   it("requires admin access before rendering the page", async () => {
@@ -205,5 +239,24 @@ describe("admin vendor verification history", () => {
     );
 
     expect(screen.getByText("No invoices for 2024.")).toBeInTheDocument();
+  });
+
+  it("renders admin payout history for the approved vendor", async () => {
+    render(
+      await AdminVendorPayoutHistoryPage({
+        params: Promise.resolve({ applicationId: "application-1" }),
+        searchParams: Promise.resolve({ source: "MANUAL", status: "COMPLETED" }),
+      }),
+    );
+
+    expect(auth.requireRoleForRender).toHaveBeenCalledWith(["SUPER_ADMIN", "ADMIN"]);
+    expect(payoutHistory.listVendorPayoutHistoryForVendorProfile).toHaveBeenCalledWith(
+      "vendor-profile-1",
+      expect.objectContaining({ initiationSource: "MANUAL", status: "COMPLETED" }),
+    );
+    expect(screen.getByRole("heading", { name: "Payout history" })).toBeInTheDocument();
+    expect(screen.getByText(/Admin view of scheduled and manual payout batches for this vendor wallet/i)).toBeInTheDocument();
+    expect(screen.getByText(/R\s*12,50/)).toBeInTheDocument();
+    expect(screen.getByText("unify-payout-demo")).toBeInTheDocument();
   });
 });

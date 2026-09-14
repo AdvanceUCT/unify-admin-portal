@@ -93,11 +93,9 @@ export default async function VendorBranchPage({
   const [stats, history] = await Promise.all([
     getVendorVerificationStats(context.vendorProfileId, {
       branchIds: [branch.id],
-      inPersonOnly: true,
     }),
     listRecentVendorVerifications(context.vendorProfileId, 5, {
       branchIds: [branch.id],
-      inPersonOnly: true,
     }),
   ]);
   const qrSvg = branch.verificationUrl

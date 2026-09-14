@@ -26,7 +26,7 @@ describe("vendor verification CSV export route", () => {
   });
 
   it("returns a CSV attachment using current filters", async () => {
-    const response = await GET(new Request("http://localhost/api/vendor/verifications/export?branchId=branch-001&q=Ada&university=UCT&dateFrom=2026-08-01&dateTo=2026-08-08"));
+    const response = await GET(new Request("http://localhost/api/vendor/verifications/export?branchId=branch-001&q=Ada&university=UCT&dateFrom=2026-08-01&dateTo=2026-08-08&source=api"));
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("text/csv; charset=utf-8");
@@ -37,6 +37,7 @@ describe("vendor verification CSV export route", () => {
       dateFrom: "2026-08-01",
       dateTo: "2026-08-08",
       query: "Ada",
+      source: "api",
       university: "UCT",
     });
   });

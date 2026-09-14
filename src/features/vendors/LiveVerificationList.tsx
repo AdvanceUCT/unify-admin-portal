@@ -38,6 +38,8 @@ type LiveEvent = {
   verificationId: string;
   branchId: string | null;
   branchName: string;
+  checkoutId: string | null;
+  source: "api" | "qr";
   status: "APPROVED" | "DECLINED" | "EXPIRED" | "FAILED";
   failureCode: string | null;
   failureReason: string | null;
@@ -58,7 +60,7 @@ function itemFromLiveEvent(event: LiveEvent): VerificationItem {
     id: event.verificationId,
     branchId: event.branchId,
     verificationRequestId: null,
-    checkoutId: null,
+    checkoutId: event.checkoutId,
     servicePointName: event.branchName,
     status: event.status,
     isVerified: event.isVerified,
