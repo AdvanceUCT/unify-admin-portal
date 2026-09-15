@@ -23,7 +23,7 @@ export default async function PaymentsAboutPage() {
           <div className="space-y-3">
             <h1 className="text-page-title text-fg">How UNIFY wallet payments work</h1>
             <p className="text-sm leading-relaxed text-fg-muted">
-              Students top up a UNIFY wallet, then spend that balance at approved on-campus vendor
+              Students top up a UNIFY wallet, then spend that balance at approved vendor
               branches. For this proof of concept, Paystack is used in test mode for wallet top-ups;
               branch payments and ordinary vendor refunds are internal ledger movements.
             </p>
@@ -55,13 +55,14 @@ export default async function PaymentsAboutPage() {
           <div className="space-y-3">
             <h2 className="text-section-title text-fg">Approving branch payment access</h2>
             <p className="text-sm leading-relaxed text-fg-muted">
-              Payment QR access is approved per branch, not per vendor. Before approving, classify
-              the branch as on-campus from{" "}
+              Payment QR access is approved per branch, not per vendor. Before approving, review
+              the branch payment access application from{" "}
               <Link className="text-info-fg underline hover:no-underline" href="/vendors?tab=payments">
                 Payment Access
               </Link>
-              . Approval provisions the vendor wallet account if needed and creates the branch&apos;s
-              opaque QR identifier.
+              . Approval checks the vendor payout destination and student-data acknowledgement,
+              provisions the vendor wallet account if needed, and creates the branch&apos;s opaque QR
+              identifier.
             </p>
           </div>
 
@@ -80,10 +81,6 @@ export default async function PaymentsAboutPage() {
               <li>
                 Wallet balances are financial records. Corrections should be explicit ledger
                 transactions such as refunds, never direct balance edits.
-              </li>
-              <li>
-                Existing approved payment QRs remain usable even if a branch has not yet been
-                classified; new approvals require on-campus classification.
               </li>
             </ul>
           </div>

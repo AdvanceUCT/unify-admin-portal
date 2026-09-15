@@ -12,7 +12,6 @@ import {
   AuditAction,
   BranchPaymentAcceptanceStatus,
   BranchPaymentApplicationStatus,
-  CampusStatus,
   VendorBranchStatus,
   VendorPaymentProfileStatus,
   WalletAccountType,
@@ -20,12 +19,28 @@ import {
 import { writeAuditLog } from "@/lib/audit/audit";
 import { prisma } from "@/lib/db/prisma";
 import { WALLET_CURRENCY } from "@/lib/payments/constants";
+import type { ApprovedVendorContext } from "@/lib/vendors/context";
+import { decryptVendorSecret } from "@/lib/vendors/integrationCrypto";
 
 const ACTIVE_APPLICATION_STATUSES = [
   BranchPaymentApplicationStatus.DRAFT,
   BranchPaymentApplicationStatus.PENDING,
   BranchPaymentApplicationStatus.APPROVED,
 ] as const;
+
+export const PAYMENT_ACCESS_ACKNOWLEDGEMENT_TEXT =
+  "I will use student transaction data only to process payments and will not store or share it beyond that.";
+
+type SafePayoutDestinationSnapshot = {
+  accountHolderName?: string | null;
+  accountMask?: string | null;
+  bankCode?: string | null;
+  bankName?: string | null;
+  createdAt?: string | null;
+  provider: string;
+  providerAccountName?: string | null;
+  recipientCode?: string | null;
+};
 
 function hasPrismaErrorCode(error: unknown, code: string) {
   return (
@@ -84,12 +99,87 @@ const reviewSchema = z.object({
   notes: z.string().trim().max(500).optional(),
 });
 
+const submitSchema = branchScopedSchema.extend({
+  acknowledgementAccepted: z.literal(true, {
+    error: "The student transaction data acknowledgement is required.",
+  }),
+});
+
+function parsePayoutDestinationSnapshot(value: string | null | undefined): SafePayoutDestinationSnapshot | null {
+  if (!value) return null;
+
+  try {
+    const parsed = JSON.parse(decryptVendorSecret(value)) as SafePayoutDestinationSnapshot;
+    if (!parsed || typeof parsed !== "object" || typeof parsed.provider !== "string") {
+      return null;
+    }
+
+    return {
+      provider: parsed.provider,
+      recipientCode: typeof parsed.recipientCode === "string" ? parsed.recipientCode : null,
+      accountHolderName: typeof parsed.accountHolderName === "string" ? parsed.accountHolderName : null,
+      accountMask: typeof parsed.accountMask === "string" ? parsed.accountMask : null,
+      bankCode: typeof parsed.bankCode === "string" ? parsed.bankCode : null,
+      bankName: typeof parsed.bankName === "string" ? parsed.bankName : null,
+      providerAccountName:
+        typeof parsed.providerAccountName === "string" ? parsed.providerAccountName : null,
+      createdAt: typeof parsed.createdAt === "string" ? parsed.createdAt : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function applicationHasPaymentDetails(application: {
+  payoutDestinationReferenceSnapshot: string | null;
+  payoutDestinationSnapshot: Prisma.JsonValue | null;
+  studentDataAcknowledgedAt: Date | null;
+  studentDataAcknowledgementText: string | null;
+}) {
+  return Boolean(
+    application.payoutDestinationReferenceSnapshot &&
+      application.payoutDestinationSnapshot &&
+      application.studentDataAcknowledgedAt &&
+      application.studentDataAcknowledgementText === PAYMENT_ACCESS_ACKNOWLEDGEMENT_TEXT,
+  );
+}
+
+async function currentPayoutSnapshot(
+  transaction: Prisma.TransactionClient,
+  vendorProfileId: string,
+) {
+  const profile = await transaction.vendorPaymentProfile.findUnique({
+    where: { vendorProfileId },
+    select: {
+      payoutDestinationCiphertext: true,
+      payoutDestinationReference: true,
+      payoutProvider: true,
+    },
+  });
+
+  if (!profile?.payoutProvider || !profile.payoutDestinationReference || !profile.payoutDestinationCiphertext) {
+    throw new Error("Save a payout destination before requesting payment access.");
+  }
+
+  const snapshot = parsePayoutDestinationSnapshot(profile.payoutDestinationCiphertext);
+  if (!snapshot) {
+    throw new Error("Unable to read the saved payout destination. Save it again before requesting payment access.");
+  }
+
+  return {
+    payoutProviderSnapshot: profile.payoutProvider,
+    payoutDestinationReferenceSnapshot: profile.payoutDestinationReference,
+    payoutDestinationSnapshot: snapshot,
+  };
+}
+
 export async function submitBranchPaymentApplication(input: {
   vendorProfileId: string;
   branchId: string;
   actorId: string;
+  acknowledgementAccepted: boolean;
 }) {
-  const data = branchScopedSchema.parse(input);
+  const data = submitSchema.parse(input);
 
   return runSerializableTransaction(async (transaction) => {
     const branch = await transaction.vendorBranch.findFirst({
@@ -117,21 +207,38 @@ export async function submitBranchPaymentApplication(input: {
       throw new Error("This branch is already approved for wallet payments.");
     }
     if (existing?.status === BranchPaymentApplicationStatus.PENDING) {
-      return existing;
+      if (applicationHasPaymentDetails(existing)) return existing;
+
+      const snapshot = await currentPayoutSnapshot(transaction, data.vendorProfileId);
+      return transaction.vendorBranchPaymentApplication.update({
+        where: { id: existing.id },
+        data: {
+          ...snapshot,
+          studentDataAcknowledgedAt: new Date(),
+          studentDataAcknowledgementText: PAYMENT_ACCESS_ACKNOWLEDGEMENT_TEXT,
+        },
+      });
     }
 
+    const snapshot = await currentPayoutSnapshot(transaction, data.vendorProfileId);
     const application = existing?.status === BranchPaymentApplicationStatus.DRAFT
       ? await transaction.vendorBranchPaymentApplication.update({
           where: { id: existing.id },
           data: {
+            ...snapshot,
             status: BranchPaymentApplicationStatus.PENDING,
+            studentDataAcknowledgedAt: new Date(),
+            studentDataAcknowledgementText: PAYMENT_ACCESS_ACKNOWLEDGEMENT_TEXT,
             submittedAt: new Date(),
           },
         })
       : await transaction.vendorBranchPaymentApplication.create({
           data: {
+            ...snapshot,
             vendorBranchId: branch.id,
             status: BranchPaymentApplicationStatus.PENDING,
+            studentDataAcknowledgedAt: new Date(),
+            studentDataAcknowledgementText: PAYMENT_ACCESS_ACKNOWLEDGEMENT_TEXT,
             submittedAt: new Date(),
           },
         });
@@ -148,36 +255,6 @@ export async function submitBranchPaymentApplication(input: {
     );
 
     return application;
-  });
-}
-
-export async function setBranchCampusStatus(input: {
-  branchId: string;
-  campusStatus: "ON_CAMPUS" | "OFF_CAMPUS";
-  actorId: string;
-}) {
-  const data = adminBranchSchema.extend({
-    campusStatus: z.enum([CampusStatus.ON_CAMPUS, CampusStatus.OFF_CAMPUS]),
-  }).parse(input);
-
-  return runSerializableTransaction(async (transaction) => {
-    const branch = await transaction.vendorBranch.update({
-      where: { id: data.branchId },
-      data: { campusStatus: data.campusStatus },
-    });
-
-    await writeAuditLog(
-      {
-        action: AuditAction.VENDOR_BRANCH_CAMPUS_STATUS_CHANGED,
-        actorId: data.actorId,
-        targetType: "vendor_branch",
-        targetId: branch.id,
-        meta: { campusStatus: data.campusStatus },
-      },
-      transaction,
-    );
-
-    return branch;
   });
 }
 
@@ -211,8 +288,8 @@ export async function approveBranchPaymentApplication(input: {
     if (!branch.active || branch.status !== VendorBranchStatus.ACTIVE) {
       throw new Error("Only active branches can be approved for wallet payments.");
     }
-    if (branch.campusStatus !== CampusStatus.ON_CAMPUS) {
-      throw new Error("This branch must be marked as on-campus before payment access can be approved.");
+    if (!applicationHasPaymentDetails(application)) {
+      throw new Error("This payment-access request is missing its payout destination or student data acknowledgement.");
     }
 
     const updateResult = await transaction.vendorBranchPaymentApplication.updateMany({
@@ -339,7 +416,7 @@ export async function rejectBranchPaymentApplication(input: {
   });
 }
 
-export async function closeBranchPaymentAcceptance(input: {
+export async function revokeBranchPaymentAcceptance(input: {
   branchId: string;
   actorId: string;
   notes: string;
@@ -371,15 +448,15 @@ export async function closeBranchPaymentAcceptance(input: {
       where: { id: acceptance.approvedApplicationId },
       data: {
         status: BranchPaymentApplicationStatus.REVOKED,
-        reviewedAt: acceptance.approvedApplication.reviewedAt,
-        reviewedByUserId: acceptance.approvedApplication.reviewedByUserId,
-        reviewNotes: acceptance.approvedApplication.reviewNotes,
+        revokedAt: new Date(),
+        revokedByUserId: data.actorId,
+        revokedNotes: data.notes,
       },
     });
 
     await writeAuditLog(
       {
-        action: AuditAction.VENDOR_BRANCH_PAYMENT_ACCEPTANCE_CLOSED,
+        action: AuditAction.VENDOR_BRANCH_PAYMENT_ACCESS_REVOKED,
         actorId: data.actorId,
         targetType: "vendor_branch_payment_acceptance",
         targetId: acceptance.id,
@@ -390,12 +467,93 @@ export async function closeBranchPaymentAcceptance(input: {
   });
 }
 
+export async function getVendorPayoutDestinationSummary(vendorProfileId: string) {
+  const profile = await prisma.vendorPaymentProfile.findUnique({
+    where: { vendorProfileId },
+    select: {
+      payoutDestinationCiphertext: true,
+      payoutDestinationReference: true,
+      payoutProvider: true,
+    },
+  });
+
+  if (!profile?.payoutProvider || !profile.payoutDestinationReference) {
+    return null;
+  }
+
+  const snapshot = parsePayoutDestinationSnapshot(profile.payoutDestinationCiphertext);
+  return {
+    provider: profile.payoutProvider,
+    reference: profile.payoutDestinationReference,
+    snapshot,
+  };
+}
+
+export async function listActivePaymentBranchIdsForContext(context: ApprovedVendorContext) {
+  if (context.branchIds.length === 0) return [];
+
+  const acceptances = await prisma.vendorBranchPaymentAcceptance.findMany({
+    where: {
+      status: BranchPaymentAcceptanceStatus.ACTIVE,
+      vendorBranchId: { in: context.branchIds },
+      vendorBranch: {
+        active: true,
+        status: VendorBranchStatus.ACTIVE,
+        vendorProfileId: context.vendorProfileId,
+      },
+    },
+    select: { vendorBranchId: true },
+  });
+
+  return acceptances.map((acceptance) => acceptance.vendorBranchId);
+}
+
+export async function listVendorPaymentAccessApplications(vendorProfileId: string) {
+  return prisma.vendorBranchPaymentApplication.findMany({
+    where: {
+      status: {
+        in: [
+          BranchPaymentApplicationStatus.PENDING,
+          BranchPaymentApplicationStatus.APPROVED,
+        ],
+      },
+      vendorBranch: { vendorProfileId },
+    },
+    include: {
+      vendorBranch: {
+        select: {
+          id: true,
+          name: true,
+          address: true,
+          paymentAcceptance: {
+            select: {
+              qrIdentifier: true,
+              status: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: [{ submittedAt: "desc" }, { createdAt: "desc" }],
+  });
+}
+
 export async function getBranchPaymentAccessDetail(branchId: string) {
   return prisma.vendorBranch.findUnique({
     where: { id: branchId },
     include: {
       vendorProfile: {
-        select: { companyName: true, serviceCategory: true, contactEmail: true },
+        select: {
+          companyName: true,
+          serviceCategory: true,
+          contactEmail: true,
+          paymentProfile: {
+            select: {
+              payoutDestinationReference: true,
+              payoutProvider: true,
+            },
+          },
+        },
       },
       paymentAcceptance: {
         include: { approvedApplication: true },
@@ -416,7 +574,7 @@ export async function listBranchPaymentAccessQueue() {
         vendorBranch: {
           include: {
             vendorProfile: {
-              select: { companyName: true, serviceCategory: true, contactEmail: true },
+              select: { id: true, companyName: true, serviceCategory: true, contactEmail: true },
             },
           },
         },
@@ -429,7 +587,7 @@ export async function listBranchPaymentAccessQueue() {
         vendorBranch: {
           include: {
             vendorProfile: {
-              select: { companyName: true, serviceCategory: true, contactEmail: true },
+              select: { id: true, companyName: true, serviceCategory: true, contactEmail: true },
             },
           },
         },
@@ -462,4 +620,88 @@ export async function listBranchPaymentAccessQueue() {
   ]);
 
   return { pendingApplications, activeAcceptances, recentDecisions };
+}
+
+export async function listPaymentAccessDecisions({
+  page = 1,
+  pageSize = 5,
+}: {
+  page?: number;
+  pageSize?: number;
+} = {}) {
+  const normalizedPage = Number.isInteger(page) && page > 0 ? page : 1;
+  const normalizedPageSize = Number.isInteger(pageSize) && pageSize > 0 ? pageSize : 5;
+  const where = {
+    status: {
+      in: [
+        BranchPaymentApplicationStatus.APPROVED,
+        BranchPaymentApplicationStatus.REJECTED,
+        BranchPaymentApplicationStatus.REVOKED,
+      ],
+    },
+  };
+
+  const [totalCount, applications] = await Promise.all([
+    prisma.vendorBranchPaymentApplication.count({ where }),
+    prisma.vendorBranchPaymentApplication.findMany({
+      where,
+      include: {
+        vendorBranch: {
+          include: {
+            vendorProfile: {
+              select: { companyName: true, serviceCategory: true },
+            },
+          },
+        },
+      },
+      orderBy: [
+        { revokedAt: "desc" },
+        { reviewedAt: "desc" },
+        { createdAt: "desc" },
+      ],
+      skip: (normalizedPage - 1) * normalizedPageSize,
+      take: normalizedPageSize,
+    }),
+  ]);
+
+  const actorIds = [
+    ...new Set(
+      applications
+        .flatMap((application) => [
+          application.reviewedByUserId,
+          application.revokedByUserId,
+        ])
+        .filter(Boolean),
+    ),
+  ] as string[];
+  const actors = actorIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: actorIds } },
+        select: { id: true, name: true },
+      })
+    : [];
+  const actorMap = Object.fromEntries(actors.map((actor) => [actor.id, actor.name]));
+
+  return {
+    decisions: applications.map((application) => {
+      const isRevoked = application.status === BranchPaymentApplicationStatus.REVOKED;
+      const actorId = isRevoked ? application.revokedByUserId : application.reviewedByUserId;
+
+      return {
+        id: application.id,
+        branchName: application.vendorBranch.name,
+        companyName: application.vendorBranch.vendorProfile.companyName,
+        decisionActorName: actorId ? (actorMap[actorId] ?? null) : null,
+        decisionAt: isRevoked ? application.revokedAt : application.reviewedAt,
+        decisionNotes: isRevoked ? application.revokedNotes : application.reviewNotes,
+        serviceCategory: application.vendorBranch.vendorProfile.serviceCategory,
+        status: application.status,
+        submittedAt: application.submittedAt ?? application.createdAt,
+      };
+    }),
+    page: normalizedPage,
+    pageSize: normalizedPageSize,
+    totalCount,
+    totalPages: Math.max(1, Math.ceil(totalCount / normalizedPageSize)),
+  };
 }

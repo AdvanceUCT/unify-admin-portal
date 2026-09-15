@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 
 import { getCurrentVendorSession } from "@/lib/auth/session";
+import { listActivePaymentBranchIdsForContext } from "@/lib/payments/branchOnboarding";
 import { getLivePaymentEvents } from "@/lib/vendors/livePayments";
 import { getApprovedVendorContextForUser } from "@/lib/vendors/context";
 
@@ -18,16 +19,21 @@ export async function GET(request: Request) {
 
   const context = await getApprovedVendorContextForUser(session.user.id);
   if (!context) return NextResponse.json({ error: { message: "Forbidden." } }, { status: 403 });
+  const paymentBranchIds = await listActivePaymentBranchIdsForContext(context);
+  if (paymentBranchIds.length === 0) {
+    return NextResponse.json({ error: { message: "Payment approval has not been granted." } }, { status: 403 });
+  }
+  const paymentContext = { ...context, branchIds: paymentBranchIds };
 
   try {
     const searchParams = new URL(request.url).searchParams;
     const branchIds = searchParams.getAll("branchId").filter(Boolean);
-    if (branchIds.some((branchId) => !context.branchIds.includes(branchId))) {
+    if (branchIds.some((branchId) => !paymentBranchIds.includes(branchId))) {
       return NextResponse.json({ error: { message: "Forbidden." } }, { status: 403 });
     }
 
     const result = await getLivePaymentEvents(
-      context,
+      paymentContext,
       searchParams.get("cursor") ?? undefined,
       branchIds.length > 0 ? { branchIds } : {},
     );

@@ -4,7 +4,6 @@ import {
   AuditAction,
   BranchPaymentAcceptanceStatus,
   BranchPaymentApplicationStatus,
-  CampusStatus,
   VendorBranchStatus,
   VendorPaymentProfileStatus,
   WalletAccountType,
@@ -22,7 +21,7 @@ const database = vi.hoisted(() => {
       update: vi.fn(),
       updateMany: vi.fn(),
     },
-    vendorPaymentProfile: { upsert: vi.fn() },
+    vendorPaymentProfile: { findUnique: vi.fn(), upsert: vi.fn() },
     walletAccount: { upsert: vi.fn() },
     vendorBranchPaymentAcceptance: {
       create: vi.fn(),
@@ -45,10 +44,21 @@ vi.mock("@/lib/db/prisma", () => ({
   },
 }));
 vi.mock("@/lib/audit/audit", () => ({ writeAuditLog: writeAuditLogMock }));
+vi.mock("@/lib/vendors/integrationCrypto", () => ({
+  decryptVendorSecret: vi.fn(() => JSON.stringify({
+    provider: "PAYSTACK",
+    recipientCode: "RCP_demo_recipient",
+    accountHolderName: "Campus Cafe",
+    accountMask: "**** 1234",
+    bankCode: "250655",
+    bankName: "Demo Bank",
+  })),
+}));
 
 import {
+  PAYMENT_ACCESS_ACKNOWLEDGEMENT_TEXT,
   approveBranchPaymentApplication,
-  closeBranchPaymentAcceptance,
+  revokeBranchPaymentAcceptance,
   submitBranchPaymentApplication,
 } from "@/lib/payments/branchOnboarding";
 
@@ -57,7 +67,6 @@ const branch = {
   vendorProfileId: "vendor-1",
   active: true,
   status: VendorBranchStatus.ACTIVE,
-  campusStatus: CampusStatus.ON_CAMPUS,
   paymentAcceptance: null,
   paymentApplications: [],
   vendorProfile: { id: "vendor-1" },
@@ -68,6 +77,11 @@ describe("branch payment onboarding", () => {
     vi.clearAllMocks();
     database.runTransaction.mockImplementation(async (operation) => operation(database.transaction));
     database.transaction.universityProfile.findMany.mockResolvedValue([{ paymentWalletEnabled: true }]);
+    database.transaction.vendorPaymentProfile.findUnique.mockResolvedValue({
+      payoutDestinationCiphertext: "encrypted-safe-payout",
+      payoutDestinationReference: "RCP_demo_recipient",
+      payoutProvider: "PAYSTACK",
+    });
   });
 
   it("submits a pending branch payment-access request for an active vendor branch", async () => {
@@ -82,14 +96,19 @@ describe("branch payment onboarding", () => {
       vendorProfileId: "vendor-1",
       branchId: "branch-1",
       actorId: "vendor-user-1",
+      acknowledgementAccepted: true,
     });
 
     expect(database.transaction.vendorBranchPaymentApplication.create).toHaveBeenCalledWith({
-      data: {
+      data: expect.objectContaining({
         vendorBranchId: "branch-1",
         status: BranchPaymentApplicationStatus.PENDING,
+        payoutProviderSnapshot: "PAYSTACK",
+        payoutDestinationReferenceSnapshot: "RCP_demo_recipient",
+        payoutDestinationSnapshot: expect.objectContaining({ accountMask: "**** 1234" }),
+        studentDataAcknowledgementText: PAYMENT_ACCESS_ACKNOWLEDGEMENT_TEXT,
         submittedAt: expect.any(Date),
-      },
+      }),
     });
     expect(writeAuditLogMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -101,17 +120,21 @@ describe("branch payment onboarding", () => {
     );
   });
 
-  it("blocks approval until the branch is marked on-campus", async () => {
+  it("blocks approval until the request contains payout and acknowledgement details", async () => {
     database.transaction.vendorBranchPaymentApplication.findUnique.mockResolvedValueOnce({
       id: "payment-app-1",
       status: BranchPaymentApplicationStatus.PENDING,
-      vendorBranch: { ...branch, campusStatus: CampusStatus.OFF_CAMPUS },
+      payoutDestinationReferenceSnapshot: null,
+      payoutDestinationSnapshot: null,
+      studentDataAcknowledgedAt: null,
+      studentDataAcknowledgementText: null,
+      vendorBranch: branch,
     });
 
     await expect(approveBranchPaymentApplication({
       applicationId: "payment-app-1",
       reviewerId: "admin-1",
-    })).rejects.toThrow("marked as on-campus");
+    })).rejects.toThrow("missing its payout destination");
 
     expect(database.transaction.vendorPaymentProfile.upsert).not.toHaveBeenCalled();
     expect(database.transaction.vendorBranchPaymentAcceptance.create).not.toHaveBeenCalled();
@@ -121,6 +144,10 @@ describe("branch payment onboarding", () => {
     database.transaction.vendorBranchPaymentApplication.findUnique.mockResolvedValueOnce({
       id: "payment-app-1",
       status: BranchPaymentApplicationStatus.PENDING,
+      payoutDestinationReferenceSnapshot: "RCP_demo_recipient",
+      payoutDestinationSnapshot: { accountMask: "**** 1234" },
+      studentDataAcknowledgedAt: new Date("2026-09-12T07:00:00.000Z"),
+      studentDataAcknowledgementText: PAYMENT_ACCESS_ACKNOWLEDGEMENT_TEXT,
       vendorBranch: branch,
     });
     database.transaction.vendorBranchPaymentApplication.updateMany.mockResolvedValueOnce({ count: 1 });
@@ -181,10 +208,10 @@ describe("branch payment onboarding", () => {
       },
     });
 
-    await closeBranchPaymentAcceptance({
+    await revokeBranchPaymentAcceptance({
       branchId: "branch-1",
       actorId: "admin-2",
-      notes: "No longer on campus",
+      notes: "Payment controls failed review",
     });
 
     expect(database.transaction.vendorBranchPaymentAcceptance.update).toHaveBeenCalledWith({
@@ -192,13 +219,15 @@ describe("branch payment onboarding", () => {
       data: {
         status: BranchPaymentAcceptanceStatus.CLOSED,
         suspendedAt: expect.any(Date),
-        suspensionReason: "No longer on campus",
+        suspensionReason: "Payment controls failed review",
       },
     });
     expect(database.transaction.vendorBranchPaymentApplication.update).toHaveBeenCalledWith({
       where: { id: "payment-app-1" },
       data: expect.objectContaining({
         status: BranchPaymentApplicationStatus.REVOKED,
+        revokedByUserId: "admin-2",
+        revokedNotes: "Payment controls failed review",
       }),
     });
   });

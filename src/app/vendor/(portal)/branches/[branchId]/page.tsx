@@ -11,7 +11,6 @@ import { BackButton } from "@/components/ui/BackButton";
 import { Badge } from "@/components/ui/Badge";
 import { Metric } from "@/components/ui/Metric";
 import { LiveVerificationList } from "@/features/vendors/LiveVerificationList";
-import { PayoutDestinationCard } from "@/features/vendors/PayoutDestinationCard";
 import { QrCodeActions } from "@/features/vendors/QrCodeActions";
 import { prisma } from "@/lib/db/prisma";
 import { formatMoneyMinor } from "@/lib/formatters";
@@ -31,13 +30,11 @@ import {
 } from "@/lib/vendors/verificationContract";
 
 import {
-  requestBranchPaymentAccessAction,
   retryBranchProvisioningAction,
   setBranchActiveAction,
   setDefaultBranchAction,
   updateBranchAction,
 } from "../actions";
-import { savePayoutDestinationAction } from "../../payments/actions";
 
 const inputClassName =
   "h-10 rounded-md border border-border bg-surface px-3 text-sm font-normal text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20";
@@ -46,23 +43,16 @@ const secondaryButtonClassName =
   "h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg";
 const metricValueClassName = "text-lg leading-tight break-all sm:text-xl xl:text-2xl";
 
-function firstParam(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] : value;
-}
-
 export default async function VendorBranchPage({
   params,
   searchParams,
 }: {
   params: Promise<{ branchId: string }>;
-  searchParams: Promise<{
-    payout?: string | string[];
-    payoutError?: string | string[];
-  }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { context } = await requireApprovedVendorContextForRender();
   const { branchId } = await params;
-  const query = await searchParams;
+  await searchParams;
   assertBranchAccess(context, branchId);
   const branch = await prisma.vendorBranch.findFirst({
     where: { id: branchId, vendorProfileId: context.vendorProfileId },
@@ -82,7 +72,7 @@ export default async function VendorBranchPage({
       vendorProfile: {
         select: {
           defaultBranchId: true,
-          paymentProfile: { select: { payoutDestinationReference: true, status: true } },
+          paymentProfile: { select: { status: true } },
           walletAccount: { select: { status: true, currency: true } },
         },
       },
@@ -116,9 +106,6 @@ export default async function VendorBranchPage({
   const paymentQrSvg = paymentQrEnabled && paymentQrUrl
     ? await QRCode.toString(paymentQrUrl, { type: "svg", margin: 1 })
     : null;
-  const showPayoutDestination = context.role === "OWNER" && paymentQrEnabled;
-  const payout = firstParam(query.payout);
-  const payoutError = firstParam(query.payoutError);
   const isDefault = branch.vendorProfile.defaultBranchId === branch.id;
   const latestPaymentApplication = branch.paymentApplications[0] ?? null;
   const canRequestPaymentAccess =
@@ -233,9 +220,19 @@ export default async function VendorBranchPage({
               aria-label={`${branch.name} payment QR code`}
             />
           ) : (
-            <p className="py-20 text-sm text-fg-subtle">
-              Payment QR unavailable — this branch is not approved for wallet payments.
-            </p>
+            <div className="py-16 text-center">
+              <p className="text-sm text-fg-subtle">
+                Payment QR unavailable - this branch is not approved for wallet payments.
+              </p>
+              {canRequestPaymentAccess ? (
+                <Link
+                  className="mt-4 inline-flex h-9 items-center rounded-md bg-brand-600 px-3 text-sm font-medium text-white transition hover:bg-brand-700"
+                  href={`/vendor/branches/${branch.id}/payment-access`}
+                >
+                  Request payment access
+                </Link>
+              ) : null}
+            </div>
           )}
           {paymentQrSvg ? (
             <QrCodeActions
@@ -248,35 +245,16 @@ export default async function VendorBranchPage({
               {paymentQrUrl}
             </p>
           ) : null}
-          {!paymentQrEnabled ? (
+          {!paymentQrEnabled && !canRequestPaymentAccess ? (
             <div className="w-full rounded-lg border border-border bg-surface-muted/60 p-3 text-left text-sm">
               {latestPaymentApplication?.status === "PENDING" ? (
                 <p className="text-fg-muted">
-                  Payment access request submitted. An administrator still needs to mark this branch on-campus and approve it.
+                  Payment access request submitted. An administrator still needs to approve this branch.
                 </p>
               ) : latestPaymentApplication?.status === "APPROVED" ? (
                 <p className="text-warning-fg">
                   Payment access was approved, but this QR is not currently usable. Ask an administrator to check the vendor payment profile and wallet account.
                 </p>
-              ) : canRequestPaymentAccess ? (
-                <form action={requestBranchPaymentAccessAction} className="space-y-3">
-                  <input name="branchId" type="hidden" value={branch.id} />
-                  <p className="text-fg-muted">
-                    Request approval to accept UNIFY wallet payments at this branch.
-                    Admins approve payment QR access per branch.
-                  </p>
-                  {latestPaymentApplication?.reviewNotes ? (
-                    <p className="text-xs text-danger-fg">
-                      Last review note: {latestPaymentApplication.reviewNotes}
-                    </p>
-                  ) : null}
-                  <button
-                    className="h-9 rounded-md bg-brand-600 px-3 text-sm font-medium text-white transition hover:bg-brand-700"
-                    type="submit"
-                  >
-                    Request payment access
-                  </button>
-                </form>
               ) : context.role === "OWNER" ? (
                 <p className="text-fg-muted">
                   Payment access can be requested once this branch is active.
@@ -292,7 +270,7 @@ export default async function VendorBranchPage({
       </div>
 
       {context.role === "OWNER" ? (
-        <div className={showPayoutDestination ? "grid gap-6 lg:grid-cols-2" : "grid gap-6"}>
+        <div className="grid gap-6">
           <section className="h-full space-y-5 rounded-xl border border-border bg-surface p-5 shadow-md">
             <h2 className="text-section-title text-fg">Branch settings</h2>
             <form action={updateBranchAction} className="space-y-3">
@@ -353,17 +331,6 @@ export default async function VendorBranchPage({
               ) : null}
             </div>
           </section>
-
-          {showPayoutDestination ? (
-            <PayoutDestinationCard
-              action={savePayoutDestinationAction}
-              className="h-full"
-              hasDestination={Boolean(branch.vendorProfile.paymentProfile?.payoutDestinationReference)}
-              payout={payout}
-              payoutError={payoutError}
-              returnTo={`/vendor/branches/${branch.id}`}
-            />
-          ) : null}
         </div>
       ) : null}
 

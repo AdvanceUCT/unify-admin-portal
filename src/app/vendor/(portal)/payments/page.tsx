@@ -12,6 +12,7 @@ import {
   listVendorPaymentEvents,
   type VendorPaymentEventFilters,
 } from "@/lib/vendors/livePayments";
+import { listActivePaymentBranchIdsForContext } from "@/lib/payments/branchOnboarding";
 import { getVendorPayoutOverview } from "@/lib/vendors/payouts";
 import { ExportCsvButton } from "../verifications/ExportCsvButton";
 import { LivePaymentTable } from "./LivePaymentTable";
@@ -70,16 +71,69 @@ export default async function VendorPaymentsPage({
 }) {
   const { context } = await requireApprovedVendorContextForRender();
   const params = await searchParams;
-  const branches: Array<{ id: string; name: string }> = await prisma.vendorBranch.findMany({
-    where: {
-      vendorProfileId: context.vendorProfileId,
-      id: { in: context.branchIds },
-    },
-    orderBy: { name: "asc" },
-    select: { id: true, name: true },
-  });
+  const [allBranches, activePaymentBranchIds] = await Promise.all([
+    prisma.vendorBranch.findMany({
+      where: {
+        vendorProfileId: context.vendorProfileId,
+        id: { in: context.branchIds },
+      },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+    listActivePaymentBranchIdsForContext(context),
+  ]);
+  const branches: Array<{ id: string; name: string }> = allBranches.filter((branch) =>
+    activePaymentBranchIds.includes(branch.id),
+  );
+
+  if (activePaymentBranchIds.length === 0) {
+    return (
+      <div className="space-y-6">
+        <section className="rounded-xl border border-warning-border bg-warning-bg p-5 shadow-md">
+          <h1 className="text-section-title text-fg">Payment approval has not been granted</h1>
+          <p className="mt-2 text-sm leading-6 text-warning-fg">
+            To request approval, navigate to a service point and submit a payment access application.
+          </p>
+        </section>
+
+        {context.role === "OWNER" ? (
+          <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+            <div className="border-b border-border px-5 py-4">
+              <h2 className="text-section-title text-fg">Service points</h2>
+            </div>
+            <div className="divide-y divide-border">
+              {allBranches.length === 0 ? (
+                <p className="px-5 py-6 text-sm text-fg-subtle">
+                  Add a branch before requesting payment access.
+                </p>
+              ) : (
+                allBranches.map((branch) => (
+                  <Link
+                    className="flex items-center justify-between gap-4 px-5 py-4 text-sm font-medium text-fg-muted transition hover:bg-surface-muted/60 hover:text-fg"
+                    href={`/vendor/branches/${branch.id}/payment-access`}
+                    key={branch.id}
+                  >
+                    <span>{branch.name}</span>
+                    <span>Submit application</span>
+                  </Link>
+                ))
+              )}
+            </div>
+          </section>
+        ) : (
+          <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
+            <p className="text-sm text-fg-muted">
+              Ask the vendor owner to submit a payment access application for your service point.
+            </p>
+          </section>
+        )}
+      </div>
+    );
+  }
+
+  const paymentContext = { ...context, branchIds: activePaymentBranchIds };
   const branchId = firstParam(params.branchId);
-  const selectedBranchId = branchId && context.branchIds.includes(branchId)
+  const selectedBranchId = branchId && activePaymentBranchIds.includes(branchId)
     ? branchId
     : undefined;
   const filters: VendorPaymentEventFilters = {
@@ -91,8 +145,8 @@ export default async function VendorPaymentsPage({
     refundStatus: refundStatusParam(params.refundStatus),
   };
   const [payoutOverview, result] = await Promise.all([
-    getVendorPayoutOverview(context),
-    listVendorPaymentEvents(context, filters),
+    context.role === "OWNER" ? getVendorPayoutOverview(context) : Promise.resolve(null),
+    listVendorPaymentEvents(paymentContext, filters),
   ]);
   const showBranchFilter = context.role === "OWNER" && branches.length > 1;
   const showingStart = result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1;
@@ -100,10 +154,12 @@ export default async function VendorPaymentsPage({
 
   return (
     <div className="space-y-6">
-      <VendorWalletBalanceCard
-        canRunDemoPayout={context.role === "OWNER"}
-        overview={payoutOverview}
-      />
+      {payoutOverview ? (
+        <VendorWalletBalanceCard
+          canRunDemoPayout={context.role === "OWNER"}
+          overview={payoutOverview}
+        />
+      ) : null}
 
       <VendorPaymentsFilterBar
         branches={branches}

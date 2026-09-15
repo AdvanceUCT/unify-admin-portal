@@ -14,9 +14,19 @@ import { Dialog } from "@/components/ui/Dialog";
 export function RejectForm({
   action,
   applicationId,
+  confirmLabel = "Confirm rejection",
+  hiddenFields,
+  label = "Reject",
+  reasonLabel = "Reason for rejection",
+  title = "Reject application",
 }: {
   action: (formData: FormData) => void | Promise<void>;
   applicationId: string;
+  confirmLabel?: string;
+  hiddenFields?: Record<string, string>;
+  label?: string;
+  reasonLabel?: string;
+  title?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -28,15 +38,20 @@ export function RejectForm({
         type="button"
       >
         <Ban aria-hidden className="size-4" />
-        Reject
+        {label}
       </button>
 
-      <Dialog isOpen={isOpen} onClose={() => setIsOpen(false)} title="Reject application">
+      <Dialog isOpen={isOpen} onClose={() => setIsOpen(false)} title={title}>
         <form action={action} className="space-y-4">
           <input type="hidden" name="applicationId" value={applicationId} />
+          {hiddenFields
+            ? Object.entries(hiddenFields).map(([name, value]) => (
+                <input key={name} name={name} type="hidden" value={value} />
+              ))
+            : null}
           <div>
             <label className="text-sm font-medium text-fg" htmlFor={`reject-notes-${applicationId}`}>
-              Reason for rejection
+              {reasonLabel}
             </label>
             <textarea
               className="mt-2 min-h-24 w-full rounded-md border border-border px-3 py-2 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
@@ -54,7 +69,7 @@ export function RejectForm({
             >
               Cancel
             </button>
-            <RejectSubmitButton />
+            <RejectSubmitButton confirmLabel={confirmLabel} />
           </div>
         </form>
       </Dialog>
@@ -62,7 +77,7 @@ export function RejectForm({
   );
 }
 
-function RejectSubmitButton() {
+function RejectSubmitButton({ confirmLabel }: { confirmLabel: string }) {
   const { pending } = useFormStatus();
 
   return (
@@ -71,7 +86,7 @@ function RejectSubmitButton() {
       disabled={pending}
       type="submit"
     >
-      {pending ? "Rejecting..." : "Confirm rejection"}
+      {pending ? "Submitting..." : confirmLabel}
     </button>
   );
 }

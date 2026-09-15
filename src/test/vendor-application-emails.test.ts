@@ -82,7 +82,7 @@ describe("vendor application email delivery", () => {
       "@/lib/email/vendor-application-rejected"
     );
     const result = await sendVendorApplicationRejectedEmail({
-      applicationUrl: "https://voskuils.com/vendor/application",
+      applicationUrl: "https://voskuils.com/vendor/applications",
       companyName: "Acme Verifiers",
       contactName: "Jordan Vendor",
       reason: "Missing proof of address.",

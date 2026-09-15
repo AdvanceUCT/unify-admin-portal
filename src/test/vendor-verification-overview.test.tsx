@@ -101,4 +101,30 @@ describe("VendorVerificationOverview", () => {
     expect(screen.getByRole("button", { name: /svg/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /png/i })).toBeInTheDocument();
   });
+
+  it("replaces the how-it-works card with the branch payment QR when provided", async () => {
+    render(
+      await VendorVerificationOverview({
+        companyName: "Demo Vendor - Main Branch",
+        paymentQrUrl: "unifywallet://pay/qr_main_branch",
+        vendorId: "vendor_1",
+        verificationUrl: "https://voskuils.com/verify/sp-public-demo",
+        stats: {
+          total: 0,
+          approved: 0,
+          pending: 0,
+          thisMonth: 0,
+          currentMonthFailedOrDeclined: 0,
+          currentMonthRunningCostCurrency: "ZAR",
+          currentMonthRunningCostMinor: 0,
+          currentMonthSuccessful: 0,
+          currentMonthTotal: 0,
+        },
+        recentVerifications: [],
+      }),
+    );
+
+    expect(screen.getByText("Your payment QR code")).toBeInTheDocument();
+    expect(screen.queryByText("How verification works")).not.toBeInTheDocument();
+  });
 });

@@ -1,5 +1,5 @@
 /**
- * @fileoverview Contains the server actions used by the `/vendor/application` workflow.
+ * @fileoverview Contains the server actions used by the vendor applications workflow.
  * @module app/vendor/(portal)/application/actions
  */
 
@@ -24,7 +24,7 @@ export type Step1ActionResult = { ok: boolean; applicationId?: string; error?: s
 export type UploadActionResult = { ok: boolean; path?: string; filename?: string; error?: string };
 export type ViewUrlActionResult = { ok: boolean; url?: string; error?: string };
 
-const REVALIDATE_PATHS = ["/vendor/application", "/vendor"];
+const REVALIDATE_PATHS = ["/vendor/application", "/vendor/applications", "/vendor"];
 
 const ALLOWED_MIME_TYPES = [
   "application/pdf",

@@ -24,6 +24,7 @@ const payoutHistory = vi.hoisted(() => ({
 }));
 const branchPaymentOnboarding = vi.hoisted(() => ({
   listBranchPaymentAccessQueue: vi.fn(),
+  listPaymentAccessDecisions: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -44,10 +45,18 @@ vi.mock("@/lib/vendors/payoutHistory", () => ({
 }));
 vi.mock("@/lib/payments/branchOnboarding", () => branchPaymentOnboarding);
 vi.mock("@/app/(admin)/vendors/actions", () => ({
+  approveBranchPaymentApplicationAction: vi.fn(),
   approveVendorApplicationAction: vi.fn(),
   createVendorVerificationQrAction: vi.fn(),
+  rejectBranchPaymentApplicationAction: vi.fn(),
   rejectVendorApplicationAction: vi.fn(),
+  revokeBranchPaymentAcceptanceAction: vi.fn(),
   revokeVendorApplicationAction: vi.fn(),
+}));
+vi.mock("@/app/(admin)/vendors/PaymentAccessRevokeButton", () => ({
+  PaymentAccessRevokeButton: ({ branchName }: { branchName: string }) => (
+    <button type="button">Revoke {branchName}</button>
+  ),
 }));
 vi.mock("@/app/(admin)/vendors/RevokeButton", () => ({
   RevokeButton: ({ companyName }: { companyName: string }) => (
@@ -164,7 +173,14 @@ describe("admin vendor verification history", () => {
     branchPaymentOnboarding.listBranchPaymentAccessQueue.mockResolvedValue({
       activeAcceptances: [],
       pendingApplications: [],
-      recentApplications: [],
+      recentDecisions: [],
+    });
+    branchPaymentOnboarding.listPaymentAccessDecisions.mockResolvedValue({
+      decisions: [],
+      page: 1,
+      pageSize: 5,
+      totalCount: 0,
+      totalPages: 1,
     });
   });
 

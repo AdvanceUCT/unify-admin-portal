@@ -57,7 +57,7 @@ export function VendorApplicationHistory({ applications }: { applications: Histo
                 <Badge tone={statusTone(application.status)}>{application.status}</Badge>
                 <Link
                   className="text-sm font-medium text-fg-muted underline underline-offset-2 hover:text-fg"
-                  href={`/vendor/application/history/${application.id}`}
+                  href={`/vendor/applications/history/${application.id}`}
                 >
                   View
                 </Link>
