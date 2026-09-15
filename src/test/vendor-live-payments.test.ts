@@ -4,6 +4,7 @@ import {
   encodeLivePaymentCursor,
   getLivePaymentEvents,
   listRecentVendorPayments,
+  listVendorPaymentEvents,
 } from "@/lib/vendors/livePayments";
 
 const database = vi.hoisted(() => ({ walletTransaction: { findMany: vi.fn() } }));
@@ -90,6 +91,24 @@ describe("live vendor payment feed", () => {
 
     expect(database.walletTransaction.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ vendorBranchId: { in: ["branch-2"] } }),
+    }));
+  });
+
+  it("lists historical payments for every branch in the vendor history scope", async () => {
+    database.walletTransaction.findMany.mockResolvedValue([payment]);
+
+    const result = await listVendorPaymentEvents({
+      ...context,
+      branchIds: ["branch-1", "branch-revoked"],
+    });
+
+    expect(result.events).toHaveLength(1);
+    expect(database.walletTransaction.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        type: "SPEND",
+        status: "COMPLETED",
+        vendorBranchId: { in: ["branch-1", "branch-revoked"] },
+      }),
     }));
   });
 

@@ -31,6 +31,7 @@ const database = vi.hoisted(() => {
   };
 
   return {
+    vendorBranch: { findMany: vi.fn() },
     transaction,
     runTransaction: vi.fn(),
   };
@@ -41,6 +42,7 @@ const writeAuditLogMock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     $transaction: database.runTransaction,
+    vendorBranch: database.vendorBranch,
   },
 }));
 vi.mock("@/lib/audit/audit", () => ({ writeAuditLog: writeAuditLogMock }));
@@ -58,6 +60,7 @@ vi.mock("@/lib/vendors/integrationCrypto", () => ({
 import {
   PAYMENT_ACCESS_ACKNOWLEDGEMENT_TEXT,
   approveBranchPaymentApplication,
+  listPaymentHistoryBranchIdsForContext,
   revokeBranchPaymentAcceptance,
   submitBranchPaymentApplication,
 } from "@/lib/payments/branchOnboarding";
@@ -229,6 +232,29 @@ describe("branch payment onboarding", () => {
         revokedByUserId: "admin-2",
         revokedNotes: "Payment controls failed review",
       }),
+    });
+  });
+
+  it("keeps revoked payment branches in the vendor payment-history scope", async () => {
+    database.vendorBranch.findMany.mockResolvedValueOnce([
+      { id: "branch-active" },
+      { id: "branch-revoked" },
+    ]);
+
+    await expect(listPaymentHistoryBranchIdsForContext({
+      userId: "vendor-user-1",
+      vendorProfileId: "vendor-1",
+      companyName: "Campus Cafe",
+      role: "OWNER",
+      branchIds: ["branch-active", "branch-revoked"],
+    })).resolves.toEqual(["branch-active", "branch-revoked"]);
+
+    expect(database.vendorBranch.findMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ["branch-active", "branch-revoked"] },
+        vendorProfileId: "vendor-1",
+      },
+      select: { id: true },
     });
   });
 });

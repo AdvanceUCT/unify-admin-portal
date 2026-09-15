@@ -508,6 +508,20 @@ export async function listActivePaymentBranchIdsForContext(context: ApprovedVend
   return acceptances.map((acceptance) => acceptance.vendorBranchId);
 }
 
+export async function listPaymentHistoryBranchIdsForContext(context: ApprovedVendorContext) {
+  if (context.branchIds.length === 0) return [];
+
+  const branches = await prisma.vendorBranch.findMany({
+    where: {
+      id: { in: context.branchIds },
+      vendorProfileId: context.vendorProfileId,
+    },
+    select: { id: true },
+  });
+
+  return branches.map((branch) => branch.id);
+}
+
 export async function listVendorPaymentAccessApplications(vendorProfileId: string) {
   return prisma.vendorBranchPaymentApplication.findMany({
     where: {

@@ -93,7 +93,7 @@ export function RunPayoutButton({
         <p className="text-xs text-fg-subtle">There is no eligible payout balance right now.</p>
       ) : (
         <p className="text-xs text-fg-subtle">
-          Ready to pay out {formatMoney(availableMinor)} from this vendor&apos;s eligible settled wallet takings.
+          Ready to pay out {formatMoney(availableMinor)} {" "} from this vendor&apos;s eligible settled wallet takings.
         </p>
       )}
 

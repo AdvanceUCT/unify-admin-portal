@@ -6,7 +6,7 @@
 import { NextResponse } from "next/server";
 
 import { getCurrentVendorSession } from "@/lib/auth/session";
-import { listActivePaymentBranchIdsForContext } from "@/lib/payments/branchOnboarding";
+import { listPaymentHistoryBranchIdsForContext } from "@/lib/payments/branchOnboarding";
 import { getApprovedVendorContextForUser } from "@/lib/vendors/context";
 import { exportVendorPaymentEventsCsv, type VendorPaymentEventFilters } from "@/lib/vendors/livePayments";
 
@@ -34,9 +34,9 @@ export async function GET(request: Request) {
   }
   const context = await getApprovedVendorContextForUser(session.user.id);
   if (!context) return NextResponse.json({ error: { message: "Forbidden." } }, { status: 403 });
-  const paymentBranchIds = await listActivePaymentBranchIdsForContext(context);
+  const paymentBranchIds = await listPaymentHistoryBranchIdsForContext(context);
   if (paymentBranchIds.length === 0) {
-    return NextResponse.json({ error: { message: "Payment approval has not been granted." } }, { status: 403 });
+    return NextResponse.json({ error: { message: "No payment history is available." } }, { status: 403 });
   }
   const paymentContext = { ...context, branchIds: paymentBranchIds };
 

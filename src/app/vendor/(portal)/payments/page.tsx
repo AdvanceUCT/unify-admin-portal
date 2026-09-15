@@ -57,6 +57,15 @@ function exportHref(filters: VendorPaymentEventFilters) {
   return `/api/vendor/payments/export${query ? `?${query}` : ""}`;
 }
 
+function resultPageCanPollLivePayments(
+  selectedBranchId: string | undefined,
+  activePaymentBranchIds: string[],
+) {
+  return selectedBranchId
+    ? activePaymentBranchIds.includes(selectedBranchId)
+    : activePaymentBranchIds.length > 0;
+}
+
 export default async function VendorPaymentsPage({
   searchParams,
 }: {
@@ -83,16 +92,17 @@ export default async function VendorPaymentsPage({
     listActivePaymentBranchIdsForContext(context),
   ]);
   const branches: Array<{ id: string; name: string }> = allBranches.filter((branch) =>
-    activePaymentBranchIds.includes(branch.id),
+    context.branchIds.includes(branch.id),
   );
+  const paymentHistoryBranchIds = branches.map((branch) => branch.id);
 
-  if (activePaymentBranchIds.length === 0) {
+  if (paymentHistoryBranchIds.length === 0) {
     return (
       <div className="space-y-6">
         <section className="rounded-xl border border-warning-border bg-warning-bg p-5 shadow-md">
-          <h1 className="text-section-title text-fg">Payment approval has not been granted</h1>
+          <h1 className="text-section-title text-fg">No payment branches available</h1>
           <p className="mt-2 text-sm leading-6 text-warning-fg">
-            To request approval, navigate to a service point and submit a payment access application.
+            To request approval, add a service point and submit a payment access application.
           </p>
         </section>
 
@@ -131,9 +141,9 @@ export default async function VendorPaymentsPage({
     );
   }
 
-  const paymentContext = { ...context, branchIds: activePaymentBranchIds };
+  const paymentContext = { ...context, branchIds: paymentHistoryBranchIds };
   const branchId = firstParam(params.branchId);
-  const selectedBranchId = branchId && activePaymentBranchIds.includes(branchId)
+  const selectedBranchId = branchId && paymentHistoryBranchIds.includes(branchId)
     ? branchId
     : undefined;
   const filters: VendorPaymentEventFilters = {
@@ -144,6 +154,7 @@ export default async function VendorPaymentsPage({
     query: firstParam(params.q),
     refundStatus: refundStatusParam(params.refundStatus),
   };
+  const canPollLivePayments = resultPageCanPollLivePayments(selectedBranchId, activePaymentBranchIds);
   const [payoutOverview, result] = await Promise.all([
     context.role === "OWNER" ? getVendorPayoutOverview(context) : Promise.resolve(null),
     listVendorPaymentEvents(paymentContext, filters),
@@ -161,6 +172,15 @@ export default async function VendorPaymentsPage({
         />
       ) : null}
 
+      {activePaymentBranchIds.length === 0 ? (
+        <section className="rounded-xl border border-warning-border bg-warning-bg p-5 shadow-md">
+          <h1 className="text-section-title text-fg">Payment approval is currently inactive</h1>
+          <p className="mt-2 text-sm leading-6 text-warning-fg">
+            Past wallet payments remain visible here, but no branch can accept new wallet payments until access is approved again.
+          </p>
+        </section>
+      ) : null}
+
       <VendorPaymentsFilterBar
         branches={branches}
         filters={filters}
@@ -176,10 +196,11 @@ export default async function VendorPaymentsPage({
           </div>
         </div>
         <LivePaymentTable
+          activePaymentBranchIds={activePaymentBranchIds}
           filters={filters}
           initialItems={result.events}
           key={[filters.query, filters.refundStatus, filters.dateFrom, filters.dateTo, filters.branchId, result.page].map((value) => value ?? "").join("|")}
-          liveCursor={result.page === 1 ? encodeLivePaymentCursor({ completedAt: new Date().toISOString(), id: "_" }) : undefined}
+          liveCursor={result.page === 1 && canPollLivePayments ? encodeLivePaymentCursor({ completedAt: new Date().toISOString(), id: "_" }) : undefined}
         />
         <div className="flex items-center justify-between border-t border-border px-5 py-4">
           <Link
