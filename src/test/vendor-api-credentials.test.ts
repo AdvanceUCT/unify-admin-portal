@@ -92,7 +92,7 @@ describe("vendor API credentials", () => {
     ).resolves.toBeNull();
   });
 
-  it("delivers a signed minimal checkout result without identity data", async () => {
+  it("delivers a signed checkout result with only a safe student summary", async () => {
     vi.mocked(assertSafeWebhookUrl).mockResolvedValue("https://checkout.example.com/webhooks/unify");
     vi.mocked(decryptVendorSecret).mockReturnValue("vendor-webhook-secret");
     vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 204 }));
@@ -136,15 +136,19 @@ describe("vendor API credentials", () => {
       verificationRequestId: "verification-001",
       checkoutId: "cart-001",
       status: "APPROVED",
+      isVerified: true,
       failureCode: null,
       failureReason: null,
+      student: {
+        id: "STU001",
+        name: "Ada Lovelace",
+        university: "University of Cape Town",
+      },
       createdAt: "2026-08-03T20:00:00.000Z",
       expiresAt: "2026-08-03T20:05:00.000Z",
       completedAt: "2026-08-03T20:02:00.000Z",
     });
-    expect(body).not.toHaveProperty("isVerified");
     expect(body).not.toHaveProperty("attributes");
-    expect(body).not.toHaveProperty("student");
 
     const headers = new Headers(request?.headers);
     expect(headers.get("X-Request-ID")).toBe("request-001");

@@ -121,17 +121,20 @@ type VendorVerificationResultRow = {
 };
 
 /**
- * Public checkout result. External systems only need the decision and the
- * checkout correlation identifiers; disclosed credential data stays inside
- * the portal's in-person verification boundary.
+ * Public checkout result. External systems need enough information to complete
+ * their own order/admission flow, but raw credential attributes stay inside the
+ * portal's in-person verification boundary.
  */
 function checkoutResultShape(verification: VendorVerificationResultRow) {
+  const attributes = normalizedVerificationAttributes(verification.attributes);
   return {
     verificationRequestId: verification.verificationRequestId,
     checkoutId: verification.checkoutId,
     status: verification.status,
+    isVerified: verification.isVerified ?? null,
     failureCode: verification.failureCode,
     failureReason: vendorVerificationFailureReason(verification.failureCode),
+    student: summarizeVerificationStudent(attributes),
     createdAt: verification.createdAt.toISOString(),
     expiresAt: verification.expiresAt?.toISOString() ?? null,
     completedAt: verification.completedAt?.toISOString() ?? null,
@@ -196,6 +199,29 @@ function successfulVerificationWhere(): Prisma.VendorVerificationWhereInput {
     OR: [{ isVerified: true }, { isVerified: null }],
     status: "APPROVED",
   };
+}
+
+function isTerminalVerificationStatus(status: VendorVerificationStatus) {
+  return status !== "PENDING";
+}
+
+function materializedTerminalCompletedAt({
+  existingCompletedAt,
+  materializedAt = new Date(),
+  reportedCompletedAt,
+  status,
+}: {
+  existingCompletedAt?: Date | null;
+  materializedAt?: Date;
+  reportedCompletedAt?: string | null;
+  status: VendorVerificationStatus;
+}) {
+  if (reportedCompletedAt) {
+    const parsed = new Date(reportedCompletedAt);
+    if (Number.isFinite(parsed.getTime())) return parsed;
+  }
+  if (existingCompletedAt) return existingCompletedAt;
+  return isTerminalVerificationStatus(status) ? materializedAt : null;
 }
 
 function sourceFilter(source: VendorVerificationSource | undefined): Prisma.VendorVerificationWhereInput {
@@ -283,11 +309,15 @@ function verificationEventShape(verification: VerificationEventRow) {
 async function applyAgentResult(id: string, result: AgentVerificationResult) {
   const existing = await prisma.vendorVerification.findUnique({
     where: { id },
-    select: { isVerified: true, servicePointId: true, verificationRequestId: true },
+    select: { completedAt: true, isVerified: true, servicePointId: true, verificationRequestId: true },
   });
   const status = mapAgentVerificationDecision(result.status);
-  const completedAt = result.completedAt ? new Date(result.completedAt) : null;
-  const metadata = completedAt
+  const completedAt = materializedTerminalCompletedAt({
+    existingCompletedAt: existing?.completedAt ?? null,
+    reportedCompletedAt: result.completedAt ?? null,
+    status,
+  });
+  const metadata = isTerminalVerificationStatus(status)
     ? await getAgentVerificationMetadata(
         result.verificationRequestId || existing?.verificationRequestId || null,
         existing?.servicePointId ?? null,
@@ -349,7 +379,10 @@ export async function createVendorCheckoutSession(vendorProfileId: string, check
     checkoutId: normalizedCheckoutId,
   });
   const status = mapAgentVerificationDecision(agentResult.status);
-  const completedAt = agentResult.completedAt ? new Date(agentResult.completedAt) : null;
+  const completedAt = materializedTerminalCompletedAt({
+    reportedCompletedAt: agentResult.completedAt ?? null,
+    status,
+  });
   // The agent can return an already-terminal decision at creation time (not
   // just "Pending"), so this creation path needs the same billing snapshot
   // resolution as the polling/webhook paths — otherwise a checkout approved
@@ -417,7 +450,7 @@ export async function getVendorVerificationResult(
   return inPersonResultShape(verification);
 }
 
-/** Returns the minimal external-checkout result and refreshes pending agent state. */
+/** Returns the safe external-checkout result and refreshes pending agent state. */
 export async function getVendorCheckoutVerificationResult(
   vendorProfileId: string,
   verificationRequestId: string,
@@ -474,7 +507,11 @@ export async function recordVerificationCompletedEvent(payload: VerificationComp
   }
   const storedAttributes = attributes ?? Prisma.DbNull;
   const status = mapAgentVerificationDecision(payload.decision);
-  const completedAt = new Date(payload.completedAt);
+  const completedAt = materializedTerminalCompletedAt({
+    existingCompletedAt: existing?.completedAt ?? null,
+    reportedCompletedAt: payload.completedAt,
+    status,
+  });
   const billingSnapshot = resolveVerificationBillingSnapshot({
     completedAt,
     isVerified,
@@ -526,6 +563,98 @@ export async function recordVerificationCompletedEvent(payload: VerificationComp
 
   if (verification.checkoutId) await deliverVendorWebhook(verification.id, requestId);
   return { duplicate: false, verification };
+}
+
+export type ReconcileVendorVerificationBillingSummary = {
+  scanned: number;
+  updated: number;
+  billable: number;
+  stillNotBillable: number;
+  nextCursor: string | null;
+};
+
+export async function reconcileVendorVerificationBilling({
+  apply = false,
+  batchSize = 100,
+  cursor,
+  materializedAt = new Date(),
+}: {
+  apply?: boolean;
+  batchSize?: number;
+  cursor?: string | null;
+  materializedAt?: Date;
+} = {}): Promise<ReconcileVendorVerificationBillingSummary> {
+  const rows = await prisma.vendorVerification.findMany({
+    where: {
+      status: "APPROVED",
+      OR: [
+        { completedAt: null },
+        { billingStatus: { not: VendorVerificationBillingStatus.BILLABLE } },
+        { verificationFeeMinor: 0 },
+        { billingPeriodKey: null },
+      ],
+    },
+    include: { branch: { select: { name: true } } },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    take: batchSize,
+  });
+
+  const summary: ReconcileVendorVerificationBillingSummary = {
+    scanned: rows.length,
+    updated: 0,
+    billable: 0,
+    stillNotBillable: 0,
+    nextCursor: rows.length === batchSize ? rows.at(-1)?.id ?? null : null,
+  };
+
+  for (const row of rows) {
+    const storedAttributes = normalizedVerificationAttributes(row.attributes);
+    const metadata = storedAttributes
+      ? { attributes: storedAttributes, isVerified: row.isVerified }
+      : await getAgentVerificationMetadata(row.verificationRequestId, row.servicePointId);
+    const attributes = metadata.attributes ?? storedAttributes;
+    const isVerified = row.isVerified ?? metadata.isVerified ?? null;
+    const completedAt = row.completedAt ?? materializedAt;
+    const billingSnapshot = resolveVerificationBillingSnapshot({
+      completedAt,
+      isVerified,
+      status: row.status,
+    });
+
+    if (billingSnapshot.billingStatus === VendorVerificationBillingStatus.BILLABLE) {
+      summary.billable += 1;
+    } else {
+      summary.stillNotBillable += 1;
+    }
+
+    if (!apply) continue;
+
+    const verification = await prisma.vendorVerification.update({
+      where: { id: row.id },
+      data: {
+        ...(attributes ? { attributes } : {}),
+        ...(isVerified !== null ? { isVerified } : {}),
+        completedAt,
+        ...billingSnapshot,
+      },
+    });
+    summary.updated += 1;
+
+    await finalizeVerificationCharge(prisma, {
+      verificationId: verification.id,
+      vendorProfileId: verification.vendorProfileId,
+      branchId: verification.branchId,
+      branchNameSnapshot: row.branch?.name ?? verification.servicePointName ?? "Branch",
+      billingStatus: verification.billingStatus,
+      verificationFeeMinor: verification.verificationFeeMinor,
+      verificationFeeCurrency: verification.verificationFeeCurrency,
+      billingPeriodKey: verification.billingPeriodKey,
+      completedAt: verification.completedAt,
+    });
+  }
+
+  return summary;
 }
 
 export async function retryVendorWebhook(vendorProfileId: string, verificationId: string) {

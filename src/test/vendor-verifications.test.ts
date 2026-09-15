@@ -10,6 +10,7 @@ import {
   listRecentVendorVerifications,
   listVendorVerificationEvents,
   listVendorVerificationUniversities,
+  reconcileVendorVerificationBilling,
   recordVerificationCompletedEvent,
 } from "@/lib/vendors/verifications";
 
@@ -332,7 +333,7 @@ describe("vendor checkout verification", () => {
     }));
   });
 
-  it("returns only minimal checkout fields even when identity data is stored", async () => {
+  it("returns a safe checkout student summary without raw identity attributes", async () => {
     database.vendorVerification.findFirst.mockResolvedValue({
       id: "stored-verification-001",
       vendorProfileId: "vendor-001",
@@ -360,15 +361,19 @@ describe("vendor checkout verification", () => {
       verificationRequestId: "verification-001",
       checkoutId: "cart-001",
       status: "APPROVED",
+      isVerified: true,
       failureCode: null,
       failureReason: null,
+      student: {
+        id: "STU001",
+        name: "Ada Lovelace",
+        university: "University of Cape Town",
+      },
       createdAt: "2026-08-03T20:00:00.000Z",
       expiresAt: "2026-08-03T20:05:00.000Z",
       completedAt: "2026-08-03T20:02:00.000Z",
     });
-    expect(result).not.toHaveProperty("isVerified");
     expect(result).not.toHaveProperty("attributes");
-    expect(result).not.toHaveProperty("student");
     expect(database.vendorVerification.findFirst).toHaveBeenCalledWith({
       where: {
         vendorProfileId: "vendor-001",
@@ -378,7 +383,9 @@ describe("vendor checkout verification", () => {
     });
   });
 
-  it("hydrates and stores checkout identity metadata when polling applies a terminal agent result", async () => {
+  it("hydrates checkout metadata and materializes missing terminal timestamps when polling", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-03T20:02:30.000Z"));
     database.vendorVerification.findFirst.mockResolvedValue({
       id: "stored-verification-001",
       vendorProfileId: "vendor-001",
@@ -405,7 +412,6 @@ describe("vendor checkout verification", () => {
       status: "Approved",
       createdAt: "2026-08-03T20:00:00.000Z",
       expiresAt: "2026-08-03T20:05:00.000Z",
-      completedAt: "2026-08-03T20:02:00.000Z",
     });
     agent.getInPersonVerificationDetails.mockResolvedValue({
       verificationRequestId: "verification-001",
@@ -425,14 +431,20 @@ describe("vendor checkout verification", () => {
       checkoutId: "cart-001",
       servicePointName: "Main Branch",
       status: "APPROVED",
+      isVerified: true,
       failureCode: null,
+      attributes: {
+        fullName: "Ada Lovelace",
+        institution: "University of Cape Town",
+        studentNumber: "STU001",
+      },
       billingStatus: "BILLABLE",
       verificationFeeMinor: 125,
       verificationFeeCurrency: "ZAR",
       billingPeriodKey: "2026-08",
       createdAt: new Date("2026-08-03T20:00:00.000Z"),
       expiresAt: new Date("2026-08-03T20:05:00.000Z"),
-      completedAt: new Date("2026-08-03T20:02:00.000Z"),
+      completedAt: new Date("2026-08-03T20:02:30.000Z"),
       branch: { name: "Main Branch" },
     });
 
@@ -446,11 +458,99 @@ describe("vendor checkout verification", () => {
           studentNumber: "STU001",
         },
         isVerified: true,
+        billingStatus: "BILLABLE",
+        completedAt: new Date("2026-08-03T20:02:30.000Z"),
         status: "APPROVED",
       }),
     }));
     expect(result).not.toHaveProperty("attributes");
-    expect(result).not.toHaveProperty("student");
+    expect(result).toMatchObject({
+      completedAt: "2026-08-03T20:02:30.000Z",
+      isVerified: true,
+      student: { id: "STU001", name: "Ada Lovelace", university: "University of Cape Town" },
+    });
+    vi.useRealTimers();
+  });
+
+  it("reconciles approved rows stuck as not billable", async () => {
+    database.vendorVerification.findMany.mockResolvedValue([{
+      id: "stored-verification-001",
+      vendorProfileId: "vendor-001",
+      branchId: "branch-001",
+      branch: { name: "Main Branch" },
+      verificationRequestId: "verification-001",
+      checkoutId: "cart-001",
+      servicePointId: "service-point-001",
+      servicePointName: "Main Branch",
+      status: "APPROVED",
+      isVerified: null,
+      failureCode: null,
+      attributes: null,
+      billingStatus: "NOT_BILLABLE",
+      verificationFeeMinor: 0,
+      verificationFeeCurrency: "ZAR",
+      billingPeriodKey: null,
+      pricingSnapshotAt: null,
+      billingReason: "MISSING_COMPLETED_AT",
+      createdAt: new Date("2026-08-03T20:00:00.000Z"),
+      updatedAt: new Date("2026-08-03T20:02:00.000Z"),
+      completedAt: null,
+      expiresAt: new Date("2026-08-03T20:05:00.000Z"),
+    }]);
+    agent.getInPersonVerificationDetails.mockResolvedValue({
+      verificationRequestId: "verification-001",
+      servicePointId: "service-point-001",
+      status: "Approved",
+      isVerified: true,
+      attributes: {
+        fullName: "Ada Lovelace",
+        institution: "University of Cape Town",
+        studentNumber: "STU001",
+      },
+    });
+    database.vendorVerification.update.mockResolvedValue({
+      id: "stored-verification-001",
+      vendorProfileId: "vendor-001",
+      branchId: "branch-001",
+      servicePointName: "Main Branch",
+      billingStatus: "BILLABLE",
+      verificationFeeMinor: 125,
+      verificationFeeCurrency: "ZAR",
+      billingPeriodKey: "2026-08",
+      completedAt: new Date("2026-08-03T20:02:30.000Z"),
+    });
+    database.verificationCharge.findUnique.mockResolvedValue(null);
+    database.universityProfile.findMany.mockResolvedValue([{ id: "university-001" }]);
+    database.verificationBillingPolicy.findFirst.mockResolvedValue({ id: "policy-001", platformBasisPoints: 1000 });
+    database.verificationCharge.create.mockResolvedValue({ id: "charge-001" });
+
+    const summary = await reconcileVendorVerificationBilling({
+      apply: true,
+      materializedAt: new Date("2026-08-03T20:02:30.000Z"),
+    });
+
+    expect(summary).toMatchObject({ billable: 1, scanned: 1, stillNotBillable: 0, updated: 1 });
+    expect(database.vendorVerification.update).toHaveBeenCalledWith({
+      where: { id: "stored-verification-001" },
+      data: expect.objectContaining({
+        attributes: {
+          fullName: "Ada Lovelace",
+          institution: "University of Cape Town",
+          studentNumber: "STU001",
+        },
+        billingReason: "APPROVED_VERIFICATION",
+        billingStatus: "BILLABLE",
+        completedAt: new Date("2026-08-03T20:02:30.000Z"),
+        isVerified: true,
+        verificationFeeMinor: 125,
+      }),
+    });
+    expect(database.verificationCharge.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        verificationId: "stored-verification-001",
+        source: "LIVE",
+      }),
+    });
   });
 
   it("preserves detailed attributes for branch-scoped in-person verification", async () => {
