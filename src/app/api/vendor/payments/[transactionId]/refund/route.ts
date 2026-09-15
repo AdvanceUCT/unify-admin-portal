@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { z, ZodError } from "zod";
 
 import { getCurrentVendorSession } from "@/lib/auth/session";
+import { listActivePaymentBranchIdsForContext } from "@/lib/payments/branchOnboarding";
 import { WalletDomainError } from "@/lib/payments/errors";
 import { getApprovedVendorContextForUser } from "@/lib/vendors/context";
 import { createVendorPaymentRefund } from "@/lib/vendors/refunds";
@@ -54,11 +55,15 @@ export async function POST(
     if (!vendorContext) {
       return NextResponse.json({ error: { message: "Forbidden." } }, { status: 403 });
     }
+    const paymentBranchIds = await listActivePaymentBranchIdsForContext(vendorContext);
+    if (paymentBranchIds.length === 0) {
+      return NextResponse.json({ error: { message: "Payment approval has not been granted." } }, { status: 403 });
+    }
 
     const { transactionId } = await context.params;
     const body = refundSchema.parse(await request.json());
     const refund = await createVendorPaymentRefund({
-      context: vendorContext,
+      context: { ...vendorContext, branchIds: paymentBranchIds },
       transactionId,
       amountMinor: body.amountMinor,
       idempotencyKey: body.idempotencyKey,

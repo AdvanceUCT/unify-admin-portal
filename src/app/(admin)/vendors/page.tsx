@@ -9,23 +9,34 @@ import { Banknote, Check, Eye, Globe, History, Link as LinkIcon, Mail, QrCode, T
 import { PageTabs } from "@/components/layout/PageTabs";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
-import { StatusText } from "@/components/ui/StatusText";
-import { DecisionNoteButton } from "@/features/audit/DecisionNoteButton";
+import {
+  PaymentAccessDecisionTable,
+  VendorApplicationDecisionTable,
+} from "@/features/audit/DecisionLogTables";
 import { requireRoleForRender } from "@/lib/auth/session";
-import { listBranchPaymentAccessQueue } from "@/lib/payments/branchOnboarding";
+import {
+  listBranchPaymentAccessQueue,
+  listPaymentAccessDecisions,
+} from "@/lib/payments/branchOnboarding";
 import {
   listDecidedVendorApplications,
   listVendorApplications,
 } from "@/lib/vendors/applications";
 import { applicationReasonLabels } from "@/lib/vendors/application-reasons";
 import {
+  approveBranchPaymentApplicationAction,
   approveVendorApplicationAction,
   createVendorVerificationQrAction,
+  rejectBranchPaymentApplicationAction,
   rejectVendorApplicationAction,
+  revokeBranchPaymentAcceptanceAction,
   revokeVendorApplicationAction,
 } from "./actions";
+import { PaymentAccessRevokeButton } from "./PaymentAccessRevokeButton";
 import { RejectForm } from "./RejectForm";
 import { RevokeButton } from "./RevokeButton";
+
+const DECISION_PAGE_SIZE = 5;
 
 function decisionDate(value: Date | string) {
   return new Date(value).toLocaleDateString("en-GB", {
@@ -35,31 +46,85 @@ function decisionDate(value: Date | string) {
   });
 }
 
-function campusStatusLabel(value: "ON_CAMPUS" | "OFF_CAMPUS" | null) {
-  if (value === "ON_CAMPUS") return "On campus";
-  if (value === "OFF_CAMPUS") return "Off campus";
-  return "Unclassified";
+function parsePage(value: string | string[] | undefined) {
+  const rawValue = Array.isArray(value) ? value[0] : value;
+  const parsed = Number.parseInt(rawValue ?? "1", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
+
+function paginateDecisions<T>(items: T[], page: number, pageSize: number) {
+  const totalCount = items.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const normalizedPage = Math.min(page, totalPages);
+  const start = (normalizedPage - 1) * pageSize;
+
+  return {
+    items: items.slice(start, start + pageSize),
+    page: normalizedPage,
+    pageSize,
+    totalCount,
+    totalPages,
+  };
+}
+
+function vendorsDecisionHref(vendorPage: number, paymentPage: number) {
+  return `/vendors?tab=log&vendorDecisionPage=${vendorPage}&paymentDecisionPage=${paymentPage}`;
 }
 
 export default async function VendorsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{
+    paymentDecisionPage?: string | string[];
+    tab?: string;
+    vendorDecisionPage?: string | string[];
+  }>;
 }) {
   await requireRoleForRender(["SUPER_ADMIN", "ADMIN"]);
 
-  const { tab } = await searchParams;
+  const { paymentDecisionPage, tab, vendorDecisionPage } = await searchParams;
   const activeTab =
     tab === "applications" ? "applications" : tab === "payments" ? "payments" : tab === "log" ? "log" : "vendors";
 
-  const [approvedApplications, pendingApplications, rejectedApplications, decidedApplications, paymentAccess] =
+  const [approvedApplications, pendingApplications, rejectedApplications, decidedApplications, paymentAccess, paymentDecisions] =
     await Promise.all([
       listVendorApplications({ status: "APPROVED" }),
       listVendorApplications({ status: "PENDING" }),
       listVendorApplications({ status: "REJECTED" }),
       listDecidedVendorApplications(),
       listBranchPaymentAccessQueue(),
+      listPaymentAccessDecisions({
+        page: parsePage(paymentDecisionPage),
+        pageSize: DECISION_PAGE_SIZE,
+      }),
     ]);
+  const vendorDecisions = paginateDecisions(
+    decidedApplications,
+    parsePage(vendorDecisionPage),
+    DECISION_PAGE_SIZE,
+  );
+  const approvedPaymentGroups = Array.from(
+    paymentAccess.activeAcceptances.reduce((groups, acceptance) => {
+      const vendor = acceptance.vendorBranch.vendorProfile;
+      const existing = groups.get(vendor.id);
+      if (existing) {
+        existing.acceptances.push(acceptance);
+      } else {
+        groups.set(vendor.id, {
+          acceptances: [acceptance],
+          companyName: vendor.companyName,
+          serviceCategory: vendor.serviceCategory,
+          vendorId: vendor.id,
+        });
+      }
+      return groups;
+    }, new Map<string, {
+      acceptances: typeof paymentAccess.activeAcceptances;
+      companyName: string;
+      serviceCategory: string;
+      vendorId: string;
+    }>()),
+  ).map(([, group]) => group);
 
   return (
     <div className="space-y-6">
@@ -360,8 +425,7 @@ export default async function VendorsPage({
               <div>
                 <h2 className="text-section-title text-fg">Branch payment access</h2>
                 <p className="mt-1 text-sm text-fg-subtle">
-                  Review branch-level requests to accept UNIFY wallet payments. A branch must be
-                  classified as on-campus before its payment QR can be approved.
+                  Review branch-level requests to accept UNIFY wallet payments.
                 </p>
               </div>
               <Link
@@ -383,33 +447,62 @@ export default async function VendorsPage({
               {paymentAccess.pendingApplications.length === 0 ? (
                 <p className="px-5 py-6 text-sm text-fg-subtle">No pending payment-access requests.</p>
               ) : (
-                paymentAccess.pendingApplications.map((application) => (
-                  <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between" key={application.id}>
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h4 className="font-medium text-fg">
-                          {application.vendorBranch.vendorProfile.companyName}
-                        </h4>
-                        <Badge tone="warning">Pending</Badge>
-                        <Badge tone={application.vendorBranch.campusStatus === "ON_CAMPUS" ? "success" : "neutral"}>
-                          {campusStatusLabel(application.vendorBranch.campusStatus)}
-                        </Badge>
+                paymentAccess.pendingApplications.map((application) => {
+                  const hasPayoutSnapshot = Boolean(application.payoutDestinationReferenceSnapshot);
+                  const hasAcknowledgement = Boolean(application.studentDataAcknowledgedAt);
+                  return (
+                    <div className="flex flex-col gap-3 px-5 py-4 lg:flex-row lg:items-center lg:justify-between" key={application.id}>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="font-medium text-fg">
+                            {application.vendorBranch.vendorProfile.companyName}
+                          </h4>
+                          <Badge tone="warning">Pending</Badge>
+                        </div>
+                        <p className="mt-1 text-sm text-fg-subtle">
+                          {application.vendorBranch.name} &middot; {application.vendorBranch.vendorProfile.serviceCategory}
+                        </p>
+                        <p className="mt-0.5 text-xs text-fg-muted">
+                          {application.vendorBranch.address || "No branch location supplied"}
+                        </p>
+                        <p className="mt-0.5 text-xs text-fg-subtle">
+                          Submitted {application.submittedAt ? decisionDate(application.submittedAt) : decisionDate(application.createdAt)}
+                          {!hasPayoutSnapshot || !hasAcknowledgement ? " / missing application details" : ""}
+                        </p>
                       </div>
-                      <p className="mt-1 text-sm text-fg-subtle">
-                        {application.vendorBranch.name} &middot; {application.vendorBranch.vendorProfile.serviceCategory}
-                      </p>
-                      <p className="mt-1 text-xs text-fg-subtle">
-                        Submitted {application.submittedAt ? decisionDate(application.submittedAt) : decisionDate(application.createdAt)}
-                      </p>
+                      <div className="flex shrink-0 flex-wrap items-center gap-2">
+                        <Link
+                          className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
+                          href={`/vendors/payment-access/${application.vendorBranchId}`}
+                        >
+                          <Eye aria-hidden className="size-4" />
+                          View
+                        </Link>
+                        <form action={approveBranchPaymentApplicationAction}>
+                          <input name="applicationId" type="hidden" value={application.id} />
+                          <input name="branchId" type="hidden" value={application.vendorBranchId} />
+                          <button
+                            className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-success-border bg-success-bg px-3 text-sm font-medium text-success-fg transition hover:bg-success-border disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={!hasPayoutSnapshot || !hasAcknowledgement}
+                            type="submit"
+                          >
+                            <Check aria-hidden className="size-4" />
+                            Approve
+                          </button>
+                        </form>
+                        <RejectForm
+                          action={rejectBranchPaymentApplicationAction}
+                          applicationId={application.id}
+                          hiddenFields={{ branchId: application.vendorBranchId }}
+                          label="Deny"
+                          reasonLabel="Reason for denial"
+                          title="Deny payment access"
+                          confirmLabel="Confirm denial"
+                        />
+                      </div>
                     </div>
-                    <Link
-                      className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
-                      href={`/vendors/payment-access/${application.vendorBranchId}`}
-                    >
-                      Review
-                    </Link>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </section>
@@ -421,35 +514,41 @@ export default async function VendorsPage({
               </h3>
             </div>
             <div className="divide-y divide-border">
-              {paymentAccess.activeAcceptances.length === 0 ? (
+              {approvedPaymentGroups.length === 0 ? (
                 <p className="px-5 py-6 text-sm text-fg-subtle">No branches are approved for wallet payments yet.</p>
               ) : (
-                paymentAccess.activeAcceptances.map((acceptance) => (
-                  <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between" key={acceptance.id}>
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h4 className="font-medium text-fg">
-                          {acceptance.vendorBranch.vendorProfile.companyName}
-                        </h4>
-                        <Badge tone="success">Approved</Badge>
-                        <Badge tone={acceptance.vendorBranch.campusStatus === "OFF_CAMPUS" ? "warning" : "neutral"}>
-                          {campusStatusLabel(acceptance.vendorBranch.campusStatus)}
-                        </Badge>
+                approvedPaymentGroups.map((group) => (
+                  <details className="group p-0" key={group.vendorId}>
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 transition hover:bg-surface-muted/60">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="font-medium text-fg">{group.companyName}</h4>
+                          <Badge tone="success">{group.acceptances.length} approved</Badge>
+                        </div>
+                        <p className="mt-0.5 text-sm text-fg-subtle">{group.serviceCategory}</p>
                       </div>
-                      <p className="mt-1 text-sm text-fg-subtle">
-                        {acceptance.vendorBranch.name} &middot; QR {acceptance.qrIdentifier}
-                      </p>
-                      <p className="mt-1 text-xs text-fg-subtle">
-                        Approved {decisionDate(acceptance.approvedAt)}
-                      </p>
+                      <span className="shrink-0 text-sm font-medium text-fg-muted group-open:hidden">Show</span>
+                      <span className="hidden shrink-0 text-sm font-medium text-fg-muted group-open:inline">Hide</span>
+                    </summary>
+                    <div className="mx-5 mb-5 divide-y divide-border rounded-lg border border-border">
+                      {group.acceptances.map((acceptance) => (
+                        <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between" key={acceptance.id}>
+                          <div>
+                            <p className="font-medium text-fg">{acceptance.vendorBranch.name}</p>
+                            <p className="mt-1 text-sm text-fg-subtle">
+                              QR {acceptance.qrIdentifier} &middot; Approved {decisionDate(acceptance.approvedAt)}
+                            </p>
+                          </div>
+                          <PaymentAccessRevokeButton
+                            action={revokeBranchPaymentAcceptanceAction}
+                            branchId={acceptance.vendorBranchId}
+                            branchName={acceptance.vendorBranch.name}
+                            companyName={group.companyName}
+                          />
+                        </div>
+                      ))}
                     </div>
-                    <Link
-                      className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
-                      href={`/vendors/payment-access/${acceptance.vendorBranchId}`}
-                    >
-                      Manage
-                    </Link>
-                  </div>
+                  </details>
                 ))
               )}
             </div>
@@ -459,83 +558,24 @@ export default async function VendorsPage({
 
       {/* Decision Log tab */}
       {activeTab === "log" && (
-        <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
-          <div className="border-b border-border px-5 py-4">
-            <h2 className="text-section-title text-fg">Application decisions</h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-center text-body">
-              <thead className="border-b border-border">
-                <tr className="whitespace-nowrap text-caption uppercase tracking-wide text-fg-subtle">
-                  <th className="px-5 py-3 font-medium">Company</th>
-                  <th className="px-5 py-3 font-medium">Category</th>
-                  <th className="px-5 py-3 font-medium">Decision</th>
-                  <th className="px-5 py-3 font-medium">Decided by</th>
-                  <th className="px-5 py-3 font-medium">Notes</th>
-                  <th className="px-5 py-3 font-medium">Decided</th>
-                  <th className="px-5 py-3 font-medium">Submitted</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {decidedApplications.length === 0 ? (
-                  <tr>
-                    <td className="px-5 py-10 text-fg-subtle" colSpan={7}>
-                      No decisions have been made yet.
-                    </td>
-                  </tr>
-                ) : (
-                  decidedApplications.map((application) => (
-                    <tr className="transition hover:bg-surface-muted/60" key={application.id}>
-                      <td className="px-5 py-4">
-                        <div className="font-medium text-fg">{application.companyName}</div>
-                        {application.companyRegistrationNumber && (
-                          <div className="text-xs text-fg-subtle">
-                            Reg. {application.companyRegistrationNumber}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-5 py-4 text-fg-muted">{application.serviceCategory}</td>
-                      <td className="px-5 py-4">
-                        {application.status === "APPROVED" ? (
-                          <StatusText tone="success">Approved</StatusText>
-                        ) : application.status === "REVOKED" ? (
-                          <StatusText tone="warning">Revoked</StatusText>
-                        ) : (
-                          <StatusText tone="danger">Rejected</StatusText>
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap px-5 py-4 text-fg-muted">
-                        {application.decisionActorName ?? (
-                          <span className="text-fg-subtle">Unknown</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-4">
-                        {application.decisionNotes ? (
-                          <DecisionNoteButton
-                            companyName={application.companyName}
-                            note={application.decisionNotes}
-                          />
-                        ) : (
-                          <span className="text-fg-subtle">—</span>
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap px-5 py-4 tabular-nums text-fg-muted">
-                        {application.decisionAt ? (
-                          decisionDate(application.decisionAt)
-                        ) : (
-                          <span className="text-fg-subtle">—</span>
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap px-5 py-4 tabular-nums text-fg-muted">
-                        {decisionDate(application.createdAt)}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <div className="space-y-6">
+          <VendorApplicationDecisionTable
+            decisions={vendorDecisions.items}
+            hrefForPage={(page) => vendorsDecisionHref(page, paymentDecisions.page)}
+            page={vendorDecisions.page}
+            pageSize={vendorDecisions.pageSize}
+            totalCount={vendorDecisions.totalCount}
+            totalPages={vendorDecisions.totalPages}
+          />
+          <PaymentAccessDecisionTable
+            decisions={paymentDecisions.decisions}
+            hrefForPage={(page) => vendorsDecisionHref(vendorDecisions.page, page)}
+            page={paymentDecisions.page}
+            pageSize={paymentDecisions.pageSize}
+            totalCount={paymentDecisions.totalCount}
+            totalPages={paymentDecisions.totalPages}
+          />
+        </div>
       )}
     </div>
   );

@@ -81,7 +81,7 @@ export function VendorApplicationWizard({
 
   function goToStep(step: number) {
     setCurrentStep(step);
-    router.replace(`/vendor/application?step=${step}`, { scroll: false });
+    router.replace(`/vendor/applications?step=${step}`, { scroll: false });
   }
 
   function handleNext(newApplicationId?: string) {

@@ -22,9 +22,19 @@ const versions = [
     publishedAt: null,
     schemaId: null,
     status: "DRAFT" as const,
-    version: "2.0",
+    version: null,
   },
 ];
+
+function renderManager() {
+  return render(
+    <SchemaVersionManager
+      attributeAvailability={attributes}
+      nextPublishVersion="2.0"
+      versions={versions}
+    />,
+  );
+}
 
 describe("SchemaVersionManager", () => {
   afterEach(() => {
@@ -33,7 +43,7 @@ describe("SchemaVersionManager", () => {
   });
 
   it("confirms publishing via a dialog before submitting the request", () => {
-    render(<SchemaVersionManager attributeAvailability={attributes} versions={versions} />);
+    renderManager();
 
     expect(screen.queryByRole("button", { name: "Confirm and publish" })).not.toBeInTheDocument();
 
@@ -56,7 +66,7 @@ describe("SchemaVersionManager", () => {
       ),
     );
 
-    render(<SchemaVersionManager attributeAvailability={attributes} versions={versions} />);
+    renderManager();
 
     fireEvent.click(screen.getByRole("button", { name: "Publish" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm and publish" }));
@@ -77,16 +87,16 @@ describe("SchemaVersionManager", () => {
       vi.fn().mockResolvedValue(new Response(null, { status: 204 })),
     );
 
-    render(<SchemaVersionManager attributeAvailability={attributes} versions={versions} />);
+    renderManager();
 
     expect(screen.queryByRole("button", { name: "Confirm and delete" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-    expect(screen.getByText(/permanently deletes the local draft v2\.0/)).toBeInTheDocument();
+    expect(screen.getByText(/permanently deletes this local draft/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Confirm and delete" }));
 
-    expect(await screen.findByText("Draft schema version 2.0 deleted.")).toBeInTheDocument();
+    expect(await screen.findByText("Schema draft deleted.")).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith("/api/credentials/schemas", {
       body: JSON.stringify({ schemaId: "schema-draft-1" }),
       headers: { "Content-Type": "application/json" },
@@ -105,12 +115,38 @@ describe("SchemaVersionManager", () => {
       ),
     );
 
-    render(<SchemaVersionManager attributeAvailability={attributes} versions={versions} />);
+    renderManager();
 
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm and delete" }));
 
     expect(await screen.findByText("Only draft schema versions can be deleted.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirm and delete" })).toBeInTheDocument();
+  });
+
+  it("creates an unversioned draft and previews the next publish version", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ id: "schema-draft-2", schemaVersion: null, status: "DRAFT" }),
+          { headers: { "Content-Type": "application/json" }, status: 201 },
+        ),
+      ),
+    );
+
+    renderManager();
+
+    expect(screen.queryByLabelText("Version")).not.toBeInTheDocument();
+    expect(screen.getByText("v2.0")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create draft" }));
+
+    expect(await screen.findByText("Schema draft created.")).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith("/api/credentials/schemas", {
+      body: JSON.stringify({ attributes: ["studentNumber"] }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
   });
 });

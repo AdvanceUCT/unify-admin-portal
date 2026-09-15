@@ -535,7 +535,7 @@ export async function reviewVendorApplication({
             contactName: notifyContact.contactName,
             companyName: notifyContact.companyName,
             reason: normalizedNotes ?? "",
-            applicationUrl: `${env.APP_URL}/vendor/application`,
+            applicationUrl: `${env.APP_URL}/vendor/applications`,
           });
         }
       } catch (error) {

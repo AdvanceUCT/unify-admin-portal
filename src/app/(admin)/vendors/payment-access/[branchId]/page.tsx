@@ -3,29 +3,37 @@
  * @module app/(admin)/vendors/payment-access/[branchId]/page
  */
 
+import { Check } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import { BackButton } from "@/components/ui/BackButton";
 import { Badge } from "@/components/ui/Badge";
 import { requireRoleForRender } from "@/lib/auth/session";
-import { getBranchPaymentAccessDetail } from "@/lib/payments/branchOnboarding";
+import {
+  PAYMENT_ACCESS_ACKNOWLEDGEMENT_TEXT,
+  getBranchPaymentAccessDetail,
+} from "@/lib/payments/branchOnboarding";
 
 import {
   approveBranchPaymentApplicationAction,
-  closeBranchPaymentAcceptanceAction,
   rejectBranchPaymentApplicationAction,
-  setBranchCampusStatusAction,
+  revokeBranchPaymentAcceptanceAction,
 } from "../../actions";
+import { PaymentAccessRevokeButton } from "../../PaymentAccessRevokeButton";
+import { RejectForm } from "../../RejectForm";
 
 function displayDate(value: Date | null) {
   if (!value) return null;
   return value.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
-function campusStatusLabel(value: "ON_CAMPUS" | "OFF_CAMPUS" | null) {
-  if (value === "ON_CAMPUS") return "On campus";
-  if (value === "OFF_CAMPUS") return "Off campus";
-  return "Unclassified";
+function detailValue(value: unknown) {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function payoutSnapshotValue(snapshot: unknown, key: string) {
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return null;
+  return detailValue((snapshot as Record<string, unknown>)[key]);
 }
 
 export default async function BranchPaymentAccessPage({
@@ -42,157 +50,149 @@ export default async function BranchPaymentAccessPage({
   const latestApplication = branch.paymentApplications[0] ?? null;
   const pendingApplication = latestApplication?.status === "PENDING" ? latestApplication : null;
   const activeAcceptance = branch.paymentAcceptance?.status === "ACTIVE" ? branch.paymentAcceptance : null;
+  const hasPayoutSnapshot = Boolean(latestApplication?.payoutDestinationReferenceSnapshot);
+  const hasAcknowledgement = Boolean(latestApplication?.studentDataAcknowledgedAt);
   const canApprovePending =
     Boolean(pendingApplication) &&
-    branch.campusStatus === "ON_CAMPUS" &&
     branch.active &&
-    branch.status === "ACTIVE";
+    branch.status === "ACTIVE" &&
+    hasPayoutSnapshot &&
+    hasAcknowledgement;
 
   return (
     <div className="space-y-6">
       <BackButton href="/vendors?tab=payments" label="Back to Payment Access" />
 
-      <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-page-title text-fg">{branch.vendorProfile.companyName}</h1>
-            <p className="mt-1 text-sm text-fg-subtle">
-              {branch.name} &middot; {branch.vendorProfile.serviceCategory}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-page-title text-fg">{branch.vendorProfile.companyName}</h1>
+          <p className="mt-1 text-sm text-fg-subtle">
+            {branch.name} &middot; {branch.vendorProfile.serviceCategory}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
             <Badge tone={branch.active && branch.status === "ACTIVE" ? "success" : "warning"}>
               {branch.active ? branch.status.replaceAll("_", " ") : "Inactive"}
             </Badge>
-            <Badge tone={branch.campusStatus === "ON_CAMPUS" ? "success" : "neutral"}>
-              {campusStatusLabel(branch.campusStatus)}
-            </Badge>
+            {activeAcceptance ? (
+              <Badge tone="success">Payment approved</Badge>
+            ) : pendingApplication ? (
+              <Badge tone="warning">Pending review</Badge>
+            ) : latestApplication ? (
+              <Badge tone={latestApplication.status === "REJECTED" || latestApplication.status === "REVOKED" ? "danger" : "neutral"}>
+                {latestApplication.status.replaceAll("_", " ")}
+              </Badge>
+            ) : (
+              <Badge tone="neutral">Not requested</Badge>
+            )}
           </div>
         </div>
-      </section>
-
-      <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
-        <div className="border-b border-border px-5 py-4">
-          <h2 className="text-section-title text-fg">Campus classification</h2>
-          <p className="mt-1 text-sm text-fg-subtle">
-            New payment approvals require the branch to be classified as on-campus.
-          </p>
-        </div>
-        <div className="p-5">
-          <form action={setBranchCampusStatusAction} className="flex flex-wrap items-center gap-2">
-            <input name="branchId" type="hidden" value={branch.id} />
-            <select
-              className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-              defaultValue={branch.campusStatus ?? ""}
-              name="campusStatus"
-              required
-            >
-              <option disabled value="">
-                Classify campus status
-              </option>
-              <option value="ON_CAMPUS">On campus</option>
-              <option value="OFF_CAMPUS">Off campus</option>
-            </select>
-            <button
-              className="h-10 rounded-md border border-border bg-surface px-4 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
-              type="submit"
-            >
-              Save
-            </button>
-          </form>
-        </div>
-      </section>
-
-      <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
-        <div className="border-b border-border px-5 py-4">
-          <h2 className="text-section-title text-fg">Payment access</h2>
-        </div>
-        <div className="space-y-5 p-5">
+        <div className="flex flex-wrap items-center gap-2">
           {activeAcceptance ? (
-            <div className="space-y-4">
-              <p className="text-sm text-fg-muted">
-                This branch is approved to accept UNIFY wallet payments. QR identifier:{" "}
-                <span className="font-mono text-fg">{activeAcceptance.qrIdentifier}</span>.
-              </p>
-              <form action={closeBranchPaymentAcceptanceAction} className="space-y-3">
-                <input name="branchId" type="hidden" value={branch.id} />
-                <label className="block text-sm">
-                  <span className="font-medium text-fg-muted">Closure reason</span>
-                  <textarea
-                    className="mt-1.5 min-h-20 w-full rounded-md border border-border px-3 py-2 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-                    name="notes"
-                    placeholder="Required before closing payment access."
-                    required
-                  />
-                </label>
-                <button
-                  className="h-9 rounded-md border border-danger-border bg-danger-bg px-3 text-sm font-medium text-danger-fg transition hover:bg-danger-border"
-                  type="submit"
-                >
-                  Close payment access
-                </button>
-              </form>
-            </div>
-          ) : pendingApplication ? (
-            <div className="space-y-5">
-              <p className="text-sm text-fg-muted">
-                Payment-access request submitted{" "}
-                {pendingApplication.submittedAt ? displayDate(pendingApplication.submittedAt) : displayDate(pendingApplication.createdAt)}.
-              </p>
-              {!canApprovePending ? (
-                <p className="rounded-md border border-warning-border bg-warning-bg px-3 py-2 text-sm text-warning-fg">
-                  Mark the branch as on-campus and ensure it is active before approving.
-                </p>
-              ) : null}
-              <form action={approveBranchPaymentApplicationAction} className="space-y-3">
+            <PaymentAccessRevokeButton
+              action={revokeBranchPaymentAcceptanceAction}
+              branchId={branch.id}
+              branchName={branch.name}
+              companyName={branch.vendorProfile.companyName}
+            />
+          ) : null}
+          {pendingApplication ? (
+            <>
+              <form action={approveBranchPaymentApplicationAction}>
                 <input name="applicationId" type="hidden" value={pendingApplication.id} />
                 <input name="branchId" type="hidden" value={branch.id} />
-                <label className="block text-sm">
-                  <span className="font-medium text-fg-muted">Approval note</span>
-                  <textarea
-                    className="mt-1.5 min-h-20 w-full rounded-md border border-border px-3 py-2 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-                    name="notes"
-                    placeholder="Optional internal note."
-                  />
-                </label>
                 <button
-                  className="h-9 rounded-md border border-success-border bg-success-bg px-3 text-sm font-medium text-success-fg transition hover:bg-success-border disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-success-border bg-success-bg px-3 text-sm font-medium text-success-fg transition hover:bg-success-border disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={!canApprovePending}
                   type="submit"
                 >
-                  Approve payment QR access
+                  <Check aria-hidden className="size-4" />
+                  Approve
                 </button>
               </form>
-              <form action={rejectBranchPaymentApplicationAction} className="space-y-3 border-t border-border pt-5">
-                <input name="applicationId" type="hidden" value={pendingApplication.id} />
-                <input name="branchId" type="hidden" value={branch.id} />
-                <label className="block text-sm">
-                  <span className="font-medium text-fg-muted">Rejection reason</span>
-                  <textarea
-                    className="mt-1.5 min-h-20 w-full rounded-md border border-border px-3 py-2 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-                    name="notes"
-                    placeholder="Required before rejecting."
-                    required
-                  />
-                </label>
-                <button
-                  className="h-9 rounded-md border border-danger-border bg-danger-bg px-3 text-sm font-medium text-danger-fg transition hover:bg-danger-border"
-                  type="submit"
-                >
-                  Reject request
-                </button>
-              </form>
-            </div>
-          ) : latestApplication ? (
-            <p className="text-sm text-fg-muted">
-              Latest request status: {latestApplication.status.replaceAll("_", " ")}
-              {latestApplication.reviewNotes ? ` — ${latestApplication.reviewNotes}` : ""}.
+              <RejectForm
+                action={rejectBranchPaymentApplicationAction}
+                applicationId={pendingApplication.id}
+                confirmLabel="Confirm denial"
+                hiddenFields={{ branchId: branch.id }}
+                label="Deny"
+                reasonLabel="Reason for denial"
+                title="Deny payment access"
+              />
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      {pendingApplication && !canApprovePending ? (
+        <p className="rounded-md border border-warning-border bg-warning-bg px-3 py-2 text-sm text-warning-fg">
+          The branch must be active and the request must include a payout destination and acknowledgement before approval.
+        </p>
+      ) : null}
+
+      <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="text-section-title text-fg">Application details</h2>
+        </div>
+        <div className="grid gap-4 p-5 lg:grid-cols-3">
+          <div className="rounded-lg border border-border bg-surface-muted/60 p-4">
+            <h3 className="text-sm font-semibold text-fg">Service point</h3>
+            <dl className="mt-3 grid gap-3 text-sm text-fg-muted">
+              <div>
+                <dt className="font-medium text-fg">Branch</dt>
+                <dd>{branch.name}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-fg">Location</dt>
+                <dd>{branch.address || "No branch location supplied"}</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div className="rounded-lg border border-border bg-surface-muted/60 p-4">
+            <h3 className="text-sm font-semibold text-fg">Payout destination</h3>
+            <dl className="mt-3 grid gap-3 text-sm text-fg-muted">
+              <div>
+                <dt className="font-medium text-fg">Provider</dt>
+                <dd>{latestApplication?.payoutProviderSnapshot ?? "Not supplied"}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-fg">Reference</dt>
+                <dd className="break-all">{latestApplication?.payoutDestinationReferenceSnapshot ?? "Not supplied"}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-fg">Account holder</dt>
+                <dd>
+                  {payoutSnapshotValue(latestApplication?.payoutDestinationSnapshot, "accountHolderName") ??
+                    payoutSnapshotValue(latestApplication?.payoutDestinationSnapshot, "providerAccountName") ??
+                    "Not supplied"}
+                </dd>
+              </div>
+              <div>
+                <dt className="font-medium text-fg">Bank</dt>
+                <dd>
+                  {payoutSnapshotValue(latestApplication?.payoutDestinationSnapshot, "bankName") ??
+                    payoutSnapshotValue(latestApplication?.payoutDestinationSnapshot, "bankCode") ??
+                    "Not supplied"}
+                </dd>
+              </div>
+              <div>
+                <dt className="font-medium text-fg">Account</dt>
+                <dd>{payoutSnapshotValue(latestApplication?.payoutDestinationSnapshot, "accountMask") ?? "Stored securely"}</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div className="rounded-lg border border-border bg-surface-muted/60 p-4">
+            <h3 className="text-sm font-semibold text-fg">Student data acknowledgement</h3>
+            <p className="mt-3 text-sm leading-6 text-fg-muted">
+              {latestApplication?.studentDataAcknowledgementText ?? PAYMENT_ACCESS_ACKNOWLEDGEMENT_TEXT}
             </p>
-          ) : (
-            <p className="text-sm text-fg-subtle">
-              This branch has not requested wallet payment access yet.
+            <p className="mt-3 text-sm text-fg-muted">
+              {latestApplication?.studentDataAcknowledgedAt
+                ? `Accepted ${displayDate(latestApplication.studentDataAcknowledgedAt)}`
+                : "Not accepted"}
             </p>
-          )}
+          </div>
         </div>
       </section>
     </div>

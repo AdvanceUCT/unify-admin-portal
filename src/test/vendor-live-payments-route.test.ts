@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const auth = vi.hoisted(() => ({ getCurrentVendorSession: vi.fn() }));
 const context = vi.hoisted(() => ({ getApprovedVendorContextForUser: vi.fn() }));
+const branchOnboarding = vi.hoisted(() => ({ listActivePaymentBranchIdsForContext: vi.fn() }));
 const livePayments = vi.hoisted(() => ({ getLivePaymentEvents: vi.fn() }));
 
 vi.mock("@/lib/auth/session", () => auth);
 vi.mock("@/lib/vendors/context", () => context);
+vi.mock("@/lib/payments/branchOnboarding", () => branchOnboarding);
 vi.mock("@/lib/vendors/livePayments", () => livePayments);
 
 import { GET } from "@/app/api/vendor/live-payments/route";
@@ -23,6 +25,7 @@ describe("vendor live payments route", () => {
       role: "STAFF",
       branchIds: ["branch-1"],
     });
+    branchOnboarding.listActivePaymentBranchIdsForContext.mockResolvedValue(["branch-1"]);
     livePayments.getLivePaymentEvents.mockResolvedValue({ events: [], nextCursor: "cursor-2" });
   });
 

@@ -12,6 +12,7 @@ import {
   listVendorPaymentEvents,
   type VendorPaymentEventFilters,
 } from "@/lib/vendors/livePayments";
+import { listActivePaymentBranchIdsForContext } from "@/lib/payments/branchOnboarding";
 import { getVendorPayoutOverview } from "@/lib/vendors/payouts";
 import { ExportCsvButton } from "../verifications/ExportCsvButton";
 import { LivePaymentTable } from "./LivePaymentTable";
@@ -56,6 +57,15 @@ function exportHref(filters: VendorPaymentEventFilters) {
   return `/api/vendor/payments/export${query ? `?${query}` : ""}`;
 }
 
+function resultPageCanPollLivePayments(
+  selectedBranchId: string | undefined,
+  activePaymentBranchIds: string[],
+) {
+  return selectedBranchId
+    ? activePaymentBranchIds.includes(selectedBranchId)
+    : activePaymentBranchIds.length > 0;
+}
+
 export default async function VendorPaymentsPage({
   searchParams,
 }: {
@@ -70,16 +80,70 @@ export default async function VendorPaymentsPage({
 }) {
   const { context } = await requireApprovedVendorContextForRender();
   const params = await searchParams;
-  const branches: Array<{ id: string; name: string }> = await prisma.vendorBranch.findMany({
-    where: {
-      vendorProfileId: context.vendorProfileId,
-      id: { in: context.branchIds },
-    },
-    orderBy: { name: "asc" },
-    select: { id: true, name: true },
-  });
+  const [allBranches, activePaymentBranchIds] = await Promise.all([
+    prisma.vendorBranch.findMany({
+      where: {
+        vendorProfileId: context.vendorProfileId,
+        id: { in: context.branchIds },
+      },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+    listActivePaymentBranchIdsForContext(context),
+  ]);
+  const branches: Array<{ id: string; name: string }> = allBranches.filter((branch) =>
+    context.branchIds.includes(branch.id),
+  );
+  const paymentHistoryBranchIds = branches.map((branch) => branch.id);
+
+  if (paymentHistoryBranchIds.length === 0) {
+    return (
+      <div className="space-y-6">
+        <section className="rounded-xl border border-warning-border bg-warning-bg p-5 shadow-md">
+          <h1 className="text-section-title text-fg">No payment branches available</h1>
+          <p className="mt-2 text-sm leading-6 text-warning-fg">
+            To request approval, add a service point and submit a payment access application.
+          </p>
+        </section>
+
+        {context.role === "OWNER" ? (
+          <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+            <div className="border-b border-border px-5 py-4">
+              <h2 className="text-section-title text-fg">Service points</h2>
+            </div>
+            <div className="divide-y divide-border">
+              {allBranches.length === 0 ? (
+                <p className="px-5 py-6 text-sm text-fg-subtle">
+                  Add a branch before requesting payment access.
+                </p>
+              ) : (
+                allBranches.map((branch) => (
+                  <Link
+                    className="flex items-center justify-between gap-4 px-5 py-4 text-sm font-medium text-fg-muted transition hover:bg-surface-muted/60 hover:text-fg"
+                    href={`/vendor/branches/${branch.id}/payment-access`}
+                    key={branch.id}
+                  >
+                    <span>{branch.name}</span>
+                    <span>Submit application</span>
+                  </Link>
+                ))
+              )}
+            </div>
+          </section>
+        ) : (
+          <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
+            <p className="text-sm text-fg-muted">
+              Ask the vendor owner to submit a payment access application for your service point.
+            </p>
+          </section>
+        )}
+      </div>
+    );
+  }
+
+  const paymentContext = { ...context, branchIds: paymentHistoryBranchIds };
   const branchId = firstParam(params.branchId);
-  const selectedBranchId = branchId && context.branchIds.includes(branchId)
+  const selectedBranchId = branchId && paymentHistoryBranchIds.includes(branchId)
     ? branchId
     : undefined;
   const filters: VendorPaymentEventFilters = {
@@ -90,9 +154,10 @@ export default async function VendorPaymentsPage({
     query: firstParam(params.q),
     refundStatus: refundStatusParam(params.refundStatus),
   };
+  const canPollLivePayments = resultPageCanPollLivePayments(selectedBranchId, activePaymentBranchIds);
   const [payoutOverview, result] = await Promise.all([
-    getVendorPayoutOverview(context),
-    listVendorPaymentEvents(context, filters),
+    context.role === "OWNER" ? getVendorPayoutOverview(context) : Promise.resolve(null),
+    listVendorPaymentEvents(paymentContext, filters),
   ]);
   const showBranchFilter = context.role === "OWNER" && branches.length > 1;
   const showingStart = result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1;
@@ -100,10 +165,21 @@ export default async function VendorPaymentsPage({
 
   return (
     <div className="space-y-6">
-      <VendorWalletBalanceCard
-        canRunDemoPayout={context.role === "OWNER"}
-        overview={payoutOverview}
-      />
+      {payoutOverview ? (
+        <VendorWalletBalanceCard
+          canRunDemoPayout={context.role === "OWNER"}
+          overview={payoutOverview}
+        />
+      ) : null}
+
+      {activePaymentBranchIds.length === 0 ? (
+        <section className="rounded-xl border border-warning-border bg-warning-bg p-5 shadow-md">
+          <h1 className="text-section-title text-fg">Payment approval is currently inactive</h1>
+          <p className="mt-2 text-sm leading-6 text-warning-fg">
+            Past wallet payments remain visible here, but no branch can accept new wallet payments until access is approved again.
+          </p>
+        </section>
+      ) : null}
 
       <VendorPaymentsFilterBar
         branches={branches}
@@ -120,10 +196,11 @@ export default async function VendorPaymentsPage({
           </div>
         </div>
         <LivePaymentTable
+          activePaymentBranchIds={activePaymentBranchIds}
           filters={filters}
           initialItems={result.events}
           key={[filters.query, filters.refundStatus, filters.dateFrom, filters.dateTo, filters.branchId, result.page].map((value) => value ?? "").join("|")}
-          liveCursor={result.page === 1 ? encodeLivePaymentCursor({ completedAt: new Date().toISOString(), id: "_" }) : undefined}
+          liveCursor={result.page === 1 && canPollLivePayments ? encodeLivePaymentCursor({ completedAt: new Date().toISOString(), id: "_" }) : undefined}
         />
         <div className="flex items-center justify-between border-t border-border px-5 py-4">
           <Link

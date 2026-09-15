@@ -12,6 +12,7 @@ import { requireVendorSessionForRender } from "@/lib/auth/session";
 import { getVendorInvoiceOwnerContextForRender } from "@/lib/billing/vendorAuthorization";
 import { prisma } from "@/lib/db/prisma";
 import { getDocumentSignedUrlForRender } from "@/lib/storage/supabase";
+import { listActivePaymentBranchIdsForContext } from "@/lib/payments/branchOnboarding";
 import {
   getApprovedVendorContextForUserForRender,
   type ApprovedVendorContext,
@@ -27,7 +28,7 @@ const ownerNavItems: PortalNavItem[] = [
   { href: "/vendor/branches", label: "Branches", icon: "branches" },
   { href: "/vendor/payments", label: "Payments", icon: "payments" },
   { href: "/vendor/staff", label: "Staff", icon: "staff" },
-  { href: "/vendor/application", label: "Application", icon: "application" },
+  { href: "/vendor/applications", label: "Applications", icon: "application" },
   { href: "/vendor/profile", label: "Profile", icon: "profile" },
   { href: "/vendor/integrations", label: "Integrations", icon: "integrations" },
   { href: "/vendor/help", label: "Help", icon: "help" },
@@ -43,7 +44,7 @@ const staffNavItems: PortalNavItem[] = [
 
 const applicantNavItems: PortalNavItem[] = [
   { href: "/vendor", label: "Overview", icon: "overview" },
-  { href: "/vendor/application", label: "Application", icon: "application" },
+  { href: "/vendor/applications", label: "Applications", icon: "application" },
   { href: "/vendor/profile", label: "Profile", icon: "profile" },
   { href: "/vendor/help", label: "Help", icon: "help" },
 ];
@@ -106,7 +107,11 @@ export default async function VendorPortalLayout({
   const notificationBranchIds = vendorContext
     ? notificationBranchIdsFor(vendorContext, chromeProfile?.defaultBranchId ?? null)
     : [];
-  const paymentNotificationBranchIds = vendorContext ? vendorContext.branchIds : [];
+  const paymentNotificationBranchIds = vendorContext
+    ? (await listActivePaymentBranchIdsForContext(vendorContext)).filter((branchId) =>
+        notificationBranchIds.includes(branchId),
+      )
+    : [];
 
   return (
     <PortalShell

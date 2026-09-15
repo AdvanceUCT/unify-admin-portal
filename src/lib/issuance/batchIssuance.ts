@@ -351,7 +351,7 @@ async function issueStudentActivationLinks(
           expiresAt: offer.expiresAt,
           deliveryStatus: CredentialDeliveryStatus.PENDING,
           revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId,
-          schemaVersion: activeSchema.schemaVersion,
+          schemaVersion: activeSchema.schemaVersion ?? undefined,
           studentId: persistedStudentId,
           renewedFromIssuanceId: options.renewedFromIssuanceId,
           wasDelivered: false,

@@ -1,5 +1,5 @@
 /**
- * @fileoverview Renders the approved vendor page at `/vendor/application`.
+ * @fileoverview Renders the approved vendor applications page.
  * @module app/vendor/(portal)/application/page
  */
 
@@ -10,11 +10,13 @@ import { ClipboardList, Info } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { VendorApplicationDetails } from "@/features/vendors/VendorApplicationDetails";
 import { VendorApplicationHistory } from "@/features/vendors/VendorApplicationHistory";
+import { VendorPaymentAccessRequests } from "@/features/vendors/VendorPaymentAccessRequests";
 import { VendorApplicationSummary } from "@/features/vendors/VendorApplicationSummary";
 import { TOTAL_STEPS, VendorApplicationWizard } from "@/features/vendors/application/VendorApplicationWizard";
 import type { DraftApplicationData } from "@/features/vendors/application/VendorApplicationWizard";
 import { requireVendorSessionForRender } from "@/lib/auth/session";
 import { formatDateTime } from "@/lib/formatters";
+import { listVendorPaymentAccessApplications } from "@/lib/payments/branchOnboarding";
 import { filenameFromStoragePath, getDocumentSignedUrlForRender } from "@/lib/storage/supabase";
 import { getApprovedVendorContextForUserForRender } from "@/lib/vendors/context";
 import {
@@ -62,7 +64,7 @@ export default async function VendorApplicationPage({
           </div>
           <Link
             className="inline-flex h-10 items-center rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700"
-            href="/vendor/application?start=1"
+            href="/vendor/applications?start=1"
           >
             Start application
           </Link>
@@ -175,7 +177,7 @@ export default async function VendorApplicationPage({
               </blockquote>
 
               <p className="mt-4 text-xs text-fg-subtle">
-                Your previous details, including uploaded documents, have been carried over below —
+                Your previous details, including uploaded documents, have been carried over below -
                 update anything that needs to change before resubmitting.
               </p>
             </div>
@@ -193,7 +195,7 @@ export default async function VendorApplicationPage({
     );
   }
 
-  const [documentUrls, logoUrl] = await Promise.all([
+  const [documentUrls, logoUrl, paymentRequests] = await Promise.all([
     (async () => {
       const urls: Record<string, string> = {};
       await Promise.all(
@@ -209,6 +211,9 @@ export default async function VendorApplicationPage({
     application.vendorProfile.logoPath
       ? getDocumentSignedUrlForRender(application.vendorProfile.logoPath)
       : Promise.resolve(null),
+    context?.role === "OWNER" && application.status === "APPROVED"
+      ? listVendorPaymentAccessApplications(context.vendorProfileId)
+      : Promise.resolve([]),
   ]);
 
   return (
@@ -222,6 +227,9 @@ export default async function VendorApplicationPage({
       >
         <VendorApplicationDetails application={application} documentUrls={documentUrls} variant="embedded" />
       </VendorApplicationSummary>
+      {context?.role === "OWNER" && application.status === "APPROVED" ? (
+        <VendorPaymentAccessRequests requests={paymentRequests} />
+      ) : null}
       <VendorApplicationHistory applications={history} />
     </div>
   );

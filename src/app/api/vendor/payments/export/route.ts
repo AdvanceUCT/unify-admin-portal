@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 
 import { getCurrentVendorSession } from "@/lib/auth/session";
+import { listPaymentHistoryBranchIdsForContext } from "@/lib/payments/branchOnboarding";
 import { getApprovedVendorContextForUser } from "@/lib/vendors/context";
 import { exportVendorPaymentEventsCsv, type VendorPaymentEventFilters } from "@/lib/vendors/livePayments";
 
@@ -33,10 +34,15 @@ export async function GET(request: Request) {
   }
   const context = await getApprovedVendorContextForUser(session.user.id);
   if (!context) return NextResponse.json({ error: { message: "Forbidden." } }, { status: 403 });
+  const paymentBranchIds = await listPaymentHistoryBranchIdsForContext(context);
+  if (paymentBranchIds.length === 0) {
+    return NextResponse.json({ error: { message: "No payment history is available." } }, { status: 403 });
+  }
+  const paymentContext = { ...context, branchIds: paymentBranchIds };
 
   const searchParams = new URL(request.url).searchParams;
   const branchId = optionalParam(searchParams, "branchId");
-  if (branchId && !context.branchIds.includes(branchId)) {
+  if (branchId && !paymentBranchIds.includes(branchId)) {
     return NextResponse.json({ error: { message: "Forbidden." } }, { status: 403 });
   }
 
@@ -47,7 +53,7 @@ export async function GET(request: Request) {
     query: optionalParam(searchParams, "q"),
     refundStatus: refundStatusParam(searchParams),
   };
-  const csv = await exportVendorPaymentEventsCsv(context, filters);
+  const csv = await exportVendorPaymentEventsCsv(paymentContext, filters);
 
   return new Response(csv, {
     headers: {

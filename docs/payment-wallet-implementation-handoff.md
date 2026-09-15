@@ -32,7 +32,7 @@ This is a technical design, not legal, banking, tax, or regulatory advice. Befor
 The following decisions are settled for the current design:
 
 1. Each deployment and database represents one university. Multi-university tenancy inside a shared database is not a current requirement.
-2. Payments are restricted to approved on-campus vendor branches.
+2. Payments are restricted to approved vendor branches.
 3. A vendor must first have its existing UNIFY vendor application approved before any of its branches can apply for payment acceptance.
 4. Payment acceptance is approved per branch. Most vendors will have one payment-enabled branch, but the model must support several.
 5. Each approved branch receives its own static payment QR identifier.

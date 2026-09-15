@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   auditCreate: vi.fn(),
   create: vi.fn(),
   deleteSchema: vi.fn(),
+  findMany: vi.fn(),
   findFirst: vi.fn(),
   findUnique: vi.fn(),
   getActiveCustomFieldDefinitions: vi.fn(),
@@ -37,6 +38,8 @@ vi.mock("@/lib/db/prisma", () => {
     credentialSchema: {
       create: mocks.create,
       delete: mocks.deleteSchema,
+      findMany: mocks.findMany,
+      findUnique: mocks.findUnique,
       update: mocks.update,
       updateMany: mocks.updateMany,
     },
@@ -56,6 +59,7 @@ import {
   createDraftCredentialSchemaVersion,
   CredentialSchemaVersionError,
   deleteDraftCredentialSchemaVersion,
+  getNextCredentialSchemaVersion,
   publishCredentialSchemaVersion,
   validateCredentialSchemaVersionInput,
 } from "@/lib/university/credentialSchema";
@@ -64,11 +68,12 @@ describe("credential schema versions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.findFirst.mockResolvedValue(null);
+    mocks.findMany.mockResolvedValue([{ schemaVersion: "1.0" }]);
     mocks.findUnique.mockResolvedValue({
       id: "schema-row-2",
       schemaAttributes: ["studentNumber", "faculty", "year", "programme"],
       schemaName: "StudentIdentity",
-      schemaVersion: "2.0",
+      schemaVersion: null,
       status: "DRAFT",
       universityProfileId: "university-1",
     });
@@ -79,11 +84,26 @@ describe("credential schema versions", () => {
       schemaId: "schema-2",
     });
     mocks.registerTrustedCredentialDefinition.mockResolvedValue({ credentialDefinitionId: "cred-def-2" });
-    mocks.create.mockImplementation(async ({ data }) => ({ id: "schema-row-2", ...data }));
-    mocks.update.mockImplementation(async ({ data }) => ({ id: "schema-row-2", ...data }));
+    let reservedSchemaVersion = "2.0";
+    mocks.create.mockImplementation(async ({ data }) => ({ id: "schema-row-2", schemaVersion: null, ...data }));
+    mocks.update.mockImplementation(async ({ data }) => (
+      "schemaVersion" in data
+        ? (() => {
+            reservedSchemaVersion = data.schemaVersion;
+            return {
+              id: "schema-row-2",
+              schemaAttributes: ["studentNumber", "faculty", "year", "programme"],
+              schemaName: "StudentIdentity",
+              schemaVersion: reservedSchemaVersion,
+              status: "DRAFT",
+              universityProfileId: "university-1",
+            };
+          })()
+        : { id: "schema-row-2", schemaVersion: reservedSchemaVersion, ...data }
+    ));
   });
 
-  it("requires a version number and studentNumber", () => {
+  it("validates published schema versions and required studentNumber", () => {
     expect(() =>
       validateCredentialSchemaVersionInput({ attributes: ["faculty"], schemaVersion: "version two" }),
     ).toThrow(CredentialSchemaVersionError);
@@ -92,20 +112,26 @@ describe("credential schema versions", () => {
     ).toThrow("studentNumber is required");
   });
 
-  it("creates a local draft without registering ledger objects", async () => {
+  it("increments the next publish version from existing schema versions", () => {
+    expect(getNextCredentialSchemaVersion([])).toBe("1.0");
+    expect(getNextCredentialSchemaVersion(["1.0", "2.0"])).toBe("3.0");
+    expect(getNextCredentialSchemaVersion(["1.0", null, undefined])).toBe("2.0");
+    expect(getNextCredentialSchemaVersion(["1.2.1", "2.0", "1.9"])).toBe("3.0");
+  });
+
+  it("creates an unversioned local draft without registering ledger objects", async () => {
     const result = await createDraftCredentialSchemaVersion({
       actorId: "admin-1",
       attributes: ["studentNumber", "faculty", "year", "programme"],
-      schemaVersion: "2.0",
     });
 
     expect(mocks.issuanceSetup).not.toHaveBeenCalled();
     expect(mocks.registerTrustedCredentialDefinition).not.toHaveBeenCalled();
+    expect(mocks.findMany).not.toHaveBeenCalled();
     expect(mocks.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           isActive: false,
-          schemaVersion: "2.0",
           status: "DRAFT",
         }),
       }),
@@ -115,15 +141,31 @@ describe("credential schema versions", () => {
         data: expect.objectContaining({
           action: "SCHEMA_VERSION_CREATED",
           actorId: "admin-1",
+          meta: {
+            attributes: ["studentNumber", "faculty", "year", "programme"],
+            universityProfileId: "university-1",
+          },
         }),
       }),
     );
-    expect(result).toMatchObject({ isActive: false, schemaVersion: "2.0", status: "DRAFT" });
+    expect(result).toMatchObject({ isActive: false, schemaVersion: null, status: "DRAFT" });
   });
 
-  it("publishes a draft with revocation support before activating it", async () => {
+  it("reserves the next version and publishes a draft with revocation support before activating it", async () => {
     const result = await publishCredentialSchemaVersion({ actorId: "admin-1", schemaId: "schema-row-2" });
 
+    expect(mocks.findMany).toHaveBeenCalledWith({
+      where: {
+        schemaName: "StudentIdentity",
+        schemaVersion: { not: null },
+        universityProfileId: "university-1",
+      },
+      select: { schemaVersion: true },
+    });
+    expect(mocks.update).toHaveBeenCalledWith({
+      data: { schemaVersion: "2.0" },
+      where: { id: "schema-row-2" },
+    });
     expect(mocks.issuanceSetup).toHaveBeenCalledWith(
       expect.objectContaining({
         credentialDefinition: expect.objectContaining({ supportRevocation: true }),
@@ -145,6 +187,7 @@ describe("credential schema versions", () => {
     expect(result).toMatchObject({
       credentialDefinitionId: "cred-def-2",
       isActive: true,
+      schemaVersion: "2.0",
       status: "ACTIVE",
     });
   });
@@ -160,7 +203,10 @@ describe("credential schema versions", () => {
 
     expect(mocks.registerTrustedCredentialDefinition).not.toHaveBeenCalled();
     expect(mocks.updateMany).not.toHaveBeenCalled();
-    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.update).toHaveBeenCalledWith({
+      data: { schemaVersion: "2.0" },
+      where: { id: "schema-row-2" },
+    });
     expect(mocks.auditCreate).not.toHaveBeenCalled();
   });
 
@@ -175,18 +221,27 @@ describe("credential schema versions", () => {
 
     expect(mocks.issuanceSetup).toHaveBeenCalled();
     expect(mocks.updateMany).not.toHaveBeenCalled();
-    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.update).toHaveBeenCalledWith({
+      data: { schemaVersion: "2.0" },
+      where: { id: "schema-row-2" },
+    });
     expect(mocks.auditCreate).not.toHaveBeenCalled();
   });
 
-  it("rejects a duplicate draft before writing anything", async () => {
-    mocks.findFirst.mockResolvedValue({ id: "existing" });
+  it("retries publish-time version allocation after a concurrent duplicate", async () => {
+    const duplicate = Object.assign(new Error("Duplicate schema version."), { code: "P2002" });
+    mocks.findMany
+      .mockResolvedValueOnce([{ schemaVersion: "1.0" }])
+      .mockResolvedValueOnce([{ schemaVersion: "1.0" }, { schemaVersion: "2.0" }]);
+    mocks.update.mockRejectedValueOnce(duplicate);
 
-    await expect(
-      createDraftCredentialSchemaVersion({ attributes: ["studentNumber"], schemaVersion: "2.0" }),
-    ).rejects.toMatchObject({ status: 409 });
-    expect(mocks.issuanceSetup).not.toHaveBeenCalled();
-    expect(mocks.create).not.toHaveBeenCalled();
+    const result = await publishCredentialSchemaVersion({ actorId: "admin-1", schemaId: "schema-row-2" });
+
+    expect(result).toMatchObject({ schemaVersion: "3.0" });
+    expect(mocks.update).toHaveBeenCalledWith({
+      data: { schemaVersion: "3.0" },
+      where: { id: "schema-row-2" },
+    });
   });
 
   describe("deleteDraftCredentialSchemaVersion", () => {

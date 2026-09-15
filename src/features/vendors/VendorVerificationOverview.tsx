@@ -41,6 +41,7 @@ const METRIC_VALUE_CLASS = "text-lg leading-tight break-all sm:text-xl xl:text-2
 
 export async function VendorVerificationOverview({
   companyName,
+  paymentQrUrl,
   vendorId,
   verificationUrl,
   stats,
@@ -49,6 +50,7 @@ export async function VendorVerificationOverview({
   viewAllHref = "/vendor/verifications",
 }: {
   companyName: string;
+  paymentQrUrl?: string | null;
   vendorId: string;
   verificationUrl: string | null;
   stats: Awaited<ReturnType<typeof getVendorVerificationStats>>;
@@ -58,6 +60,9 @@ export async function VendorVerificationOverview({
 }) {
   const qrSvg = verificationUrl
     ? await QRCode.toString(verificationUrl, { type: "svg", margin: 1 })
+    : null;
+  const paymentQrSvg = paymentQrUrl
+    ? await QRCode.toString(paymentQrUrl, { type: "svg", margin: 1 })
     : null;
 
   return (
@@ -134,28 +139,45 @@ export async function VendorVerificationOverview({
           )}
         </section>
 
-        <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
-          <h2 className="text-section-title text-fg">How verification works</h2>
-          <ol className="mt-4 space-y-4">
-            {HOW_IT_WORKS.map((step, index) => {
-              const Icon = step.icon;
-              return (
-                <li className="flex gap-3" key={step.title}>
-                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white">
-                    {index + 1}
-                  </span>
-                  <div>
-                    <p className="flex items-center gap-1.5 text-sm font-medium text-fg">
-                      <Icon className="text-fg-subtle" size={14} aria-hidden="true" />
-                      {step.title}
-                    </p>
-                    <p className="mt-0.5 text-sm text-fg-muted">{step.description}</p>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        </section>
+        {paymentQrSvg ? (
+          <section className="flex flex-col items-center justify-center gap-4 rounded-xl border border-border bg-surface p-8 text-center shadow-md">
+            <div
+              className="size-48"
+              dangerouslySetInnerHTML={{ __html: paymentQrSvg }}
+              aria-label="Payment QR code"
+            />
+            <div>
+              <p className="font-medium text-fg">Your payment QR code</p>
+              <p className="mt-1 max-w-xs text-sm text-fg-muted">
+                Display this at the approved service point so students can pay from their UNIFY wallet.
+              </p>
+            </div>
+            <QrCodeActions svg={paymentQrSvg} filename={`${companyName.toLowerCase().replace(/\s+/g, "-")}-payment-qr`} />
+          </section>
+        ) : (
+          <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
+            <h2 className="text-section-title text-fg">How verification works</h2>
+            <ol className="mt-4 space-y-4">
+              {HOW_IT_WORKS.map((step, index) => {
+                const Icon = step.icon;
+                return (
+                  <li className="flex gap-3" key={step.title}>
+                    <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white">
+                      {index + 1}
+                    </span>
+                    <div>
+                      <p className="flex items-center gap-1.5 text-sm font-medium text-fg">
+                        <Icon className="text-fg-subtle" size={14} aria-hidden="true" />
+                        {step.title}
+                      </p>
+                      <p className="mt-0.5 text-sm text-fg-muted">{step.description}</p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
+        )}
       </div>
 
       {verificationUrl && (

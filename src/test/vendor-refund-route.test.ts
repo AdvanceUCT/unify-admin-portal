@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const auth = vi.hoisted(() => ({ getCurrentVendorSession: vi.fn() }));
 const context = vi.hoisted(() => ({ getApprovedVendorContextForUser: vi.fn() }));
+const branchOnboarding = vi.hoisted(() => ({ listActivePaymentBranchIdsForContext: vi.fn() }));
 const refunds = vi.hoisted(() => ({ createVendorPaymentRefund: vi.fn() }));
 
 vi.mock("@/lib/auth/session", () => auth);
 vi.mock("@/lib/vendors/context", () => context);
+vi.mock("@/lib/payments/branchOnboarding", () => branchOnboarding);
 vi.mock("@/lib/vendors/refunds", () => refunds);
 
 import { POST } from "@/app/api/vendor/payments/[transactionId]/refund/route";
@@ -31,6 +33,7 @@ describe("vendor refund route", () => {
       role: "OWNER",
       branchIds: ["branch-1"],
     });
+    branchOnboarding.listActivePaymentBranchIdsForContext.mockResolvedValue(["branch-1"]);
     refunds.createVendorPaymentRefund.mockResolvedValue({
       originalTransactionId: "spend-1",
       refundTransactionId: "refund-1",

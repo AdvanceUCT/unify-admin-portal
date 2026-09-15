@@ -29,9 +29,12 @@ export default async function VendorDashboardPage() {
       include: {
         branches: {
           where: context.role === "STAFF" ? { id: { in: context.branchIds } } : {},
+          include: { paymentAcceptance: true },
           orderBy: { name: "asc" },
         },
-        defaultBranch: true,
+        defaultBranch: { include: { paymentAcceptance: true } },
+        paymentProfile: { select: { status: true } },
+        walletAccount: { select: { currency: true, status: true } },
       },
     });
     if (!vendor) return null;
@@ -39,6 +42,15 @@ export default async function VendorDashboardPage() {
       (vendor.defaultBranch && context.branchIds.includes(vendor.defaultBranch.id) ? vendor.defaultBranch : null) ??
       vendor.branches[0] ??
       null;
+    const paymentQrUrl = displayBranch?.paymentAcceptance?.qrIdentifier &&
+      displayBranch.active &&
+      displayBranch.status === "ACTIVE" &&
+      displayBranch.paymentAcceptance.status === "ACTIVE" &&
+      vendor.paymentProfile?.status === "APPROVED" &&
+      vendor.walletAccount?.status === "ACTIVE" &&
+      vendor.walletAccount.currency === "ZAR"
+        ? `unifywallet://pay/${displayBranch.paymentAcceptance.qrIdentifier}`
+        : null;
     const [stats, recentVerifications, recentPayments, universityProfile] = await Promise.all([
       getVendorVerificationStats(context.vendorProfileId, { branchIds: context.branchIds }),
       listRecentVendorVerifications(context.vendorProfileId, 5, { branchIds: context.branchIds }),
@@ -61,7 +73,8 @@ export default async function VendorDashboardPage() {
     return (
       <div className="space-y-6">
         <VendorVerificationOverview
-          companyName={displayBranch ? `${vendor.companyName} · ${displayBranch.name}` : vendor.companyName}
+          companyName={displayBranch ? `${vendor.companyName} - ${displayBranch.name}` : vendor.companyName}
+          paymentQrUrl={paymentQrUrl}
           vendorId={vendor.id}
           verificationUrl={displayBranch?.verificationUrl ?? null}
           stats={stats}
@@ -165,7 +178,7 @@ export default async function VendorDashboardPage() {
           </p>
           <Link
             className="mt-4 inline-flex h-9 items-center rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700"
-            href="/vendor/application"
+            href="/vendor/applications"
           >
             {application.status === "DRAFT" ? "Continue application" : "View application"}
           </Link>

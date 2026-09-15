@@ -6,6 +6,7 @@
 import { SchemaVersionManager } from "@/features/credentials/SchemaVersionManager";
 import { requireRoleForRender } from "@/lib/auth/session";
 import {
+  getNextCredentialSchemaPublishVersion,
   getSchemaAttributeAvailability,
   listCredentialSchemaVersions,
 } from "@/lib/university/credentialSchema";
@@ -18,14 +19,16 @@ export default async function CredentialSchemasPage() {
   ]);
   if (!profile) throw new Error("University profile was not found.");
 
-  const [versions, attributeAvailability] = await Promise.all([
+  const [versions, attributeAvailability, nextPublishVersion] = await Promise.all([
     listCredentialSchemaVersions(profile.id),
     getSchemaAttributeAvailability(profile.id),
+    getNextCredentialSchemaPublishVersion(profile.id),
   ]);
 
   return (
     <SchemaVersionManager
       attributeAvailability={attributeAvailability}
+      nextPublishVersion={nextPublishVersion}
       versions={versions.map((version) => ({
         attributes: version.schemaAttributes,
         createdAt: version.createdAt.toISOString(),

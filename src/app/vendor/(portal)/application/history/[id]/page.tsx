@@ -1,5 +1,5 @@
 /**
- * @fileoverview Renders the approved vendor page at `/vendor/application/history/[id]`.
+ * @fileoverview Renders the approved vendor application history page.
  * @module app/vendor/(portal)/application/history/[id]/page
  */
 
@@ -45,7 +45,7 @@ export default async function VendorApplicationHistoryDetailPage({
 
   return (
     <div className="space-y-6">
-      <BackButton href="/vendor/application" label="Back to application" />
+      <BackButton href="/vendor/applications" label="Back to applications" />
       <VendorApplicationDetails
         application={application}
         documentUrls={documentUrls}

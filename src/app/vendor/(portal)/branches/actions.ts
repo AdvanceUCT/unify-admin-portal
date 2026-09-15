@@ -83,13 +83,18 @@ export async function setDefaultBranchAction(formData: FormData) {
 export async function requestBranchPaymentAccessAction(formData: FormData) {
   const { session, context } = await requireVendorOwnerContext();
   const branchId = String(formData.get("branchId") ?? "");
+  const acknowledgementAccepted = formData.get("acknowledgement") === "on";
   const { submitBranchPaymentApplication } = await import("@/lib/payments/branchOnboarding");
   await submitBranchPaymentApplication({
     vendorProfileId: context.vendorProfileId,
     branchId,
     actorId: session.user.id,
+    acknowledgementAccepted,
   });
   revalidatePath("/vendor");
   revalidatePath("/vendor/branches");
   revalidatePath(`/vendor/branches/${branchId}`);
+  revalidatePath(`/vendor/branches/${branchId}/payment-access`);
+  revalidatePath("/vendor/applications");
+  redirect("/vendor/applications");
 }

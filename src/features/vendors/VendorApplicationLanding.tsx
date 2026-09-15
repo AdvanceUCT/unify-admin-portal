@@ -172,7 +172,7 @@ export function VendorApplicationLanding({
         </div>
         <Link
           className="inline-flex h-10 items-center rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700"
-          href={applicationStatus ? "/vendor/application" : "/vendor/application?start=1"}
+          href={applicationStatus ? "/vendor/applications" : "/vendor/applications?start=1"}
         >
           {ctaLabel}
         </Link>

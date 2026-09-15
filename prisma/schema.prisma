@@ -146,7 +146,6 @@ model VendorBranch {
   verificationUrl     String?
   status              VendorBranchStatus               @default(PROVISIONING)
   active              Boolean                          @default(true)
-  campusStatus        CampusStatus?
   createdByUserId     String?
   createdBy           User?                            @relation("VendorBranchCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   createdAt           DateTime                         @default(now())
@@ -170,11 +169,6 @@ enum VendorBranchStatus {
   ACTIVE
   DISABLED
   PROVISIONING_FAILED
-}
-
-enum CampusStatus {
-  ON_CAMPUS
-  OFF_CAMPUS
 }
 
 model VendorMembership {
@@ -651,18 +645,26 @@ model VendorPaymentProfile {
 }
 
 model VendorBranchPaymentApplication {
-  id                 String                         @id @default(cuid())
-  vendorBranchId     String
-  vendorBranch       VendorBranch                   @relation(fields: [vendorBranchId], references: [id], onDelete: Restrict)
-  status             BranchPaymentApplicationStatus @default(DRAFT)
-  submittedAt        DateTime?
-  reviewedAt         DateTime?
-  reviewedByUserId   String?
-  reviewNotes        String?
-  withdrawnAt        DateTime?
-  createdAt          DateTime                       @default(now())
-  updatedAt          DateTime                       @updatedAt
-  approvedAcceptance VendorBranchPaymentAcceptance? @relation("ApprovedBranchPaymentApplication")
+  id                                  String                         @id @default(cuid())
+  vendorBranchId                      String
+  vendorBranch                        VendorBranch                   @relation(fields: [vendorBranchId], references: [id], onDelete: Restrict)
+  status                              BranchPaymentApplicationStatus @default(DRAFT)
+  submittedAt                         DateTime?
+  reviewedAt                          DateTime?
+  reviewedByUserId                    String?
+  reviewNotes                         String?
+  withdrawnAt                         DateTime?
+  studentDataAcknowledgedAt           DateTime?
+  studentDataAcknowledgementText      String?
+  payoutProviderSnapshot              String?
+  payoutDestinationReferenceSnapshot  String?
+  payoutDestinationSnapshot           Json?
+  revokedAt                           DateTime?
+  revokedByUserId                     String?
+  revokedNotes                        String?
+  createdAt                           DateTime                       @default(now())
+  updatedAt                           DateTime                       @updatedAt
+  approvedAcceptance                  VendorBranchPaymentAcceptance? @relation("ApprovedBranchPaymentApplication")
 
   @@unique([id, vendorBranchId])
   @@unique([vendorBranchId], map: "vendor_branch_payment_application_one_active", where: raw("\"status\" IN ('DRAFT', 'PENDING', 'APPROVED')"))
@@ -886,7 +888,7 @@ model CredentialSchema {
   universityProfileId            String
   universityProfile              UniversityProfile      @relation(fields: [universityProfileId], references: [id])
   schemaName                     String
-  schemaVersion                  String
+  schemaVersion                  String?
   schemaAttributes               String[]
   schemaId                       String?
   credentialDefinitionId         String?
@@ -1220,6 +1222,7 @@ enum AuditAction {
   VENDOR_BRANCH_PAYMENT_APPLICATION_SUBMITTED
   VENDOR_BRANCH_PAYMENT_APPLICATION_APPROVED
   VENDOR_BRANCH_PAYMENT_APPLICATION_REJECTED
+  VENDOR_BRANCH_PAYMENT_ACCESS_REVOKED
   VENDOR_BRANCH_PAYMENT_ACCEPTANCE_CLOSED
   VENDOR_DEFAULT_BRANCH_CHANGED
   VENDOR_STAFF_INVITE_CREATED

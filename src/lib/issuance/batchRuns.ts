@@ -483,7 +483,7 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
           email: offer.email,
           expiresAt: offer.expiresAt,
           revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId,
-          schemaVersion: activeSchema.schemaVersion,
+          schemaVersion: activeSchema.schemaVersion ?? undefined,
           studentId: item.studentId,
           wasDelivered: false,
         });

@@ -7,7 +7,6 @@ import "server-only";
 
 import { randomBytes } from "node:crypto";
 
-import type { Prisma } from "@/generated/prisma/client";
 import {
   LedgerDirection,
   PayoutBatchStatus,

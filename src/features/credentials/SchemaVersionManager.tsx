@@ -30,11 +30,12 @@ type SchemaVersionSummary = {
   publishedAt?: string | null;
   schemaId?: string | null;
   status: "DRAFT" | "ACTIVE" | "RETIRED";
-  version: string;
+  version: string | null;
 };
 
 type SchemaVersionManagerProps = {
   attributeAvailability: SchemaAttributeAvailability[];
+  nextPublishVersion: string;
   versions: SchemaVersionSummary[];
 };
 
@@ -62,11 +63,14 @@ function statusLabel(version: SchemaVersionSummary) {
   return "Retired";
 }
 
-export function SchemaVersionManager({ attributeAvailability, versions }: SchemaVersionManagerProps) {
+function versionLabel(version: string | null) {
+  return version ? `v${version}` : "Draft";
+}
+
+export function SchemaVersionManager({ attributeAvailability, nextPublishVersion, versions }: SchemaVersionManagerProps) {
   const router = useRouter();
   const active = versions.find((version) => version.isActive);
   const [attributes, setAttributes] = useState<string[]>(active?.attributes ?? ["studentNumber"]);
-  const [schemaVersion, setSchemaVersion] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -100,14 +104,14 @@ export function SchemaVersionManager({ attributeAvailability, versions }: Schema
 
     try {
       const response = await fetch("/api/credentials/schemas", {
-        body: JSON.stringify({ attributes, schemaVersion }),
+        body: JSON.stringify({ attributes }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
       if (!response.ok) throw new Error(await responseError(response));
 
-      setMessage(`Draft schema version ${schemaVersion.trim()} created.`);
-      setSchemaVersion("");
+      await response.json().catch(() => null);
+      setMessage("Schema draft created.");
       router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Draft schema creation failed.");
@@ -140,7 +144,7 @@ export function SchemaVersionManager({ attributeAvailability, versions }: Schema
       });
       if (!response.ok) throw new Error(await responseError(response));
 
-      setHistoryMessage(`Schema version ${pendingPublish.version} published and activated.`);
+      setHistoryMessage(`Schema version ${pendingPublish.version ?? nextPublishVersion} published and activated.`);
       setPendingPublish(null);
       router.refresh();
     } catch (caught) {
@@ -174,7 +178,11 @@ export function SchemaVersionManager({ attributeAvailability, versions }: Schema
       });
       if (!response.ok) throw new Error(await responseError(response));
 
-      setHistoryMessage(`Draft schema version ${pendingDelete.version} deleted.`);
+      setHistoryMessage(
+        pendingDelete.version
+          ? `Draft schema version ${pendingDelete.version} deleted.`
+          : "Schema draft deleted.",
+      );
       setPendingDelete(null);
       router.refresh();
     } catch (caught) {
@@ -210,6 +218,7 @@ export function SchemaVersionManager({ attributeAvailability, versions }: Schema
           <div className="divide-y divide-border">
             {versions.map((version) => {
               const isVersionActive = version.status === "ACTIVE" || version.isActive;
+              const displayVersion = versionLabel(version.version);
 
               return (
                 <div
@@ -222,7 +231,7 @@ export function SchemaVersionManager({ attributeAvailability, versions }: Schema
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <span className="text-lg font-semibold tabular-nums text-fg">v{version.version}</span>
+                      <span className="text-lg font-semibold tabular-nums text-fg">{displayVersion}</span>
                       <StatusText tone={statusTone(version)}>{statusLabel(version)}</StatusText>
                     </div>
                     {version.status === "DRAFT" ? (
@@ -282,28 +291,19 @@ export function SchemaVersionManager({ attributeAvailability, versions }: Schema
           field set stays scannable instead of becoming an undifferentiated
           checkbox wall. */}
       <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
-        <h2 className="text-section-title text-fg">Create draft version</h2>
+        <h2 className="text-section-title text-fg">Create draft schema</h2>
         <p className="mt-1 text-sm leading-5 text-fg-muted">
-          Create the schema locally first. Publish it only when every attribute can be populated.
+          Create the schema locally first. A version is assigned only when the draft is published.
         </p>
 
         <div className="mt-5 flex flex-wrap items-end gap-3">
-          <div className="w-full max-w-48">
-            <label className="block text-sm font-medium text-fg" htmlFor="schema-version">
-              Version
-            </label>
-            <input
-              className="mt-2 h-10 w-full rounded-md border border-border px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-              disabled={isSubmitting}
-              id="schema-version"
-              onChange={(event) => setSchemaVersion(event.target.value)}
-              placeholder="2.0"
-              value={schemaVersion}
-            />
+          <div className="w-full max-w-48 rounded-md border border-border bg-surface-muted px-3 py-2">
+            <span className="block text-xs font-medium text-fg-muted">Next publish version</span>
+            <span className="mt-0.5 block text-lg font-semibold tabular-nums text-fg">v{nextPublishVersion}</span>
           </div>
           <button
             className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-fg-subtle"
-            disabled={isSubmitting || !schemaVersion.trim() || attributes.length === 0}
+            disabled={isSubmitting || attributes.length === 0}
             onClick={createDraftVersion}
             type="button"
           >
@@ -373,13 +373,13 @@ export function SchemaVersionManager({ attributeAvailability, versions }: Schema
       <Dialog
         isOpen={pendingPublish !== null}
         onClose={closePublishDialog}
-        title={pendingPublish ? `Publish schema v${pendingPublish.version}` : "Publish schema"}
+        title={pendingPublish ? `Publish schema as v${pendingPublish.version ?? nextPublishVersion}` : "Publish schema"}
       >
         {pendingPublish ? (
           <div className="space-y-4">
             <p className="text-sm text-fg-muted">
-              This registers v{pendingPublish.version} on the ledger
-              {active ? ` and retires the currently active v${active.version}` : ""}. This cannot be
+              This registers v{pendingPublish.version ?? nextPublishVersion} on the ledger
+              {active ? ` and retires the currently active ${versionLabel(active.version)}` : ""}. This cannot be
               undone.
             </p>
             {publishError ? (
@@ -413,12 +413,12 @@ export function SchemaVersionManager({ attributeAvailability, versions }: Schema
       <Dialog
         isOpen={pendingDelete !== null}
         onClose={closeDeleteDialog}
-        title={pendingDelete ? `Delete draft v${pendingDelete.version}` : "Delete draft"}
+        title={pendingDelete?.version ? `Delete draft v${pendingDelete.version}` : "Delete draft"}
       >
         {pendingDelete ? (
           <div className="space-y-4">
             <p className="text-sm text-fg-muted">
-              This permanently deletes the local draft v{pendingDelete.version}. It was never
+              This permanently deletes this local draft. It was never
               published, so nothing depends on it — but this cannot be undone.
             </p>
             {deleteError ? (

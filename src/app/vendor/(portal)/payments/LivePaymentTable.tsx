@@ -71,10 +71,12 @@ function matchesFilters(payment: LivePaymentEvent, filters: VendorPaymentEventFi
 }
 
 export function LivePaymentTable({
+  activePaymentBranchIds,
   filters,
   initialItems,
   liveCursor,
 }: {
+  activePaymentBranchIds: string[];
   filters: VendorPaymentEventFilters;
   initialItems: LivePaymentEvent[];
   liveCursor?: string;
@@ -84,6 +86,7 @@ export function LivePaymentTable({
   const [refundPaymentToConfirm, setRefundPaymentToConfirm] = useState<LivePaymentEvent | null>(null);
   const [refundingTransactionId, setRefundingTransactionId] = useState<string>();
   const filtersKey = useMemo(() => JSON.stringify(filters), [filters]);
+  const activePaymentBranchIdSet = useMemo(() => new Set(activePaymentBranchIds), [activePaymentBranchIds]);
 
   useEffect(() => {
     if (!liveCursor) return;
@@ -196,50 +199,56 @@ export function LivePaymentTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {items.map((payment) => (
-              <tr className="align-middle transition hover:bg-surface-muted/60" key={payment.transactionId}>
-                <td className="whitespace-nowrap px-4 py-3 text-fg-muted">{formatDateTime(payment.completedAt)}</td>
-                <td className="px-4 py-3 font-medium text-fg">{payment.branchName}</td>
-                <td className="px-4 py-3 font-medium text-fg">{payment.studentName}</td>
-                <td className="px-4 py-3 text-fg-muted">{payment.studentNumber}</td>
-                <td className="whitespace-nowrap px-4 py-3 font-semibold tabular-nums text-success-fg">
-                  {formatMoneyMinor(payment.amountMinor, payment.currency)}
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 tabular-nums text-fg-muted">
-                  {payment.totalRefundedMinor > 0 ? formatMoneyMinor(payment.totalRefundedMinor, payment.currency) : "-"}
-                </td>
-                <td className="px-4 py-3">
-                  <StatusText tone={REFUND_STATUS_TONE[payment.refundStatus]}>
-                    {REFUND_STATUS_LABEL[payment.refundStatus]}
-                  </StatusText>
-                  {payment.refundableUntil && payment.refundStatus === "REFUNDABLE" ? (
-                    <p className="mt-1 text-xs text-fg-subtle">Until {formatDateTime(payment.refundableUntil)}</p>
-                  ) : null}
-                </td>
-                <td className="max-w-44 truncate px-4 py-3 font-mono text-xs text-fg-muted">
-                  {payment.reference ?? payment.transactionId}
-                </td>
-                <td className="px-4 py-3">
-                  {payment.refundStatus === "REFUNDABLE" ? (
-                    <button
-                      className="inline-flex h-9 min-w-24 items-center justify-center gap-1.5 rounded-md bg-brand-600 px-3 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-fg-subtle disabled:shadow-none"
-                      disabled={refundingTransactionId === payment.transactionId}
-                      onClick={() => setRefundPaymentToConfirm(payment)}
-                      type="button"
-                    >
-                      {refundingTransactionId === payment.transactionId ? (
-                        <Loader2 aria-hidden="true" className="animate-spin" size={14} />
-                      ) : (
-                        <RotateCcw aria-hidden="true" size={14} />
-                      )}
-                      {refundingTransactionId === payment.transactionId ? "Refunding" : "Refund"}
-                    </button>
-                  ) : (
-                    <span className="text-xs text-fg-subtle">No action</span>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {items.map((payment) => {
+              const canRefundPayment =
+                payment.refundStatus === "REFUNDABLE" &&
+                activePaymentBranchIdSet.has(payment.branchId);
+
+              return (
+                <tr className="align-middle transition hover:bg-surface-muted/60" key={payment.transactionId}>
+                  <td className="whitespace-nowrap px-4 py-3 text-fg-muted">{formatDateTime(payment.completedAt)}</td>
+                  <td className="px-4 py-3 font-medium text-fg">{payment.branchName}</td>
+                  <td className="px-4 py-3 font-medium text-fg">{payment.studentName}</td>
+                  <td className="px-4 py-3 text-fg-muted">{payment.studentNumber}</td>
+                  <td className="whitespace-nowrap px-4 py-3 font-semibold tabular-nums text-success-fg">
+                    {formatMoneyMinor(payment.amountMinor, payment.currency)}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 tabular-nums text-fg-muted">
+                    {payment.totalRefundedMinor > 0 ? formatMoneyMinor(payment.totalRefundedMinor, payment.currency) : "-"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusText tone={REFUND_STATUS_TONE[payment.refundStatus]}>
+                      {REFUND_STATUS_LABEL[payment.refundStatus]}
+                    </StatusText>
+                    {payment.refundableUntil && payment.refundStatus === "REFUNDABLE" ? (
+                      <p className="mt-1 text-xs text-fg-subtle">Until {formatDateTime(payment.refundableUntil)}</p>
+                    ) : null}
+                  </td>
+                  <td className="max-w-44 truncate px-4 py-3 font-mono text-xs text-fg-muted">
+                    {payment.reference ?? payment.transactionId}
+                  </td>
+                  <td className="px-4 py-3">
+                    {canRefundPayment ? (
+                      <button
+                        className="inline-flex h-9 min-w-24 items-center justify-center gap-1.5 rounded-md bg-brand-600 px-3 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-fg-subtle disabled:shadow-none"
+                        disabled={refundingTransactionId === payment.transactionId}
+                        onClick={() => setRefundPaymentToConfirm(payment)}
+                        type="button"
+                      >
+                        {refundingTransactionId === payment.transactionId ? (
+                          <Loader2 aria-hidden="true" className="animate-spin" size={14} />
+                        ) : (
+                          <RotateCcw aria-hidden="true" size={14} />
+                        )}
+                        {refundingTransactionId === payment.transactionId ? "Refunding" : "Refund"}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-fg-subtle">No action</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         {items.length === 0 && (

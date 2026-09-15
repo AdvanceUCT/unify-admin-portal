@@ -28,6 +28,12 @@ const computedAttributeNames = new Set(["year", "institution", "validFrom", "exp
 const schemaVersionPattern = /^\d+\.\d+(?:\.\d+)?$/;
 const schemaName = "StudentIdentity";
 
+type ParsedSchemaVersion = {
+  major: number;
+  minor: number;
+  patch: number;
+};
+
 export type SchemaAttributeAvailability = {
   available: boolean;
   label: string;
@@ -45,16 +51,49 @@ export class CredentialSchemaVersionError extends Error {
   }
 }
 
-export function validateCredentialSchemaVersionInput(input: {
+function hasPrismaErrorCode(error: unknown, code: string) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === code
+  );
+}
+
+function parseSchemaVersion(value: string): ParsedSchemaVersion | null {
+  const match = value.trim().match(/^(\d+)\.(\d+)(?:\.(\d+))?$/);
+  if (!match) return null;
+
+  return {
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: match[3] ? Number(match[3]) : 0,
+  };
+}
+
+function compareSchemaVersions(left: ParsedSchemaVersion, right: ParsedSchemaVersion) {
+  return (
+    left.major - right.major ||
+    left.minor - right.minor ||
+    left.patch - right.patch
+  );
+}
+
+export function getNextCredentialSchemaVersion(existingVersions: readonly (string | null | undefined)[]) {
+  const highest = existingVersions
+    .filter((version): version is string => typeof version === "string")
+    .map(parseSchemaVersion)
+    .filter((version): version is ParsedSchemaVersion => version !== null)
+    .sort(compareSchemaVersions)
+    .at(-1);
+
+  return `${(highest?.major ?? 0) + 1}.0`;
+}
+
+export function validateCredentialSchemaAttributesInput(input: {
   availableAttributes?: readonly string[];
   attributes: string[];
-  schemaVersion: string;
 }) {
-  const schemaVersion = input.schemaVersion.trim();
-  if (!schemaVersionPattern.test(schemaVersion)) {
-    throw new CredentialSchemaVersionError("Schema version must look like 2.0 or 2.0.1.", 400);
-  }
-
   const attributes = [...new Set(input.attributes.map((attribute) => attribute.trim()).filter(Boolean))];
   if (!attributes.includes("studentNumber")) {
     throw new CredentialSchemaVersionError("studentNumber is required in every student credential schema.", 400);
@@ -65,7 +104,23 @@ export function validateCredentialSchemaVersionInput(input: {
     throw new CredentialSchemaVersionError(`Unsupported schema attributes: ${unsupported.join(", ")}.`, 400);
   }
 
-  return { attributes, schemaVersion };
+  return { attributes };
+}
+
+export function validateCredentialSchemaVersionInput(input: {
+  availableAttributes?: readonly string[];
+  attributes: string[];
+  schemaVersion: string;
+}) {
+  const schemaVersion = input.schemaVersion.trim();
+  if (!schemaVersionPattern.test(schemaVersion)) {
+    throw new CredentialSchemaVersionError("Schema version must look like 2.0 or 2.0.1.", 400);
+  }
+
+  return {
+    ...validateCredentialSchemaAttributesInput(input),
+    schemaVersion,
+  };
 }
 
 export async function getSchemaAttributeAvailability(profileId: string): Promise<SchemaAttributeAvailability[]> {
@@ -155,28 +210,29 @@ export async function listCredentialSchemaVersions(profileId: string) {
   });
 }
 
+export async function getNextCredentialSchemaPublishVersion(profileId: string) {
+  const versions = await prisma.credentialSchema.findMany({
+    where: {
+      schemaName,
+      schemaVersion: { not: null },
+      universityProfileId: profileId,
+    },
+    select: { schemaVersion: true },
+  });
+
+  return getNextCredentialSchemaVersion(versions.map((version) => version.schemaVersion));
+}
+
 export async function createDraftCredentialSchemaVersion(input: {
   actorId?: string | null;
   attributes: string[];
-  schemaVersion: string;
 }) {
   const profile = await getUniversityProfile();
   if (!profile) {
     throw new CredentialSchemaVersionError("University profile has not been configured.", 409);
   }
   const availableAttributes = await getAvailableSchemaAttributeNames(profile.id);
-  const validated = validateCredentialSchemaVersionInput({ ...input, availableAttributes });
-
-  const duplicate = await prisma.credentialSchema.findFirst({
-    where: {
-      schemaName,
-      schemaVersion: validated.schemaVersion,
-      universityProfileId: profile.id,
-    },
-  });
-  if (duplicate) {
-    throw new CredentialSchemaVersionError(`Schema version ${validated.schemaVersion} already exists.`, 409);
-  }
+  const validated = validateCredentialSchemaAttributesInput({ ...input, availableAttributes });
 
   return prisma.$transaction(async (transaction) => {
     const schema = await transaction.credentialSchema.create({
@@ -184,7 +240,6 @@ export async function createDraftCredentialSchemaVersion(input: {
         isActive: false,
         schemaAttributes: validated.attributes,
         schemaName,
-        schemaVersion: validated.schemaVersion,
         status: CredentialSchemaStatus.DRAFT,
         universityProfileId: profile.id,
       },
@@ -196,7 +251,7 @@ export async function createDraftCredentialSchemaVersion(input: {
         actorId: input.actorId ?? null,
         meta: {
           attributes: validated.attributes,
-          schemaVersion: validated.schemaVersion,
+          universityProfileId: profile.id,
         },
         targetId: schema.id,
         targetType: "CredentialSchema",
@@ -205,6 +260,56 @@ export async function createDraftCredentialSchemaVersion(input: {
 
     return schema;
   });
+}
+
+async function reserveDraftSchemaVersionForPublish(input: {
+  profileId: string;
+  schemaId: string;
+}) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await prisma.$transaction(async (transaction) => {
+        const draft = await transaction.credentialSchema.findUnique({ where: { id: input.schemaId } });
+        if (!draft || draft.universityProfileId !== input.profileId) {
+          throw new CredentialSchemaVersionError("Draft schema version was not found.", 404);
+        }
+        if (draft.status !== CredentialSchemaStatus.DRAFT) {
+          throw new CredentialSchemaVersionError("Only draft schema versions can be published.", 409);
+        }
+        if (draft.schemaVersion) return draft;
+
+        const versions = await transaction.credentialSchema.findMany({
+          where: {
+            schemaName,
+            schemaVersion: { not: null },
+            universityProfileId: input.profileId,
+          },
+          select: { schemaVersion: true },
+        });
+        const schemaVersion = getNextCredentialSchemaVersion(
+          versions.map((version) => version.schemaVersion),
+        );
+
+        return transaction.credentialSchema.update({
+          data: { schemaVersion },
+          where: { id: draft.id },
+        });
+      }, { isolationLevel: "Serializable" });
+    } catch (error) {
+      if (
+        attempt < 2 &&
+        (hasPrismaErrorCode(error, "P2002") || hasPrismaErrorCode(error, "P2034"))
+      ) {
+        continue;
+      }
+      if (hasPrismaErrorCode(error, "P2002")) {
+        throw new CredentialSchemaVersionError("Unable to allocate a unique schema version. Try again.", 409);
+      }
+      throw error;
+    }
+  }
+
+  throw new CredentialSchemaVersionError("Unable to allocate a unique schema version. Try again.", 409);
 }
 
 export async function publishCredentialSchemaVersion(input: {
@@ -216,12 +321,12 @@ export async function publishCredentialSchemaVersion(input: {
     throw new CredentialSchemaVersionError("University issuer setup is incomplete.", 409);
   }
 
-  const draft = await prisma.credentialSchema.findUnique({ where: { id: input.schemaId } });
-  if (!draft || draft.universityProfileId !== profile.id) {
-    throw new CredentialSchemaVersionError("Draft schema version was not found.", 404);
-  }
-  if (draft.status !== CredentialSchemaStatus.DRAFT) {
-    throw new CredentialSchemaVersionError("Only draft schema versions can be published.", 409);
+  const draft = await reserveDraftSchemaVersionForPublish({
+    profileId: profile.id,
+    schemaId: input.schemaId,
+  });
+  if (!draft.schemaVersion) {
+    throw new CredentialSchemaVersionError("Unable to allocate a unique schema version. Try again.", 409);
   }
 
   const availableAttributes = await getAvailableSchemaAttributeNames(profile.id);
@@ -281,9 +386,9 @@ export async function publishCredentialSchemaVersion(input: {
         actorId: input.actorId ?? null,
         meta: {
           credentialDefinitionId: registered.credentialDefinitionId,
-          revocationRegistryDefinitionId: registered.revocationRegistryDefinitionId,
-          schemaId: registered.schemaId,
-          schemaVersion: draft.schemaVersion,
+        revocationRegistryDefinitionId: registered.revocationRegistryDefinitionId,
+        schemaId: registered.schemaId,
+        schemaVersion: draft.schemaVersion,
         },
         targetId: schema.id,
         targetType: "CredentialSchema",
@@ -336,7 +441,6 @@ export async function deleteDraftCredentialSchemaVersion(input: {
 export async function createAndPublishCredentialSchemaVersion(input: {
   actorId?: string | null;
   attributes: string[];
-  schemaVersion: string;
 }) {
   const draft = await createDraftCredentialSchemaVersion(input);
   return publishCredentialSchemaVersion({ actorId: input.actorId, schemaId: draft.id });
