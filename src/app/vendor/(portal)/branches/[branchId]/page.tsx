@@ -10,10 +10,15 @@ import QRCode from "qrcode";
 import { BackButton } from "@/components/ui/BackButton";
 import { Badge } from "@/components/ui/Badge";
 import { Metric } from "@/components/ui/Metric";
+import { LivePaymentList } from "@/features/vendors/LivePaymentList";
 import { LiveVerificationList } from "@/features/vendors/LiveVerificationList";
 import { QrCodeActions } from "@/features/vendors/QrCodeActions";
 import { prisma } from "@/lib/db/prisma";
 import { formatMoneyMinor } from "@/lib/formatters";
+import {
+  encodeLivePaymentCursor,
+  listRecentVendorPayments,
+} from "@/lib/vendors/livePayments";
 import {
   assertBranchAccess,
   requireApprovedVendorContextForRender,
@@ -80,12 +85,16 @@ export default async function VendorBranchPage({
   });
   if (!branch) notFound();
 
-  const [stats, history] = await Promise.all([
+  const [stats, history, recentPayments] = await Promise.all([
     getVendorVerificationStats(context.vendorProfileId, {
       branchIds: [branch.id],
     }),
     listRecentVendorVerifications(context.vendorProfileId, 5, {
       branchIds: [branch.id],
+    }),
+    listRecentVendorPayments(context, {
+      branchIds: [branch.id],
+      limit: 5,
     }),
   ]);
   const qrSvg = branch.verificationUrl
@@ -371,6 +380,36 @@ export default async function VendorBranchPage({
           })}
         />
       </section>
+
+      {context.role === "OWNER" && paymentQrEnabled ? (
+        <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+          <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
+            <h2 className="text-section-title text-fg">Recent payments</h2>
+            <Link
+              className="text-sm font-medium text-fg-muted hover:text-fg"
+              href={`/vendor/payments?branchId=${encodeURIComponent(branch.id)}`}
+            >
+              View all
+            </Link>
+          </div>
+          <LivePaymentList
+            branchId={branch.id}
+            initialItems={recentPayments}
+            liveCursor={
+              recentPayments[0]
+                ? encodeLivePaymentCursor({
+                    completedAt: recentPayments[0].completedAt,
+                    id: recentPayments[0].transactionId,
+                  })
+                : encodeLivePaymentCursor({
+                    completedAt: new Date().toISOString(),
+                    id: "_",
+                  })
+            }
+            maxItems={5}
+          />
+        </section>
+      ) : null}
     </div>
   );
 }

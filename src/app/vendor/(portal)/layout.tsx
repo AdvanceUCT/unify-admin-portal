@@ -108,7 +108,9 @@ export default async function VendorPortalLayout({
     ? notificationBranchIdsFor(vendorContext, chromeProfile?.defaultBranchId ?? null)
     : [];
   const paymentNotificationBranchIds = vendorContext
-    ? await listActivePaymentBranchIdsForContext(vendorContext)
+    ? (await listActivePaymentBranchIdsForContext(vendorContext)).filter((branchId) =>
+        notificationBranchIds.includes(branchId),
+      )
     : [];
 
   return (
