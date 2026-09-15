@@ -888,7 +888,7 @@ model CredentialSchema {
   universityProfileId            String
   universityProfile              UniversityProfile      @relation(fields: [universityProfileId], references: [id])
   schemaName                     String
-  schemaVersion                  String
+  schemaVersion                  String?
   schemaAttributes               String[]
   schemaId                       String?
   credentialDefinitionId         String?

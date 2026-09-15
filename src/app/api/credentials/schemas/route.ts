@@ -41,9 +41,9 @@ export async function POST(request: Request) {
   }
 
   const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
-  if (typeof record.schemaVersion !== "string" || !Array.isArray(record.attributes)) {
+  if (!Array.isArray(record.attributes)) {
     return NextResponse.json(
-      { error: { message: "schemaVersion and attributes are required." } },
+      { error: { message: "attributes are required." } },
       { status: 400 },
     );
   }
@@ -55,7 +55,6 @@ export async function POST(request: Request) {
     const schema = await createDraftCredentialSchemaVersion({
       actorId: sessionOrResponse.user.id,
       attributes: record.attributes as string[],
-      schemaVersion: record.schemaVersion,
     });
     return NextResponse.json(
       {
@@ -68,7 +67,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const status = error instanceof CredentialSchemaVersionError ? error.status : 502;
     return NextResponse.json(
-      { error: { message: error instanceof Error ? error.message : "Schema registration failed." } },
+      { error: { message: error instanceof Error ? error.message : "Schema draft creation failed." } },
       { status },
     );
   }
