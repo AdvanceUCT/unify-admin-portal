@@ -25,6 +25,8 @@
     "billing:paystack-check": "tsx scripts/paystack-check.ts",
     "prebilling:reconcile": "npm run prisma:generate",
     "billing:reconcile": "tsx scripts/billing-reconcile.ts",
+    "prevendors:reconcile-verification-billing": "npm run prisma:generate",
+    "vendors:reconcile-verification-billing": "tsx scripts/reconcile-vendor-verification-billing.ts",
     "predemo:seed-verifications": "npm run prisma:generate",
     "demo:seed-verifications": "tsx scripts/seed-vendor-verification-history.ts",
     "typecheck": "tsc --noEmit",

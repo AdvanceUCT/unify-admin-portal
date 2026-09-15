@@ -12,7 +12,11 @@ import { prisma } from "@/lib/db/prisma";
 import { decryptVendorSecret, encryptVendorSecret, hashVendorApiKey } from "@/lib/vendors/integrationCrypto";
 import { assertSafeWebhookUrl } from "@/lib/vendors/webhookSafety";
 import { requestIdFrom } from "@/lib/requestId";
-import { vendorVerificationFailureReason } from "@/lib/vendors/verificationContract";
+import {
+  normalizedVerificationAttributes,
+  summarizeVerificationStudent,
+  vendorVerificationFailureReason,
+} from "@/lib/vendors/verificationContract";
 
 export async function approvedVendorProfileForUser(userId: string) {
   return prisma.vendorProfile.findFirst({
@@ -122,13 +126,16 @@ export async function deliverVendorWebhook(vendorVerificationId: string, request
 
   const url = await assertSafeWebhookUrl(config.url);
   const eventId = verification.eventId ?? `verification:${verification.verificationRequestId}`;
+  const attributes = normalizedVerificationAttributes(verification.attributes);
   const payload = {
     eventId,
     verificationRequestId: verification.verificationRequestId,
     checkoutId: verification.checkoutId,
     status: verification.status,
+    isVerified: verification.isVerified ?? null,
     failureCode: verification.failureCode,
     failureReason: vendorVerificationFailureReason(verification.failureCode),
+    student: summarizeVerificationStudent(attributes),
     createdAt: verification.createdAt.toISOString(),
     expiresAt: verification.expiresAt?.toISOString() ?? null,
     completedAt: verification.completedAt?.toISOString() ?? null,
