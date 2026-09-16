@@ -101,6 +101,7 @@ async function credentialStudentReferences(studentId: string) {
   return Array.from(new Set([studentId, student?.studentNumber].filter((value): value is string => Boolean(value))));
 }
 
+/** Requires an accepted/issued active credential before a student can activate payments. */
 async function assertStudentPaymentEligible(studentId: string) {
   const studentReferences = await credentialStudentReferences(studentId);
   const eligibleCredential = await prisma.credentialIssuance.findFirst({
@@ -200,6 +201,8 @@ export async function requestStudentPaymentActivation(input: {
     return createSession(student.id, deviceIdHash, now);
   }
 
+  // Persist only HMACed lookup keys for student number/IP and a one-way device
+  // hash. The OTP itself is also HMACed with its challenge id before storage.
   const studentNumberHash = hmac(`student:${studentNumber}`);
   const requestedIpHash = input.ipAddress ? hmac(`ip:${input.ipAddress}`) : null;
   const windowStart = addMs(now, -ACTIVATION_RATE_WINDOW_MS);
@@ -235,6 +238,8 @@ export async function requestStudentPaymentActivation(input: {
     throw new WalletDomainError("RATE_LIMITED", "Please wait before requesting another activation code.");
   }
 
+  // Supersede older active challenges for this same student/device pair so
+  // only the latest delivered OTP can be used.
   await prisma.studentPaymentActivationChallenge.updateMany({
     where: {
       studentNumberHash,
@@ -347,6 +352,8 @@ export async function verifyStudentPaymentActivation(input: {
 
   if (invalidActivation) {
     if (challenge && !challenge.consumedAt && !challenge.verifiedAt) {
+      // Increment attempts even for invalid codes, but do not reveal which
+      // part of the challenge failed.
       await prisma.studentPaymentActivationChallenge.updateMany({
         where: { id: challenge.id, attemptCount: { lt: challenge.maxAttempts } },
         data: { attemptCount: { increment: 1 } },
@@ -413,6 +420,8 @@ export async function refreshStudentPaymentSession(input: {
   }
 
   if (session.refreshTokenHash !== refreshTokenHash) {
+    // A refresh-token mismatch on an existing session is treated as reuse or
+    // theft: revoke the whole session family rather than issuing new tokens.
     await prisma.studentPaymentSession.update({
       where: { id: session.id },
       data: { revokedAt: now, refreshReusedAt: now },
@@ -422,6 +431,8 @@ export async function refreshStudentPaymentSession(input: {
 
   const accessToken = generateOpaqueToken();
   const nextRefreshToken = generateOpaqueToken();
+  // Rotate the refresh token atomically. If another request already rotated
+  // it, mark the session reused so both racing clients must re-authenticate.
   const rotated = await prisma.studentPaymentSession.updateMany({
     where: { id: session.id, refreshTokenHash, revokedAt: null, refreshReusedAt: null },
     data: {
@@ -453,6 +464,8 @@ export async function authenticateWalletBearer(request: Request, now: Date = new
   const match = authorization.match(/^Bearer\s+(.+)$/i);
   if (!match) throw new WalletDomainError("INVALID_WALLET_SESSION", "Missing wallet bearer token.");
 
+  // Access tokens are opaque to clients and stored only as SHA-256 hashes, so
+  // a database read cannot recover a bearer token.
   const accessTokenHash = sha256(match[1].trim());
   const session = await prisma.studentPaymentSession.findUnique({
     where: { accessTokenHash },

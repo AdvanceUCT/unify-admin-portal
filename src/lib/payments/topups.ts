@@ -142,6 +142,9 @@ async function prepareTopupSnapshot(input: {
   idempotencyKey: string;
   config: PaystackWalletTopupConfig;
 }) {
+  // Phase A of top-up creation: reserve the wallet transaction and provider
+  // reference in a short serializable transaction, then release all locks
+  // before the network call to Paystack.
   for (let referenceAttempt = 0; referenceAttempt < MAX_REFERENCE_ATTEMPTS; referenceAttempt += 1) {
     try {
       return await runSerializableTransaction(prisma, async (tx) => {
@@ -177,6 +180,8 @@ async function prepareTopupSnapshot(input: {
           include: { walletTransaction: true },
         });
         if (existing) {
+          // Mobile clients may retry after losing the response. Reuse is safe
+          // only when the key maps to the same amount/currency snapshot.
           if (existing.amountMinor !== input.amountMinor || existing.currency !== WALLET_CURRENCY) {
             throw new WalletDomainError("IDEMPOTENCY_CONFLICT", "Idempotency key was already used for a different top-up.");
           }
@@ -251,6 +256,9 @@ export async function createWalletTopup(input: {
     return serializeTopupAttempt(prepared.reuse);
   }
 
+  // Phase B calls Paystack after the durable snapshot exists. A crash or
+  // timeout here leaves a recoverable attempt that reconciliation verifies by
+  // reference instead of creating a second provider transaction.
   const attempt = prepared.snapshot;
   const student = await prisma.student.findUniqueOrThrow({ where: { id: input.studentId }, select: { email: true } });
 
@@ -325,6 +333,9 @@ export async function reconcileWalletTopup(input: {
   config?: PaystackWalletTopupConfig;
   now?: Date;
 }) {
+  // Reconciliation is the only path that credits the wallet. Browser returns,
+  // webhooks, and cron all verify the stored reference with Paystack first;
+  // no caller-supplied success state is trusted.
   const now = input.now ?? new Date();
   const config = input.config ?? resolvePaystackWalletTopupConfig();
   const attempt = await prisma.walletTopupAttempt.findFirst({
@@ -393,6 +404,8 @@ export async function reconcileWalletTopup(input: {
   }
 
   if (verified.status !== "success") {
+    // Non-terminal provider statuses stay UNKNOWN so a later webhook or cron
+    // sweep can observe the final outcome without losing the pending top-up.
     const updated = await prisma.walletTopupAttempt.update({
       where: { id: attempt.id },
       data: { status: WalletTopupAttemptStatus.UNKNOWN, failureCode: null, lastCheckedAt: now },
@@ -467,6 +480,8 @@ export async function reconcileWalletTopupByReference(input: {
 }
 
 export async function reconcileStaleWalletTopups(now: Date = new Date()) {
+  // Bounded sweep for cron/serverless use: reconcile old unresolved attempts
+  // without letting one bad provider response block the rest of the batch.
   const cutoff = new Date(now.getTime() - STALE_TOPUP_MIN_AGE_SECONDS * 1000);
   const stale = await prisma.walletTopupAttempt.findMany({
     where: { status: { in: [WalletTopupAttemptStatus.PENDING, WalletTopupAttemptStatus.UNKNOWN] }, updatedAt: { lte: cutoff } },
