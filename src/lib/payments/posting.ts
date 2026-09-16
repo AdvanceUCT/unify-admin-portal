@@ -160,6 +160,9 @@ function sameIdempotentRequest(
   },
   posting: PreparedPosting,
 ) {
+  // Idempotency is only safe when the retried request is the same financial
+  // instruction. The generated ledger entries are included so a reused key
+  // cannot silently redirect funds.
   const requestedEntries = [...posting.entries].sort((left, right) =>
     left.accountId.localeCompare(right.accountId),
   );
@@ -213,6 +216,9 @@ async function preparePosting(
   operation: WalletOperation,
   settings: Awaited<ReturnType<typeof getPaymentWalletSettings>>,
 ): Promise<PreparedPosting> {
+  // Build the intended double-entry posting before any mutation happens.
+  // Eligibility failures are carried back on the prepared object so the
+  // eventual idempotency check can run first for already-created transactions.
   const common = validateBase(operation.input);
 
   if (operation.kind === "TOPUP") {
@@ -405,10 +411,13 @@ async function postWalletOperation(operation: WalletOperation) {
   validateBase(operation.input);
 
   return runSerializableTransaction(async (transaction) => {
-  const settings = await getPaymentWalletSettings(transaction);
+    const settings = await getPaymentWalletSettings(transaction);
     const posting = await preparePosting(transaction, operation, settings);
     const accountIds = posting.entries.map((entry) => entry.accountId).sort((a, b) => a.localeCompare(b));
 
+    // Lock balances in a stable order before checking funds and writing
+    // ledger rows. This avoids deadlocks and keeps concurrent spends/payouts
+    // from both seeing the same available balance.
     await transaction.$queryRaw(
       Prisma.sql`
         SELECT "accountId"
@@ -435,6 +444,8 @@ async function postWalletOperation(operation: WalletOperation) {
       include: { entries: true },
     });
     if (existing) {
+      // Replays of the same operation return the original transaction; a
+      // reused idempotency key with different money movement is rejected.
       if (!sameIdempotentRequest(existing, posting)) {
         throw new WalletDomainError(
           "IDEMPOTENCY_CONFLICT",
@@ -450,6 +461,8 @@ async function postWalletOperation(operation: WalletOperation) {
     if (posting.eligibilityError) throw posting.eligibilityError;
     assertAccountStatuses(posting, accounts);
 
+    // System clearing accounts may go negative as provider-facing suspense
+    // accounts; student and vendor accounts may not.
     for (const entry of posting.entries) {
       if (entry.direction !== LedgerDirection.DEBIT) continue;
       const account = accounts.find((candidate) => candidate.id === entry.accountId)!;
@@ -470,6 +483,8 @@ async function postWalletOperation(operation: WalletOperation) {
         : posting.refundableUntil;
     }
 
+    // Create the transaction as PENDING, attach immutable ledger entries, then
+    // mark it COMPLETE. Database invariants enforce that the entries balance.
     const walletTransaction = await transaction.walletTransaction.create({
       data: {
         type: posting.type,
@@ -533,6 +548,10 @@ export async function completePendingTopup(input: CompletePendingTopupInput) {
   const walletTransactionId = normalizeRequired(input.walletTransactionId, "Wallet transaction id");
   const studentAccountId = normalizeRequired(input.studentAccountId, "Student account id");
 
+  // Paystack top-ups are created as pending wallet transactions before the
+  // provider call. Only reconciliation completes that skeleton by posting the
+  // gateway-clearing debit and student credit, and repeated confirmations are
+  // safe to replay.
   return runSerializableTransaction(async (transaction) => {
     const existing = await transaction.walletTransaction.findUnique({
       where: { id: walletTransactionId },

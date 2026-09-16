@@ -151,6 +151,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ received: true, ignored: true }, { status: 200 });
   }
 
+  // The reference prefix is only a router hint after signature validation and
+  // durable dedupe. Each downstream handler still verifies the stored attempt
+  // snapshot with Paystack before mutating invoice or wallet state.
   const dedupe = await recordGatewayEvent(prisma, {
     provider: "paystack",
     providerAccountRef: signatureConfig.accountRef,

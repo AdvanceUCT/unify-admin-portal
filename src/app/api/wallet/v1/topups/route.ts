@@ -10,6 +10,11 @@ const createTopupSchema = z.object({
   idempotencyKey: z.string().min(1).max(128),
 });
 
+/**
+ * Starts a wallet top-up for the bearer session's student only. The mobile
+ * client supplies an idempotency key; the service owns all provider/reference
+ * state so repeated taps cannot create duplicate wallet credits.
+ */
 export async function POST(request: Request) {
   try {
     const session = await authenticateWalletBearer(request);
