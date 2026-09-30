@@ -1,18 +1,5 @@
-import { resolveWalletPaymentDestination } from "@/lib/payments/walletMobile";
-import { walletErrorResponse, walletJson } from "@/lib/payments/walletApi";
-import { authenticateWalletBearer } from "@/lib/payments/walletSession";
+import { walletJson } from "@/lib/payments/walletApi";
 
-type Context = {
-  params: Promise<{ qrIdentifier: string }>;
-};
-
-export async function GET(request: Request, context: Context) {
-  try {
-    await authenticateWalletBearer(request);
-    const { qrIdentifier } = await context.params;
-    const destination = await resolveWalletPaymentDestination(qrIdentifier);
-    return walletJson(destination);
-  } catch (error) {
-    return walletErrorResponse(error);
-  }
+export async function GET(_request: Request, _context: { params: Promise<{ qrIdentifier: string }> }) {
+  return walletJson({ error: { code: "STATIC_PAYMENT_REMOVED", message: "Static payment QR codes are no longer supported. Ask the cashier for a POS sale QR." } }, { status: 410 });
 }

@@ -110,7 +110,7 @@ This idempotently configures schedule `unify-payment-webhooks`, `*/5 * * * *` UT
 
 ## Wallet recovery contract
 
-Authenticated balance responses include opaque `walletAccountId`. Both QR flows persist their reference, original key, immutable terms, account and submission phase before transmitting payment. Lifecycle recovery never submits automatically.
+Authenticated balance responses include opaque `walletAccountId`. POS checkouts persist their reference, original key, immutable terms, account and submission phase before transmitting payment. Lifecycle recovery never submits automatically.
 
 * `GET /api/wallet/v1/payments/by-reference/{idempotencyKey}` returns the caller's completed receipt or `{ "status": "NOT_RECORDED" }`.
 * `GET /api/wallet/v1/payments/{transactionId}/receipt` returns only the payer's completed receipt; foreign transactions return `RECEIPT_NOT_FOUND`.
@@ -124,8 +124,16 @@ Authenticated balance responses include opaque `walletAccountId`. Both QR flows 
 2. Deploy the POS receiver. In the TechNest owner portal, choose only Rondebosch Branch and the receiver URL `https://unify-pos-simulator.vercel.app/api/unify/payment-events`. Save the one-time signing secret as server-only `UNIFY_PAYMENT_WEBHOOK_SECRET` in the POS Vercel environment, then redeploy POS. Configure QStash after endpoint deployment.
 3. Compile the signed phone-only wallet APK on Windows using the existing keystore. Verify certificate against portal asset links. EC2 continues hosting only the agent backend.
 4. On the POS prepare a small itemised test-money sale. Scan on a locked phone, unlock, review vendor/branch/reference/total, explicitly approve and compare wallet, POS and portal transaction IDs, totals and completion times. Open the receipt again from wallet activity.
-5. Interrupt connectivity immediately after approval, terminate/reopen the wallet, reconnect and recover. If UNIFY reports NOT_RECORDED, explicitly retry the same instruction. Confirm one spend and matching receipt. Repeat for static QR checkout.
+5. Interrupt connectivity immediately after approval, terminate/reopen the wallet, reconnect and recover. If UNIFY reports NOT_RECORDED, explicitly retry the same instruction. Confirm one spend and matching receipt.
 6. Cancel a pending sale and scan its QR; demonstrate cancellation. Let another sale expire for ten minutes and verify both clients show expiry.
 7. Manually retry a delivered event in owner history. Confirm duplicate delivery is accepted and no additional spend occurs. Disable callbacks/QStash temporarily and demonstrate that POS polling and wallet receipt recovery still work, then restore delivery.
 
 Physical phone acceptance and individual Jira completion remain pending until these demonstrations are verified. Foundation PRs merge first; move only this chunk's commits onto updated main and retarget the stacked portal/wallet PRs. No ticket closes merely because its code appears in a grouped PR.
+
+## POS-only continuation — 30 September 2026
+
+Static payment destination and submission routes return HTTP 410 STATIC_PAYMENT_REMOVED. Vendor pages offer POS sales instead of printable payment QR codes. Historical receipt routes and verification QR codes remain available. Branch acceptance identifiers remain internal to dynamic POS eligibility; no destructive schema migration is required.
+
+AD-156: existing timeout-aware activation remains in use. AD-158: existing bounded GET retries preserve one correlation ID; writes are not automatically retried. AD-159: incoming request IDs now propagate to agent calls and activation proxy response headers/error bodies. AD-210: existing student-number/OTP model is retained, with explicit expiry/device/attempt/single-use tests. Runtime bypass must be distinguished from true OTP phone acceptance.
+
+QStash is configured on production, one five-minute signed schedule with one retry. Unattended expiry and callback delivery were observed. Phone account isolation, real OTP acceptance and controlled outage scenarios are still pending; tickets remain open and PRs draft.

@@ -100,11 +100,7 @@ export default async function VendorBranchPage({
   const qrSvg = branch.verificationUrl
     ? await QRCode.toString(branch.verificationUrl, { type: "svg", margin: 1 })
     : null;
-  const paymentQrUrl = branch.paymentAcceptance?.qrIdentifier
-    ? `unifywallet://pay/${branch.paymentAcceptance.qrIdentifier}`
-    : null;
-  const paymentQrEnabled = Boolean(
-    paymentQrUrl &&
+  const paymentEnabled = Boolean(
       branch.active &&
       branch.status === "ACTIVE" &&
       branch.paymentAcceptance?.status === "ACTIVE" &&
@@ -112,16 +108,13 @@ export default async function VendorBranchPage({
       branch.vendorProfile.walletAccount?.status === "ACTIVE" &&
       branch.vendorProfile.walletAccount.currency === "ZAR",
   );
-  const paymentQrSvg = paymentQrEnabled && paymentQrUrl
-    ? await QRCode.toString(paymentQrUrl, { type: "svg", margin: 1 })
-    : null;
   const isDefault = branch.vendorProfile.defaultBranchId === branch.id;
   const latestPaymentApplication = branch.paymentApplications[0] ?? null;
   const canRequestPaymentAccess =
     context.role === "OWNER" &&
     branch.active &&
     branch.status === "ACTIVE" &&
-    !paymentQrEnabled &&
+    !paymentEnabled &&
     (!latestPaymentApplication ||
       latestPaymentApplication.status === "REJECTED" ||
       latestPaymentApplication.status === "REVOKED" ||
@@ -219,19 +212,15 @@ export default async function VendorBranchPage({
 
         <section className="flex h-full flex-col items-center gap-4 rounded-xl border border-border bg-surface p-6 text-center shadow-md">
           <div>
-            <h2 className="text-section-title text-fg">Payment QR</h2>
-            <p className="mt-1 text-sm text-fg-subtle">Students scan this to pay this branch from their UNIFY wallet.</p>
+            <h2 className="text-section-title text-fg">POS payments</h2>
+            <p className="mt-1 text-sm text-fg-subtle">Create a sale in the POS. Students scan its QR to review the fixed amount and approve payment.</p>
           </div>
-          {paymentQrSvg ? (
-            <div
-              className="size-52"
-              dangerouslySetInnerHTML={{ __html: paymentQrSvg }}
-              aria-label={`${branch.name} payment QR code`}
-            />
+          {paymentEnabled ? (
+            <Link className="text-sm font-medium text-fg hover:underline" href="/vendor/payment-requests">View POS sales</Link>
           ) : (
             <div className="py-16 text-center">
               <p className="text-sm text-fg-subtle">
-                Payment QR unavailable - this branch is not approved for wallet payments.
+                This branch is not approved for wallet payments.
               </p>
               {canRequestPaymentAccess ? (
                 <Link
@@ -243,18 +232,7 @@ export default async function VendorBranchPage({
               ) : null}
             </div>
           )}
-          {paymentQrSvg ? (
-            <QrCodeActions
-              svg={paymentQrSvg}
-              filename={`${branch.name.toLowerCase().replace(/\s+/g, "-")}-payment-qr`}
-            />
-          ) : null}
-          {paymentQrUrl && paymentQrEnabled ? (
-            <p className="max-w-full break-all text-xs text-fg-subtle">
-              {paymentQrUrl}
-            </p>
-          ) : null}
-          {!paymentQrEnabled && !canRequestPaymentAccess ? (
+          {!paymentEnabled && !canRequestPaymentAccess ? (
             <div className="w-full rounded-lg border border-border bg-surface-muted/60 p-3 text-left text-sm">
               {latestPaymentApplication?.status === "PENDING" ? (
                 <p className="text-fg-muted">
@@ -381,7 +359,7 @@ export default async function VendorBranchPage({
         />
       </section>
 
-      {context.role === "OWNER" && paymentQrEnabled ? (
+      {context.role === "OWNER" && paymentEnabled ? (
         <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
           <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
             <h2 className="text-section-title text-fg">Recent payments</h2>

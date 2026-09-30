@@ -26,7 +26,7 @@ import { AgentServiceError, resolveActivation } from "@/lib/agentClient";
 function jsonRequest(body: unknown) {
   return new Request("http://localhost:3000/api/mock/wallet/activation/resolve", {
     body: JSON.stringify(body),
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Request-ID": "wallet-proxy-123" },
     method: "POST",
   });
 }
@@ -59,7 +59,8 @@ describe("wallet activation resolve proxy", () => {
     expect(resolveActivation).toHaveBeenCalledWith({
       sourceUrl: "https://example/source",
       token: "real-token",
-    });
+    }, "wallet-proxy-123");
+    expect(response.headers.get("x-request-id")).toBe("wallet-proxy-123");
     expect(body).toMatchObject({
       activationId: "activation-from-agent",
       activationSource: "token",
@@ -78,6 +79,8 @@ describe("wallet activation resolve proxy", () => {
 
     expect(response.status).toBe(400);
     expect(body.error.code).toBe("ActivationTokenRequired");
+    expect(body.error.requestId).toBe("wallet-proxy-123");
+    expect(response.headers.get("x-request-id")).toBe("wallet-proxy-123");
     expect(resolveActivation).not.toHaveBeenCalled();
   });
 

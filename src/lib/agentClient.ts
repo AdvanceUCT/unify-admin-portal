@@ -8,6 +8,7 @@
  * Service. It is intended to be used only on the server-side.
  */
 import "server-only";
+import { headers } from "next/headers";
 import { env } from "@/lib/config/env";
 import { requestIdFrom } from "@/lib/requestId";
 
@@ -17,6 +18,7 @@ const timeoutDetailsCode = "AGENT_SERVICE_TIMEOUT";
 
 type AgentFetchOptions = Omit<RequestInit, "signal"> & {
   timeoutMs: number;
+  requestId?: string;
 };
 
 type AgentApiPath = `/api/${string}`;
@@ -151,13 +153,19 @@ async function agentFetch(
   }
 
   const url = buildAgentServiceUrl(AGENT_SERVICE_URL, path);
-  const { timeoutMs, ...fetchOptions } = options;
+  const { timeoutMs, requestId: suppliedRequestId, ...fetchOptions } = options;
   const method = (fetchOptions.method ?? "GET").toUpperCase();
   // Retry reads only; repeating a write could duplicate an issuance or proof
   // session unless that endpoint explicitly provides its own idempotency key.
   const retryDelays = method === "GET" ? SAFE_READ_RETRY_DELAYS_MS : [];
   // Preserve one correlation identifier across every attempt of this request.
-  const requestId = requestIdFrom(undefined);
+  let incomingRequestId: string | null = null;
+  try {
+    incomingRequestId = (await headers()).get("x-request-id");
+  } catch {
+    // Background work has no Next.js request context; generate its own ID.
+  }
+  const requestId = requestIdFrom(suppliedRequestId ?? incomingRequestId);
 
   for (let attempt = 0; ; attempt += 1) {
     const controller = new AbortController();
@@ -367,7 +375,7 @@ export async function createBatchActivationLinks(payload: {
 export async function resolveActivation(payload: {
   token: string;
   sourceUrl?: string;
-}): Promise<{
+}, requestId?: string): Promise<{
   activationId: string;
   activationSource: string;
   createdAt: string;
@@ -378,6 +386,7 @@ export async function resolveActivation(payload: {
   issuerLabel: string;
 }> {
   const response = await agentFetch("/api/wallet/activation/resolve", {
+    requestId,
     method: "POST",
     body: JSON.stringify(payload),
     timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,

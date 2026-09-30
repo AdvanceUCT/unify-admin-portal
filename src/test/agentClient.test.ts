@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { headers } from "next/headers";
+
+vi.mock("next/headers", () => ({ headers: vi.fn(async () => new Headers()) }));
 
 const envMock = vi.hoisted(() => ({
   AGENT_API_KEY: "test-agent-key",
@@ -210,7 +213,8 @@ describe("agent client timeouts", () => {
     );
   });
 
-  it("retries transient reads with the same correlation ID", async () => {
+  it("retries transient reads with the incoming correlation ID", async () => {
+    vi.mocked(headers).mockResolvedValueOnce(new Headers({ "X-Request-ID": "wallet-request-123" }) as Awaited<ReturnType<typeof headers>>);
     vi.useFakeTimers();
     const fetchMock = vi
       .fn()
@@ -228,7 +232,7 @@ describe("agent client timeouts", () => {
       (init?.headers as Record<string, string>)["X-Request-ID"],
     );
     expect(new Set(requestIds).size).toBe(1);
-    expect(requestIds[0]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(requestIds[0]).toBe("wallet-request-123");
   });
 
   it("does not retry mutations", async () => {

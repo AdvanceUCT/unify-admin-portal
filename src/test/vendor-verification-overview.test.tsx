@@ -102,11 +102,10 @@ describe("VendorVerificationOverview", () => {
     expect(screen.getByRole("button", { name: /png/i })).toBeInTheDocument();
   });
 
-  it("replaces the how-it-works card with the branch payment QR when provided", async () => {
+  it("keeps verification instructions without offering a static payment QR", async () => {
     render(
       await VendorVerificationOverview({
         companyName: "Demo Vendor - Main Branch",
-        paymentQrUrl: "unifywallet://pay/qr_main_branch",
         vendorId: "vendor_1",
         verificationUrl: "https://voskuils.com/verify/sp-public-demo",
         stats: {
@@ -124,7 +123,7 @@ describe("VendorVerificationOverview", () => {
       }),
     );
 
-    expect(screen.getByText("Your payment QR code")).toBeInTheDocument();
-    expect(screen.queryByText("How verification works")).not.toBeInTheDocument();
+    expect(screen.queryByText("Your payment QR code")).not.toBeInTheDocument();
+    expect(screen.getByText("How verification works")).toBeInTheDocument();
   });
 });

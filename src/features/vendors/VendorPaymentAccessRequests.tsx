@@ -66,9 +66,6 @@ export function VendorPaymentAccessRequests({
                 </p>
                 <p className="mt-1 text-xs text-fg-subtle">
                   Submitted {formatDateTime((request.submittedAt ?? request.createdAt).toISOString())}
-                  {request.vendorBranch.paymentAcceptance?.status === BranchPaymentAcceptanceStatus.ACTIVE
-                    ? ` / QR ${request.vendorBranch.paymentAcceptance.qrIdentifier}`
-                    : ""}
                 </p>
               </div>
             </div>
