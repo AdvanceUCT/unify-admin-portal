@@ -5,6 +5,7 @@
 
 import { corsPreflight, jsonWithCors } from "@/app/api/mock/cors";
 import { AgentServiceError, resolveActivation } from "@/lib/agentClient";
+import { requestIdFrom } from "@/lib/requestId";
 import type { WalletActivationResolveRequest } from "@/lib/api/types";
 
 const COMPAT_LEDGER_NAME = "BCovrin Test" as const;
@@ -23,16 +24,18 @@ async function readJson(request: Request) {
  * response as compatibility fields expected by older wallet app versions.
  */
 export async function POST(request: Request) {
+  const requestId = requestIdFrom(request.headers.get("x-request-id"));
+  const respond = (data: unknown, init?: ResponseInit) => jsonWithCors(data, { ...init, headers: { "X-Request-ID": requestId } });
   const body = await readJson(request);
   const token = typeof body?.token === "string" ? body.token.trim() : "";
 
   if (!token) {
-    return jsonWithCors(
+    return respond(
       {
         error: {
           code: "ActivationTokenRequired",
           message: "Activation token is required.",
-          requestId: "wallet-activation-resolve",
+          requestId,
         },
       },
       { status: 400 },
@@ -43,9 +46,9 @@ export async function POST(request: Request) {
     const agentResponse = await resolveActivation({
       token,
       sourceUrl: typeof body?.sourceUrl === "string" ? body.sourceUrl : undefined,
-    });
+    }, requestId);
 
-    return jsonWithCors({
+    return respond({
       ...agentResponse,
       ledgerName: COMPAT_LEDGER_NAME,
       studentId: agentResponse.activationId,
@@ -53,24 +56,24 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (error instanceof AgentServiceError) {
-      return jsonWithCors(
+      return respond(
         {
           error: {
             code: "AgentActivationResolveFailed",
             message: error.message,
-            requestId: "wallet-activation-resolve",
+            requestId,
           },
         },
         { status: error.status },
       );
     }
 
-    return jsonWithCors(
+    return respond(
       {
         error: {
           code: "AgentServiceUnavailable",
           message: error instanceof Error ? error.message : "Agent service request failed.",
-          requestId: "wallet-activation-resolve",
+          requestId,
         },
       },
       { status: 502 },

@@ -224,55 +224,15 @@ describe("payment wallet API route contracts", () => {
     ]);
   });
 
-  it("resolves vendor destinations and submits internal wallet payments", async () => {
-    vi.mocked(resolveWalletPaymentDestination).mockResolvedValue({
-      vendorName: "Campus Cafe",
-      branchName: "Main Campus",
-      currency: "ZAR",
-      vendorBranchId: "branch-1",
-    });
-    vi.mocked(submitWalletPayment).mockResolvedValue({
-      vendorName: "Campus Cafe",
-      branchName: "Main Campus",
-      currency: "ZAR",
-      transactionId: "txn-1",
-      amountMinor: 1250,
-      resultingBalanceMinor: 3750,
-      completedAt: "2026-09-10T10:00:00.000Z",
-      status: "COMPLETED",
-    });
-
-    const vendorResponse = await resolveVendor(new Request("http://localhost:3000/api/wallet/v1/vendors/qr-12345678", {
-      headers: { authorization: "Bearer access-token" },
-    }), { params: Promise.resolve({ qrIdentifier: "qr-12345678" }) });
-    const paymentResponse = await submitPayment(jsonRequest("/api/wallet/v1/payments", {
-      qrIdentifier: "qr-12345678",
-      amountMinor: 1250,
-      idempotencyKey: "spend-1",
-    }));
-
-    expect(resolveWalletPaymentDestination).toHaveBeenCalledWith("qr-12345678");
-    expect(submitWalletPayment).toHaveBeenCalledWith({
-      studentId: "student-1",
-      qrIdentifier: "qr-12345678",
-      amountMinor: 1250,
-      idempotencyKey: "spend-1",
-    });
-    await expect(vendorResponse.json()).resolves.toEqual({
-      vendorBranchId: "branch-1",
-      vendorName: "Campus Cafe",
-      branchName: "Main Campus",
-      currency: "ZAR",
-    });
-    await expect(paymentResponse.json()).resolves.toEqual({
-      vendorName: "Campus Cafe",
-      branchName: "Main Campus",
-      currency: "ZAR",
-      transactionId: "txn-1",
-      amountMinor: 1250,
-      resultingBalanceMinor: 3750,
-      completedAt: "2026-09-10T10:00:00.000Z",
-      status: "COMPLETED",
-    });
+  it("rejects retired static QR endpoints without entering the financial service", async () => {
+    const vendorResponse = await resolveVendor(new Request("http://localhost:3000/api/wallet/v1/vendors/qr-12345678"), { params: Promise.resolve({ qrIdentifier: "qr-12345678" }) });
+    const paymentResponse = await submitPayment(jsonRequest("/api/wallet/v1/payments", { qrIdentifier: "qr-12345678", amountMinor: 1250, idempotencyKey: "spend-1" }));
+    for (const response of [vendorResponse, paymentResponse]) {
+      expect(response.status).toBe(410);
+      await expect(response.json()).resolves.toMatchObject({ error: { code: "STATIC_PAYMENT_REMOVED" } });
+    }
+    expect(authenticateWalletBearer).not.toHaveBeenCalled();
+    expect(resolveWalletPaymentDestination).not.toHaveBeenCalled();
+    expect(submitWalletPayment).not.toHaveBeenCalled();
   });
 });

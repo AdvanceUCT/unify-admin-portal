@@ -42,15 +42,6 @@ export default async function VendorDashboardPage() {
       (vendor.defaultBranch && context.branchIds.includes(vendor.defaultBranch.id) ? vendor.defaultBranch : null) ??
       vendor.branches[0] ??
       null;
-    const paymentQrUrl = displayBranch?.paymentAcceptance?.qrIdentifier &&
-      displayBranch.active &&
-      displayBranch.status === "ACTIVE" &&
-      displayBranch.paymentAcceptance.status === "ACTIVE" &&
-      vendor.paymentProfile?.status === "APPROVED" &&
-      vendor.walletAccount?.status === "ACTIVE" &&
-      vendor.walletAccount.currency === "ZAR"
-        ? `unifywallet://pay/${displayBranch.paymentAcceptance.qrIdentifier}`
-        : null;
     const [stats, recentVerifications, recentPayments, universityProfile] = await Promise.all([
       getVendorVerificationStats(context.vendorProfileId, { branchIds: context.branchIds }),
       listRecentVendorVerifications(context.vendorProfileId, 5, { branchIds: context.branchIds }),
@@ -74,7 +65,6 @@ export default async function VendorDashboardPage() {
       <div className="space-y-6">
         <VendorVerificationOverview
           companyName={displayBranch ? `${vendor.companyName} - ${displayBranch.name}` : vendor.companyName}
-          paymentQrUrl={paymentQrUrl}
           vendorId={vendor.id}
           verificationUrl={displayBranch?.verificationUrl ?? null}
           stats={stats}
