@@ -1,3 +1,4 @@
+CREATE INDEX payment_request_status_expires_idx ON payment_request(status, "expiresAt");
 CREATE TABLE payment_webhook_config (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   "vendorProfileId" TEXT NOT NULL REFERENCES vendor_profile(id) ON DELETE RESTRICT,

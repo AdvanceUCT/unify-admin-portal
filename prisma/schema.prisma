@@ -104,6 +104,8 @@ model AdminInvite {
 }
 
 model VendorProfile {
+  paymentWebhookConfigs PaymentWebhookConfig[]
+  paymentWebhookEvents PaymentWebhookEvent[]
   paymentRequests PaymentRequest[]
   id                  String                @id @default(cuid())
   userId              String                @unique
@@ -137,6 +139,7 @@ model VendorProfile {
 }
 
 model VendorBranch {
+  paymentWebhookEvents PaymentWebhookEvent[]
   paymentRequests PaymentRequest[]
   id                  String                           @id @default(cuid())
   vendorProfileId     String
@@ -1531,6 +1534,7 @@ enum PaymentRequestStatus {
 }
 
 model PaymentRequest {
+  paymentWebhookEvent PaymentWebhookEvent?
   id String @id
   vendorProfileId String
   vendorProfile VendorProfile @relation(fields: [vendorProfileId], references: [id], onDelete: Restrict)
@@ -1553,6 +1557,7 @@ model PaymentRequest {
   @@unique([vendorProfileId, idempotencyKey])
   @@unique([vendorProfileId, orderReference])
   @@index([vendorProfileId, vendorBranchId, createdAt, id])
+  @@index([status, expiresAt])
   @@map("payment_request")
 }
 
@@ -1560,6 +1565,7 @@ model PaymentRequest {
 model PaymentWebhookConfig {
   id String @id @default(uuid())
   vendorProfileId String
+  vendorProfile VendorProfile @relation(fields: [vendorProfileId], references: [id], onDelete: Restrict)
   url String
   branchIds String[]
   secretEncrypted String
@@ -1567,6 +1573,7 @@ model PaymentWebhookConfig {
   createdAt DateTime @default(now())
   disabledAt DateTime?
   deliveries PaymentWebhookDelivery[]
+  attempts PaymentWebhookAttempt[]
   @@index([vendorProfileId, enabled])
   @@map("payment_webhook_config")
 }
@@ -1574,8 +1581,11 @@ model PaymentWebhookConfig {
 model PaymentWebhookEvent {
   id String @id @default(uuid())
   requestId String @unique
+  request PaymentRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
   vendorProfileId String
+  vendorProfile VendorProfile @relation(fields: [vendorProfileId], references: [id], onDelete: Restrict)
   branchId String
+  branch VendorBranch @relation(fields: [branchId], references: [id], onDelete: Restrict)
   eventType String
   payload Json
   createdAt DateTime @default(now())
@@ -1607,6 +1617,7 @@ model PaymentWebhookAttempt {
   deliveryId String
   delivery PaymentWebhookDelivery @relation(fields: [deliveryId], references: [id], onDelete: Restrict)
   configId String
+  config PaymentWebhookConfig @relation(fields: [configId], references: [id], onDelete: Restrict)
   sequence Int
   outcome String @default("STARTED")
   httpStatus Int?
