@@ -49,6 +49,7 @@ function normalizeIdempotencyKey(value: string) {
 export async function getMobileWalletBalance(studentId: string) {
   const balance = await getStudentWalletBalance(studentId);
   return {
+    walletAccountId: balance.account.id,
     postedBalanceMinor: toSafeNumber(balance.postedBalanceMinor),
     currency: balance.account.currency as "ZAR",
     accountStatus: balance.account.status,
