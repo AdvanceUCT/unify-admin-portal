@@ -104,6 +104,8 @@ model AdminInvite {
 }
 
 model VendorProfile {
+  paymentWebhookConfigs PaymentWebhookConfig[]
+  paymentWebhookEvents PaymentWebhookEvent[]
   paymentRequests PaymentRequest[]
   id                  String                @id @default(cuid())
   userId              String                @unique
@@ -137,6 +139,7 @@ model VendorProfile {
 }
 
 model VendorBranch {
+  paymentWebhookEvents PaymentWebhookEvent[]
   paymentRequests PaymentRequest[]
   id                  String                           @id @default(cuid())
   vendorProfileId     String
@@ -1531,6 +1534,7 @@ enum PaymentRequestStatus {
 }
 
 model PaymentRequest {
+  paymentWebhookEvent PaymentWebhookEvent?
   id String @id
   vendorProfileId String
   vendorProfile VendorProfile @relation(fields: [vendorProfileId], references: [id], onDelete: Restrict)
@@ -1553,5 +1557,73 @@ model PaymentRequest {
   @@unique([vendorProfileId, idempotencyKey])
   @@unique([vendorProfileId, orderReference])
   @@index([vendorProfileId, vendorBranchId, createdAt, id])
+  @@index([status, expiresAt])
   @@map("payment_request")
+}
+
+// Revisions preserve the destination used by each attempt. Replacement never redirects old events.
+model PaymentWebhookConfig {
+  id String @id @default(uuid())
+  vendorProfileId String
+  vendorProfile VendorProfile @relation(fields: [vendorProfileId], references: [id], onDelete: Restrict)
+  url String
+  branchIds String[]
+  secretEncrypted String
+  enabled Boolean @default(true)
+  createdAt DateTime @default(now())
+  disabledAt DateTime?
+  deliveries PaymentWebhookDelivery[]
+  attempts PaymentWebhookAttempt[]
+  @@index([vendorProfileId, enabled])
+  @@map("payment_webhook_config")
+}
+
+model PaymentWebhookEvent {
+  id String @id @default(uuid())
+  requestId String @unique
+  request PaymentRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  vendorProfileId String
+  vendorProfile VendorProfile @relation(fields: [vendorProfileId], references: [id], onDelete: Restrict)
+  branchId String
+  branch VendorBranch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  eventType String
+  payload Json
+  createdAt DateTime @default(now())
+  delivery PaymentWebhookDelivery?
+  @@index([vendorProfileId, createdAt, id])
+  @@map("payment_webhook_event")
+}
+
+model PaymentWebhookDelivery {
+  id String @id @default(uuid())
+  eventId String @unique
+  event PaymentWebhookEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  configId String
+  config PaymentWebhookConfig @relation(fields: [configId], references: [id], onDelete: Restrict)
+  status String @default("READY")
+  automaticAttempts Int @default(0)
+  attemptSequence Int @default(0)
+  nextAttemptAt DateTime? @default(now())
+  leaseToken String?
+  leaseExpiresAt DateTime?
+  deliveredAt DateTime?
+  attempts PaymentWebhookAttempt[]
+  @@index([status, nextAttemptAt])
+  @@map("payment_webhook_delivery")
+}
+
+model PaymentWebhookAttempt {
+  id String @id @default(uuid())
+  deliveryId String
+  delivery PaymentWebhookDelivery @relation(fields: [deliveryId], references: [id], onDelete: Restrict)
+  configId String
+  config PaymentWebhookConfig @relation(fields: [configId], references: [id], onDelete: Restrict)
+  sequence Int
+  outcome String @default("STARTED")
+  httpStatus Int?
+  errorCode String?
+  startedAt DateTime @default(now())
+  completedAt DateTime?
+  @@unique([deliveryId, sequence])
+  @@map("payment_webhook_attempt")
 }

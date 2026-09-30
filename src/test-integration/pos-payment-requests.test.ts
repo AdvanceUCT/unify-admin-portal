@@ -2,17 +2,121 @@
 import { randomUUID } from "node:crypto";
 import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/config/env", () => ({ env: { DATABASE_URL: process.env.DATABASE_URL, VENDOR_API_KEY_PEPPER: "isolated-pos-test-pepper-at-least-32-characters" } }));
+vi.mock("@/lib/config/env", () => ({ env: { DATABASE_URL: process.env.DATABASE_URL, VENDOR_API_KEY_PEPPER: "isolated-pos-test-pepper-at-least-32-characters", VENDOR_WEBHOOK_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64") } }));
+vi.mock("@/lib/vendors/paymentWebhookTransport", async (importOriginal) => ({ ...await importOriginal<object>(), resolvePaymentWebhookDestination: vi.fn(async () => ({})) }));
 import { prisma } from "@/lib/db/prisma";
 import { createPaymentRequest, payPaymentRequest, cancelPaymentRequest, getStudentRequestReceipt, getMerchantPaymentRequest, listPaymentRequests } from "@/lib/payments/paymentRequests";
 import { postTopup } from "@/lib/payments/posting";
 import { createVendorApiCredential, authenticateVendorApiKey, revokeVendorApiCredential } from "@/lib/vendors/integrations";
 import { hashVendorApiKey } from "@/lib/vendors/integrationCrypto";
+import { configurePaymentWebhook, disablePaymentWebhook, retryPaymentWebhook, claimPaymentWebhookDeliveries, deliverClaimedPaymentWebhook, paymentWebhookHistory } from "@/lib/vendors/paymentWebhooks";
+import { getPayerPaymentReceipt } from "@/lib/payments/paymentReceipts";
 const url = new URL(process.env.DATABASE_URL ?? "http://invalid");
 beforeAll(async () => {
   if (!["/pos_test", "/unify_wallet_test"].includes(url.pathname) || process.env.NODE_ENV === "production") throw new Error("POS service tests require an isolated payment test database.");
   await prisma.universityProfile.upsert({ where: { id: "pos-test-university" }, create: { id: "pos-test-university", name: "Test", abbreviation: "TEST", contactEmail: "test@example.invalid", paymentWalletEnabled: true }, update: { paymentWalletEnabled: true } });
   await prisma.walletAccount.upsert({ where: { systemCode: "GATEWAY_CLEARING" }, create: { type: "SYSTEM", currency: "ZAR", systemCode: "GATEWAY_CLEARING" }, update: {} });
+});
+
+describe("Reliable checkout outbox and payer recovery in PostgreSQL", () => {
+  async function callbackFixture() {
+    const f = await fixture();
+    const configuration = await configurePaymentWebhook(f.access.id, { url: "https://receiver.example/events", branchIds: [f.branch.id] });
+    const sale = await createPaymentRequest(f.access, f.input);
+    return { ...f, configuration, sale };
+  }
+  it("creates exactly one immutable event on duplicate terminal transitions", async () => {
+    const f = await callbackFixture();
+    await Promise.all([cancelPaymentRequest(f.access, f.sale.id), cancelPaymentRequest(f.access, f.sale.id)]);
+    const events = await prisma.paymentWebhookEvent.findMany({ where: { requestId: f.sale.id }, include: { delivery: true } });
+    expect(events).toHaveLength(1); expect(events[0].delivery?.status).toBe("READY");
+    expect(events[0].payload).toMatchObject({ version: 1, type: "payment_request.cancelled", data: { amountMinor: 3500, transactionId: null } });
+    expect(JSON.stringify(events[0].payload)).not.toMatch(/student|payer|credential/i);
+    await expect(prisma.paymentWebhookEvent.update({ where: { id: events[0].id }, data: { payload: {} } })).rejects.toThrow();
+  });
+  it("rolls back cancellation and its event together", async () => {
+    const f = await callbackFixture();
+    await expect(prisma.$transaction(async (tx) => {
+      await tx.paymentRequest.update({ where: { id: f.sale.id }, data: { status: "CANCELLED" } });
+      expect(await tx.paymentWebhookEvent.count({ where: { requestId: f.sale.id } })).toBe(1);
+      throw new Error("abort event");
+    })).rejects.toThrow("abort event");
+    expect(await prisma.paymentWebhookEvent.count({ where: { requestId: f.sale.id } })).toBe(0);
+    expect((await prisma.paymentRequest.findUniqueOrThrow({ where: { id: f.sale.id } })).status).toBe("PENDING");
+  });
+  it("rolls back spend, request, event and balances together", async () => {
+    const f = await callbackFixture(); const key = randomUUID();
+    const { postSpendInTransaction } = await import("@/lib/payments/posting");
+    await expect(prisma.$transaction(async (tx) => {
+      const spend = await postSpendInTransaction(tx, { studentAccountId: f.students[0].walletAccount!.id, vendorBranchId: f.branch.id, amountMinor: BigInt(3500), reference: f.sale.orderReference, idempotencyKey: key });
+      await tx.paymentRequest.update({ where: { id: f.sale.id }, data: { status: "PAID", payerStudentId: f.students[0].id, walletTransactionId: spend.id, completedAt: spend.completedAt } });
+      expect(await tx.paymentWebhookEvent.count({ where: { requestId: f.sale.id } })).toBe(1);
+      throw new Error("abort paid event");
+    })).rejects.toThrow("abort paid event");
+    expect(await prisma.paymentWebhookEvent.count({ where: { requestId: f.sale.id } })).toBe(0);
+    expect(await getPayerPaymentReceipt(f.students[0].id, { idempotencyKey: key })).toEqual({ status: "NOT_RECORDED" });
+    expect((await prisma.walletAccountBalance.findUniqueOrThrow({ where: { accountId: f.students[0].walletAccount!.id } })).postedBalanceMinor).toBe(BigInt(10000));
+  });
+  it("recovers both receipt lookup forms only for the payer", async () => {
+    const f = await callbackFixture(); const key = randomUUID();
+    const receipt = await payPaymentRequest(f.students[0].id, f.sale.id, { idempotencyKey: key });
+    expect(await getPayerPaymentReceipt(f.students[0].id, { idempotencyKey: key })).toMatchObject({ status: "COMPLETED", transactionId: receipt.transactionId, vendorBranchId: f.branch.id });
+    expect(await getPayerPaymentReceipt(f.students[1].id, { idempotencyKey: key })).toEqual({ status: "NOT_RECORDED" });
+    await expect(getPayerPaymentReceipt(f.students[1].id, { transactionId: receipt.transactionId! })).rejects.toMatchObject({ status: 404 });
+    expect(await prisma.paymentWebhookEvent.count({ where: { requestId: f.sale.id } })).toBe(1);
+  });
+  it("rejects foreign branches and leaves old events parked on configuration replacement", async () => {
+    const f = await callbackFixture(); const other = await fixture();
+    await expect(configurePaymentWebhook(f.access.id, { url: "https://receiver.example/events", branchIds: [other.branch.id] })).rejects.toMatchObject({ status: 403 });
+    await cancelPaymentRequest(f.access, f.sale.id);
+    const event = await prisma.paymentWebhookEvent.findUniqueOrThrow({ where: { requestId: f.sale.id } });
+    const replacement = await configurePaymentWebhook(f.access.id, { url: "https://replacement.example/events", branchIds: [f.branch.id] });
+    let delivery = await prisma.paymentWebhookDelivery.findUniqueOrThrow({ where: { eventId: event.id } });
+    expect(delivery.status).toBe("PARKED"); expect(delivery.configId).toBe(f.configuration.configuration.id);
+    await expect(retryPaymentWebhook(other.access.id, event.id)).rejects.toMatchObject({ status: 404 });
+    await retryPaymentWebhook(f.access.id, event.id);
+    delivery = await prisma.paymentWebhookDelivery.findUniqueOrThrow({ where: { eventId: event.id } });
+    expect(delivery.configId).toBe(replacement.configuration.id); expect(delivery.status).toBe("READY");
+    await disablePaymentWebhook(f.access.id);
+    await expect(retryPaymentWebhook(f.access.id, event.id)).rejects.toMatchObject({ code: "CALLBACK_DISABLED" });
+  });
+  it("leases each delivery to only one dispatcher and fences an interrupted worker", async () => {
+    // Park other fixtures so this scenario controls the claim set.
+    await prisma.paymentWebhookDelivery.updateMany({ where: { status: "READY" }, data: { status: "PARKED" } });
+    const f = await callbackFixture(); await cancelPaymentRequest(f.access, f.sale.id);
+    const claims = (await Promise.all([claimPaymentWebhookDeliveries(), claimPaymentWebhookDeliveries()])).flat();
+    expect(claims).toHaveLength(1);
+    const original = claims[0];
+    await prisma.paymentWebhookDelivery.update({ where: { id: original.id }, data: { leaseExpiresAt: new Date(Date.now() - 1000) } });
+    const recovered = (await claimPaymentWebhookDeliveries())[0];
+    expect(recovered.leaseToken).not.toBe(original.leaseToken);
+    await deliverClaimedPaymentWebhook(original, async () => 204);
+    expect((await prisma.paymentWebhookDelivery.findUniqueOrThrow({ where: { id: original.id } })).status).toBe("IN_FLIGHT");
+    let raw = ""; let signature = ""; let timestamp = "";
+    await deliverClaimedPaymentWebhook(recovered, async (_url, body, headers) => { raw = body; signature = headers["X-Unify-Signature"]; timestamp = headers["X-Unify-Timestamp"]; return 204; });
+    const { createHmac } = await import("node:crypto");
+    expect(signature).toBe(`sha256=${createHmac("sha256", f.configuration.secret).update(`${timestamp}.${raw}`).digest("hex")}`);
+    expect(JSON.parse(raw).id).toBe(original.eventId);
+    expect((await prisma.paymentWebhookDelivery.findUniqueOrThrow({ where: { id: original.id } })).status).toBe("DELIVERED");
+    const history = await paymentWebhookHistory(f.access.id, new URLSearchParams());
+    expect(history.lastSuccess).not.toBeNull(); expect(history.items[0].delivery?.attempts.some((a) => a.outcome === "INTERRUPTED")).toBe(true);
+  });
+  it("records timeouts without response bodies, exhausts six attempts and allows explicit retry", async () => {
+    await prisma.paymentWebhookDelivery.updateMany({ where: { status: "READY" }, data: { status: "PARKED" } });
+    const f = await callbackFixture(); await cancelPaymentRequest(f.access, f.sale.id);
+    const event = await prisma.paymentWebhookEvent.findUniqueOrThrow({ where: { requestId: f.sale.id } });
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await prisma.paymentWebhookDelivery.update({ where: { eventId: event.id }, data: { nextAttemptAt: new Date(Date.now() - 1_000) } });
+      const claimed = (await claimPaymentWebhookDeliveries())[0];
+      await deliverClaimedPaymentWebhook(claimed, async () => { throw new Error("timeout with secret response body"); });
+    }
+    const delivery = await prisma.paymentWebhookDelivery.findUniqueOrThrow({ where: { eventId: event.id }, include: { attempts: true } });
+    expect(delivery.status).toBe("EXHAUSTED"); expect(delivery.attempts).toHaveLength(6);
+    expect(JSON.stringify(delivery.attempts)).not.toContain("secret response body");
+    expect(await claimPaymentWebhookDeliveries()).toHaveLength(0);
+    await retryPaymentWebhook(f.access.id, event.id);
+    expect((await claimPaymentWebhookDeliveries())[0].automaticAttempts).toBe(1);
+  });
 });
 afterAll(async () => { await prisma.$disconnect(); });
 async function fixture(amount = BigInt(10000)) {

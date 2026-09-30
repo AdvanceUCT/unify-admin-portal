@@ -8,6 +8,7 @@ import { Code2, KeyRound, MousePointerClick, ShieldCheck, Webhook } from "lucide
 import Link from "next/link";
 import { prisma } from "@/lib/db/prisma";
 import { VendorIntegrationSettings } from "@/features/vendors/VendorIntegrationSettings";
+import { PaymentWebhookSettings } from "@/features/vendors/PaymentWebhookSettings";
 import { requireVendorOwnerContextForRender } from "@/lib/vendors/context";
 import { getVendorWebhookConfig, listVendorApiCredentials } from "@/lib/vendors/integrations";
 
@@ -171,9 +172,10 @@ Authorization: Bearer unify_vk_...
 
 GET /api/vendor/v1/payment-requests/{id}
 POST /api/vendor/v1/payment-requests/{id}/cancel`}</pre>
-        <p className="mt-2 text-sm">Requests expire after ten minutes. PAID is authoritative; pending, cancelled and expired requests are not receipts. Payment callbacks and refund execution are not enabled.</p>
+        <p className="mt-2 text-sm">Requests expire after ten minutes. PAID is authoritative; pending, cancelled and expired requests are not receipts. Configure separate signed payment callbacks below. Refund execution is outside this demo.</p>
         <Link href="/vendor/payment-requests" className="text-brand-600">View payment requests →</Link>
       </section>
+      <PaymentWebhookSettings branches={branches} />
       <VendorIntegrationSettings
         branches={branches}
         initialApiKeys={apiKeys.map((key) => ({

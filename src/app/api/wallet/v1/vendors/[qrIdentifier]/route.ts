@@ -10,7 +10,7 @@ export async function GET(request: Request, context: Context) {
   try {
     await authenticateWalletBearer(request);
     const { qrIdentifier } = await context.params;
-    const { vendorBranchId: _vendorBranchId, ...destination } = await resolveWalletPaymentDestination(qrIdentifier);
+    const destination = await resolveWalletPaymentDestination(qrIdentifier);
     return walletJson(destination);
   } catch (error) {
     return walletErrorResponse(error);
