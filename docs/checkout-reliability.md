@@ -56,7 +56,7 @@ Example body (whitespace/order shown here is illustrative; verify the received r
   "type": "payment_request.paid",
   "occurredAt": "2026-09-30T12:00:00.000Z",
   "data": {
-    "requestId": "aBcdEF0123456789aBcdEF0123456789aB",
+    "requestId": "aBcdEF0123456789aBcdEF0123456789",
     "branchId": "approved-branch-id",
     "orderReference": "sale-001",
     "amountMinor": 3500,
