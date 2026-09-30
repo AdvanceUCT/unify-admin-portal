@@ -5,6 +5,8 @@
 
 import { Code2, KeyRound, MousePointerClick, ShieldCheck, Webhook } from "lucide-react";
 
+import Link from "next/link";
+import { prisma } from "@/lib/db/prisma";
 import { VendorIntegrationSettings } from "@/features/vendors/VendorIntegrationSettings";
 import { requireVendorOwnerContextForRender } from "@/lib/vendors/context";
 import { getVendorWebhookConfig, listVendorApiCredentials } from "@/lib/vendors/integrations";
@@ -15,9 +17,10 @@ const codeBlockClassName =
 export default async function VendorIntegrationsPage() {
   const { context } = await requireVendorOwnerContextForRender();
 
-  const [apiKeys, webhook] = await Promise.all([
+  const [apiKeys, webhook, branches] = await Promise.all([
     listVendorApiCredentials(context.vendorProfileId),
     getVendorWebhookConfig(context.vendorProfileId),
+    prisma.vendorBranch.findMany({ where: { vendorProfileId: context.vendorProfileId }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
 
   return (
@@ -159,7 +162,20 @@ Authorization: Bearer unify_vk_...`}</pre>
         </div>
       </section>
 
+      <section className="rounded-xl border border-border bg-surface p-5">
+        <h2 className="text-section-title">POS payment integration</h2>
+        <p className="mt-2 text-sm">Create a fixed-amount request, display its QR, then poll the result. A timeout must be recovered using the same reference.</p>
+        <pre className={codeBlockClassName}>{`POST /api/vendor/v1/payment-requests
+Authorization: Bearer unify_vk_...
+{"branchId":"your-branch","orderReference":"sale-001","amountMinor":3500,"currency":"ZAR","idempotencyKey":"unique-sale-key"}
+
+GET /api/vendor/v1/payment-requests/{id}
+POST /api/vendor/v1/payment-requests/{id}/cancel`}</pre>
+        <p className="mt-2 text-sm">Requests expire after ten minutes. PAID is authoritative; pending, cancelled and expired requests are not receipts. Payment callbacks and refund execution are not enabled.</p>
+        <Link href="/vendor/payment-requests" className="text-brand-600">View payment requests →</Link>
+      </section>
       <VendorIntegrationSettings
+        branches={branches}
         initialApiKeys={apiKeys.map((key) => ({
           ...key,
           createdAt: key.createdAt.toISOString(),

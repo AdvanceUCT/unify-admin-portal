@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+import { VENDOR_API_SCOPES, type VendorApiScope } from "@/lib/vendors/apiScopes";
 import { Badge } from "@/components/ui/Badge";
 import { IconButton } from "@/components/ui/IconButton";
 
@@ -26,6 +27,8 @@ type ApiKeySummary = {
   createdAt: string;
   lastUsedAt: string | null;
   revokedAt: string | null;
+  scopes: string[];
+  branchIds: string[];
 };
 
 const inputClassName =
@@ -36,11 +39,15 @@ const primaryButtonClassName =
 export function VendorIntegrationSettings({
   initialApiKeys,
   initialWebhook,
+  branches = [],
 }: {
+  branches?: { id: string; name: string }[];
   initialApiKeys: ApiKeySummary[];
   initialWebhook: { url: string; enabled: boolean } | null;
 }) {
   const [apiKeys, setApiKeys] = useState(initialApiKeys);
+  const [scopes, setScopes] = useState<VendorApiScope[]>(["verification:create", "verification:read"]);
+  const [branchIds, setBranchIds] = useState<string[]>([]);
   const [keyName, setKeyName] = useState("");
   const [newToken, setNewToken] = useState<string | null>(null);
   const [webhookUrl, setWebhookUrl] = useState(initialWebhook?.url ?? "");
@@ -55,7 +62,7 @@ export function VendorIntegrationSettings({
     const response = await fetch("/api/vendor/integrations/api-keys", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: keyName }),
+      body: JSON.stringify({ name: keyName, scopes, branchIds }),
     });
     const body = await response.json();
     if (!response.ok) {
@@ -70,6 +77,8 @@ export function VendorIntegrationSettings({
         createdAt: body.createdAt,
         lastUsedAt: null,
         revokedAt: null,
+        scopes: body.scopes,
+        branchIds: body.branchIds,
       },
       ...current,
     ]);
@@ -150,6 +159,16 @@ export function VendorIntegrationSettings({
           </button>
         </div>
 
+        <fieldset className="mt-4 space-y-2">
+          <legend className="text-sm font-medium">Key permissions</legend>
+          <div className="flex flex-wrap gap-4">{VENDOR_API_SCOPES.map((scope) => <label key={scope} className="text-sm"><input type="checkbox" checked={scopes.includes(scope)} onChange={(event) => setScopes((current) => event.target.checked ? [...current, scope] : current.filter((value) => value !== scope))} /> {scope}</label>)}</div>
+          <p className="text-xs text-fg-subtle">Refund scope prepares access for a future API; it does not enable refunds here.</p>
+        </fieldset>
+        <fieldset className="mt-4 space-y-2">
+          <legend className="text-sm font-medium">Permitted branches</legend>
+          <div className="flex flex-wrap gap-4">{branches.map((branch) => <label key={branch.id} className="text-sm"><input type="checkbox" checked={branchIds.includes(branch.id)} onChange={(event) => setBranchIds((current) => event.target.checked ? [...current, branch.id] : current.filter((value) => value !== branch.id))} /> {branch.name}</label>)}</div>
+          <p className="text-xs text-fg-subtle">Payment/refund keys require at least one branch. Replace a key to change its permissions.</p>
+        </fieldset>
         {newToken ? (
           <div className="mt-4 rounded-lg border border-warning-border bg-warning-bg px-4 py-3">
             <p className="text-sm font-medium text-warning-fg">
@@ -182,9 +201,10 @@ export function VendorIntegrationSettings({
                 <p className="truncate text-sm font-medium text-fg">
                   {key.name}
                 </p>
+                <p className="text-xs text-fg-subtle">{key.scopes?.join(", ")} / {key.branchIds?.map((id) => branches.find((branch) => branch.id === id)?.name ?? id).join(", ") || "Verification only"}</p>
                 <p className="text-xs text-fg-subtle">
                   unify_vk_{key.keyPrefix}_...
-                  {key.lastUsedAt ? " / Used" : " / Never used"}
+                  {key.lastUsedAt ? ` / Last used ${new Date(key.lastUsedAt).toLocaleString()}` : " / Never used"}
                 </p>
               </div>
               {key.revokedAt ? (

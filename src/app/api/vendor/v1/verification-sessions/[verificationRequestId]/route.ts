@@ -13,11 +13,14 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ verificationRequestId: string }> },
 ) {
-  const vendor = await vendorFromApiRequest(request);
+  let vendor;
+  try { vendor = await vendorFromApiRequest(request, "verification:read"); } catch {
+    return NextResponse.json({ error: { code: "MISSING_SCOPE", message: "This API key cannot access verification." } }, { status: 403 });
+  }
   if (!vendor) return NextResponse.json({ error: { message: "Invalid vendor API key." } }, { status: 401 });
 
   const { verificationRequestId } = await context.params;
-  const result = await getVendorCheckoutVerificationResult(vendor.id, verificationRequestId);
+  const result = await getVendorCheckoutVerificationResult(vendor.id, verificationRequestId, vendor.branchIds.length ? vendor.branchIds : undefined);
   if (!result) return NextResponse.json({ error: { message: "Verification was not found." } }, { status: 404 });
   return NextResponse.json(result);
 }

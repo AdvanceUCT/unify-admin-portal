@@ -11,6 +11,7 @@ import { VendorApplicationStatus } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/db/prisma";
 import { decryptVendorSecret, encryptVendorSecret, hashVendorApiKey } from "@/lib/vendors/integrationCrypto";
 import { assertSafeWebhookUrl } from "@/lib/vendors/webhookSafety";
+import { LEGACY_VERIFICATION_SCOPES, validateCredentialPermissions, type VendorApiScope } from "@/lib/vendors/apiScopes";
 import { requestIdFrom } from "@/lib/requestId";
 import {
   normalizedVerificationAttributes,
@@ -27,27 +28,31 @@ export async function approvedVendorProfileForUser(userId: string) {
   });
 }
 
-export async function createVendorApiCredential(vendorProfileId: string, name: string) {
+export async function createVendorApiCredential(vendorProfileId: string, name: string, scopes: unknown = LEGACY_VERIFICATION_SCOPES, branchIds: unknown = []) {
   const normalizedName = name.trim();
   if (!normalizedName) throw new Error("API key name is required.");
 
+  const permissions = validateCredentialPermissions(scopes, branchIds);
+  const branches = await prisma.vendorBranch.count({ where: { id: { in: permissions.branchIds }, vendorProfileId } });
+  if (branches !== permissions.branchIds.length) throw new Error("A selected branch does not belong to this vendor.");
   const prefix = randomBytes(6).toString("hex");
   const token = `unify_vk_${prefix}_${randomBytes(32).toString("base64url")}`;
   const record = await prisma.vendorApiCredential.create({
     data: {
       vendorProfileId,
+      ...permissions,
       name: normalizedName,
       keyPrefix: prefix,
       keyHash: hashVendorApiKey(token),
     },
   });
-  return { id: record.id, name: record.name, prefix, token, createdAt: record.createdAt };
+  return { id: record.id, name: record.name, prefix, token, createdAt: record.createdAt, ...permissions };
 }
 
 export function listVendorApiCredentials(vendorProfileId: string) {
   return prisma.vendorApiCredential.findMany({
     where: { vendorProfileId },
-    select: { id: true, name: true, keyPrefix: true, createdAt: true, lastUsedAt: true, revokedAt: true },
+    select: { id: true, name: true, keyPrefix: true, createdAt: true, lastUsedAt: true, revokedAt: true, scopes: true, branchIds: true },
     orderBy: { createdAt: "desc" },
   });
 }
@@ -60,7 +65,7 @@ export async function revokeVendorApiCredential(vendorProfileId: string, credent
   if (result.count !== 1) throw new Error("Active API key was not found.");
 }
 
-export async function authenticateVendorApiKey(header: string | null) {
+export async function authenticateVendorApiKey(header: string | null, requiredScope?: VendorApiScope) {
   const token = header?.match(/^Bearer\s+(\S+)$/i)?.[1];
   const prefix = token?.match(/^unify_vk_([a-f0-9]{12})_[A-Za-z0-9_-]+$/)?.[1];
   if (!token || !prefix) return null;
@@ -69,7 +74,7 @@ export async function authenticateVendorApiKey(header: string | null) {
     where: { keyPrefix: prefix },
     include: {
       vendorProfile: {
-        include: { applications: { where: { status: VendorApplicationStatus.APPROVED }, select: { id: true } } },
+        include: { applications: { where: { status: VendorApplicationStatus.APPROVED }, select: { id: true } }, paymentProfile: { select: { status: true } } },
       },
     },
   });
@@ -79,8 +84,16 @@ export async function authenticateVendorApiKey(header: string | null) {
   const expected = Buffer.from(credential.keyHash);
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null;
 
+  if (requiredScope && !credential.scopes.includes(requiredScope)) {
+    const { PosApiError } = await import("@/lib/payments/posErrors");
+    throw new PosApiError("MISSING_SCOPE", "This API key does not have the required scope.", 403);
+  }
+  if (requiredScope && (requiredScope.startsWith("payments:") || requiredScope.startsWith("refunds:")) && credential.vendorProfile.paymentProfile?.status !== "APPROVED") {
+    const { PosApiError } = await import("@/lib/payments/posErrors");
+    throw new PosApiError("VENDOR_NOT_PAYMENT_ENABLED", "This vendor cannot currently accept payments.", 403);
+  }
   await prisma.vendorApiCredential.update({ where: { id: credential.id }, data: { lastUsedAt: new Date() } });
-  return credential.vendorProfile;
+  return { ...credential.vendorProfile, credentialId: credential.id, scopes: credential.scopes, branchIds: credential.branchIds };
 }
 
 export async function configureVendorWebhook(vendorProfileId: string, rawUrl: string) {
