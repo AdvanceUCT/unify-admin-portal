@@ -259,6 +259,7 @@ describe("payment wallet API route contracts", () => {
       idempotencyKey: "spend-1",
     });
     await expect(vendorResponse.json()).resolves.toEqual({
+      vendorBranchId: "branch-1",
       vendorName: "Campus Cafe",
       branchName: "Main Campus",
       currency: "ZAR",
