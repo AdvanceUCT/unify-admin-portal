@@ -1,3 +1,5 @@
+BEGIN;
+
 CREATE INDEX payment_request_status_expires_idx ON payment_request(status, "expiresAt");
 CREATE TABLE payment_webhook_config (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -80,3 +82,5 @@ BEGIN
 END $$;
 CREATE TRIGGER payment_webhook_config_guard BEFORE UPDATE OR DELETE ON payment_webhook_config
   FOR EACH ROW EXECUTE FUNCTION guard_payment_webhook_config();
+
+COMMIT;
