@@ -15,7 +15,7 @@ beforeAll(async () => {
   await prisma.walletAccount.upsert({ where: { systemCode: "GATEWAY_CLEARING" }, create: { type: "SYSTEM", currency: "ZAR", systemCode: "GATEWAY_CLEARING" }, update: {} });
 });
 afterAll(async () => { await prisma.$disconnect(); });
-async function fixture(amount = 10000n) {
+async function fixture(amount = BigInt(10000)) {
   const suffix = randomUUID();
   const user = await prisma.user.create({ data: { id: suffix, email: `${suffix}@example.invalid`, name: "Test owner", userType: "VENDOR" } });
   const vendor = await prisma.vendorProfile.create({ data: { userId: user.id, companyName: "POS test vendor", serviceCategory: "TEST", contactEmail: user.email, applications: { create: { status: "APPROVED" } }, paymentProfile: { create: { status: "APPROVED" } }, walletAccount: { create: { type: "VENDOR", currency: "ZAR" } } } });
@@ -45,11 +45,11 @@ describe("POS requests using the real PostgreSQL services", () => {
     expect(outcomes.filter((item) => item.status === "fulfilled")).toHaveLength(1);
     const record = await prisma.paymentRequest.findUniqueOrThrow({ where: { id: sale.id }, include: { walletTransaction: { include: { entries: true } } } });
     expect(record.status).toBe("PAID"); expect(record.walletTransaction!.entries).toHaveLength(2);
-    expect(record.walletTransaction!.entries.reduce((sum, entry) => sum + (entry.direction === "CREDIT" ? entry.amountMinor : -entry.amountMinor), 0n)).toBe(0n);
+    expect(record.walletTransaction!.entries.reduce((sum, entry) => sum + (entry.direction === "CREDIT" ? entry.amountMinor : -entry.amountMinor), BigInt(0))).toBe(BigInt(0));
     const other = f.students.find((student) => student.id !== record.payerStudentId)!;
     await expect(getStudentRequestReceipt(other.id, sale.id)).rejects.toMatchObject({ code: "RECEIPT_NOT_FOUND" });
     const balances = await prisma.walletAccountBalance.findMany({ where: { account: { OR: [{ studentId: { in: f.students.map((s) => s.id) } }, { vendorProfileId: f.access.id }] } } });
-    expect(balances.every((balance) => balance.postedBalanceMinor >= 0n)).toBe(true);
+    expect(balances.every((balance) => balance.postedBalanceMinor >= BigInt(0))).toBe(true);
   });
   it("recovers concurrent duplicate submissions as the same receipt", async () => {
     const f = await fixture(); const sale = await createPaymentRequest(f.access, f.input); const key = randomUUID();
@@ -65,13 +65,13 @@ describe("POS requests using the real PostgreSQL services", () => {
     expect(Boolean(record.walletTransactionId)).toBe(record.status === "PAID");
   });
   it("leaves insufficient-fund requests pending without a spend", async () => {
-    const f = await fixture(0n); const sale = await createPaymentRequest(f.access, f.input);
+    const f = await fixture(BigInt(0)); const sale = await createPaymentRequest(f.access, f.input);
     await expect(payPaymentRequest(f.students[0].id, sale.id, { idempotencyKey: randomUUID() })).rejects.toMatchObject({ code: "INSUFFICIENT_FUNDS" });
     const record = await prisma.paymentRequest.findUniqueOrThrow({ where: { id: sale.id } }); expect(record.status).toBe("PENDING"); expect(record.walletTransactionId).toBeNull();
   });
   it("expires from server time and rejects payment", async () => {
     const f = await fixture(); const now = new Date(); const id = randomUUID();
-    await prisma.paymentRequest.create({ data: { id, vendorProfileId: f.access.id, vendorBranchId: f.branch.id, credentialId: f.credential.id, orderReference: f.input.orderReference, idempotencyKey: f.input.idempotencyKey, amountMinor: 3500n, currency: "ZAR", createdAt: new Date(now.getTime()-700000), expiresAt: new Date(now.getTime()-100000) } });
+    await prisma.paymentRequest.create({ data: { id, vendorProfileId: f.access.id, vendorBranchId: f.branch.id, credentialId: f.credential.id, orderReference: f.input.orderReference, idempotencyKey: f.input.idempotencyKey, amountMinor: BigInt(3500), currency: "ZAR", createdAt: new Date(now.getTime()-700000), expiresAt: new Date(now.getTime()-100000) } });
     await Promise.allSettled([cancelPaymentRequest(f.access, id), payPaymentRequest(f.students[0].id, id, { idempotencyKey: randomUUID() })]);
     expect((await prisma.paymentRequest.findUniqueOrThrow({ where: { id } })).status).toBe("EXPIRED");
   });
@@ -80,7 +80,7 @@ describe("POS requests using the real PostgreSQL services", () => {
     const before = (await prisma.walletAccountBalance.findUniqueOrThrow({ where: { accountId: f.students[0].walletAccount!.id } })).postedBalanceMinor;
     // A separate caller transaction is intentionally aborted after the financial operation.
     const { postSpendInTransaction } = await import("@/lib/payments/posting");
-    await expect(prisma.$transaction(async (tx) => { await postSpendInTransaction(tx, { studentAccountId: f.students[0].walletAccount!.id, vendorBranchId: f.branch.id, amountMinor: 3500n, idempotencyKey: randomUUID(), reference: sale.orderReference }); throw new Error("abort completion"); })).rejects.toThrow("abort completion");
+    await expect(prisma.$transaction(async (tx) => { await postSpendInTransaction(tx, { studentAccountId: f.students[0].walletAccount!.id, vendorBranchId: f.branch.id, amountMinor: BigInt(3500), idempotencyKey: randomUUID(), reference: sale.orderReference }); throw new Error("abort completion"); })).rejects.toThrow("abort completion");
     expect((await prisma.walletAccountBalance.findUniqueOrThrow({ where: { accountId: f.students[0].walletAccount!.id } })).postedBalanceMinor).toBe(before);
     expect((await prisma.paymentRequest.findUniqueOrThrow({ where: { id: sale.id } })).status).toBe("PENDING");
   });
@@ -105,7 +105,7 @@ describe("POS requests using the real PostgreSQL services", () => {
   });
   it("rejects changes to request terms and terminal outcomes in PostgreSQL", async () => {
     const f = await fixture(); const sale = await createPaymentRequest(f.access, f.input);
-    await expect(prisma.paymentRequest.update({ where: { id: sale.id }, data: { amountMinor: 4000n } })).rejects.toThrow();
+    await expect(prisma.paymentRequest.update({ where: { id: sale.id }, data: { amountMinor: BigInt(4000) } })).rejects.toThrow();
     await cancelPaymentRequest(f.access, sale.id);
     await expect(prisma.paymentRequest.update({ where: { id: sale.id }, data: { status: "PENDING" } })).rejects.toThrow();
   });
