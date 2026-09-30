@@ -104,6 +104,7 @@ model AdminInvite {
 }
 
 model VendorProfile {
+  paymentRequests PaymentRequest[]
   id                  String                @id @default(cuid())
   userId              String                @unique
   user                User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -136,6 +137,7 @@ model VendorProfile {
 }
 
 model VendorBranch {
+  paymentRequests PaymentRequest[]
   id                  String                           @id @default(cuid())
   vendorProfileId     String
   vendorProfile       VendorProfile                    @relation("VendorBranches", fields: [vendorProfileId], references: [id], onDelete: Cascade)
@@ -347,6 +349,9 @@ model VendorVerification {
 }
 
 model VendorApiCredential {
+  scopes String[] @default(["verification:create", "verification:read"])
+  branchIds String[] @default([])
+  paymentRequests PaymentRequest[]
   id              String        @id @default(cuid())
   vendorProfileId String
   vendorProfile   VendorProfile @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
@@ -409,6 +414,7 @@ enum VendorVerificationBillingStatus {
 }
 
 model Student {
+  posPaymentRequests PaymentRequest[]
   id                          String                              @id @default(cuid())
   studentNumber               String                              @unique
   email                       String
@@ -488,6 +494,7 @@ model WalletAccountBalance {
 }
 
 model WalletTransaction {
+  paymentRequest PaymentRequest?
   id                     String                  @id @default(cuid())
   type                   WalletTransactionType
   status                 WalletTransactionStatus @default(PENDING)
@@ -1513,4 +1520,38 @@ enum BillingRunStatus {
   RUNNING
   COMPLETED
   FAILED
+}
+
+
+enum PaymentRequestStatus {
+  PENDING
+  PAID
+  CANCELLED
+  EXPIRED
+}
+
+model PaymentRequest {
+  id String @id
+  vendorProfileId String
+  vendorProfile VendorProfile @relation(fields: [vendorProfileId], references: [id], onDelete: Restrict)
+  vendorBranchId String
+  vendorBranch VendorBranch @relation(fields: [vendorBranchId], references: [id], onDelete: Restrict)
+  credentialId String
+  credential VendorApiCredential @relation(fields: [credentialId], references: [id], onDelete: Restrict)
+  orderReference String
+  idempotencyKey String
+  amountMinor BigInt
+  currency String @default("ZAR")
+  status PaymentRequestStatus @default(PENDING)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  completedAt DateTime?
+  payerStudentId String?
+  payer Student? @relation(fields: [payerStudentId], references: [id], onDelete: Restrict)
+  walletTransactionId String? @unique
+  walletTransaction WalletTransaction? @relation(fields: [walletTransactionId], references: [id], onDelete: Restrict)
+  @@unique([vendorProfileId, idempotencyKey])
+  @@unique([vendorProfileId, orderReference])
+  @@index([vendorProfileId, vendorBranchId, createdAt, id])
+  @@map("payment_request")
 }

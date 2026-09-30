@@ -10,6 +10,7 @@ import { decryptVendorSecret } from "@/lib/vendors/integrationCrypto";
 import { assertSafeWebhookUrl } from "@/lib/vendors/webhookSafety";
 
 const database = vi.hoisted(() => ({
+  vendorBranch: { count: vi.fn().mockResolvedValue(0) },
   vendorApiCredential: {
     create: vi.fn(),
     findUnique: vi.fn(),
@@ -65,10 +66,12 @@ describe("vendor API credentials", () => {
       keyHash: "stored-api-key-hash",
       revokedAt: null,
       vendorProfile,
+      scopes: ["verification:create", "verification:read"],
+      branchIds: [],
     });
     database.vendorApiCredential.update.mockResolvedValue({});
 
-    await expect(authenticateVendorApiKey(`Bearer ${token}`)).resolves.toBe(vendorProfile);
+    await expect(authenticateVendorApiKey(`Bearer ${token}`)).resolves.toMatchObject({ ...vendorProfile, credentialId: "credential-001", scopes: ["verification:create", "verification:read"], branchIds: [] });
     expect(database.vendorApiCredential.update).toHaveBeenCalledWith({
       where: { id: "credential-001" },
       data: { lastUsedAt: expect.any(Date) },

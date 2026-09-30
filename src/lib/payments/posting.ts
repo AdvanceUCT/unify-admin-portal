@@ -93,14 +93,22 @@ function hasPrismaErrorCode(error: unknown, code: string) {
   return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
-async function runSerializableTransaction<T>(
+function isRetryableTransactionConflict(error: unknown) {
+  if (hasPrismaErrorCode(error, "P2034")) return true;
+  if (!hasPrismaErrorCode(error, "P2010") || typeof error !== "object" || error === null || !("meta" in error)) return false;
+  const meta = error.meta;
+  return typeof meta === "object" && meta !== null && "code" in meta &&
+    (meta.code === "40001" || meta.code === "40P01");
+}
+
+export async function runSerializableTransaction<T>(
   operation: (transaction: Prisma.TransactionClient) => Promise<T>,
 ) {
   for (let attempt = 0; attempt < MAX_SERIALIZABLE_ATTEMPTS; attempt += 1) {
     try {
       return await prisma.$transaction(operation, { isolationLevel: "Serializable" });
     } catch (error) {
-      if (!hasPrismaErrorCode(error, "P2034") || attempt === MAX_SERIALIZABLE_ATTEMPTS - 1) {
+      if (!isRetryableTransactionConflict(error) || attempt === MAX_SERIALIZABLE_ATTEMPTS - 1) {
         throw error;
       }
     }
@@ -407,10 +415,8 @@ function assertAccountStatuses(
   }
 }
 
-async function postWalletOperation(operation: WalletOperation) {
-  validateBase(operation.input);
-
-  return runSerializableTransaction(async (transaction) => {
+async function postWalletOperationInTransaction(transaction: Prisma.TransactionClient, operation: WalletOperation) {
+    validateBase(operation.input);
     const settings = await getPaymentWalletSettings(transaction);
     const posting = await preparePosting(transaction, operation, settings);
     const accountIds = posting.entries.map((entry) => entry.accountId).sort((a, b) => a.localeCompare(b));
@@ -525,7 +531,15 @@ async function postWalletOperation(operation: WalletOperation) {
       where: { id: walletTransaction.id },
       include: { entries: { orderBy: { sequence: "asc" } } },
     });
-  });
+}
+
+async function postWalletOperation(operation: WalletOperation) {
+  return runSerializableTransaction((transaction) => postWalletOperationInTransaction(transaction, operation));
+}
+
+/** Shares the posting transaction with the fixed payment request state change. */
+export function postSpendInTransaction(transaction: Prisma.TransactionClient, input: PostSpendInput) {
+  return postWalletOperationInTransaction(transaction, { kind: "SPEND", input });
 }
 
 export function postTopup(input: PostTopupInput) {

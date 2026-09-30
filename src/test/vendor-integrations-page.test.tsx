@@ -11,6 +11,7 @@ const integrations = vi.hoisted(() => ({
   listVendorApiCredentials: vi.fn(),
 }));
 
+vi.mock("@/lib/db/prisma", () => ({ prisma: { vendorBranch: { findMany: vi.fn().mockResolvedValue([]) } } }));
 vi.mock("@/lib/vendors/context", () => context);
 vi.mock("@/lib/vendors/integrations", () => integrations);
 vi.mock("@/features/vendors/VendorIntegrationSettings", () => ({

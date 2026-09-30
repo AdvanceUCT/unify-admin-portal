@@ -10,7 +10,10 @@ import { createVendorCheckoutSession } from "@/lib/vendors/verifications";
 
 /** Handles POST requests to `/api/vendor/v1/verification-sessions`. */
 export async function POST(request: Request) {
-  const vendor = await vendorFromApiRequest(request);
+  let vendor;
+  try { vendor = await vendorFromApiRequest(request, "verification:create"); } catch {
+    return NextResponse.json({ error: { code: "MISSING_SCOPE", message: "This API key cannot access verification." } }, { status: 403 });
+  }
   if (!vendor) return NextResponse.json({ error: { message: "Invalid vendor API key." } }, { status: 401 });
 
   try {

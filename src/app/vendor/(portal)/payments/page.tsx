@@ -165,6 +165,7 @@ export default async function VendorPaymentsPage({
 
   return (
     <div className="space-y-6">
+      <Link href="/vendor/payment-requests" className="text-sm text-brand-600">View POS payment requests →</Link>
       {payoutOverview ? (
         <VendorWalletBalanceCard
           canRunDemoPayout={context.role === "OWNER"}
