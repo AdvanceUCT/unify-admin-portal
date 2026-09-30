@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { posErrorResponse } from "@/lib/payments/posErrors";
+import { posErrorResponse, PosApiError } from "@/lib/payments/posErrors";
 import { schedulePaymentWebhookDispatch } from "@/lib/vendors/paymentWebhookAfter";
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
  try {
@@ -9,5 +9,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const result = await payPaymentRequest(session.studentId, (await context.params).id, await request.json());
   schedulePaymentWebhookDispatch();
   return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
- } catch(error) { return posErrorResponse(error); }
+ } catch(error) {
+  if (error instanceof PosApiError && error.code === "REQUEST_EXPIRED") schedulePaymentWebhookDispatch();
+  return posErrorResponse(error);
+ }
 }

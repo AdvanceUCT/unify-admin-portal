@@ -171,6 +171,7 @@ describe("payment wallet API route contracts", () => {
 
   it("returns balance and activity for the authenticated student", async () => {
     vi.mocked(getMobileWalletBalance).mockResolvedValue({
+      walletAccountId: "account-student",
       postedBalanceMinor: 5000,
       currency: "ZAR",
       accountStatus: "ACTIVE",
@@ -201,6 +202,7 @@ describe("payment wallet API route contracts", () => {
     expect(getMobileWalletBalance).toHaveBeenCalledWith("student-1");
     expect(listMobileWalletActivity).toHaveBeenCalledWith("student-1", 10);
     await expect(balanceResponse.json()).resolves.toEqual({
+      walletAccountId: "account-student",
       postedBalanceMinor: 5000,
       currency: "ZAR",
       accountStatus: "ACTIVE",

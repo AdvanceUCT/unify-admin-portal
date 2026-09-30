@@ -24,7 +24,12 @@ export async function resolvePaymentWebhookDestination(rawUrl: string) {
 // DNS is checked for every attempt, then the HTTPS connection uses exactly that address.
 // TLS still verifies the original hostname. No redirects or response bodies are retained.
 export async function sendPaymentWebhook(rawUrl: string, body: string, headers: Record<string, string>) {
-  const destination = await resolvePaymentWebhookDestination(rawUrl);
+  const deadline = Date.now() + 3_000;
+  let dnsTimer: ReturnType<typeof setTimeout> | undefined;
+  const destination = await Promise.race([
+    resolvePaymentWebhookDestination(rawUrl),
+    new Promise<never>((_resolve, reject) => { dnsTimer = setTimeout(() => reject(new Error("DELIVERY_TIMEOUT")), 3_000); }),
+  ]).finally(() => clearTimeout(dnsTimer));
   return new Promise<number>((resolve, reject) => {
     const req = request(destination.url, {
       method: "POST",
@@ -39,7 +44,7 @@ export async function sendPaymentWebhook(rawUrl: string, body: string, headers: 
       response.destroy();
       resolve(status);
     });
-    const timer = setTimeout(() => req.destroy(new Error("DELIVERY_TIMEOUT")), 3_000);
+    const timer = setTimeout(() => req.destroy(new Error("DELIVERY_TIMEOUT")), Math.max(1, deadline - Date.now()));
     req.on("error", (error) => { clearTimeout(timer); reject(error); });
     req.end(body);
   });
