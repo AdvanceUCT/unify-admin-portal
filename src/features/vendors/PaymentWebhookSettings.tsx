@@ -23,7 +23,7 @@ export function PaymentWebhookSettings({ branches }: { branches: { id: string; n
     setConfig(configuration); setUrl(configuration?.url ?? ""); setBranchIds(configuration?.branchIds ?? []);
     setHistory(await h.json() as History);
   }, []);
-  useEffect(() => { void load().catch((error: Error) => setMessage(error.message)); }, [load]);
+  useEffect(() => { void Promise.resolve().then(load).catch((error: Error) => setMessage(error.message)); }, [load]);
   async function action(path: string, method: string, body?: unknown) {
     setBusy(true); setMessage(""); setSecret(null);
     try {

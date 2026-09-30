@@ -27,7 +27,7 @@ export async function sendPaymentWebhook(rawUrl: string, body: string, headers: 
   const destination = await resolvePaymentWebhookDestination(rawUrl);
   return new Promise<number>((resolve, reject) => {
     const req = request(destination.url, {
-      method: "POST", autoSelectFamily: false,
+      method: "POST",
       lookup: (_hostname, options, callback) => {
         if (options.all) callback(null, [destination.address]);
         else callback(null, destination.address.address, destination.address.family);
