@@ -74,7 +74,7 @@ export async function authenticateVendorApiKey(header: string | null, requiredSc
     where: { keyPrefix: prefix },
     include: {
       vendorProfile: {
-        include: { applications: { where: { status: VendorApplicationStatus.APPROVED }, select: { id: true } } },
+        include: { applications: { where: { status: VendorApplicationStatus.APPROVED }, select: { id: true } }, paymentProfile: { select: { status: true } } },
       },
     },
   });
@@ -87,6 +87,10 @@ export async function authenticateVendorApiKey(header: string | null, requiredSc
   if (requiredScope && !credential.scopes.includes(requiredScope)) {
     const { PosApiError } = await import("@/lib/payments/posErrors");
     throw new PosApiError("MISSING_SCOPE", "This API key does not have the required scope.", 403);
+  }
+  if (requiredScope && (requiredScope.startsWith("payments:") || requiredScope.startsWith("refunds:")) && credential.vendorProfile.paymentProfile?.status !== "APPROVED") {
+    const { PosApiError } = await import("@/lib/payments/posErrors");
+    throw new PosApiError("VENDOR_NOT_PAYMENT_ENABLED", "This vendor cannot currently accept payments.", 403);
   }
   await prisma.vendorApiCredential.update({ where: { id: credential.id }, data: { lastUsedAt: new Date() } });
   return { ...credential.vendorProfile, credentialId: credential.id, scopes: credential.scopes, branchIds: credential.branchIds };

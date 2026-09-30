@@ -97,8 +97,14 @@ function isRetryableTransactionConflict(error: unknown) {
   if (hasPrismaErrorCode(error, "P2034")) return true;
   if (!hasPrismaErrorCode(error, "P2010") || typeof error !== "object" || error === null || !("meta" in error)) return false;
   const meta = error.meta;
-  return typeof meta === "object" && meta !== null && "code" in meta &&
-    (meta.code === "40001" || meta.code === "40P01");
+  if (typeof meta !== "object" || meta === null) return false;
+  if ("code" in meta && (meta.code === "40001" || meta.code === "40P01")) return true;
+  if (!("driverAdapterError" in meta)) return false;
+  const adapter = meta.driverAdapterError;
+  if (typeof adapter !== "object" || adapter === null || !("cause" in adapter)) return false;
+  const cause = adapter.cause;
+  return typeof cause === "object" && cause !== null && "originalCode" in cause &&
+    (cause.originalCode === "40001" || cause.originalCode === "40P01");
 }
 
 export async function runSerializableTransaction<T>(

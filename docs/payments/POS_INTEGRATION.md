@@ -41,7 +41,7 @@ Payment locks the request row, then posts through `postSpendInTransaction` using
 
 ## Coordinated release
 
-1. Run unit/type/lint checks and real PostgreSQL service/concurrency tests on isolated EC2 infrastructure or CI. `src/test-integration/pos-payment-requests.test.ts` refuses databases other than `pos_test`.
+1. Run unit/type/lint checks and real PostgreSQL service/concurrency tests on isolated EC2 infrastructure or CI. `src/test-integration/pos-payment-requests.test.ts` refuses databases other than `pos_test` or the CI database `unify_wallet_test`.
 2. Deploy forward migration `20260930120000_add_scoped_pos_payment_requests` with portal APIs. Existing verification/static wallet flows remain compatible.
 3. Provision a dedicated approved test vendor/branch through authorised setup; issue only payment scopes for the POS key. Record the branch/key in the simulator's server environment, never in browser variables or source.
 4. Build/install the coordinated signed Android APK and deploy the simulator through Vercel CLI.

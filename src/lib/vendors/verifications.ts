@@ -359,18 +359,25 @@ async function applyAgentResult(id: string, result: AgentVerificationResult) {
 }
 
 /** Creates or reuses the checkout verification record identified by the vendor's checkout ID. */
-export async function createVendorCheckoutSession(vendorProfileId: string, checkoutId: string) {
+export async function createVendorCheckoutSession(vendorProfileId: string, checkoutId: string, permittedBranchIds?: string[]) {
   const normalizedCheckoutId = checkoutId.trim();
   if (!normalizedCheckoutId || normalizedCheckoutId.length > 128) {
     throw new Error("checkoutId must contain between 1 and 128 characters.");
   }
 
+  if (permittedBranchIds) {
+    const scopedVendor = await prisma.vendorProfile.findUnique({ where: { id: vendorProfileId }, select: { defaultBranchId: true } });
+    if (!scopedVendor?.defaultBranchId || !permittedBranchIds.includes(scopedVendor.defaultBranchId)) {
+      throw new Error("This API key cannot access the verification branch.");
+    }
+  }
   await ensureVendorVerificationServicePoint(vendorProfileId);
   const vendor = await prisma.vendorProfile.findUnique({
     where: { id: vendorProfileId },
     include: { defaultBranch: true },
   });
   const branch = vendor?.defaultBranch;
+  if (permittedBranchIds && (!branch || !permittedBranchIds.includes(branch.id))) throw new Error("This API key cannot access the verification branch.");
   if (!vendor || !branch?.agentServicePointId) throw new Error("Vendor verification service point is not configured.");
 
   const agentResult = await createCheckoutVerificationSession({
@@ -454,12 +461,14 @@ export async function getVendorVerificationResult(
 export async function getVendorCheckoutVerificationResult(
   vendorProfileId: string,
   verificationRequestId: string,
+  permittedBranchIds?: string[],
 ) {
   let verification = await prisma.vendorVerification.findFirst({
     where: {
       vendorProfileId,
       verificationRequestId,
       checkoutId: { not: null },
+      ...(permittedBranchIds ? { branchId: { in: permittedBranchIds } } : {}),
     },
   });
   if (!verification) return null;

@@ -76,6 +76,19 @@ const completedEvent = {
 describe("vendor checkout verification", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("rejects a branch-scoped key before creating an inaccessible verification", async () => {
+    database.vendorProfile.findUnique.mockResolvedValueOnce({ defaultBranchId: "foreign-branch" });
+    await expect(createVendorCheckoutSession("vendor-001", "cart-001", ["allowed-branch"])).rejects.toThrow("cannot access");
+    expect(applications.ensureVendorVerificationServicePoint).not.toHaveBeenCalled();
+    expect(agent.createCheckoutVerificationSession).not.toHaveBeenCalled();
+  });
+
+  it("filters verification recovery by the key's branch allowlist", async () => {
+    database.vendorVerification.findFirst.mockResolvedValueOnce(null);
+    expect(await getVendorCheckoutVerificationResult("vendor-001", "verification-001", ["allowed-branch"])).toBeNull();
+    expect(database.vendorVerification.findFirst).toHaveBeenCalledWith({ where: { vendorProfileId: "vendor-001", verificationRequestId: "verification-001", checkoutId: { not: null }, branchId: { in: ["allowed-branch"] } } });
+  });
+
   it("binds a new agent session to the vendor checkout id", async () => {
     applications.ensureVendorVerificationServicePoint.mockResolvedValue(undefined);
     database.vendorProfile.findUnique.mockResolvedValue({

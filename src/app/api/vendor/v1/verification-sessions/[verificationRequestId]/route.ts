@@ -20,7 +20,7 @@ export async function GET(
   if (!vendor) return NextResponse.json({ error: { message: "Invalid vendor API key." } }, { status: 401 });
 
   const { verificationRequestId } = await context.params;
-  const result = await getVendorCheckoutVerificationResult(vendor.id, verificationRequestId);
+  const result = await getVendorCheckoutVerificationResult(vendor.id, verificationRequestId, vendor.branchIds.length ? vendor.branchIds : undefined);
   if (!result) return NextResponse.json({ error: { message: "Verification was not found." } }, { status: 404 });
   return NextResponse.json(result);
 }

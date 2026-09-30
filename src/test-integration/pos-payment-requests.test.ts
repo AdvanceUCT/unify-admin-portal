@@ -98,6 +98,8 @@ describe("POS requests using the real PostgreSQL services", () => {
     const key = await createVendorApiCredential(f.access.id, "POS", ["payments:create"], [f.branch.id]);
     expect(hashVendorApiKey(key.token)).not.toBe(key.token);
     await expect(authenticateVendorApiKey(`Bearer ${key.token}`, "verification:read")).rejects.toMatchObject({ code: "MISSING_SCOPE" });
+    await prisma.vendorPaymentProfile.update({ where: { vendorProfileId: f.access.id }, data: { status: "SUSPENDED" } });
+    await expect(authenticateVendorApiKey(`Bearer ${key.token}`, "payments:create")).rejects.toMatchObject({ code: "VENDOR_NOT_PAYMENT_ENABLED" });
     await revokeVendorApiCredential(f.access.id, key.id);
     expect(await authenticateVendorApiKey(`Bearer ${key.token}`, "payments:create")).toBeNull();
   });
