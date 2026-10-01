@@ -1,0 +1,22 @@
+[UNIFY Vendor Help] Help reviewing a long verifier request
+
+UNIFY
+
+New vendor help request
+
+A vendor submitted a help request from the UNIFY Vendor Portal.
+
+Help reviewing a long verifier request: We need help with the latest credential verification request.
+
+The student presented a credential, but the portal showed a connection error before the result appeared.
+Please help us confirm the outcome and understand the next step.
+
+Submitted at: 1 October 2026 at 10:30 SAST
+Submitted by: Alex Example <alex@example.invalid>
+Vendor: Example Campus Services
+Portal role: Vendor administrator
+Contact person: Alex Example
+Vendor contact email: help@example.invalid
+Service category: Campus services
+
+UNIFY Vendor Portal · Internal support notification

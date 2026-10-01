@@ -1,0 +1,18 @@
+An update on your UNIFY verifier application
+
+UNIFY
+
+Your application was not approved
+
+Hi Alex Example,
+
+Example Campus Services's application was not approved at this time.
+
+Reason: The company registration information could not be verified. Please upload the complete document, including the registration number and registered company name.
+
+Address the feedback and submit a new application when you are ready.
+
+View application: https://example.invalid/application?token=fictional-preview-only&source=email
+If the button does not work, copy and open this link.
+
+UNIFY Vendor Portal · Application and account updates

@@ -1,0 +1,16 @@
+You are invited to UNIFY Admin
+
+UNIFY
+
+Join UNIFY Admin
+
+Hi Alex Example,
+
+You have been invited to the UNIFY Admin Portal. Accept your invitation to set up your account.
+
+This invitation expires at 5 October 2026 at 14:00 SAST.
+
+Accept invitation: https://example.invalid/invite?token=fictional-preview-only&source=email
+If the button does not work, copy and open this link.
+
+UNIFY Admin Portal · Account access

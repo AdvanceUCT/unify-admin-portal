@@ -5,10 +5,11 @@
 
 import "server-only";
 
+import { renderVendorApplicationSubmittedEmail } from "./templates";
+
 import { env } from "@/lib/config/env";
 import {
   type EmailDeliveryResult,
-  escapeHtml,
   sendResendEmail,
 } from "@/lib/email/resend";
 
@@ -17,26 +18,6 @@ type SendVendorApplicationSubmittedEmailInput = {
   contactName: string;
   companyName: string;
 };
-
-function emailHtml(input: SendVendorApplicationSubmittedEmailInput) {
-  const contactName = escapeHtml(input.contactName);
-  const companyName = escapeHtml(input.companyName);
-
-  return [
-    `<p>Hi ${contactName},</p>`,
-    `<p>We've received ${companyName}'s application to become a verified UNIFY credential verifier.</p>`,
-    "<p>Our team will review it and let you know as soon as a decision has been made.</p>",
-  ].join("\n");
-}
-
-function emailText(input: SendVendorApplicationSubmittedEmailInput) {
-  return [
-    `Hi ${input.contactName},`,
-    "",
-    `We've received ${input.companyName}'s application to become a verified UNIFY credential verifier.`,
-    "Our team will review it and let you know as soon as a decision has been made.",
-  ].join("\n");
-}
 
 export async function sendVendorApplicationSubmittedEmail({
   to,
@@ -63,9 +44,7 @@ export async function sendVendorApplicationSubmittedEmail({
   return sendResendEmail({
     apiKey: env.RESEND_API_KEY,
     from: env.AUTH_EMAIL_FROM,
-    html: emailHtml(input),
-    subject: "We've received your UNIFY verifier application",
-    text: emailText(input),
+    ...renderVendorApplicationSubmittedEmail(input),
     to,
   });
 }

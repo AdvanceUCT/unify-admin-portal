@@ -5,10 +5,11 @@
 
 import "server-only";
 
+import { renderAdminInviteEmail } from "./templates";
+
 import { env } from "@/lib/config/env";
 import {
   type EmailDeliveryResult,
-  escapeHtml,
   sendResendEmail,
 } from "@/lib/email/resend";
 
@@ -18,30 +19,6 @@ type SendAdminInviteEmailInput = {
   inviteUrl: string;
   expiresAt: Date;
 };
-
-function emailHtml(input: SendAdminInviteEmailInput) {
-  const inviteUrl = escapeHtml(input.inviteUrl);
-  const name = escapeHtml(input.name);
-
-  return [
-    `<p>Hi ${name},</p>`,
-    "<p>You have been invited to join the UNIFY Admin Portal.</p>",
-    `<p><a href="${inviteUrl}">Accept your admin invite</a></p>`,
-    `<p>This invite expires at ${input.expiresAt.toLocaleString()}.</p>`,
-    "<p>If the button does not work, copy and open this link:</p>",
-    `<p>${inviteUrl}</p>`,
-  ].join("\n");
-}
-
-function emailText(input: SendAdminInviteEmailInput) {
-  return [
-    `Hi ${input.name},`,
-    "",
-    "You have been invited to join the UNIFY Admin Portal.",
-    `Accept your admin invite: ${input.inviteUrl}`,
-    `This invite expires at ${input.expiresAt.toISOString()}.`,
-  ].join("\n");
-}
 
 export async function sendAdminInviteEmail({
   to,
@@ -70,9 +47,7 @@ export async function sendAdminInviteEmail({
   return sendResendEmail({
     apiKey: env.RESEND_API_KEY,
     from: env.AUTH_EMAIL_FROM,
-    html: emailHtml(input),
-    subject: "You have been invited to UNIFY Admin Portal",
-    text: emailText(input),
+    ...renderAdminInviteEmail(input),
     to,
   });
 }
