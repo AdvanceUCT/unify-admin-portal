@@ -23,12 +23,24 @@ describe("Wallet Signature email templates", () => {
     expect(message.html).toContain('role="presentation"');
     expect(message.html).toContain('max-width:560px');
     expect(message.html).toContain('bgcolor="#123B31"');
-    expect(message.html).not.toMatch(/<script|<img|<Admin>|<Owner>|<problem>|<details>|<changed>/);
+    const document = new DOMParser().parseFromString(message.html, "text/html");
+    expect(document.querySelector("script, img, admin, owner, problem, details, changed")).toBeNull();
     expect(message.text).toContain("UNIFY");
     const preview = message.html.match(/mso-hide:all;">([^<]*)<\/div>/)![1];
     expect(preview.length).toBeLessThan(90);
     expect(preview).not.toMatch(/617204|test-only/);
     expect(message.subject).not.toMatch(/617204|test-only/);
+  });
+  it.each([
+    '<SCRIPT>alert("example")</SCRIPT>',
+    '<ScRiPt>alert("example")</script foo="bar">',
+    '<IMG SRC=x onerror="alert(1)">',
+  ])("renders tag-like input as literal text: %s", (input) => {
+    const rendered = renderEmail({ subject: "Sample", category: "TEST", heading: "Sample", preview: "A fictional sample", footer: "Test only", blocks: [{ kind: "paragraph", text: input }] });
+    const document = new DOMParser().parseFromString(rendered.html, "text/html");
+    expect(document.querySelector("script, img, [onerror]")).toBeNull();
+    expect(document.body.textContent).toContain(input);
+    expect(rendered.text).toContain(input);
   });
   it("keeps activation tokens and query parameters intact in the button, fallback and plain text", () => {
     const rendered = messages[1];
