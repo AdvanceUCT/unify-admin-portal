@@ -38,7 +38,7 @@ async function withOtpLocks<T>(keys: string[], now: Date | undefined, operation:
     try {
       return await prisma.$transaction(async (tx) => {
         for (const key of [...new Set(keys)].sort()) {
-          await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`payment-otp:${key}`}, 0))`;
+          await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${`payment-otp:${key}`}, 0))`;
         }
         const rows = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
         return operation(tx, now ?? rows[0].now);
