@@ -5,10 +5,11 @@
 
 import "server-only";
 
+import { renderPasswordResetEmail } from "./templates";
+
 import { env } from "@/lib/config/env";
 import {
   type EmailDeliveryResult,
-  escapeHtml,
   sendResendEmail,
 } from "@/lib/email/resend";
 
@@ -18,30 +19,6 @@ type SendPasswordResetEmailInput = {
   resetUrl: string;
   expiresInMinutes: number;
 };
-
-function emailHtml(input: SendPasswordResetEmailInput) {
-  const name = escapeHtml(input.name);
-  const resetUrl = escapeHtml(input.resetUrl);
-
-  return [
-    `<p>Hi ${name},</p>`,
-    "<p>A password reset was requested for your UNIFY Admin Portal account.</p>",
-    `<p><a href="${resetUrl}">Reset your password</a></p>`,
-    `<p>This link expires in ${input.expiresInMinutes} minutes.</p>`,
-    "<p>If the button does not work, copy and open this link:</p>",
-    `<p>${resetUrl}</p>`,
-  ].join("\n");
-}
-
-function emailText(input: SendPasswordResetEmailInput) {
-  return [
-    `Hi ${input.name},`,
-    "",
-    "A password reset was requested for your UNIFY Admin Portal account.",
-    `Reset your password: ${input.resetUrl}`,
-    `This link expires in ${input.expiresInMinutes} minutes.`,
-  ].join("\n");
-}
 
 export async function sendPasswordResetEmail({
   to,
@@ -70,9 +47,7 @@ export async function sendPasswordResetEmail({
   return sendResendEmail({
     apiKey: env.RESEND_API_KEY,
     from: env.AUTH_EMAIL_FROM,
-    html: emailHtml(input),
-    subject: "Reset your UNIFY Admin Portal password",
-    text: emailText(input),
+    ...renderPasswordResetEmail(input),
     to,
   });
 }

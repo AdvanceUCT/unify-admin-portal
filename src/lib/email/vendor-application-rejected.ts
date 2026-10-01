@@ -5,10 +5,11 @@
 
 import "server-only";
 
+import { renderVendorApplicationRejectedEmail } from "./templates";
+
 import { env } from "@/lib/config/env";
 import {
   type EmailDeliveryResult,
-  escapeHtml,
   sendResendEmail,
 } from "@/lib/email/resend";
 
@@ -19,32 +20,6 @@ type SendVendorApplicationRejectedEmailInput = {
   reason: string;
   applicationUrl: string;
 };
-
-function emailHtml(input: SendVendorApplicationRejectedEmailInput) {
-  const contactName = escapeHtml(input.contactName);
-  const companyName = escapeHtml(input.companyName);
-  const reason = escapeHtml(input.reason);
-  const applicationUrl = escapeHtml(input.applicationUrl);
-
-  return [
-    `<p>Hi ${contactName},</p>`,
-    `<p>${companyName}'s application to become a UNIFY credential verifier was not approved at this time.</p>`,
-    `<p><strong>Reason:</strong> ${reason}</p>`,
-    "<p>You're welcome to address the feedback and submit a new application.</p>",
-    `<p><a href="${applicationUrl}">View your application</a></p>`,
-  ].join("\n");
-}
-
-function emailText(input: SendVendorApplicationRejectedEmailInput) {
-  return [
-    `Hi ${input.contactName},`,
-    "",
-    `${input.companyName}'s application to become a UNIFY credential verifier was not approved at this time.`,
-    `Reason: ${input.reason}`,
-    "You're welcome to address the feedback and submit a new application.",
-    `View your application: ${input.applicationUrl}`,
-  ].join("\n");
-}
 
 export async function sendVendorApplicationRejectedEmail({
   to,
@@ -74,9 +49,7 @@ export async function sendVendorApplicationRejectedEmail({
   return sendResendEmail({
     apiKey: env.RESEND_API_KEY,
     from: env.AUTH_EMAIL_FROM,
-    html: emailHtml(input),
-    subject: "An update on your UNIFY verifier application",
-    text: emailText(input),
+    ...renderVendorApplicationRejectedEmail(input),
     to,
   });
 }

@@ -5,10 +5,11 @@
 
 import "server-only";
 
+import { renderCredentialActivationEmail } from "./templates";
+
 import { env } from "@/lib/config/env";
 import {
   type EmailDeliveryResult,
-  escapeHtml,
   sendResendEmail,
 } from "@/lib/email/resend";
 
@@ -26,30 +27,6 @@ function shouldUseConsoleDelivery() {
     env.CREDENTIAL_EMAIL_DELIVERY_MODE === "console" ||
     (!env.RESEND_API_KEY && process.env.NODE_ENV !== "production")
   );
-}
-
-function emailHtml(input: SendCredentialActivationEmailInput) {
-  const activationUrl = escapeHtml(input.activationUrl);
-  const studentName = escapeHtml(input.studentName);
-
-  return [
-    `<p>Hi ${studentName},</p>`,
-    "<p>Your UNIFY student credential is ready to activate in the Student Wallet.</p>",
-    `<p><a href="${activationUrl}">Open your credential activation link</a></p>`,
-    `<p>This link expires at ${new Date(input.expiresAt).toLocaleString()}.</p>`,
-    "<p>If the button does not open the wallet, copy and open this link on the device with the Student Wallet installed:</p>",
-    `<p>${activationUrl}</p>`,
-  ].join("\n");
-}
-
-function emailText(input: SendCredentialActivationEmailInput) {
-  return [
-    `Hi ${input.studentName},`,
-    "",
-    "Your UNIFY student credential is ready to activate in the Student Wallet.",
-    `Open this link on the device with the Student Wallet installed: ${input.activationUrl}`,
-    `This link expires at ${new Date(input.expiresAt).toISOString()}.`,
-  ].join("\n");
 }
 
 export async function sendCredentialActivationEmail(
@@ -76,9 +53,7 @@ export async function sendCredentialActivationEmail(
   return sendResendEmail({
     apiKey: env.RESEND_API_KEY,
     from,
-    html: emailHtml(input),
-    subject: "Activate your UNIFY student credential",
-    text: emailText(input),
+    ...renderCredentialActivationEmail(input),
     to: input.to,
   });
 }

@@ -5,10 +5,11 @@
 
 import "server-only";
 
+import { renderVendorApplicationRevokedEmail } from "./templates";
+
 import { env } from "@/lib/config/env";
 import {
   type EmailDeliveryResult,
-  escapeHtml,
   sendResendEmail,
 } from "@/lib/email/resend";
 
@@ -18,29 +19,6 @@ type SendVendorApplicationRevokedEmailInput = {
   companyName: string;
   reason: string;
 };
-
-function emailHtml(input: SendVendorApplicationRevokedEmailInput) {
-  const contactName = escapeHtml(input.contactName);
-  const companyName = escapeHtml(input.companyName);
-  const reason = escapeHtml(input.reason);
-
-  return [
-    `<p>Hi ${contactName},</p>`,
-    `<p>${companyName}'s verifier access to UNIFY has been revoked.</p>`,
-    `<p><strong>Reason:</strong> ${reason}</p>`,
-    "<p>If you believe this is a mistake, please contact the UNIFY team.</p>",
-  ].join("\n");
-}
-
-function emailText(input: SendVendorApplicationRevokedEmailInput) {
-  return [
-    `Hi ${input.contactName},`,
-    "",
-    `${input.companyName}'s verifier access to UNIFY has been revoked.`,
-    `Reason: ${input.reason}`,
-    "If you believe this is a mistake, please contact the UNIFY team.",
-  ].join("\n");
-}
 
 export async function sendVendorApplicationRevokedEmail({
   to,
@@ -69,9 +47,7 @@ export async function sendVendorApplicationRevokedEmail({
   return sendResendEmail({
     apiKey: env.RESEND_API_KEY,
     from: env.AUTH_EMAIL_FROM,
-    html: emailHtml(input),
-    subject: "Your UNIFY verifier access has been revoked",
-    text: emailText(input),
+    ...renderVendorApplicationRevokedEmail(input),
     to,
   });
 }
