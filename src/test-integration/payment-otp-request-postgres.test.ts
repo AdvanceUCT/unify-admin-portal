@@ -21,7 +21,7 @@ it("orders concurrent resend and verification using the same student/device lock
   const student = randomUUID(), device = randomUUID(), id = randomUUID();
   const time = new Date(now.getTime() + 60000);
   await prisma.student.create({ data: { id: student, studentNumber: student.toUpperCase(), email: "ci@example.invalid", firstName: "CI", lastName: "OTP" } });
-  await prisma.credentialIssuance.create({ data: { studentId: student, credentialDefinitionId: "ci-only", status: "ACCEPTED", lifecycleStatus: "ACTIVE" } });
+  await prisma.credentialIssuance.create({ data: { studentId: student, credentialDefinitionId: "ci-only", status: "ACCEPTED", lifecycleStatus: "ACTIVE", credentialValidFrom: new Date("2020-01-01T00:00:00Z"), credentialExpiresAt: new Date("2099-01-01T00:00:00Z") } });
   await prisma.studentPaymentActivationChallenge.create({ data: { id, studentId: student, studentNumberHash: createHash("sha256").update(student.toUpperCase()).digest("hex"), deviceIdHash: createHash("sha256").update(device).digest("hex"), otpHash: createHmac("sha256", "ci-only-otp-pepper").update(`${id}:123456`).digest("hex"), createdAt: now, expiresAt: new Date(now.getTime() + 600000), resendAvailableAt: time } });
   const [verified, resent] = await Promise.allSettled([verifyStudentPaymentActivation({ challengeId: id, deviceId: device, otp: "123456", now: time }), request(student, device, undefined, time)]);
   expect(resent.status).toBe("fulfilled");

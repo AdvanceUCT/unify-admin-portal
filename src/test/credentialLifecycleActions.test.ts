@@ -169,8 +169,7 @@ describe("credential lifecycle actions", () => {
         data: expect.objectContaining({
           action: "CREDENTIAL_REVOKED",
           eventId: "event-revoked",
-      revision: 1,
-          metadata: expect.objectContaining({ previousStatus: "ACTIVE" }),
+          metadata: expect.objectContaining({ previousStatus: "ACTIVE", revision: 1 }),
         }),
       }),
     );

@@ -43,3 +43,8 @@ it("existing sessions and refresh remain usable after expiry and suspension", as
   await expect(refreshStudentPaymentSession({ refreshToken: session.refreshToken, sessionId: session.sessionId, deviceId: "ci-device", now })).resolves.toHaveProperty("accessToken");
   await expect(activate(id)).rejects.toMatchObject({ code: "PAYMENT_WALLET_NOT_ELIGIBLE" });
 });
+it("accepts any eligible candidate without letting expired or suspended candidates decide", async () => {
+  const id = await student();
+  for (const [lifecycleStatus, end] of [["ACTIVE", -1], ["SUSPENDED", 1000], ["ACTIVE", 1000]] as const) await prisma.credentialIssuance.create({ data: { studentId: id, credentialDefinitionId: "ci-modern", status: "ISSUED", lifecycleStatus, credentialValidFrom: new Date(now.getTime() - 1000), credentialExpiresAt: new Date(now.getTime() + end) } });
+  await expect(activate(id)).resolves.toHaveProperty("sessionId");
+});

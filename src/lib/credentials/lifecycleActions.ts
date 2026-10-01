@@ -71,6 +71,7 @@ async function persistLifecycleChange(change: PersistedLifecycleChange) {
   // Keep the materialized credential state and its audit evidence atomic: a
   // lifecycle transition must never be visible without the corresponding log.
   if (!Number.isSafeInteger(change.revision) || change.revision < 0 || change.revision > 2147483647) throw new CredentialLifecycleActionError("Agent returned an invalid lifecycle revision.", 502);
+  if (!change.eventId.trim()) throw new CredentialLifecycleActionError("Agent returned an empty lifecycle identity.", 502);
   return prisma.$transaction(async (transaction) => {
     await transaction.$queryRaw`SELECT id FROM credential_issuance WHERE "credentialExchangeId" = ${change.credentialExchangeId} FOR UPDATE`;
   const issuance = await transaction.credentialIssuance.findUnique({

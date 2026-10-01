@@ -149,6 +149,7 @@ export async function POST(request: Request) {
   }
 
   const eventType = payload && typeof payload === "object" && "type" in payload ? String(payload.type) : "unknown";
+  if (eventType === "credential.lifecycleChanged") return correlatedJson(requestId, { error: { message: "Invalid credential lifecycle event." } }, { status: 400 });
   console.info(`[webhooks] [${requestId}] received ${eventType}`);
 
   if (isVerificationCompletedPayload(payload)) {

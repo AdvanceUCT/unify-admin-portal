@@ -145,8 +145,8 @@ async function assertStudentPaymentEligible(studentId: string, now = new Date())
   const legacyIds = new Set((env.CREDENTIAL_VALIDITY_LEGACY_DEFINITION_IDS ?? "").split(",").map(value => value.trim()).filter(Boolean));
   const schemas = await prisma.credentialSchema.findMany({ where: { credentialDefinitionId: { in: candidates.map(candidate => candidate.credentialDefinitionId) } }, select: { credentialDefinitionId: true, schemaAttributes: true } });
   const eligibleCredential = candidates.some(candidate => {
-    const schema = schemas.find(item => item.credentialDefinitionId === candidate.credentialDefinitionId);
-    const legacy = legacyIds.has(candidate.credentialDefinitionId) && Boolean(schema) && !schema!.schemaAttributes.includes("validFrom") && !schema!.schemaAttributes.includes("expiresAt");
+    const matching = schemas.filter(item => item.credentialDefinitionId === candidate.credentialDefinitionId);
+    const legacy = legacyIds.has(candidate.credentialDefinitionId) && matching.length > 0 && matching.every(schema => !schema.schemaAttributes.includes("validFrom") && !schema.schemaAttributes.includes("expiresAt"));
     return !credentialValidityFailure({ validFrom: candidate.credentialValidFrom?.toISOString(), expiresAt: candidate.credentialExpiresAt?.toISOString() }, now.getTime(), legacy);
   });
   if (!eligibleCredential) {
