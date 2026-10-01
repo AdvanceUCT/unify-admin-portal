@@ -39,6 +39,7 @@ function shouldSkipProxy(pathname: string) {
     pathname.startsWith("/api/wallet") ||
     pathname.startsWith("/api/webhooks") ||
     pathname.startsWith("/api/cron") ||
+    pathname === "/api/jobs/payment-webhooks" ||
     pathname === "/favicon.ico" ||
     PUBLIC_FILE.test(pathname)
   );
