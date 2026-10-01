@@ -7,6 +7,7 @@ import "server-only";
 
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { sendResendEmail, escapeHtml } from "@/lib/email/resend";
 import { env } from "@/lib/config/env";
@@ -22,6 +23,31 @@ const ACTIVATION_RATE_WINDOW_MS = 10 * 60 * 1000;
 const MAX_STUDENT_REQUESTS_PER_WINDOW = 5;
 const MAX_DEVICE_REQUESTS_PER_WINDOW = 5;
 const MAX_IP_REQUESTS_PER_WINDOW = 10;
+
+type OtpTransaction = Prisma.TransactionClient;
+
+function transactionConflict(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const value = error as { code?: string; originalCode?: string; meta?: unknown; cause?: unknown; driverAdapterError?: unknown };
+  return ["P2034", "40001", "40P01"].includes(value.code ?? value.originalCode ?? "") ||
+    [value.meta, value.cause, value.driverAdapterError].some(transactionConflict);
+}
+
+async function withOtpLocks<T>(keys: string[], now: Date | undefined, operation: (tx: OtpTransaction, time: Date) => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        for (const key of [...new Set(keys)].sort()) {
+          await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`payment-otp:${key}`}, 0))`;
+        }
+        const rows = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
+        return operation(tx, now ?? rows[0].now);
+      }, { maxWait: 10000, timeout: 15000 });
+    } catch (error) {
+      if (attempt >= 2 || !transactionConflict(error)) throw error;
+    }
+  }
+}
 
 type SessionTokenBundle = {
   accessToken: string;
@@ -205,25 +231,27 @@ export async function requestStudentPaymentActivation(input: {
   // hash. The OTP itself is also HMACed with its challenge id before storage.
   const studentNumberHash = hmac(`student:${studentNumber}`);
   const requestedIpHash = input.ipAddress ? hmac(`ip:${input.ipAddress}`) : null;
+  const keys = [`student:${studentNumberHash}`, `device:${deviceIdHash}`, ...(requestedIpHash ? [`ip:${requestedIpHash}`] : [])];
+  const { challenge, student, otp, challengeId } = await withOtpLocks(keys, input.now, async (tx, now) => {
   const windowStart = addMs(now, -ACTIVATION_RATE_WINDOW_MS);
 
   const [recentSameRequest, studentRequests, deviceRequests, ipRequests] = await Promise.all([
-    prisma.studentPaymentActivationChallenge.findFirst({
+    tx.studentPaymentActivationChallenge.findFirst({
       where: {
         studentNumberHash,
         deviceIdHash,
-        createdAt: { gte: addMs(now, -OTP_RESEND_COOLDOWN_MS) },
+        createdAt: { gt: addMs(now, -OTP_RESEND_COOLDOWN_MS) },
       },
       select: { id: true },
     }),
-    prisma.studentPaymentActivationChallenge.count({
+    tx.studentPaymentActivationChallenge.count({
       where: { studentNumberHash, createdAt: { gte: windowStart } },
     }),
-    prisma.studentPaymentActivationChallenge.count({
+    tx.studentPaymentActivationChallenge.count({
       where: { deviceIdHash, createdAt: { gte: windowStart } },
     }),
     requestedIpHash
-      ? prisma.studentPaymentActivationChallenge.count({
+      ? tx.studentPaymentActivationChallenge.count({
           where: { requestedIpHash, createdAt: { gte: windowStart } },
         })
       : Promise.resolve(0),
@@ -240,7 +268,7 @@ export async function requestStudentPaymentActivation(input: {
 
   // Supersede older active challenges for this same student/device pair so
   // only the latest delivered OTP can be used.
-  await prisma.studentPaymentActivationChallenge.updateMany({
+  await tx.studentPaymentActivationChallenge.updateMany({
     where: {
       studentNumberHash,
       deviceIdHash,
@@ -254,12 +282,12 @@ export async function requestStudentPaymentActivation(input: {
   const otp = generateOtp();
   const challengeId = `wact_${randomBytes(16).toString("hex")}`;
 
-  const student = await prisma.student.findUnique({
+  const student = await tx.student.findUnique({
     where: { studentNumber },
     select: { id: true, email: true, firstName: true, lastName: true },
   });
 
-  const challenge = await prisma.studentPaymentActivationChallenge.create({
+  const challenge = await tx.studentPaymentActivationChallenge.create({
     data: {
       id: challengeId,
       studentId: student?.id,
@@ -271,8 +299,12 @@ export async function requestStudentPaymentActivation(input: {
       resendAvailableAt: addMs(now, OTP_RESEND_COOLDOWN_MS),
       maxAttempts: MAX_OTP_ATTEMPTS,
       requestedIpHash: requestedIpHash ?? undefined,
+      createdAt: now,
     },
     select: { id: true, expiresAt: true, resendAvailableAt: true, destinationHint: true },
+  });
+
+  return { challenge, student, otp, challengeId };
   });
 
   if (student) {
@@ -284,10 +316,15 @@ export async function requestStudentPaymentActivation(input: {
         challengeId,
       });
     } catch (error) {
-      console.error("[wallet-activation] Failed to send payment OTP email:", error);
+      // Expire immediately, retaining createdAt for cooldown and quota accounting.
+      await prisma.studentPaymentActivationChallenge.updateMany({
+        where: { id: challengeId, consumedAt: null, verifiedAt: null },
+        data: { expiresAt: new Date(0) },
+      });
+      console.error("[wallet-activation] OTP delivery failed", { count: 1, errorType: error instanceof Error ? error.name : "unknown" });
       throw new WalletDomainError(
         "PAYMENT_OTP_DELIVERY_FAILED",
-        "The activation code could not be sent. Check the payment OTP email configuration and try again.",
+        "The code could not be sent. Wait 60 seconds before requesting a new code.",
       );
     }
   }
@@ -336,51 +373,30 @@ export async function verifyStudentPaymentActivation(input: {
     throw new WalletDomainError("INVALID_WALLET_SESSION", "Invalid activation code.");
   }
 
-  const challenge = await prisma.studentPaymentActivationChallenge.findUnique({ where: { id: challengeId } });
-  const presentedHash = hmac(`${challengeId}:${otp}`);
-
-  const invalidActivation = Boolean(
-    !challenge ||
-    !challenge.studentId ||
-    challenge.consumedAt ||
-    challenge.verifiedAt ||
-    challenge.expiresAt <= now ||
-    challenge.deviceIdHash !== deviceIdHash ||
-    challenge.attemptCount >= challenge.maxAttempts ||
-    !safeEqualHex(challenge.otpHash, presentedHash)
-  );
-
-  if (invalidActivation) {
-    if (challenge && !challenge.consumedAt && !challenge.verifiedAt) {
-      // Increment attempts even for invalid codes, but do not reveal which
-      // part of the challenge failed.
-      await prisma.studentPaymentActivationChallenge.updateMany({
-        where: { id: challenge.id, attemptCount: { lt: challenge.maxAttempts } },
-        data: { attemptCount: { increment: 1 } },
-      });
+  const initial = await prisma.studentPaymentActivationChallenge.findUnique({ where: { id: challengeId } });
+  if (!initial) throw new WalletDomainError("INVALID_WALLET_SESSION", "Invalid activation code.");
+  const studentId = await withOtpLocks([`student:${initial.studentNumberHash}`, `device:${initial.deviceIdHash}`], input.now, async (tx, time) => {
+    const challenge = await tx.studentPaymentActivationChallenge.findUnique({ where: { id: challengeId } });
+    const invalid = !challenge || !challenge.studentId || challenge.consumedAt || challenge.verifiedAt ||
+      challenge.expiresAt <= time || challenge.deviceIdHash !== deviceIdHash ||
+      challenge.attemptCount >= challenge.maxAttempts || !safeEqualHex(challenge.otpHash, hmac(`${challengeId}:${otp}`));
+    if (invalid) {
+      if (challenge && !challenge.consumedAt && !challenge.verifiedAt) {
+        await tx.studentPaymentActivationChallenge.updateMany({
+          where: { id: challenge.id, attemptCount: { lt: challenge.maxAttempts } },
+          data: { attemptCount: { increment: 1 } },
+        });
+      }
+      return null;
     }
-    throw new WalletDomainError("INVALID_WALLET_SESSION", "Invalid activation code.");
-  }
-  if (!challenge?.studentId) {
-    throw new WalletDomainError("INVALID_WALLET_SESSION", "Invalid activation code.");
-  }
-  const studentId = challenge.studentId;
-
-  await assertStudentPaymentEligible(studentId);
-
-  const consumed = await prisma.studentPaymentActivationChallenge.updateMany({
-    where: {
-      id: challenge.id,
-      consumedAt: null,
-      verifiedAt: null,
-      expiresAt: { gt: now },
-      attemptCount: { lt: challenge.maxAttempts },
-    },
-    data: { attemptCount: { increment: 1 }, verifiedAt: now, consumedAt: now },
+    await assertStudentPaymentEligible(challenge.studentId!);
+    const consumed = await tx.studentPaymentActivationChallenge.updateMany({
+      where: { id: challenge.id, consumedAt: null, verifiedAt: null, expiresAt: { gt: time }, attemptCount: { lt: challenge.maxAttempts } },
+      data: { attemptCount: { increment: 1 }, verifiedAt: time, consumedAt: time },
+    });
+    return consumed.count === 1 ? challenge.studentId : null;
   });
-  if (consumed.count !== 1) {
-    throw new WalletDomainError("INVALID_WALLET_SESSION", "Invalid activation code.");
-  }
+  if (!studentId) throw new WalletDomainError("INVALID_WALLET_SESSION", "Invalid activation code.");
 
   await ensureStudentWalletAccount(studentId);
   return createSession(studentId, deviceIdHash, now);
