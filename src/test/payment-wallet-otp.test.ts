@@ -70,7 +70,7 @@ describe("Payment OTP request and resend", () => {
     const result = await requestStudentPaymentActivation(request);
     expect(result).toMatchObject({ expiresAt: new Date(now.getTime() + 600000).toISOString(), resendAvailableAt: new Date(now.getTime() + 60000).toISOString() });
     const email = vi.mocked(sendResendEmail).mock.calls[0][0];
-    const otp = email.text!.match(/code is (\d{6})/)![1];
+    const otp = email.text!.match(/\b(\d{6})\b/)![1];
     const data = database.studentPaymentActivationChallenge.create.mock.calls[0][0].data;
     expect(data.otpHash).toBe(createHmac("sha256", "ci-only-pepper").update(`${data.id}:${otp}`).digest("hex"));
     expect(data).not.toHaveProperty("otp"); expect(data).not.toHaveProperty("studentNumber");

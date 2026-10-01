@@ -8,7 +8,7 @@ import "server-only";
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 
 import { prisma } from "@/lib/db/prisma";
-import { sendResendEmail, escapeHtml } from "@/lib/email/resend";
+import { sendPaymentOtpEmail } from "@/lib/email/payment-otp";
 import { env } from "@/lib/config/env";
 import { ensureStudentWalletAccount } from "@/lib/payments/accounts";
 import { WalletDomainError } from "@/lib/payments/errors";
@@ -73,9 +73,6 @@ function addMs(now: Date, ms: number) {
   return new Date(now.getTime() + ms);
 }
 
-function shouldLogPreviewOtpCode() {
-  return env.PAYMENT_OTP_DEBUG_LOG_CODE;
-}
 
 function assertActivationEnabled() {
   if (!env.PAYMENT_WALLET_TOPUPS_ENABLED) {
@@ -135,32 +132,6 @@ function toTokenResponse(session: {
     refreshExpiresAt: session.refreshTokenExpiresAt.toISOString(),
     sessionId: session.id,
   };
-}
-
-async function sendPaymentOtpEmail(input: { to: string; otp: string; studentName: string; challengeId: string }) {
-  if (!env.RESEND_API_KEY || !env.PAYMENT_OTP_EMAIL_FROM) {
-    throw new WalletDomainError("PAYMENT_WALLET_DISABLED", "Payment OTP email configuration is missing.");
-  }
-
-  const safeName = escapeHtml(input.studentName);
-  const safeOtp = escapeHtml(input.otp);
-  const recipient = env.PAYMENT_OTP_EMAIL_OVERRIDE_TO ?? input.to;
-  if (env.PAYMENT_OTP_EMAIL_OVERRIDE_TO) {
-    console.warn("[wallet-activation] Sending payment OTP to configured test override recipient.");
-  }
-  const delivery = await sendResendEmail({
-    apiKey: env.RESEND_API_KEY,
-    from: env.PAYMENT_OTP_EMAIL_FROM,
-    to: recipient,
-    subject: "Your UNIFY wallet activation code",
-    text: `Your UNIFY wallet activation code is ${input.otp}. It expires in 10 minutes.`,
-    html: `<p>Hi ${safeName},</p><p>Your UNIFY wallet activation code is <strong>${safeOtp}</strong>.</p><p>It expires in 10 minutes.</p>`,
-  });
-  if (shouldLogPreviewOtpCode()) {
-    console.warn(
-      `[wallet-activation] Preview OTP debug code for challenge ${input.challengeId}: ${input.otp} (delivery=${delivery.provider}:${delivery.messageId ?? "unknown"})`,
-    );
-  }
 }
 
 export async function requestStudentPaymentActivation(input: {

@@ -5,8 +5,10 @@
 
 import "server-only";
 
+import { renderVendorHelpRequestEmail } from "./templates";
+
 import { env } from "@/lib/config/env";
-import { escapeHtml, sendResendEmail, type EmailDeliveryResult } from "@/lib/email/resend";
+import { sendResendEmail, type EmailDeliveryResult } from "@/lib/email/resend";
 
 type VendorHelpRequestEmailInput = {
   to: string;
@@ -36,35 +38,6 @@ function vendorMetadataLines(input: VendorHelpRequestEmailInput) {
     `Vendor contact email: ${input.vendor.contactEmail ?? "Unknown"}`,
     `Service category: ${input.vendor.serviceCategory ?? "Unknown"}`,
   ];
-}
-
-function emailText(input: VendorHelpRequestEmailInput) {
-  return [
-    "A vendor submitted a help request from the UNIFY Vendor Portal.",
-    "",
-    `Title: ${input.title}`,
-    "",
-    "Details:",
-    input.details,
-    "",
-    "Vendor metadata:",
-    ...vendorMetadataLines(input),
-  ].join("\n");
-}
-
-function emailHtml(input: VendorHelpRequestEmailInput) {
-  const metadata = vendorMetadataLines(input)
-    .map((line) => `<li>${escapeHtml(line)}</li>`)
-    .join("\n");
-
-  return [
-    "<p>A vendor submitted a help request from the UNIFY Vendor Portal.</p>",
-    `<p><strong>Title:</strong> ${escapeHtml(input.title)}</p>`,
-    "<p><strong>Details:</strong></p>",
-    `<p>${escapeHtml(input.details).replace(/\n/g, "<br />")}</p>`,
-    "<p><strong>Vendor metadata:</strong></p>",
-    `<ul>${metadata}</ul>`,
-  ].join("\n");
 }
 
 function shouldUseConsoleDelivery() {
@@ -102,10 +75,8 @@ export async function sendVendorHelpRequestEmail(
   return sendResendEmail({
     apiKey: env.RESEND_API_KEY,
     from: env.VENDOR_HELP_EMAIL_FROM,
-    html: emailHtml(input),
+    ...renderVendorHelpRequestEmail(input),
     replyTo: input.submittedBy.email,
-    subject: `[UNIFY Vendor Help] ${input.title}`,
-    text: emailText(input),
     to: input.to,
   });
 }
