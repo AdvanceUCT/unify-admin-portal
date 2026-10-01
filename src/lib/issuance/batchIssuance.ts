@@ -345,6 +345,7 @@ async function issueStudentActivationLinks(
           activationUrl: publicActivationUrl,
           credentialDefinitionId: activeSchema.credentialDefinitionId,
           credentialExchangeId: offer.credentialExchangeId,
+          credentialValidFrom: validityWindow.validFrom,
           credentialExpiresAt: validityWindow.expiresAt,
           credentialRevocationId: offer.credentialRevocationId,
           email: offer.email,

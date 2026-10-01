@@ -12,7 +12,7 @@ import {
   CredentialIssuanceStatus,
   CredentialLifecycleStatus,
 } from "@/generated/prisma/enums";
-import { changeCredentialLifecycle, type AgentCredentialLifecycleResult } from "@/lib/agentClient";
+import { getCredentialLifecycle, changeCredentialLifecycle, type AgentCredentialLifecycleResult } from "@/lib/agentClient";
 import type { CredentialLifecycleChangedWebhookPayload } from "@/lib/credentials/statusMapping";
 import { toPublicCredentialStatus } from "@/lib/credentials/lifecycle";
 import { prisma } from "@/lib/db/prisma";
@@ -30,6 +30,7 @@ export class CredentialLifecycleActionError extends Error {
 }
 
 type PersistedLifecycleChange = {
+  revision: number;
   actorId?: string | null;
   credentialExchangeId: string;
   credentialRevocationId: string;
@@ -62,7 +63,17 @@ function messageFor(status: PersistedLifecycleChange["status"]) {
 }
 
 async function persistLifecycleChange(change: PersistedLifecycleChange) {
-  const issuance = await prisma.credentialIssuance.findUnique({
+  const occurredAt = new Date(change.timestamp);
+  if (Number.isNaN(occurredAt.getTime())) {
+    throw new CredentialLifecycleActionError("Agent returned an invalid lifecycle timestamp.", 502);
+  }
+
+  // Keep the materialized credential state and its audit evidence atomic: a
+  // lifecycle transition must never be visible without the corresponding log.
+  if (!Number.isSafeInteger(change.revision) || change.revision < 0 || change.revision > 2147483647) throw new CredentialLifecycleActionError("Agent returned an invalid lifecycle revision.", 502);
+  return prisma.$transaction(async (transaction) => {
+    await transaction.$queryRaw`SELECT id FROM credential_issuance WHERE "credentialExchangeId" = ${change.credentialExchangeId} FOR UPDATE`;
+  const issuance = await transaction.credentialIssuance.findUnique({
     where: { credentialExchangeId: change.credentialExchangeId },
   });
   if (!issuance) {
@@ -78,16 +89,26 @@ async function persistLifecycleChange(change: PersistedLifecycleChange) {
     throw new CredentialLifecycleActionError("Agent revocation metadata does not match the stored issuance.", 409);
   }
 
-  const occurredAt = new Date(change.timestamp);
-  if (Number.isNaN(occurredAt.getTime())) {
-    throw new CredentialLifecycleActionError("Agent returned an invalid lifecycle timestamp.", 502);
-  }
+    const previousRevision = issuance.lifecycleRevision;
+    const isCurrent = previousRevision == null || change.revision > previousRevision;
+    const replay = change.revision === previousRevision;
+    if (replay && (issuance.lifecycleEventId !== change.eventId || issuance.lifecycleStatus !== lifecycleStatusFor(change.status))) {
+      console.error("[credential-lifecycle] revision conflict", { count: 1 });
+      throw new CredentialLifecycleActionError("Conflicting lifecycle event at the same revision.", 409);
+    }
+    if (isCurrent && (issuance.status === CredentialIssuanceStatus.REVOKED || issuance.lifecycleStatus === CredentialLifecycleStatus.REVOKED) && change.status !== "REVOKED") {
+      throw new CredentialLifecycleActionError("Permanent credential revocation is terminal.", 409);
+    }
+    const seen = await transaction.credentialAuditLog.findUnique({ where: { eventId: change.eventId } });
+    if (seen && (seen.credentialIssuanceId !== issuance.id || (seen.metadata as { revision?: number } | null)?.revision !== change.revision)) {
+      throw new CredentialLifecycleActionError("Lifecycle event identity was reused.", 409);
+    }
+    if (isCurrent) {
 
-  // Keep the materialized credential state and its audit evidence atomic: a
-  // lifecycle transition must never be visible without the corresponding log.
-  await prisma.$transaction(async (transaction) => {
     await transaction.credentialIssuance.update({
       data: {
+        lifecycleRevision: change.revision,
+        lifecycleEventId: change.eventId,
         credentialRevocationId: change.credentialRevocationId,
         lifecycleReason: change.reason ?? null,
         lifecycleStatus: lifecycleStatusFor(change.status),
@@ -100,6 +121,7 @@ async function persistLifecycleChange(change: PersistedLifecycleChange) {
       },
       where: { id: issuance.id },
     });
+    }
 
     await transaction.credentialAuditLog.createMany({
       data: {
@@ -113,6 +135,8 @@ async function persistLifecycleChange(change: PersistedLifecycleChange) {
         metadata: {
           credentialRevocationId: change.credentialRevocationId,
           previousStatus: change.previousStatus,
+          revision: change.revision,
+          applied: isCurrent,
           reason: change.reason ?? null,
           revocationRegistryDefinitionId: change.revocationRegistryDefinitionId,
           status: change.status,
@@ -131,14 +155,14 @@ async function persistLifecycleChange(change: PersistedLifecycleChange) {
       });
     }
 
-    if (change.status === "SUSPENDED" && change.scheduledReactivationAt) {
+    if ((isCurrent || replay) && change.status === "SUSPENDED" && change.scheduledReactivationAt) {
       const deduplicationKey = `auto-reactivate:${issuance.id}:${change.eventId}`;
       await transaction.credentialAutomationJob.upsert({
         create: {
           credentialIssuanceId: issuance.id,
           deduplicationKey,
           dueAt: change.scheduledReactivationAt,
-          metadata: { reason: change.reason ?? null },
+          metadata: { reason: change.reason ?? null, suspensionRevision: change.revision, suspensionEventId: change.eventId },
           requestedByActorId: change.actorId,
           type: CredentialAutomationJobType.AUTO_REACTIVATE,
         },
@@ -162,7 +186,7 @@ async function persistLifecycleChange(change: PersistedLifecycleChange) {
       });
     }
 
-    if (change.status === "ACTIVE" || change.status === "REVOKED") {
+    if (isCurrent && (change.status === "ACTIVE" || change.status === "REVOKED")) {
       const cancelled = await transaction.credentialAutomationJob.updateMany({
         data: { completedAt: occurredAt, status: CredentialAutomationJobStatus.CANCELLED },
         where: {
@@ -188,15 +212,13 @@ async function persistLifecycleChange(change: PersistedLifecycleChange) {
         });
       }
     }
+    if (!isCurrent && !replay) console.info("[credential-lifecycle] stale event", { count: 1 });
+    return {
+      lifecycleState: isCurrent ? change.status : issuance.lifecycleStatus ?? "ACTIVE",
+      ...((isCurrent || replay) && change.scheduledReactivationAt ? { scheduledReactivationAt: change.scheduledReactivationAt.toISOString() } : {}),
+      updatedAt: (isCurrent ? occurredAt : issuance.lifecycleStatusUpdatedAt ?? occurredAt).toISOString(),
+    };
   });
-
-  return {
-    lifecycleState: change.status,
-    ...(change.scheduledReactivationAt
-      ? { scheduledReactivationAt: change.scheduledReactivationAt.toISOString() }
-      : {}),
-    updatedAt: occurredAt.toISOString(),
-  };
 }
 
 function expectedStatusFor(action: CredentialLifecycleAction) {
@@ -229,6 +251,7 @@ export async function requestCredentialLifecycleChange(params: {
   studentLookupIds?: string[];
   credentialIssuanceId?: string;
   reactivateAt?: Date | null;
+  expectedLifecycleRevision?: number;
 }) {
   const reason = params.reason.trim();
   if (!reason) throw new CredentialLifecycleActionError("A reason is required for lifecycle changes.", 400);
@@ -275,6 +298,7 @@ export async function requestCredentialLifecycleChange(params: {
     issuance.credentialExchangeId,
     params.action,
     reason,
+    ...(params.expectedLifecycleRevision !== undefined ? [params.expectedLifecycleRevision] as [number] : []),
   );
   const expectedStatus = expectedStatusFor(params.action);
   if (result.status !== expectedStatus) {
@@ -288,8 +312,9 @@ export async function requestCredentialLifecycleChange(params: {
     actorId: params.actorId,
     credentialExchangeId: result.credentialExchangeId,
     credentialRevocationId: result.credentialRevocationId,
-    eventId: result.eventId ?? `${params.action}:${result.credentialExchangeId}:${result.updatedAt}`,
-    previousStatus: currentStatus === "SUSPENDED" ? "SUSPENDED" : "ACTIVE",
+    eventId: result.eventId ?? "",
+    revision: result.revision ?? -1,
+    previousStatus: result.previousStatus ?? (currentStatus === "SUSPENDED" ? "SUSPENDED" : "ACTIVE"),
     reason,
     revocationRegistryDefinitionId: result.revocationRegistryDefinitionId,
     status: result.status,
@@ -301,12 +326,22 @@ export async function requestCredentialLifecycleChange(params: {
 
 /** Replays an agent lifecycle webhook through the same idempotent persistence path. */
 export async function recordCredentialLifecycleChangedEvent(payload: CredentialLifecycleChangedWebhookPayload) {
+  if (payload.revision === undefined) {
+    let current: AgentCredentialLifecycleResult;
+    try { current = await getCredentialLifecycle(payload.credentialExchangeId); }
+    catch { throw new CredentialLifecycleActionError("Authoritative lifecycle snapshot is unavailable.", 503); }
+    if (!Number.isSafeInteger(current.revision) || !current.eventId || current.credentialExchangeId !== payload.credentialExchangeId || current.credentialRevocationId !== payload.credentialRevocationId || current.revocationRegistryDefinitionId !== payload.revocationRegistryDefinitionId) {
+      throw new CredentialLifecycleActionError("Revisioned lifecycle snapshot is unavailable or mismatched.", 503);
+    }
+    return persistLifecycleChange({ ...current, eventId: current.eventId, revision: current.revision!, previousStatus: payload.previousStatus, timestamp: current.updatedAt });
+  }
   // Direct API responses and retried webhooks deliberately converge on the same
   // persistence path. eventId plus skipDuplicates makes the audit write replay-safe.
   return persistLifecycleChange({
     credentialExchangeId: payload.credentialExchangeId,
     credentialRevocationId: payload.credentialRevocationId,
     eventId: payload.eventId,
+    revision: payload.revision,
     previousStatus: payload.previousStatus,
     reason: payload.reason,
     revocationRegistryDefinitionId: payload.revocationRegistryDefinitionId,

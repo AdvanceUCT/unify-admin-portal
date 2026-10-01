@@ -13,7 +13,7 @@ beforeAll(async () => {
   const profiles = await prisma.universityProfile.findMany();
   if (!profiles.length) await prisma.universityProfile.create({ data: { id: "pos-test-university", name: "Test", abbreviation: "TEST", contactEmail: "test@example.invalid", paymentWalletEnabled: true } });
   await prisma.student.create({ data: { id: studentId, studentNumber: studentId, email: "ci@example.invalid", firstName: "CI", lastName: "OTP" } });
-  await prisma.credentialIssuance.create({ data: { studentId, credentialDefinitionId: "ci-only", status: "ACCEPTED", lifecycleStatus: "ACTIVE" } });
+  await prisma.credentialIssuance.create({ data: { studentId, credentialDefinitionId: "ci-only", status: "ACCEPTED", lifecycleStatus: "ACTIVE", credentialValidFrom: new Date("2020-01-01Z"), credentialExpiresAt: new Date("2099-01-01Z") } });
 });
 afterAll(async () => { await prisma.$disconnect(); });
 it("issues exactly one session when the same OTP is verified concurrently", async () => {

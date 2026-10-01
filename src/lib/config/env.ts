@@ -143,6 +143,7 @@ const boundedPositiveInteger = (defaultValue: number, maximum: number) =>
     .transform((value) => (value === "" || value === undefined ? defaultValue : value));
 
 const envSchema = z.object({
+  CREDENTIAL_VALIDITY_LEGACY_DEFINITION_IDS: optionalNonEmptyString,
   DATABASE_URL: databaseUrl("DATABASE_URL"),
   DIRECT_URL: databaseUrl("DIRECT_URL").optional(),
   BETTER_AUTH_SECRET: z

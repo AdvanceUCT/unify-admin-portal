@@ -12,6 +12,7 @@ import { prisma } from "@/lib/db/prisma";
 import { sendResendEmail, escapeHtml } from "@/lib/email/resend";
 import { env } from "@/lib/config/env";
 import { ensureStudentWalletAccount } from "@/lib/payments/accounts";
+import { credentialValidityFailure } from "@/lib/credentials/validity";
 import { WalletDomainError } from "@/lib/payments/errors";
 
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -128,9 +129,9 @@ async function credentialStudentReferences(studentId: string) {
 }
 
 /** Requires an accepted/issued active credential before a student can activate payments. */
-async function assertStudentPaymentEligible(studentId: string) {
+async function assertStudentPaymentEligible(studentId: string, now = new Date()) {
   const studentReferences = await credentialStudentReferences(studentId);
-  const eligibleCredential = await prisma.credentialIssuance.findFirst({
+  const candidates = await prisma.credentialIssuance.findMany({
     where: {
       studentId: { in: studentReferences },
       status: { in: ["ACCEPTED", "ISSUED"] },
@@ -139,7 +140,14 @@ async function assertStudentPaymentEligible(studentId: string) {
         { lifecycleStatus: "ACTIVE" },
       ],
     },
-    select: { id: true },
+    select: { id: true, credentialDefinitionId: true, credentialValidFrom: true, credentialExpiresAt: true },
+  });
+  const legacyIds = new Set((env.CREDENTIAL_VALIDITY_LEGACY_DEFINITION_IDS ?? "").split(",").map(value => value.trim()).filter(Boolean));
+  const schemas = await prisma.credentialSchema.findMany({ where: { credentialDefinitionId: { in: candidates.map(candidate => candidate.credentialDefinitionId) } }, select: { credentialDefinitionId: true, schemaAttributes: true } });
+  const eligibleCredential = candidates.some(candidate => {
+    const schema = schemas.find(item => item.credentialDefinitionId === candidate.credentialDefinitionId);
+    const legacy = legacyIds.has(candidate.credentialDefinitionId) && Boolean(schema) && !schema!.schemaAttributes.includes("validFrom") && !schema!.schemaAttributes.includes("expiresAt");
+    return !credentialValidityFailure({ validFrom: candidate.credentialValidFrom?.toISOString(), expiresAt: candidate.credentialExpiresAt?.toISOString() }, now.getTime(), legacy);
   });
   if (!eligibleCredential) {
     throw new WalletDomainError(
@@ -221,7 +229,7 @@ export async function requestStudentPaymentActivation(input: {
         "Accept an active student credential before activating payments.",
       );
     }
-    await assertStudentPaymentEligible(student.id);
+    await assertStudentPaymentEligible(student.id, now);
     await ensureStudentWalletAccount(student.id);
     console.warn("[wallet-activation] PAYMENT_OTP_BYPASS_ENABLED created a test payment session without OTP.");
     return createSession(student.id, deviceIdHash, now);
@@ -389,7 +397,7 @@ export async function verifyStudentPaymentActivation(input: {
       }
       return null;
     }
-    await assertStudentPaymentEligible(challenge.studentId!);
+    await assertStudentPaymentEligible(challenge.studentId!, time);
     const consumed = await tx.studentPaymentActivationChallenge.updateMany({
       where: { id: challenge.id, consumedAt: null, verifiedAt: null, expiresAt: { gt: time }, attemptCount: { lt: challenge.maxAttempts } },
       data: { attemptCount: { increment: 1 }, verifiedAt: time, consumedAt: time },

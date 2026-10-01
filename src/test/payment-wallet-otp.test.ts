@@ -4,10 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const database = vi.hoisted(() => ({
   universityProfile: { findMany: vi.fn() },
   student: { findUnique: vi.fn() },
-  credentialIssuance: { findFirst: vi.fn() },
+  credentialIssuance: { findMany: vi.fn() },
   $transaction: vi.fn(),
   $queryRaw: vi.fn(),
   studentPaymentActivationChallenge: { findUnique: vi.fn(), findFirst: vi.fn(), count: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
+  credentialSchema: { findMany: vi.fn(async () => []) },
   studentPaymentSession: { create: vi.fn() },
 }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: database }));
@@ -32,7 +33,7 @@ describe("existing payment OTP activation", () => {
     database.$queryRaw.mockResolvedValue([{ now }]);
     database.universityProfile.findMany.mockResolvedValue([{ paymentWalletEnabled: true }]);
     database.student.findUnique.mockResolvedValue({ studentNumber: "STUDENTTEST" });
-    database.credentialIssuance.findFirst.mockResolvedValue({ id: "credential-test" });
+    database.credentialIssuance.findMany.mockResolvedValue([{ id: "credential-test", credentialDefinitionId: "modern", credentialValidFrom: new Date("2020-01-01Z"), credentialExpiresAt: new Date("2099-01-01Z") }]);
     database.studentPaymentActivationChallenge.findUnique.mockResolvedValue({ ...challenge });
     database.studentPaymentActivationChallenge.updateMany.mockResolvedValue({ count: 1 });
     database.studentPaymentSession.create.mockResolvedValue({ id: "session-test", accessTokenExpiresAt: new Date(now.getTime() + 900000), refreshTokenExpiresAt: new Date(now.getTime() + 2592000000) });

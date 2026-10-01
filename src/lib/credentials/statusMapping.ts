@@ -24,6 +24,7 @@ export type CredentialLifecycleChangedWebhookPayload = {
   credentialExchangeId: string;
   credentialRevocationId: string;
   eventId: string;
+  revision?: number;
   previousStatus: "ACTIVE" | "SUSPENDED" | "REVOKED";
   reason?: string;
   revocationRegistryDefinitionId: string;

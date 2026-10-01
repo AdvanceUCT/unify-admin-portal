@@ -10,7 +10,7 @@ import { NextResponse } from "next/server";
 import { env } from "@/lib/config/env";
 import { requestIdFrom } from "@/lib/requestId";
 import { recordCredentialStateChangedEvent } from "@/lib/credentials/status";
-import { recordCredentialLifecycleChangedEvent } from "@/lib/credentials/lifecycleActions";
+import { CredentialLifecycleActionError, recordCredentialLifecycleChangedEvent } from "@/lib/credentials/lifecycleActions";
 import type {
   CredentialLifecycleChangedWebhookPayload,
   CredentialStateChangedWebhookPayload,
@@ -67,6 +67,7 @@ function isCredentialLifecycleChangedPayload(value: unknown): value is Credentia
     typeof record.credentialRevocationId === "string" &&
     typeof record.revocationRegistryDefinitionId === "string" &&
     typeof record.eventId === "string" &&
+    (record.revision === undefined || (Number.isSafeInteger(record.revision) && Number(record.revision) >= 0)) &&
     (record.previousStatus === "ACTIVE" || record.previousStatus === "SUSPENDED" || record.previousStatus === "REVOKED") &&
     (record.status === "ACTIVE" || record.status === "SUSPENDED" || record.status === "REVOKED") &&
     typeof record.timestamp === "string"
@@ -138,8 +139,13 @@ export async function POST(request: Request) {
   }
 
   if (isCredentialLifecycleChangedPayload(payload)) {
-    await recordCredentialLifecycleChangedEvent(payload);
-    return correlatedJson(requestId, { received: true }, { status: 202 });
+    try {
+      await recordCredentialLifecycleChangedEvent(payload);
+      return correlatedJson(requestId, { received: true }, { status: 202 });
+    } catch (error) {
+      if (error instanceof CredentialLifecycleActionError) return correlatedJson(requestId, { error: { message: error.message } }, { status: error.status });
+      throw error;
+    }
   }
 
   const eventType = payload && typeof payload === "object" && "type" in payload ? String(payload.type) : "unknown";

@@ -395,6 +395,8 @@ export async function resolveActivation(payload: {
 }
 
 export type AgentCredentialLifecycleResult = {
+  revision?: number;
+  previousStatus?: "ACTIVE" | "SUSPENDED" | "REVOKED";
   credentialExchangeId: string;
   credentialRevocationId: string;
   eventId?: string;
@@ -408,16 +410,27 @@ export type AgentCredentialLifecycleResult = {
   updatedAt: string;
 };
 
+export async function getCredentialLifecycle(credentialExchangeId: string): Promise<AgentCredentialLifecycleResult> {
+  const response = await agentFetch(`/api/credentials/${encodeURIComponent(credentialExchangeId)}/lifecycle`, { method: "GET", timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS });
+  return response.json();
+}
+
+export async function getCredentialValidity(credentialExchangeId: string): Promise<{ id: string; credentialDefinitionId?: string; credentialValidity?: { validFrom?: string; expiresAt?: string } }> {
+  const response = await agentFetch(`/api/credentials/${encodeURIComponent(credentialExchangeId)}`, { method: "GET", timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS });
+  return response.json();
+}
+
 /** Asks the authoritative agent to suspend, reactivate, or revoke one credential. */
 export async function changeCredentialLifecycle(
   credentialExchangeId: string,
   action: "reactivate" | "revoke" | "suspend",
   reason?: string,
+  expectedRevision?: number,
 ): Promise<AgentCredentialLifecycleResult> {
   const response = await agentFetch(
     `/api/credentials/${encodeURIComponent(credentialExchangeId)}/${action}`,
     {
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({ reason, ...(expectedRevision !== undefined ? { expectedRevision } : {}) }),
       method: "POST",
       timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
     },

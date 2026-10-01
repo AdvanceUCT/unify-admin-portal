@@ -11,6 +11,9 @@ const verificationAttributesSchema = z.record(z.string(), z.string());
 
 const FAILURE_REASONS: Record<string, string> = {
   CREDO_PROTOCOL_ERROR: "The credential presentation could not be completed.",
+  CREDENTIAL_EXPIRED: "The student credential has expired.",
+  CREDENTIAL_NOT_YET_VALID: "The student credential is not yet valid.",
+  CREDENTIAL_VALIDITY_INVALID: "The student credential validity dates are missing or invalid.",
   CREDENTIAL_NOT_CURRENT: "The student credential is no longer current.",
   PROOF_EXCHANGE_ABANDONED: "The student did not complete the credential presentation.",
   PROOF_NOT_VERIFIED: "The presented credential proof could not be verified.",

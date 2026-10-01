@@ -17,11 +17,14 @@ vi.mock("@/lib/agentClient", () => ({
 
 vi.mock("@/lib/db/prisma", () => {
   const transactionClient = {
+    $queryRaw: vi.fn(async () => []),
     credentialAuditLog: {
+      findUnique: vi.fn(async () => null),
       createMany: mocks.auditCreateMany,
       updateMany: mocks.auditUpdateMany,
     },
     credentialIssuance: {
+      findUnique: mocks.issuanceFindUnique,
       update: mocks.issuanceUpdate,
     },
     credentialAutomationJob: {
@@ -67,6 +70,7 @@ describe("credential lifecycle actions", () => {
       credentialExchangeId: "exchange-1",
       credentialRevocationId: "7",
       eventId: "event-1",
+      revision: 1,
       reason: "Enrolment review",
       revocationRegistryDefinitionId: "rev-reg-1",
       status: "SUSPENDED",
@@ -139,6 +143,7 @@ describe("credential lifecycle actions", () => {
       credentialExchangeId: "exchange-1",
       credentialRevocationId: "7",
       eventId: "event-revoked",
+      revision: 1,
       reason: "Demo cleanup",
       revocationRegistryDefinitionId: "rev-reg-1",
       status: "REVOKED",
@@ -164,6 +169,7 @@ describe("credential lifecycle actions", () => {
         data: expect.objectContaining({
           action: "CREDENTIAL_REVOKED",
           eventId: "event-revoked",
+      revision: 1,
           metadata: expect.objectContaining({ previousStatus: "ACTIVE" }),
         }),
       }),
@@ -179,6 +185,7 @@ describe("credential lifecycle actions", () => {
       credentialExchangeId: "exchange-1",
       credentialRevocationId: "7",
       eventId: "event-expired-revoked",
+      revision: 1,
       revocationRegistryDefinitionId: "rev-reg-1",
       status: "REVOKED",
       updatedAt: "2026-07-08T09:05:00.000Z",

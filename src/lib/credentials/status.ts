@@ -84,7 +84,7 @@ function withStudentAutomation(
 export function overlayCredentialStatus(
   student: StudentRecord,
   issuance?: CredentialLifecycleSource &
-    Pick<CredentialIssuance, "credentialDefinitionId" | "credentialExchangeId" | "credentialExpiresAt" | "id" | "issuedAt" | "schemaVersion"> &
+    Pick<CredentialIssuance, "credentialDefinitionId" | "credentialExchangeId" | "credentialExpiresAt" | "credentialValidFrom" | "id" | "issuedAt" | "schemaVersion"> &
     { automationJobs?: CredentialAutomationJob[] },
   renewalSettings?: { automaticCredentialRenewalEnabled: boolean; renewalCadenceMonths: number } | null,
 ): StudentRecord {
@@ -102,7 +102,7 @@ export function overlayCredentialStatus(
       isRevocable: hasRevocationHandle(issuance),
       lifecycleState: toPublicCredentialStatus(issuance),
       schemaVersion: issuance?.schemaVersion ?? student.credential.schemaVersion,
-      validFrom: issuance?.issuedAt?.toISOString() ?? student.credential.validFrom,
+      validFrom: issuance?.credentialValidFrom?.toISOString() ?? student.credential.validFrom,
       expiresAt: issuance?.credentialExpiresAt?.toISOString() ?? student.credential.expiresAt,
       nextRenewalAt:
         renewalSettings?.automaticCredentialRenewalEnabled && issuance?.issuedAt
@@ -216,6 +216,7 @@ export async function createCredentialIssuanceFromOffer(params: {
   activationUrl?: string;
   credentialDefinitionId: string;
   credentialExchangeId: string;
+  credentialValidFrom?: Date;
   credentialExpiresAt?: Date;
   credentialRevocationId?: string;
   deliveryStatus?: CredentialDeliveryStatus;
@@ -236,6 +237,7 @@ export async function createCredentialIssuanceFromOffer(params: {
       activationUrl: params.activationUrl,
       credentialDefinitionId: params.credentialDefinitionId,
       credentialExchangeId: params.credentialExchangeId,
+      credentialValidFrom: params.credentialValidFrom,
       credentialExpiresAt: params.credentialExpiresAt,
       credentialRevocationId: params.credentialRevocationId,
       deliveryStatus,
@@ -320,7 +322,7 @@ export async function reconcileCredentialEventLogs(credentialExchangeId: string)
       issuedAt = event.occurredAt;
       credentialRevocationId = payload.credentialRevocationId ?? credentialRevocationId;
       revocationRegistryDefinitionId = payload.revocationRegistryDefinitionId ?? revocationRegistryDefinitionId;
-      if (credentialRevocationId && revocationRegistryDefinitionId) {
+      if (credentialRevocationId && revocationRegistryDefinitionId && issuance.lifecycleRevision == null && lifecycleStatus !== CredentialLifecycleStatus.REVOKED && lifecycleStatus !== CredentialLifecycleStatus.SUSPENDED) {
         lifecycleStatus = CredentialLifecycleStatus.ACTIVE;
         lifecycleStatusUpdatedAt = event.occurredAt;
       }
@@ -414,11 +416,11 @@ export async function recordCredentialStateChangedEvent(payload: CredentialState
           credentialRevocationId: payload.credentialRevocationId ?? existingIssuance.credentialRevocationId,
           issuedAt: mappedStatus === CredentialIssuanceStatus.ISSUED ? occurredAt : existingIssuance.issuedAt,
           lifecycleStatus:
-            mappedStatus === CredentialIssuanceStatus.ISSUED && hasRevocationMetadata
+            mappedStatus === CredentialIssuanceStatus.ISSUED && hasRevocationMetadata && existingIssuance.lifecycleRevision == null && existingIssuance.lifecycleStatus !== CredentialLifecycleStatus.REVOKED && existingIssuance.lifecycleStatus !== CredentialLifecycleStatus.SUSPENDED
               ? CredentialLifecycleStatus.ACTIVE
               : existingIssuance.lifecycleStatus,
           lifecycleStatusUpdatedAt:
-            mappedStatus === CredentialIssuanceStatus.ISSUED && hasRevocationMetadata
+            mappedStatus === CredentialIssuanceStatus.ISSUED && hasRevocationMetadata && existingIssuance.lifecycleRevision == null && existingIssuance.lifecycleStatus !== CredentialLifecycleStatus.REVOKED && existingIssuance.lifecycleStatus !== CredentialLifecycleStatus.SUSPENDED
               ? occurredAt
               : existingIssuance.lifecycleStatusUpdatedAt,
           revocationRegistryDefinitionId:
