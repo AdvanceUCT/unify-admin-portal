@@ -1,0 +1,14 @@
+Your UNIFY verifier application has been approved
+
+UNIFY
+
+Your application is approved
+
+Hi Alex Example,
+
+Example Campus Services is now approved as a UNIFY credential verifier.
+
+Open Vendor Portal: https://example.invalid/vendor?token=fictional-preview-only&source=email
+If the button does not work, copy and open this link.
+
+UNIFY Vendor Portal · Application and account updates
