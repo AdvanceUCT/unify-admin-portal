@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { createHash, createHmac } from "node:crypto";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
