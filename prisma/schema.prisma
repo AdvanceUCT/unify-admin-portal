@@ -557,6 +557,8 @@ model StudentPaymentActivationChallenge {
 
   @@index([studentId, createdAt])
   @@index([studentNumberHash, createdAt])
+  @@index([deviceIdHash, createdAt])
+  @@index([requestedIpHash, createdAt])
   @@index([expiresAt])
   @@map("student_payment_activation_challenge")
 }
