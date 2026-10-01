@@ -1,10 +1,10 @@
-import { randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 vi.mock("@/lib/config/env", () => ({ env: { DATABASE_URL: process.env.DATABASE_URL, PAYMENT_WALLET_TOPUPS_ENABLED: true, PAYMENT_OTP_PEPPER: "ci-only-otp-pepper", PAYMENT_OTP_EMAIL_FROM: "ci@example.invalid", RESEND_API_KEY: "ci-only" } }));
 vi.mock("@/lib/email/resend", () => ({ sendResendEmail: vi.fn(async () => ({ provider: "test" })), escapeHtml: (value: string) => value }));
 import { sendResendEmail } from "@/lib/email/resend";
 import { prisma } from "@/lib/db/prisma";
-import { requestStudentPaymentActivation } from "@/lib/payments/walletSession";
+import { requestStudentPaymentActivation, verifyStudentPaymentActivation } from "@/lib/payments/walletSession";
 const now = new Date("2026-10-01T10:00:00Z");
 const request = (studentNumber: string, deviceId: string, ipAddress?: string, time = now) => requestStudentPaymentActivation({ studentNumber, deviceId, ipAddress, now: time });
 function challenge(value: Awaited<ReturnType<typeof request>>) {
@@ -17,6 +17,25 @@ beforeAll(async () => {
   if (!await prisma.universityProfile.count()) await prisma.universityProfile.create({ data: { name: "CI", abbreviation: "CI", contactEmail: "ci@example.invalid", paymentWalletEnabled: true } });
 });
 afterAll(async () => prisma.$disconnect());
+it("orders concurrent resend and verification using the same student/device locks", async () => {
+  const student = randomUUID(), device = randomUUID(), id = randomUUID();
+  const time = new Date(now.getTime() + 60000);
+  await prisma.student.create({ data: { id: student, studentNumber: student.toUpperCase(), email: "ci@example.invalid", firstName: "CI", lastName: "OTP" } });
+  await prisma.credentialIssuance.create({ data: { studentId: student, credentialDefinitionId: "ci-only", status: "ACCEPTED", lifecycleStatus: "ACTIVE" } });
+  await prisma.studentPaymentActivationChallenge.create({ data: { id, studentId: student, studentNumberHash: createHash("sha256").update(student.toUpperCase()).digest("hex"), deviceIdHash: createHash("sha256").update(device).digest("hex"), otpHash: createHmac("sha256", "ci-only-otp-pepper").update(`${id}:123456`).digest("hex"), createdAt: now, expiresAt: new Date(now.getTime() + 600000), resendAvailableAt: time } });
+  const [verified, resent] = await Promise.allSettled([verifyStudentPaymentActivation({ challengeId: id, deviceId: device, otp: "123456", now: time }), request(student, device, undefined, time)]);
+  expect(resent.status).toBe("fulfilled");
+  const old = await prisma.studentPaymentActivationChallenge.findUniqueOrThrow({ where: { id } });
+  if (verified.status === "fulfilled") {
+    expect(old.consumedAt).toEqual(time);
+    expect(await prisma.studentPaymentSession.count({ where: { studentId: student } })).toBe(1);
+  } else {
+    expect(verified.reason).toMatchObject({ code: "INVALID_WALLET_SESSION" });
+    expect(old.expiresAt).toEqual(time);
+    expect(old.consumedAt).toBeNull();
+    expect(await prisma.studentPaymentSession.count({ where: { studentId: student } })).toBe(0);
+  }
+});
 it("serializes simultaneous requests and resends, including exact cooldown boundary", async () => {
   const student = randomUUID(), device = randomUUID();
   const first = await Promise.allSettled(Array.from({ length: 8 }, () => request(student, device)));

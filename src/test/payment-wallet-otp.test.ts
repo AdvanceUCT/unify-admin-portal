@@ -87,6 +87,17 @@ describe("Payment OTP request and resend", () => {
     await expect(requestStudentPaymentActivation(request)).rejects.toMatchObject({ code: "RATE_LIMITED" });
     expect(sendResendEmail).not.toHaveBeenCalled(); expect(database.studentPaymentActivationChallenge.updateMany).not.toHaveBeenCalled();
   });
+  it("retries transaction conflicts at most three times without sending email twice", async () => {
+    database.$transaction.mockRejectedValueOnce({ code: "P2034" }).mockRejectedValueOnce({ code: "40P01" });
+    await requestStudentPaymentActivation(request);
+    expect(database.$transaction).toHaveBeenCalledTimes(3);
+    expect(sendResendEmail).toHaveBeenCalledTimes(1);
+    vi.clearAllMocks();
+    database.$transaction.mockRejectedValueOnce({ code: "P2034" }).mockRejectedValueOnce({ code: "40001" }).mockRejectedValueOnce({ code: "40P01" });
+    await expect(requestStudentPaymentActivation(request)).rejects.toMatchObject({ code: "40P01" });
+    expect(database.$transaction).toHaveBeenCalledTimes(3);
+    expect(sendResendEmail).not.toHaveBeenCalled();
+  });
   it("blocks excessive requests", async () => {
     database.studentPaymentActivationChallenge.count.mockResolvedValue(10);
     await expect(requestStudentPaymentActivation(request)).rejects.toMatchObject({ code: "RATE_LIMITED" });
