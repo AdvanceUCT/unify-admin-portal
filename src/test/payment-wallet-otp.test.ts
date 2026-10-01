@@ -5,6 +5,8 @@ const database = vi.hoisted(() => ({
   universityProfile: { findMany: vi.fn() },
   student: { findUnique: vi.fn() },
   credentialIssuance: { findFirst: vi.fn() },
+  $transaction: vi.fn(),
+  $queryRaw: vi.fn(),
   studentPaymentActivationChallenge: { findUnique: vi.fn(), findFirst: vi.fn(), count: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
   studentPaymentSession: { create: vi.fn() },
 }));
@@ -26,6 +28,8 @@ const challenge = {
 describe("existing payment OTP activation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    database.$transaction.mockImplementation(async (fn) => fn(database));
+    database.$queryRaw.mockResolvedValue([{ now }]);
     database.universityProfile.findMany.mockResolvedValue([{ paymentWalletEnabled: true }]);
     database.student.findUnique.mockResolvedValue({ studentNumber: "STUDENTTEST" });
     database.credentialIssuance.findFirst.mockResolvedValue({ id: "credential-test" });
@@ -58,6 +62,8 @@ describe("Payment OTP request and resend", () => {
   const request = { studentNumber: " studenttest ", deviceId: "device-test", ipAddress: "192.0.2.1", now };
   beforeEach(() => {
     vi.clearAllMocks();
+    database.$transaction.mockImplementation(async (fn) => fn(database));
+    database.$queryRaw.mockResolvedValue([{ now }]);
     database.universityProfile.findMany.mockResolvedValue([{ paymentWalletEnabled: true }]);
     database.student.findUnique.mockResolvedValue({ id: "student-test", email: "student@example.test", firstName: "Student", lastName: "Test" });
     database.studentPaymentActivationChallenge.findFirst.mockResolvedValue(null);
@@ -80,6 +86,17 @@ describe("Payment OTP request and resend", () => {
     database.studentPaymentActivationChallenge.findFirst.mockResolvedValue({ id: "recent" });
     await expect(requestStudentPaymentActivation(request)).rejects.toMatchObject({ code: "RATE_LIMITED" });
     expect(sendResendEmail).not.toHaveBeenCalled(); expect(database.studentPaymentActivationChallenge.updateMany).not.toHaveBeenCalled();
+  });
+  it("retries transaction conflicts at most three times without sending email twice", async () => {
+    database.$transaction.mockRejectedValueOnce({ code: "P2034" }).mockRejectedValueOnce({ code: "40P01" });
+    await requestStudentPaymentActivation(request);
+    expect(database.$transaction).toHaveBeenCalledTimes(3);
+    expect(sendResendEmail).toHaveBeenCalledTimes(1);
+    vi.clearAllMocks();
+    database.$transaction.mockRejectedValueOnce({ code: "P2034" }).mockRejectedValueOnce({ code: "40001" }).mockRejectedValueOnce({ code: "40P01" });
+    await expect(requestStudentPaymentActivation(request)).rejects.toMatchObject({ code: "40P01" });
+    expect(database.$transaction).toHaveBeenCalledTimes(3);
+    expect(sendResendEmail).not.toHaveBeenCalled();
   });
   it("blocks excessive requests", async () => {
     database.studentPaymentActivationChallenge.count.mockResolvedValue(10);
