@@ -477,6 +477,7 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
           activationUrl: publicActivationUrl,
           credentialDefinitionId: activeSchema.credentialDefinitionId,
           credentialExchangeId: offer.credentialExchangeId,
+          credentialValidFrom: validityWindow.validFrom,
           credentialExpiresAt: validityWindow.expiresAt,
           credentialRevocationId: offer.credentialRevocationId,
           deliveryStatus: CredentialDeliveryStatus.PENDING,

@@ -35,7 +35,9 @@
     "test:payments:db": "vitest run --config vitest.integration.config.ts",
     "test:billing": "vitest run src/test/billing",
     "test:billing:db": "vitest run --config vitest.billing-integration.config.ts",
-    "pretest": "npm run prisma:generate"
+    "pretest": "npm run prisma:generate",
+    "credentials:validity-backfill": "node --conditions=react-server --import tsx scripts/credential-validity-backfill.ts",
+    "precredentials:validity-backfill": "npm run prisma:generate"
   },
   "dependencies": {
     "@better-auth/prisma-adapter": "^1.6.11",

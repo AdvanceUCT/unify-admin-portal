@@ -2,11 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const database = {
   credentialIssuance: {
-    findFirst: vi.fn(),
+    findMany: vi.fn(),
   },
   student: {
     findUnique: vi.fn(),
   },
+  credentialSchema: { findMany: vi.fn(async () => []) },
   studentPaymentSession: {
     create: vi.fn(),
   },
@@ -38,7 +39,7 @@ describe("payment wallet activation eligibility", () => {
       if (where.id === "student-internal-1") return { studentNumber: "VOSCAL099" };
       return null;
     });
-    database.credentialIssuance.findFirst.mockResolvedValue({ id: "issuance-1" });
+    database.credentialIssuance.findMany.mockResolvedValue([{ id: "issuance-1", credentialDefinitionId: "modern", credentialValidFrom: new Date("2020-01-01Z"), credentialExpiresAt: new Date("2099-01-01Z") }]);
     database.studentPaymentSession.create.mockResolvedValue({
       id: "session-1",
       accessTokenExpiresAt: new Date("2099-01-01T00:15:00.000Z"),
@@ -54,7 +55,7 @@ describe("payment wallet activation eligibility", () => {
       studentNumber: "VOSCAL099",
     })).resolves.toMatchObject({ sessionId: "session-1" });
 
-    expect(database.credentialIssuance.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+    expect(database.credentialIssuance.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         studentId: { in: ["student-internal-1", "VOSCAL099"] },
         status: { in: ["ACCEPTED", "ISSUED"] },

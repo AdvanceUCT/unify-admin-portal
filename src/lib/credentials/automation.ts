@@ -135,6 +135,10 @@ async function executeJob(job: CredentialAutomationJob, now: Date) {
   }
 
   const action = job.type === CredentialAutomationJobType.AUTO_REACTIVATE ? "reactivate" : "revoke";
+  if (action === "reactivate") {
+    const metadata = job.metadata as { suspensionRevision?: number; suspensionEventId?: string } | null;
+    if (metadata?.suspensionRevision !== issuance.lifecycleRevision || metadata?.suspensionEventId !== issuance.lifecycleEventId) throw new CancelledAutomationError("The originating suspension is no longer current.");
+  }
   if (action === "reactivate" && issuance.lifecycleStatus === CredentialLifecycleStatus.ACTIVE) return;
   if (issuance.lifecycleStatus === CredentialLifecycleStatus.REVOKED) {
     if (action === "revoke") return;
@@ -143,6 +147,7 @@ async function executeJob(job: CredentialAutomationJob, now: Date) {
   await requestCredentialLifecycleChange({
     action,
     credentialIssuanceId: issuance.id,
+    ...(action === "reactivate" ? { expectedLifecycleRevision: issuance.lifecycleRevision ?? undefined } : {}),
     reason: action === "reactivate" ? "Scheduled suspension duration ended." : "Replacement credential activated.",
     studentId: issuance.studentId,
   });

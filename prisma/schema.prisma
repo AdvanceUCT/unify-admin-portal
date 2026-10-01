@@ -948,6 +948,9 @@ model CredentialIssuance {
   revokedAt                      DateTime?
   suspendedAt                    DateTime?
   reactivatedAt                  DateTime?
+  credentialValidFrom            DateTime?
+  lifecycleRevision              Int?
+  lifecycleEventId               String?
   credentialExpiresAt            DateTime?
   createdAt                      DateTime                   @default(now())
   updatedAt                      DateTime                   @updatedAt

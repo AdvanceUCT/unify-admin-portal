@@ -142,7 +142,7 @@ describe("credential automation", () => {
 
   it("executes a due scheduled reactivation", async () => {
     mocks.findIssuances.mockResolvedValue([]);
-    mocks.findIssuance.mockResolvedValue({ ...issuance, lifecycleStatus: "SUSPENDED" });
+    mocks.findIssuance.mockResolvedValue({ ...issuance, lifecycleStatus: "SUSPENDED", lifecycleRevision: 3, lifecycleEventId: "suspension-3" });
     const job = {
       attemptCount: 1,
       credentialIssuanceId: "issuance-1",
@@ -151,6 +151,7 @@ describe("credential automation", () => {
       id: "job-2",
       requestedByActorId: "admin-1",
       type: "AUTO_REACTIVATE",
+      metadata: { suspensionRevision: 3, suspensionEventId: "suspension-3" },
     };
     mocks.jobQuery.mockResolvedValueOnce([job]).mockResolvedValueOnce([]);
 
@@ -159,6 +160,15 @@ describe("credential automation", () => {
       action: "reactivate",
       credentialIssuanceId: "issuance-1",
       studentId: "STU001",
+      expectedLifecycleRevision: 3,
     }));
+  });
+  it("cancels a stale scheduled suspension without requesting an agent transition", async () => {
+    mocks.findIssuances.mockResolvedValue([]);
+    mocks.findIssuance.mockResolvedValue({ ...issuance, lifecycleStatus: "SUSPENDED", lifecycleRevision: 3, lifecycleEventId: "new-suspension" });
+    mocks.jobQuery.mockResolvedValueOnce([{ id: "old-job", credentialIssuanceId: "issuance-1", attemptCount: 1, dueAt: now, type: "AUTO_REACTIVATE", metadata: { suspensionRevision: 1, suspensionEventId: "old-suspension" } }]).mockResolvedValueOnce([]);
+    await expect(runCredentialAutomation(now, 2)).resolves.toMatchObject({ cancelled: 1 });
+    expect(mocks.requestLifecycle).not.toHaveBeenCalled();
+    expect(mocks.jobUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "CANCELLED" }) }));
   });
 });
