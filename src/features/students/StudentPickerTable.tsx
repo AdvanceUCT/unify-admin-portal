@@ -7,7 +7,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { StatusText } from "@/components/ui/StatusText";
 import type { StudentRecord } from "@/lib/api/types";
@@ -15,8 +15,7 @@ import { credentialStatusTone, formatCredentialStatus } from "@/lib/formatters";
 
 const PAGE_SIZE = 10;
 
-const selectClassName =
-  "h-9 w-full appearance-none rounded-md border border-border bg-surface pl-3 pr-8 text-sm text-fg transition focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-52";
+import { StudentFilterToolbar } from "./StudentFilterToolbar";
 
 /**
  * The student directory table + search/filter toolbar, shared by the
@@ -40,7 +39,7 @@ export function StudentPickerTable({
   const [page, setPage] = useState(1);
 
   const faculties = useMemo(
-    () => [...new Set(students.map((student) => student.credential.faculty).filter(Boolean))].sort(),
+    () => [...new Set(students.map((student) => student.credential.faculty).filter((value): value is string => Boolean(value)))].sort(),
     [students],
   );
 
@@ -81,7 +80,6 @@ export function StudentPickerTable({
     setPage(1);
   }
 
-  const hasFilters = query || faculty || programme;
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * PAGE_SIZE;
@@ -96,84 +94,14 @@ export function StudentPickerTable({
           it around. */}
       {toolbarAction ? <div className="flex justify-end">{toolbarAction}</div> : null}
 
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface p-4 shadow-md">
-        {/* Search input */}
-        <div className="relative w-full sm:w-72">
-          <Search
-            aria-hidden="true"
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-fg-subtle"
-          />
-          <input
-            className="h-9 w-full rounded-md border border-border bg-surface pl-9 pr-3 text-sm text-fg placeholder:text-fg-subtle transition focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setPage(1);
-            }}
-            placeholder="Search by name or student number..."
-            value={query}
-          />
-        </div>
-
-        {/* Faculty filter */}
-        <div className="relative w-full sm:w-auto">
-          <select
-            className={selectClassName}
-            onChange={(event) => {
-              setFaculty(event.target.value);
-              setProgramme("");
-              setPage(1);
-            }}
-            value={faculty}
-          >
-            <option value="">All faculties</option>
-            {faculties.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-          <ChevronDown
-            aria-hidden="true"
-            className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-fg-subtle"
-          />
-        </div>
-
-        {/* Programme filter */}
-        <div className="relative w-full sm:w-auto">
-          <select
-            className={selectClassName}
-            onChange={(event) => {
-              setProgramme(event.target.value);
-              setPage(1);
-            }}
-            value={programme}
-          >
-            <option value="">All programmes</option>
-            {programmes.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-          <ChevronDown
-            aria-hidden="true"
-            className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-fg-subtle"
-          />
-        </div>
-
-        {/* Clear filters */}
-        {hasFilters ? (
-          <button
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-surface-muted px-3 text-sm font-medium text-fg-muted transition hover:bg-brand-50 hover:text-brand-700"
-            onClick={clearFilters}
-            type="button"
-          >
-            <X aria-hidden="true" className="size-3.5" />
-            Clear
-          </button>
-        ) : null}
-      </div>
+      <StudentFilterToolbar
+        query={query} faculty={faculty} programme={programme}
+        faculties={faculties} programmes={programmes}
+        onQueryChange={(value) => { setQuery(value); setPage(1); }}
+        onFacultyChange={(value) => { setFaculty(value); setProgramme(""); setPage(1); }}
+        onProgrammeChange={(value) => { setProgramme(value); setPage(1); }}
+        onClear={clearFilters}
+      />
 
       {/* Results count */}
       <p className="text-xs text-fg-subtle">

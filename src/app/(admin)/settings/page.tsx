@@ -3,19 +3,37 @@
  * @module app/(admin)/settings/page
  */
 
+import { prisma } from "@/lib/db/prisma";
 import { Suspense } from "react";
-import { Activity, Building, Clock, FileText, Gauge, Link as LinkIcon, Receipt, Webhook } from "lucide-react";
+import {
+  Activity,
+  Building,
+  Clock,
+  FileText,
+  Gauge,
+  Link as LinkIcon,
+  Receipt,
+  Webhook,
+} from "lucide-react";
 import Link from "next/link";
 
 import { SettingsSectionLoading } from "@/components/layout/PortalRouteLoading";
 import { checkAgentHealth, type AgentHealth } from "@/lib/agentClient";
-import { ADMIN_ROLES, type AdminRole, ROLE_LABELS } from "@/lib/auth/permissions";
+import {
+  ADMIN_ROLES,
+  type AdminRole,
+  ROLE_LABELS,
+} from "@/lib/auth/permissions";
 import { requireRoleForRender } from "@/lib/auth/session";
-import { getBillingOperationsSummary, type BillingOperationsSummary } from "@/lib/billing/operationsSummary";
+import {
+  getBillingOperationsSummary,
+  type BillingOperationsSummary,
+} from "@/lib/billing/operationsSummary";
 import { env } from "@/lib/config/env";
 import { getDocumentSignedUrlForRender } from "@/lib/storage/supabase";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfileForRender } from "@/lib/university/profile";
+import { RenewalSchedulerDetails } from "./RenewalSchedulerDetails";
 import { RenewalSettingsForm } from "./RenewalSettingsForm";
 import { AgentServiceHealthCard } from "./AgentServiceHealthCard";
 import { BillingOperationsCard } from "./BillingOperationsCard";
@@ -23,18 +41,24 @@ import { SettingsCard, SettingsField } from "./SettingsCard";
 import { UniversityLogoUpload } from "./UniversityLogoUpload";
 import { UniversityProfileForm } from "./UniversityProfileForm";
 
-function configuredStatus(value: string | undefined | null): "Configured" | "Not set" {
+function configuredStatus(
+  value: string | undefined | null,
+): "Configured" | "Not set" {
   return value ? "Configured" : "Not set";
 }
 
-function handledResult<T>(promise: Promise<T>): Promise<PromiseSettledResult<T>> {
+function handledResult<T>(
+  promise: Promise<T>,
+): Promise<PromiseSettledResult<T>> {
   return promise.then(
     (value) => ({ status: "fulfilled", value }),
     (reason) => ({ status: "rejected", reason }),
   );
 }
 
-async function readHandledResult<T>(resultPromise: Promise<PromiseSettledResult<T>>): Promise<T> {
+async function readHandledResult<T>(
+  resultPromise: Promise<PromiseSettledResult<T>>,
+): Promise<T> {
   const result = await resultPromise;
   if (result.status === "rejected") throw result.reason;
   return result.value;
@@ -72,25 +96,36 @@ export default async function SettingsPage() {
   const role = session.user.role as AdminRole;
   const canEditProfile = role === "SUPER_ADMIN" || role === "ADMIN";
   const canViewBillingOperations = role === "SUPER_ADMIN" || role === "ADMIN";
-  const canManageVerificationBilling = role === "SUPER_ADMIN" || role === "ADMIN";
+  const canManageVerificationBilling =
+    role === "SUPER_ADMIN" || role === "ADMIN";
   const agentHealthPromise = handledResult(checkAgentHealth());
   const billingOperationsSummaryPromise = canViewBillingOperations
     ? handledResult(getBillingOperationsSummary())
     : null;
 
   const profile = await getUniversityProfileForRender();
+  const validityPolicy = await prisma.credentialValidityPolicy.findFirst({
+    orderBy: { version: "desc" },
+  });
+  const annualDate = (month?: number, day?: number) =>
+    month && day
+      ? `${String(day).padStart(2, "0")}-${String(month).padStart(2, "0")}`
+      : "";
   const [universityLogoUrl, activeSchema] = await Promise.all([
     profile?.logoPath ? getDocumentSignedUrlForRender(profile.logoPath) : null,
     profile ? getActiveCredentialSchema(profile.id) : null,
   ]);
-  const webhookEndpoint = new URL("/api/webhooks/agent", env.APP_URL).toString();
+  const webhookEndpoint = new URL(
+    "/api/webhooks/agent",
+    env.APP_URL,
+  ).toString();
 
   return (
     <div className="space-y-6">
       <p className="text-sm text-fg-subtle">
         Signed in as{" "}
-        <span className="font-medium text-fg">{session.user.name}</span>{" "}
-        ({session.user.email}) &middot; {ROLE_LABELS[role]}
+        <span className="font-medium text-fg">{session.user.name}</span> (
+        {session.user.email}) &middot; {ROLE_LABELS[role]}
       </p>
 
       <SettingsCard
@@ -102,7 +137,9 @@ export default async function SettingsPage() {
           canEditProfile ? (
             <div className="space-y-5">
               <div>
-                <p className="mb-3 text-sm font-medium text-fg-muted">University logo</p>
+                <p className="mb-3 text-sm font-medium text-fg-muted">
+                  University logo
+                </p>
                 <UniversityLogoUpload initialLogoUrl={universityLogoUrl} />
               </div>
               <div className="border-t border-border pt-5">
@@ -121,9 +158,18 @@ export default async function SettingsPage() {
                 value={universityLogoUrl ? "Uploaded" : "Not set"}
               />
               <SettingsField label="University name" value={profile.name} />
-              <SettingsField label="Abbreviation" value={profile.abbreviation} />
-              <SettingsField label="Contact email" value={profile.contactEmail} />
-              <SettingsField label="Website URL" value={profile.websiteUrl ?? "Not set"} />
+              <SettingsField
+                label="Abbreviation"
+                value={profile.abbreviation}
+              />
+              <SettingsField
+                label="Contact email"
+                value={profile.contactEmail}
+              />
+              <SettingsField
+                label="Website URL"
+                value={profile.websiteUrl ?? "Not set"}
+              />
             </div>
           )
         ) : (
@@ -134,21 +180,28 @@ export default async function SettingsPage() {
       </SettingsCard>
 
       <SettingsCard
-        description="Default credential validity window and renewal cadence applied to new issuances."
+        description="Shared annual dates for new credentials and upcoming auto-renewals."
         icon={Clock}
         title="Validity & renewal"
       >
         {profile ? (
           <RenewalSettingsForm
-            cadenceMonths={profile.renewalCadenceMonths}
-            enabled={profile.automaticCredentialRenewalEnabled}
-            validityDays={profile.defaultCredentialValidityDays}
+            startDate={annualDate(
+              validityPolicy?.startMonth,
+              validityPolicy?.startDay,
+            )}
+            expiryDate={annualDate(
+              validityPolicy?.expiryMonth,
+              validityPolicy?.expiryDay,
+            )}
+            canEdit={["SUPER_ADMIN", "ADMIN"].includes(session.user.role ?? "")}
           />
         ) : (
           <p className="text-sm text-fg-subtle">
             No university profile exists yet. Complete the setup wizard first.
           </p>
         )}
+        {canEditProfile && <Suspense fallback={null}><RenewalSchedulerDetails /></Suspense>}
       </SettingsCard>
 
       <SettingsCard
@@ -176,8 +229,14 @@ export default async function SettingsPage() {
       >
         {activeSchema ? (
           <div className="divide-y divide-border">
-            <SettingsField label="Schema version" value={activeSchema.schemaVersion} />
-            <SettingsField label="Schema ID" value={activeSchema.schemaId ?? "Not set"} />
+            <SettingsField
+              label="Schema version"
+              value={activeSchema.schemaVersion}
+            />
+            <SettingsField
+              label="Schema ID"
+              value={activeSchema.schemaId ?? "Not set"}
+            />
             <SettingsField
               label="Credential definition ID"
               value={activeSchema.credentialDefinitionId ?? "Not set"}
@@ -186,10 +245,15 @@ export default async function SettingsPage() {
               label="Revocation registry definition ID"
               value={activeSchema.revocationRegistryDefinitionId ?? "Not set"}
             />
-            <SettingsField label="Issuer DID" value={profile?.issuerDid ?? "Not set"} />
+            <SettingsField
+              label="Issuer DID"
+              value={profile?.issuerDid ?? "Not set"}
+            />
           </div>
         ) : (
-          <p className="text-sm text-fg-subtle">No active credential schema yet.</p>
+          <p className="text-sm text-fg-subtle">
+            No active credential schema yet.
+          </p>
         )}
       </SettingsCard>
 
@@ -233,7 +297,10 @@ export default async function SettingsPage() {
           icon={Receipt}
           title="Vendor verification billing"
         >
-          <Link className="text-sm font-medium text-brand-700 hover:underline" href="/settings/verification-billing">
+          <Link
+            className="text-sm font-medium text-brand-700 hover:underline"
+            href="/settings/verification-billing"
+          >
             Manage verification billing →
           </Link>
         </SettingsCard>
@@ -254,7 +321,9 @@ export default async function SettingsPage() {
               />
             }
           >
-            <BillingOperationsSection summaryPromise={billingOperationsSummaryPromise} />
+            <BillingOperationsSection
+              summaryPromise={billingOperationsSummaryPromise}
+            />
           </Suspense>
         </SettingsCard>
       )}

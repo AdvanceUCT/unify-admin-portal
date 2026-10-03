@@ -21,9 +21,18 @@ export type PageTab = {
  * solid brand fill. Sits directly under the header now that pages don't
  * render their own title, so it's normally the first element in the page body.
  */
-export function PageTabs({ tabs }: { tabs: PageTab[] }) {
+export function PageTabs({
+  tabs,
+  ariaLabel = "Page sections",
+}: {
+  tabs: PageTab[];
+  ariaLabel?: string;
+}) {
   return (
-    <nav aria-label="Page sections" className="inline-flex flex-wrap items-center gap-2 rounded-lg bg-surface-muted p-1.5">
+    <nav
+      aria-label={ariaLabel}
+      className="inline-flex flex-wrap items-center gap-2 rounded-lg bg-surface-muted p-1.5"
+    >
       {tabs.map((tab) => (
         <Link
           aria-current={tab.isActive ? "page" : undefined}
@@ -41,7 +50,9 @@ export function PageTabs({ tabs }: { tabs: PageTab[] }) {
             <span
               className={cn(
                 "rounded-full px-1.5 py-0.5 text-xs font-semibold leading-none",
-                tab.isActive ? "bg-white/25 text-white" : "bg-brand-200 text-brand-800",
+                tab.isActive
+                  ? "bg-white/25 text-white"
+                  : "bg-brand-200 text-brand-800",
               )}
             >
               {tab.count}

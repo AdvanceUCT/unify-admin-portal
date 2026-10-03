@@ -1,174 +1,113 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
 const mocks = vi.hoisted(() => ({
-  auditCreate: vi.fn(),
-  findIssuances: vi.fn(),
-  findIssuance: vi.fn(),
-  getUniversityProfile: vi.fn(),
-  jobQuery: vi.fn(),
-  jobUpdate: vi.fn(),
-  jobUpdateMany: vi.fn(),
-  jobUpsert: vi.fn(),
-  queueRenewal: vi.fn(),
-  requestLifecycle: vi.fn(),
+  query: vi.fn(),
+  cancel: vi.fn(),
+  update: vi.fn(),
+  issuance: vi.fn(),
+  lifecycle: vi.fn(),
+  annual: vi.fn(),
+  runCreate: vi.fn(),
+  runUpdate: vi.fn(),
+  audit: vi.fn(),
 }));
-
-vi.mock("server-only", () => ({}));
-vi.mock("@/lib/university/profile", () => ({ getUniversityProfile: mocks.getUniversityProfile }));
-vi.mock("@/lib/issuance/batchIssuance", () => ({ queueCredentialIssuanceRenewal: mocks.queueRenewal }));
-vi.mock("@/lib/credentials/lifecycleActions", () => ({ requestCredentialLifecycleChange: mocks.requestLifecycle }));
+vi.mock("@/lib/credentials/annualRenewals", () => ({
+  runAnnualRenewals: mocks.annual,
+}));
+vi.mock("@/lib/credentials/lifecycleActions", () => ({
+  requestCredentialLifecycleChange: mocks.lifecycle,
+}));
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
-    $queryRaw: mocks.jobQuery,
-    credentialAuditLog: { create: mocks.auditCreate },
-    credentialAutomationJob: {
-      update: mocks.jobUpdate,
-      updateMany: mocks.jobUpdateMany,
-      upsert: mocks.jobUpsert,
+    $queryRaw: mocks.query,
+    credentialAutomationJob: { updateMany: mocks.cancel, update: mocks.update },
+    credentialIssuance: { findUnique: mocks.issuance },
+    credentialAutomationRun: {
+      create: mocks.runCreate,
+      update: mocks.runUpdate,
     },
-    credentialIssuance: { findMany: mocks.findIssuances, findUnique: mocks.findIssuance },
+    credentialAuditLog: { create: mocks.audit },
   },
 }));
-
-import { enqueueDueRenewals, runCredentialAutomation } from "@/lib/credentials/automation";
-
-const now = new Date("2026-09-04T22:05:00.000Z");
-const issuance = {
-  credentialDefinitionId: "cred-def-1",
-  credentialExchangeId: "exchange-1",
-  id: "issuance-1",
-  issuedAt: new Date("2025-09-04T22:05:00.000Z"),
-  lifecycleStatus: "ACTIVE",
-  studentId: "STU001",
-};
-
-describe("credential automation", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.getUniversityProfile.mockResolvedValue({
-      automaticCredentialRenewalEnabled: true,
-      renewalCadenceMonths: 12,
-    });
-    mocks.findIssuances.mockResolvedValue([issuance]);
-    mocks.jobUpsert.mockResolvedValue({});
-    mocks.jobUpdate.mockResolvedValue({});
-    mocks.findIssuance.mockResolvedValue(issuance);
-    mocks.queueRenewal.mockResolvedValue({});
-    mocks.requestLifecycle.mockResolvedValue({});
+import {
+  enqueueDueRenewals,
+  runCredentialAutomation,
+} from "@/lib/credentials/automation";
+const now = new Date("2026-10-03T10:00:00Z");
+beforeEach(() => {
+  vi.resetAllMocks();
+  mocks.runCreate.mockResolvedValue({ id: "run" });
+  mocks.query.mockResolvedValue([]);
+  mocks.annual.mockResolvedValue({
+    processed: 2,
+    failed: 0,
+    cancelled: 0,
+    deferred: 0,
+    retrying: 0,
+    succeeded: 2,
   });
-
-  it("queues each due issuance once with a stable key", async () => {
-    await expect(enqueueDueRenewals(now)).resolves.toBe(1);
-    expect(mocks.jobUpsert).toHaveBeenCalledWith(expect.objectContaining({
-      create: expect.objectContaining({
-        credentialIssuanceId: "issuance-1",
-        deduplicationKey: "auto-renew:issuance-1",
-        dueAt: new Date("2026-09-04T22:05:00.000Z"),
+});
+describe("credential automation orchestration", () => {
+  it("retires global cadence jobs without touching lifecycle jobs", async () => {
+    await enqueueDueRenewals(now);
+    expect(mocks.cancel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          type: "AUTO_RENEW",
+          status: { in: ["PENDING", "PROCESSING"] },
+        },
       }),
-      where: { deduplicationKey: "auto-renew:issuance-1" },
-    }));
+    );
   });
-
-  it("cancels pending renewal jobs when automation is disabled", async () => {
-    mocks.getUniversityProfile.mockResolvedValue({ automaticCredentialRenewalEnabled: false, renewalCadenceMonths: 12 });
-    await expect(enqueueDueRenewals(now)).resolves.toBe(0);
-    expect(mocks.jobUpdateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { status: "PENDING", type: "AUTO_RENEW" },
-    }));
-    expect(mocks.findIssuances).not.toHaveBeenCalled();
+  it("runs annual renewals and persists scheduler health", async () => {
+    expect(await runCredentialAutomation(now)).toMatchObject({
+      processed: 2,
+      succeeded: 2,
+    });
+    expect(mocks.runUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "SUCCEEDED", processed: 2 }),
+      }),
+    );
   });
-
-  it("executes a claimed renewal with its idempotency key", async () => {
-    mocks.findIssuances.mockResolvedValue([]);
-    const job = {
-      attemptCount: 1,
-      credentialIssuanceId: "issuance-1",
-      deduplicationKey: "auto-renew:issuance-1",
-      dueAt: now,
-      id: "job-1",
-      requestedByActorId: null,
-      type: "AUTO_RENEW",
-    };
-    mocks.jobQuery.mockResolvedValueOnce([job]).mockResolvedValueOnce([]);
-
-    await expect(runCredentialAutomation(now, 2)).resolves.toMatchObject({ processed: 1, succeeded: 1 });
-    expect(mocks.queueRenewal).toHaveBeenCalledWith("issuance-1", now, null, "auto-renew:issuance-1");
-    expect(mocks.jobUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "SUCCEEDED" }) }));
+  it("keeps scheduled reactivation independent of annual configuration", async () => {
+    mocks.issuance.mockResolvedValue({
+      id: "old",
+      studentId: "student",
+      lifecycleStatus: "SUSPENDED",
+      lifecycleRevision: 3,
+      lifecycleEventId: "event",
+    });
+    mocks.query
+      .mockResolvedValueOnce([
+        {
+          id: "job",
+          credentialIssuanceId: "old",
+          type: "AUTO_REACTIVATE",
+          attemptCount: 1,
+          metadata: { suspensionRevision: 3, suspensionEventId: "event" },
+        },
+      ])
+      .mockResolvedValue([]);
+    await runCredentialAutomation(now);
+    expect(mocks.lifecycle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "reactivate",
+        expectedLifecycleRevision: 3,
+      }),
+    );
   });
-
-  it("defers a suspended renewal without consuming a retry attempt", async () => {
-    mocks.findIssuances.mockResolvedValue([]);
-    mocks.findIssuance.mockResolvedValue({ ...issuance, lifecycleStatus: "SUSPENDED" });
-    const job = {
-      attemptCount: 3,
-      credentialIssuanceId: "issuance-1",
-      deduplicationKey: "auto-renew:issuance-1",
-      dueAt: now,
-      id: "job-1",
-      requestedByActorId: null,
-      type: "AUTO_RENEW",
-    };
-    mocks.jobQuery.mockResolvedValueOnce([job]).mockResolvedValueOnce([]);
-
-    await expect(runCredentialAutomation(now, 2)).resolves.toMatchObject({ deferred: 1, processed: 1 });
-    expect(mocks.jobUpdate).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ attemptCount: 2, status: "PENDING" }),
-    }));
-    expect(mocks.queueRenewal).not.toHaveBeenCalled();
-  });
-
-  it("marks the fifth failed attempt for manual retry", async () => {
-    mocks.findIssuances.mockResolvedValue([]);
-    mocks.queueRenewal.mockRejectedValue(new Error("Agent unavailable"));
-    const job = {
-      attemptCount: 5,
-      credentialIssuanceId: "issuance-1",
-      deduplicationKey: "auto-renew:issuance-1",
-      dueAt: now,
-      id: "job-1",
-      requestedByActorId: null,
-      type: "AUTO_RENEW",
-    };
-    mocks.jobQuery.mockResolvedValueOnce([job]).mockResolvedValueOnce([]);
-
-    await expect(runCredentialAutomation(now, 2)).resolves.toMatchObject({ failed: 1, processed: 1 });
-    expect(mocks.jobUpdate).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ lastError: "Agent unavailable", status: "FAILED" }),
-    }));
-    expect(mocks.auditCreate).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ action: "CREDENTIAL_AUTOMATION_FAILED" }),
-    }));
-  });
-
-  it("executes a due scheduled reactivation", async () => {
-    mocks.findIssuances.mockResolvedValue([]);
-    mocks.findIssuance.mockResolvedValue({ ...issuance, lifecycleStatus: "SUSPENDED", lifecycleRevision: 3, lifecycleEventId: "suspension-3" });
-    const job = {
-      attemptCount: 1,
-      credentialIssuanceId: "issuance-1",
-      deduplicationKey: "auto-reactivate:issuance-1:event-1",
-      dueAt: now,
-      id: "job-2",
-      requestedByActorId: "admin-1",
-      type: "AUTO_REACTIVATE",
-      metadata: { suspensionRevision: 3, suspensionEventId: "suspension-3" },
-    };
-    mocks.jobQuery.mockResolvedValueOnce([job]).mockResolvedValueOnce([]);
-
-    await expect(runCredentialAutomation(now, 2)).resolves.toMatchObject({ succeeded: 1 });
-    expect(mocks.requestLifecycle).toHaveBeenCalledWith(expect.objectContaining({
-      action: "reactivate",
-      credentialIssuanceId: "issuance-1",
-      studentId: "STU001",
-      expectedLifecycleRevision: 3,
-    }));
-  });
-  it("cancels a stale scheduled suspension without requesting an agent transition", async () => {
-    mocks.findIssuances.mockResolvedValue([]);
-    mocks.findIssuance.mockResolvedValue({ ...issuance, lifecycleStatus: "SUSPENDED", lifecycleRevision: 3, lifecycleEventId: "new-suspension" });
-    mocks.jobQuery.mockResolvedValueOnce([{ id: "old-job", credentialIssuanceId: "issuance-1", attemptCount: 1, dueAt: now, type: "AUTO_REACTIVATE", metadata: { suspensionRevision: 1, suspensionEventId: "old-suspension" } }]).mockResolvedValueOnce([]);
-    await expect(runCredentialAutomation(now, 2)).resolves.toMatchObject({ cancelled: 1 });
-    expect(mocks.requestLifecycle).not.toHaveBeenCalled();
-    expect(mocks.jobUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "CANCELLED" }) }));
+  it("records scheduler failures durably", async () => {
+    mocks.annual.mockRejectedValue(new Error("Database unavailable"));
+    await expect(runCredentialAutomation(now)).rejects.toThrow(
+      "Database unavailable",
+    );
+    expect(mocks.runUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "FAILED",
+          error: "Database unavailable",
+        }),
+      }),
+    );
   });
 });

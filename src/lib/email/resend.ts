@@ -18,6 +18,7 @@ type SendResendEmailInput = {
   subject: string;
   text: string;
   to: string;
+  signal?: AbortSignal;
 };
 
 export function escapeHtml(value: string) {
@@ -36,6 +37,7 @@ export async function sendResendEmail({
   subject,
   text,
   to,
+  signal,
 }: SendResendEmailInput): Promise<EmailDeliveryResult> {
   const response = await fetch("https://api.resend.com/emails", {
     body: JSON.stringify({
@@ -52,6 +54,7 @@ export async function sendResendEmail({
       "Content-Type": "application/json",
     },
     method: "POST",
+    ...(signal ? { signal } : {}),
   });
   const body = (await response.json().catch(() => null)) as { id?: string; message?: string } | null;
 

@@ -1,6 +1,12 @@
+vi.mock("@/lib/credentials/renewalActivation", () => ({
+  reconcileRenewalActivation: vi.fn(),
+}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CredentialIssuanceStatus, CredentialLifecycleStatus } from "@/generated/prisma/enums";
+import {
+  CredentialIssuanceStatus,
+  CredentialLifecycleStatus,
+} from "@/generated/prisma/enums";
 import {
   createCredentialIssuanceFromOffer,
   recordCredentialStateChangedEvent,
@@ -47,11 +53,13 @@ describe("credential issuance persistence", () => {
       wasDelivered: true,
     });
 
-    expect(credentialIssuance.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      create: expect.objectContaining({
-        credentialExpiresAt,
+    expect(credentialIssuance.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          credentialExpiresAt,
+        }),
       }),
-    }));
+    );
   });
 
   it("updates issuedAt and lifecycle state from issued webhooks without changing stored expiry", async () => {
@@ -92,7 +100,9 @@ describe("credential issuance persistence", () => {
       }),
       where: { id: "issuance-1" },
     });
-    expect(credentialIssuance.update.mock.calls[0][0].data).not.toHaveProperty("credentialExpiresAt");
+    expect(credentialIssuance.update.mock.calls[0][0].data).not.toHaveProperty(
+      "credentialExpiresAt",
+    );
     expect(credentialAuditLog.createMany).toHaveBeenCalledWith({
       data: expect.objectContaining({
         action: "CREDENTIAL_LIFECYCLE_ACTIVATED",
@@ -102,12 +112,14 @@ describe("credential issuance persistence", () => {
       }),
       skipDuplicates: true,
     });
-    expect(credentialAutomationJob.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      create: expect.objectContaining({
-        credentialIssuanceId: "issuance-old",
-        type: "REVOKE_REPLACED",
+    expect(credentialAutomationJob.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          credentialIssuanceId: "issuance-old",
+          type: "REVOKE_REPLACED",
+        }),
       }),
-    }));
+    );
     expect(credentialExpiresAt.toISOString()).toBe("2026-05-27T10:00:00.000Z");
   });
 
