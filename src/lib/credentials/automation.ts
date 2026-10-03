@@ -6,15 +6,11 @@ import {
   CredentialAuditAction,
   CredentialAutomationJobStatus,
   CredentialAutomationJobType,
-  CredentialIssuanceStatus,
   CredentialLifecycleStatus,
-  CredentialRenewalStatus,
 } from "@/generated/prisma/enums";
 import { requestCredentialLifecycleChange } from "@/lib/credentials/lifecycleActions";
-import { nextRenewalAt, renewalCandidateCutoff } from "@/lib/credentials/renewalCadence";
+import { runAnnualRenewals } from "@/lib/credentials/annualRenewals";
 import { prisma } from "@/lib/db/prisma";
-import { queueCredentialIssuanceRenewal } from "@/lib/issuance/batchIssuance";
-import { getUniversityProfile } from "@/lib/university/profile";
 
 const MAX_ATTEMPTS = 5;
 const LEASE_MINUTES = 10;
@@ -23,53 +19,13 @@ const RUN_LIMIT = 50;
 class DeferredAutomationError extends Error {}
 class CancelledAutomationError extends Error {}
 
+/** Retire the legacy global cadence without affecting lifecycle jobs. */
 export async function enqueueDueRenewals(now = new Date()) {
-  const profile = await getUniversityProfile();
-  if (!profile?.automaticCredentialRenewalEnabled) {
-    await prisma.credentialAutomationJob.updateMany({
-      data: { completedAt: now, status: CredentialAutomationJobStatus.CANCELLED },
-      where: { status: CredentialAutomationJobStatus.PENDING, type: CredentialAutomationJobType.AUTO_RENEW },
-    });
-    return 0;
-  }
-
-  const candidates = await prisma.credentialIssuance.findMany({
-    orderBy: { issuedAt: "asc" },
-    take: RUN_LIMIT,
-    where: {
-      issuedAt: { lte: renewalCandidateCutoff(now, profile.renewalCadenceMonths) },
-      lifecycleStatus: { in: [CredentialLifecycleStatus.ACTIVE, CredentialLifecycleStatus.EXPIRED] },
-      renewedIntoIssuanceId: null,
-      renewalStatus: { in: [CredentialRenewalStatus.NONE, CredentialRenewalStatus.FAILED] },
-      status: CredentialIssuanceStatus.ISSUED,
-    },
+  await prisma.credentialAutomationJob.updateMany({
+    where: { type: "AUTO_RENEW", status: { in: ["PENDING", "PROCESSING"] } },
+    data: { status: "CANCELLED", completedAt: now },
   });
-  const issuances = candidates.filter((issuance) =>
-    nextRenewalAt(issuance.issuedAt!, profile.renewalCadenceMonths) <= now,
-  );
-
-  await Promise.all(issuances.map(async (issuance) => {
-    const deduplicationKey = `auto-renew:${issuance.id}`;
-    const dueAt = nextRenewalAt(issuance.issuedAt!, profile.renewalCadenceMonths);
-    await prisma.credentialAutomationJob.upsert({
-      create: {
-        credentialIssuanceId: issuance.id,
-        deduplicationKey,
-        dueAt,
-        type: CredentialAutomationJobType.AUTO_RENEW,
-      },
-      update: {},
-      where: { deduplicationKey },
-    });
-    await prisma.credentialAutomationJob.updateMany({
-      data: { completedAt: null, dueAt, status: CredentialAutomationJobStatus.PENDING },
-      where: {
-        deduplicationKey,
-        status: { in: [CredentialAutomationJobStatus.PENDING, CredentialAutomationJobStatus.CANCELLED] },
-      },
-    });
-  }));
-  return issuances.length;
+  return 0;
 }
 
 async function claimNextDueJob(now: Date) {
@@ -100,8 +56,14 @@ async function claimNextDueJob(now: Date) {
   return rows[0];
 }
 
-async function writeJobAudit(job: CredentialAutomationJob, action: CredentialAuditAction, message: string) {
-  const issuance = await prisma.credentialIssuance.findUnique({ where: { id: job.credentialIssuanceId } });
+async function writeJobAudit(
+  job: CredentialAutomationJob,
+  action: CredentialAuditAction,
+  message: string,
+) {
+  const issuance = await prisma.credentialIssuance.findUnique({
+    where: { id: job.credentialIssuanceId },
+  });
   if (!issuance) return;
   await prisma.credentialAuditLog.create({
     data: {
@@ -112,57 +74,85 @@ async function writeJobAudit(job: CredentialAutomationJob, action: CredentialAud
       credentialIssuanceId: issuance.id,
       eventId: `automation:${job.id}:${job.attemptCount}:${action}`,
       message,
-      metadata: { attemptCount: job.attemptCount, jobId: job.id, jobType: job.type },
+      metadata: {
+        attemptCount: job.attemptCount,
+        jobId: job.id,
+        jobType: job.type,
+      },
       studentId: issuance.studentId,
     },
   });
 }
 
-async function executeJob(job: CredentialAutomationJob, now: Date) {
-  const issuance = await prisma.credentialIssuance.findUnique({ where: { id: job.credentialIssuanceId } });
+async function executeJob(job: CredentialAutomationJob) {
+  const issuance = await prisma.credentialIssuance.findUnique({
+    where: { id: job.credentialIssuanceId },
+  });
   if (!issuance) throw new Error("Credential issuance no longer exists.");
 
-  if (job.type === CredentialAutomationJobType.AUTO_RENEW) {
-    if (issuance.lifecycleStatus === CredentialLifecycleStatus.SUSPENDED) {
-      throw new DeferredAutomationError("Credential is suspended; renewal deferred until it is active.");
-    }
-    if (issuance.lifecycleStatus === CredentialLifecycleStatus.REVOKED) {
-      throw new CancelledAutomationError("Credential was revoked before automatic renewal.");
-    }
-    await writeJobAudit(job, CredentialAuditAction.CREDENTIAL_RENEWAL_REQUESTED, "Automatic credential renewal requested.");
-    await queueCredentialIssuanceRenewal(issuance.id, now, null, job.deduplicationKey);
-    return;
-  }
+  if (job.type === CredentialAutomationJobType.AUTO_RENEW)
+    throw new CancelledAutomationError(
+      "Legacy global automatic renewal has been retired.",
+    );
 
-  const action = job.type === CredentialAutomationJobType.AUTO_REACTIVATE ? "reactivate" : "revoke";
+  const action =
+    job.type === CredentialAutomationJobType.AUTO_REACTIVATE
+      ? "reactivate"
+      : "revoke";
   if (action === "reactivate") {
-    const metadata = job.metadata as { suspensionRevision?: number; suspensionEventId?: string } | null;
-    if (metadata?.suspensionRevision !== issuance.lifecycleRevision || metadata?.suspensionEventId !== issuance.lifecycleEventId) throw new CancelledAutomationError("The originating suspension is no longer current.");
+    const metadata = job.metadata as {
+      suspensionRevision?: number;
+      suspensionEventId?: string;
+    } | null;
+    if (
+      metadata?.suspensionRevision !== issuance.lifecycleRevision ||
+      metadata?.suspensionEventId !== issuance.lifecycleEventId
+    )
+      throw new CancelledAutomationError(
+        "The originating suspension is no longer current.",
+      );
   }
-  if (action === "reactivate" && issuance.lifecycleStatus === CredentialLifecycleStatus.ACTIVE) return;
+  if (
+    action === "reactivate" &&
+    issuance.lifecycleStatus === CredentialLifecycleStatus.ACTIVE
+  )
+    return;
   if (issuance.lifecycleStatus === CredentialLifecycleStatus.REVOKED) {
     if (action === "revoke") return;
-    throw new CancelledAutomationError("Credential was revoked before scheduled reactivation.");
+    throw new CancelledAutomationError(
+      "Credential was revoked before scheduled reactivation.",
+    );
   }
   await requestCredentialLifecycleChange({
     action,
     credentialIssuanceId: issuance.id,
-    ...(action === "reactivate" ? { expectedLifecycleRevision: issuance.lifecycleRevision ?? undefined } : {}),
-    reason: action === "reactivate" ? "Scheduled suspension duration ended." : "Replacement credential activated.",
+    ...(action === "reactivate"
+      ? { expectedLifecycleRevision: issuance.lifecycleRevision ?? undefined }
+      : {}),
+    reason:
+      action === "reactivate"
+        ? "Scheduled suspension duration ended."
+        : "Replacement credential activated.",
     studentId: issuance.studentId,
   });
 }
 
 async function processClaimedJob(job: CredentialAutomationJob, now: Date) {
   try {
-    await executeJob(job, now);
+    await executeJob(job);
     await prisma.credentialAutomationJob.update({
-      data: { completedAt: new Date(), lastError: null, leaseExpiresAt: null, status: CredentialAutomationJobStatus.SUCCEEDED },
+      data: {
+        completedAt: new Date(),
+        lastError: null,
+        leaseExpiresAt: null,
+        status: CredentialAutomationJobStatus.SUCCEEDED,
+      },
       where: { id: job.id },
     });
     return { id: job.id, status: "succeeded" as const };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Credential automation failed.";
+    const message =
+      error instanceof Error ? error.message : "Credential automation failed.";
     if (error instanceof DeferredAutomationError) {
       await prisma.credentialAutomationJob.update({
         data: {
@@ -178,7 +168,12 @@ async function processClaimedJob(job: CredentialAutomationJob, now: Date) {
     }
     if (error instanceof CancelledAutomationError) {
       await prisma.credentialAutomationJob.update({
-        data: { completedAt: new Date(), lastError: message, leaseExpiresAt: null, status: CredentialAutomationJobStatus.CANCELLED },
+        data: {
+          completedAt: new Date(),
+          lastError: message,
+          leaseExpiresAt: null,
+          status: CredentialAutomationJobStatus.CANCELLED,
+        },
         where: { id: job.id },
       });
       return { id: job.id, status: "cancelled" as const };
@@ -186,10 +181,14 @@ async function processClaimedJob(job: CredentialAutomationJob, now: Date) {
     const finalFailure = job.attemptCount >= MAX_ATTEMPTS;
     await prisma.credentialAutomationJob.update({
       data: {
-        dueAt: finalFailure ? job.dueAt : new Date(now.getTime() + 24 * 60 * 60_000),
+        dueAt: finalFailure
+          ? job.dueAt
+          : new Date(now.getTime() + 24 * 60 * 60_000),
         lastError: message,
         leaseExpiresAt: null,
-        status: finalFailure ? CredentialAutomationJobStatus.FAILED : CredentialAutomationJobStatus.PENDING,
+        status: finalFailure
+          ? CredentialAutomationJobStatus.FAILED
+          : CredentialAutomationJobStatus.PENDING,
       },
       where: { id: job.id },
     });
@@ -198,34 +197,87 @@ async function processClaimedJob(job: CredentialAutomationJob, now: Date) {
       finalFailure
         ? CredentialAuditAction.CREDENTIAL_AUTOMATION_FAILED
         : CredentialAuditAction.CREDENTIAL_AUTOMATION_RETRY_SCHEDULED,
-      finalFailure ? message : `${message} Retrying on the next daily run.`,
+      finalFailure ? message : `${message} Retrying on a subsequent daily run.`,
     );
-    return { error: message, id: job.id, status: finalFailure ? "failed" as const : "retrying" as const };
+    return {
+      error: message,
+      id: job.id,
+      status: finalFailure ? ("failed" as const) : ("retrying" as const),
+    };
   }
 }
 
-export async function runCredentialAutomation(now = new Date(), limit = RUN_LIMIT) {
-  const queuedRenewals = await enqueueDueRenewals(now);
-  const results: Awaited<ReturnType<typeof processClaimedJob>>[] = [];
-  for (let index = 0; index < limit; index += 1) {
-    const job = await claimNextDueJob(now);
-    if (!job) break;
-    results.push(await processClaimedJob(job, now));
+export async function runCredentialAutomation(
+  now = new Date(),
+  limit = RUN_LIMIT,
+) {
+  const startedAt = Date.now();
+  const run = await prisma.credentialAutomationRun.create({ data: {} });
+  try {
+    const queuedRenewals = await enqueueDueRenewals();
+    const results: Awaited<ReturnType<typeof processClaimedJob>>[] = [];
+    for (
+      let index = 0;
+      index < limit && Date.now() < startedAt + 160_000;
+      index += 1
+    ) {
+      const job = await claimNextDueJob(now);
+      if (!job) break;
+      results.push(await processClaimedJob(job, now));
+    }
+    // Reserve time for the final 60-second agent call, email, and persisted outcomes.
+    const annual = await runAnnualRenewals(now, startedAt + 180_000);
+    const totals = {
+      failed:
+        annual.failed +
+        results.filter((result) => result.status === "failed").length,
+      cancelled:
+        annual.cancelled +
+        results.filter((result) => result.status === "cancelled").length,
+      deferred:
+        annual.deferred +
+        results.filter((result) => result.status === "deferred").length,
+      processed: annual.processed + results.length,
+      queuedRenewals,
+      retrying:
+        annual.retrying +
+        results.filter((result) => result.status === "retrying").length,
+      succeeded:
+        annual.succeeded +
+        results.filter((result) => result.status === "succeeded").length,
+    };
+    await prisma.credentialAutomationRun.update({
+      where: { id: run.id },
+      data: {
+        completedAt: new Date(),
+        status: totals.failed ? "PARTIAL_FAILURE" : "SUCCEEDED",
+        processed: totals.processed,
+        failed: totals.failed,
+        totals,
+      },
+    });
+    return totals;
+  } catch (error) {
+    await prisma.credentialAutomationRun.update({
+      where: { id: run.id },
+      data: {
+        completedAt: new Date(),
+        status: "FAILED",
+        error: error instanceof Error ? error.message : "Automation failed.",
+      },
+    });
+    throw error;
   }
-  return {
-    failed: results.filter((result) => result.status === "failed").length,
-    cancelled: results.filter((result) => result.status === "cancelled").length,
-    deferred: results.filter((result) => result.status === "deferred").length,
-    processed: results.length,
-    queuedRenewals,
-    retrying: results.filter((result) => result.status === "retrying").length,
-    succeeded: results.filter((result) => result.status === "succeeded").length,
-  };
 }
 
-export async function retryCredentialAutomationJob(jobId: string, actorId: string | null) {
+export async function retryCredentialAutomationJob(
+  jobId: string,
+  actorId: string | null,
+) {
   const now = new Date();
-  const job = await prisma.credentialAutomationJob.findUnique({ where: { id: jobId } });
+  const job = await prisma.credentialAutomationJob.findUnique({
+    where: { id: jobId },
+  });
   if (!job || job.status !== CredentialAutomationJobStatus.FAILED) {
     throw new Error("Failed credential automation job was not found.");
   }

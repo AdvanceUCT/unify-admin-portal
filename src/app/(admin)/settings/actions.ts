@@ -8,15 +8,22 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { AuditAction, CredentialAutomationJobStatus, CredentialAutomationJobType } from "@/generated/prisma/enums";
+import { AuditAction } from "@/generated/prisma/enums";
 import { checkAgentHealth } from "@/lib/agentClient";
 import { writeAuditLog } from "@/lib/audit/audit";
 import { ADMIN_ROLES, assertCan } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
-import { countCredentialsDueForRenewal } from "@/lib/credentials/renewalPolicy";
+import { parseAnnualDate } from "@/lib/credentials/academicPeriod";
+import {
+  previewPolicyChange,
+  saveValidityPolicy,
+} from "@/lib/credentials/validityPolicy";
 import { validateLogoFile } from "@/lib/images/logoValidation";
-import { deleteVendorDocument, uploadUniversityLogo } from "@/lib/storage/supabase";
+import {
+  deleteVendorDocument,
+  uploadUniversityLogo,
+} from "@/lib/storage/supabase";
 import {
   getUniversityProfile,
   removeUniversityProfileLogo,
@@ -32,8 +39,16 @@ export type UniversityProfileSettingsState = {
 export type LogoActionResult = { ok: boolean; error?: string };
 
 const profileSettingsSchema = z.object({
-  name: z.string().trim().min(2, "University name must be at least 2 characters.").max(160),
-  abbreviation: z.string().trim().min(2, "Abbreviation must be at least 2 characters.").max(24),
+  name: z
+    .string()
+    .trim()
+    .min(2, "University name must be at least 2 characters.")
+    .max(160),
+  abbreviation: z
+    .string()
+    .trim()
+    .min(2, "Abbreviation must be at least 2 characters.")
+    .max(24),
   contactEmail: z.string().trim().email("Enter a valid contact email address."),
   websiteUrl: z
     .string()
@@ -68,7 +83,9 @@ export async function updateUniversityProfileAction(
   if (!parsed.success) {
     return {
       status: "error",
-      message: parsed.error.issues[0]?.message ?? "Please check the form and try again.",
+      message:
+        parsed.error.issues[0]?.message ??
+        "Please check the form and try again.",
     };
   }
 
@@ -124,14 +141,20 @@ export async function uploadUniversityLogoAction(
   const file = formData.get("file");
 
   if (!(file instanceof File) || file.size === 0) {
-    return { ok: false, error: "No file was provided. Please choose an image to upload." };
+    return {
+      ok: false,
+      error: "No file was provided. Please choose an image to upload.",
+    };
   }
   const validation = await validateLogoFile(file);
   if (!validation.ok) return validation;
 
   const profile = await getUniversityProfile();
   if (!profile) {
-    return { ok: false, error: "No university profile exists yet. Complete setup first." };
+    return {
+      ok: false,
+      error: "No university profile exists yet. Complete setup first.",
+    };
   }
 
   let uploadedPath: string | undefined;
@@ -168,7 +191,10 @@ export async function uploadUniversityLogoAction(
         );
       }
     }
-    return { ok: false, error: "Something went wrong while uploading. Please try again." };
+    return {
+      ok: false,
+      error: "Something went wrong while uploading. Please try again.",
+    };
   }
 }
 
@@ -176,11 +202,17 @@ export async function removeUniversityLogoAction(): Promise<LogoActionResult> {
   const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
   const profile = await getUniversityProfile();
   if (!profile) {
-    return { ok: false, error: "No university profile exists yet. Complete setup first." };
+    return {
+      ok: false,
+      error: "No university profile exists yet. Complete setup first.",
+    };
   }
 
   try {
-    const { removedPath } = await removeUniversityProfileLogo(profile.id, session.user.id);
+    const { removedPath } = await removeUniversityProfileLogo(
+      profile.id,
+      session.user.id,
+    );
     if (removedPath) {
       try {
         await deleteVendorDocument(removedPath);
@@ -194,64 +226,42 @@ export async function removeUniversityLogoAction(): Promise<LogoActionResult> {
     revalidateUniversityLogoPaths();
     return { ok: true };
   } catch {
-    return { ok: false, error: "Unable to remove the university logo. Please try again." };
+    return {
+      ok: false,
+      error: "Unable to remove the university logo. Please try again.",
+    };
   }
 }
 
-const renewalSettingsSchema = z.object({
-  automaticCredentialRenewalEnabled: z.boolean(),
-  defaultCredentialValidityDays: z.coerce.number().int().min(1).max(3650),
-  renewalCadenceMonths: z.coerce.number().int().min(1).max(120),
-});
-
+function annualPolicyFrom(startDate: string, expiryDate: string) {
+  const start = parseAnnualDate(startDate, "DD-MM"),
+    expiry = parseAnnualDate(expiryDate, "DD-MM");
+  return {
+    startMonth: start.month,
+    startDay: start.day,
+    expiryMonth: expiry.month,
+    expiryDay: expiry.day,
+  };
+}
 export async function saveRenewalSettingsAction(formData: FormData) {
   const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
-  const parsed = renewalSettingsSchema.safeParse({
-    automaticCredentialRenewalEnabled: formData.get("automaticCredentialRenewalEnabled") === "on",
-    defaultCredentialValidityDays: formData.get("defaultCredentialValidityDays"),
-    renewalCadenceMonths: formData.get("renewalCadenceMonths"),
-  });
-
-  if (!parsed.success) {
-    throw new Error("Validity days and renewal cadence must be valid positive numbers.");
-  }
-
-  const profile = await getUniversityProfile();
-  if (!profile) {
-    throw new Error("University profile was not found.");
-  }
-
-  await prisma.$transaction(async (transaction) => {
-    await transaction.universityProfile.update({
-      data: parsed.data,
-      where: { id: profile.id },
-    });
-
-    if (!parsed.data.automaticCredentialRenewalEnabled) {
-      await transaction.credentialAutomationJob.updateMany({
-        data: { completedAt: new Date(), status: CredentialAutomationJobStatus.CANCELLED },
-        where: { status: CredentialAutomationJobStatus.PENDING, type: CredentialAutomationJobType.AUTO_RENEW },
-      });
-    }
-
-    await transaction.auditLog.create({
-      data: {
-        action: AuditAction.RENEWAL_SETTINGS_UPDATED,
-        actorId: session.user.id,
-        meta: parsed.data,
-        targetId: profile.id,
-        targetType: "UniversityProfile",
-      },
-    });
-  });
-
+  await saveValidityPolicy(
+    annualPolicyFrom(
+      String(formData.get("startDate")),
+      String(formData.get("expiryDate")),
+    ),
+    session.user.id,
+  );
   revalidatePath("/settings");
+  revalidatePath("/credentials/renewals");
+  revalidatePath("/credentials/issuance/renewals");
 }
-
-export async function getRenewalSettingsPreviewAction(cadenceMonths: number) {
+export async function getRenewalSettingsPreviewAction(
+  startDate: string,
+  expiryDate: string,
+) {
   await requireRole(["SUPER_ADMIN", "ADMIN"]);
-  if (!Number.isInteger(cadenceMonths) || cadenceMonths < 1 || cadenceMonths > 120) return 0;
-  return countCredentialsDueForRenewal(cadenceMonths);
+  return previewPolicyChange(annualPolicyFrom(startDate, expiryDate));
 }
 
 /** `invoice:read` — refreshes the billing operations card's numbers without a full page reload. */
@@ -259,7 +269,8 @@ export async function getBillingOperationsSummaryAction() {
   const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
   assertCan("invoice:read", session);
 
-  const { getBillingOperationsSummary } = await import("@/lib/billing/operationsSummary");
+  const { getBillingOperationsSummary } =
+    await import("@/lib/billing/operationsSummary");
   return getBillingOperationsSummary();
 }
 
@@ -272,21 +283,33 @@ export async function runBillingReconciliationNowAction() {
   const session = await requireRole(["SUPER_ADMIN", "ADMIN"]);
   assertCan("invoice:reconcile", session);
 
-  const { BILLING_JOB_TYPE_RECONCILE } = await import("@/lib/billing/constants");
-  const { acquireJobLease, completeJobLease, failJobLease } = await import("@/lib/billing/jobLease");
-  const { runVendorBillingReconciliation } = await import("@/lib/billing/reconciliation");
-  const { getBillingOperationsSummary } = await import("@/lib/billing/operationsSummary");
+  const { BILLING_JOB_TYPE_RECONCILE } =
+    await import("@/lib/billing/constants");
+  const { acquireJobLease, completeJobLease, failJobLease } =
+    await import("@/lib/billing/jobLease");
+  const { runVendorBillingReconciliation } =
+    await import("@/lib/billing/reconciliation");
+  const { getBillingOperationsSummary } =
+    await import("@/lib/billing/operationsSummary");
 
-  const lease = await acquireJobLease(prisma, { jobType: BILLING_JOB_TYPE_RECONCILE, leaseOwner: `admin:${session.user.id}` });
+  const lease = await acquireJobLease(prisma, {
+    jobType: BILLING_JOB_TYPE_RECONCILE,
+    leaseOwner: `admin:${session.user.id}`,
+  });
   if (!lease) {
-    throw new Error("A reconciliation run is already in progress (cron or another admin). Try again shortly.");
+    throw new Error(
+      "A reconciliation run is already in progress (cron or another admin). Try again shortly.",
+    );
   }
 
   try {
     const reconciliation = await runVendorBillingReconciliation(prisma);
     await completeJobLease(prisma, lease.runId, {
-      scannedCount: reconciliation.attemptsSwept + reconciliation.gatewayEventsRetried,
-      importedCount: reconciliation.attemptsConfirmed + reconciliation.gatewayEventsRecovered,
+      scannedCount:
+        reconciliation.attemptsSwept + reconciliation.gatewayEventsRetried,
+      importedCount:
+        reconciliation.attemptsConfirmed +
+        reconciliation.gatewayEventsRecovered,
       exceptionCount: reconciliation.gatewayEventsStillFailing,
       totalsSnapshot: reconciliation,
     });

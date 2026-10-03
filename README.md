@@ -417,7 +417,7 @@ npx prisma migrate deploy
 
 Set both `DATABASE_URL` and `DIRECT_URL` in the Vercel Production environment. Use the pooled URL for application traffic and the direct URL for migrations.
 
-Scheduled jobs in `vercel.json` call credential automation, vendor billing, payment reconciliation, and vendor payouts. All cron routes require `CRON_SECRET`. Paystack webhooks must point at `/api/webhooks/paystack` on a reachable HTTPS deployment and must not be blocked by deployment protection.
+Scheduled jobs in `vercel.json` call daily credential automation, vendor billing, payment reconciliation, and vendor payouts. Credential automation is configured for 00:05 South African time; Vercel Hobby may invoke it within the scheduled hour. Retries and catch-up resume on subsequent daily runs. The credential route's 300-second budget requires Fluid Compute on Hobby. All cron routes require `CRON_SECRET`. Paystack webhooks must point at `/api/webhooks/paystack` on a reachable HTTPS deployment and must not be blocked by deployment protection.
 
 ## Main operational flows
 
@@ -430,6 +430,10 @@ Scheduled jobs in `vercel.json` call credential automation, vendor billing, paym
 5. Signed agent webhooks reconcile holder acceptance and credential state into the audit history.
 
 Credential suspension, reactivation, revocation, and renewal are initiated in the portal but enforced through the agent service and revocation registry.
+
+Configure a shared annual credential start and expiry under **Settings ? Validity & renewal** before issuing new credentials. Dates repeat in `Africa/Johannesburg`; the selected expiry day is included. Ordinary issuance is valid immediately, while automatic renewal uses the shared academic-period start. Select **Enable auto-renewal** and the number of academic years during individual or batch issuance; the initial period counts as year one.
+
+**Credentials ? Renewals** shows upcoming offers, delivery and activation outcomes, failed attempts, and scheduler health. Administrators can cancel remaining auto-renewals there or on student details. Manual renewal is expired-only. See [annual credential renewals](docs/annual-credential-renewals.md) for recovery, testing, migration, and deployment requirements.
 
 ### Vendor verification
 

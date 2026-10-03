@@ -51,6 +51,8 @@ export type StudentCredential = {
 };
 
 export type BatchIssuanceSelection = {
+  autoRenew?: boolean;
+  renewalYears?: number;
   cohortId?: string;
   credentialStatus?: CredentialLifecycleState;
   faculty?: string;
@@ -90,6 +92,7 @@ export type BatchIssuancePreviewItem = {
 };
 
 export type BatchIssuancePreviewResult = {
+  validity?: { validFrom: string; expiresAt: string; academicYear: number; finalYear: number; renewalDates: string[] };
   cohortId: string;
   eligibleCount: number;
   filters: BatchIssuanceSelection;

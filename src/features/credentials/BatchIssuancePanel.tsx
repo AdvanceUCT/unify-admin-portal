@@ -5,6 +5,8 @@
 
 "use client";
 
+import { RenewalOptionsFields } from "./RenewalOptionsFields";
+import type { RenewalOptions } from "@/lib/credentials/academicPeriod";
 import Link from "next/link";
 import { Eye, LoaderCircle, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -21,7 +23,10 @@ import type {
 } from "@/lib/api/types";
 import { formatCredentialStatus } from "@/lib/formatters";
 
-const credentialStatusOptions: Array<{ label: string; value: "" | CredentialLifecycleState }> = [
+const credentialStatusOptions: Array<{
+  label: string;
+  value: "" | CredentialLifecycleState;
+}> = [
   { label: "Eligible statuses", value: "" },
   { label: formatCredentialStatus("NOT_ISSUED"), value: "NOT_ISSUED" },
   { label: formatCredentialStatus("OFFER_SENT"), value: "OFFER_SENT" },
@@ -29,13 +34,17 @@ const credentialStatusOptions: Array<{ label: string; value: "" | CredentialLife
   { label: formatCredentialStatus("ACTIVE"), value: "ACTIVE" },
   { label: formatCredentialStatus("SUSPENDED"), value: "SUSPENDED" },
   { label: formatCredentialStatus("EXPIRED"), value: "EXPIRED" },
-  { label: formatCredentialStatus("LEGACY_NON_REVOCABLE"), value: "LEGACY_NON_REVOCABLE" },
+  {
+    label: formatCredentialStatus("LEGACY_NON_REVOCABLE"),
+    value: "LEGACY_NON_REVOCABLE",
+  },
   { label: formatCredentialStatus("FAILED"), value: "FAILED" },
   { label: formatCredentialStatus("REVOKED"), value: "REVOKED" },
 ];
 
 function itemTone(status: BatchIssuanceItemStatus | "Eligible" | "Skipped") {
-  if (status === "Delivered" || status === "Activated" || status === "Eligible") return "success";
+  if (status === "Delivered" || status === "Activated" || status === "Eligible")
+    return "success";
   if (status === "Failed" || status === "DeliveryFailed") return "danger";
   if (status === "Skipped") return "neutral";
   return "warning";
@@ -49,11 +58,20 @@ export function BatchIssuancePanel({
   programmesByFaculty: Record<string, string[]>;
 }) {
   const router = useRouter();
-  function invalidatePreview() { setBatchPreview(null); }
-  const [credentialStatus, setCredentialStatus] = useState<"" | CredentialLifecycleState>("");
+  const [renewalOptions, setRenewalOptions] = useState<RenewalOptions>({
+    autoRenew: false,
+    renewalYears: 3,
+  });
+  function invalidatePreview() {
+    setBatchPreview(null);
+  }
+  const [credentialStatus, setCredentialStatus] = useState<
+    "" | CredentialLifecycleState
+  >("");
   const [faculty, setFaculty] = useState("");
   const [programme, setProgramme] = useState("");
-  const [batchPreview, setBatchPreview] = useState<BatchIssuancePreviewResult | null>(null);
+  const [batchPreview, setBatchPreview] =
+    useState<BatchIssuancePreviewResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -63,16 +81,22 @@ export function BatchIssuancePanel({
   const facultyOptions = Object.keys(programmesByFaculty);
   const allProgrammeOptions = Object.values(programmesByFaculty).flat();
   const selection: BatchIssuanceSelection = {
+    ...renewalOptions,
     cohortId: preview.cohortId,
     credentialStatus: credentialStatus || undefined,
     faculty: faculty || undefined,
     programme: programme || undefined,
   };
-  const programmeOptions = faculty ? programmesByFaculty[faculty] : allProgrammeOptions;
-  const canConfirm = Boolean(batchPreview?.eligibleCount) && !isStarting && !isPreviewing;
+  const programmeOptions = faculty
+    ? programmesByFaculty[faculty]
+    : allProgrammeOptions;
+  const canConfirm =
+    Boolean(batchPreview?.eligibleCount) && !isStarting && !isPreviewing;
 
   function handleFacultyChange(nextFaculty: string) {
-    const nextProgrammeOptions = nextFaculty ? programmesByFaculty[nextFaculty] : allProgrammeOptions;
+    const nextProgrammeOptions = nextFaculty
+      ? programmesByFaculty[nextFaculty]
+      : allProgrammeOptions;
     setFaculty(nextFaculty);
     invalidatePreview();
 
@@ -89,7 +113,11 @@ export function BatchIssuancePanel({
     try {
       setBatchPreview(await previewBatchIssuance(selection));
     } catch (previewError) {
-      setError(previewError instanceof Error ? previewError.message : "Batch preview failed.");
+      setError(
+        previewError instanceof Error
+          ? previewError.message
+          : "Batch preview failed.",
+      );
     } finally {
       setIsPreviewing(false);
     }
@@ -101,9 +129,17 @@ export function BatchIssuancePanel({
 
     try {
       const run = await createBatchRun(batchPreview!.filters);
-      startNavigation(() => router.push(`/credentials/issuance/batch/runs/${encodeURIComponent(run.batchId)}`));
+      startNavigation(() =>
+        router.push(
+          `/credentials/issuance/batch/runs/${encodeURIComponent(run.batchId)}`,
+        ),
+      );
     } catch (processError) {
-      setError(processError instanceof Error ? processError.message : "Batch run failed.");
+      setError(
+        processError instanceof Error
+          ? processError.message
+          : "Batch run failed.",
+      );
     } finally {
       setIsProcessing(false);
     }
@@ -116,7 +152,8 @@ export function BatchIssuancePanel({
           <div>
             <h2 className="text-section-title text-fg">Create batch run</h2>
             <p className="mt-1 text-sm text-fg-muted">
-              Preview up to 100 students. Issuance continues in the background; you can leave and return to batch history.
+              Preview up to 100 students. Issuance continues in the background;
+              you can leave and return to batch history.
             </p>
           </div>
           <Link
@@ -150,7 +187,10 @@ export function BatchIssuancePanel({
             <select
               disabled={isPreviewing || isStarting}
               className="h-10 w-full rounded-md border border-border bg-surface px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-              onChange={(event) => (setProgramme(event.target.value), invalidatePreview())}
+              onChange={(event) => (
+                setProgramme(event.target.value),
+                invalidatePreview()
+              )}
               value={programme}
             >
               <option value="">All programmes</option>
@@ -166,7 +206,12 @@ export function BatchIssuancePanel({
             <select
               disabled={isPreviewing || isStarting}
               className="h-10 w-full rounded-md border border-border bg-surface px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-              onChange={(event) => (setCredentialStatus(event.target.value as "" | CredentialLifecycleState), invalidatePreview())}
+              onChange={(event) => (
+                setCredentialStatus(
+                  event.target.value as "" | CredentialLifecycleState,
+                ),
+                invalidatePreview()
+              )}
               value={credentialStatus}
             >
               {credentialStatusOptions.map((option) => (
@@ -176,17 +221,29 @@ export function BatchIssuancePanel({
               ))}
             </select>
           </label>
-          <div className="flex items-end">
-            <button
-              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-fg-subtle"
-              disabled={isPreviewing || isStarting}
-              onClick={handlePreview}
-              type="button"
-            >
-              {isPreviewing ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Eye aria-hidden className="size-4" />}
-              {isPreviewing ? "Previewing" : "Preview batch"}
-            </button>
-          </div>
+        </div>
+
+        <RenewalOptionsFields
+          value={renewalOptions}
+          onChange={(value) => {
+            setRenewalOptions(value);
+            invalidatePreview();
+          }}
+        />
+        <div className="mt-4 flex justify-end">
+          <button
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-fg-subtle"
+            disabled={isPreviewing || isStarting}
+            onClick={handlePreview}
+            type="button"
+          >
+            {isPreviewing ? (
+              <LoaderCircle aria-hidden className="size-4 animate-spin" />
+            ) : (
+              <Eye aria-hidden className="size-4" />
+            )}
+            {isPreviewing ? "Previewing" : "Preview batch"}
+          </button>
         </div>
 
         {error ? (
@@ -202,7 +259,8 @@ export function BatchIssuancePanel({
             <div>
               <h2 className="text-section-title text-fg">Preview</h2>
               <p className="mt-1 text-sm text-fg-muted">
-                {batchPreview.eligibleCount} eligible, {batchPreview.skippedCount} skipped from{" "}
+                {batchPreview.eligibleCount} eligible,{" "}
+                {batchPreview.skippedCount} skipped from{" "}
                 {batchPreview.requestedCount} matching students.
               </p>
             </div>
@@ -212,8 +270,14 @@ export function BatchIssuancePanel({
               onClick={handleConfirm}
               type="button"
             >
-              {isStarting ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Send aria-hidden className="size-4" />}
-              {isStarting ? "Starting batch" : `Generate ${batchPreview.eligibleCount} offers`}
+              {isStarting ? (
+                <LoaderCircle aria-hidden className="size-4 animate-spin" />
+              ) : (
+                <Send aria-hidden className="size-4" />
+              )}
+              {isStarting
+                ? "Starting batch"
+                : `Generate ${batchPreview.eligibleCount} offers`}
             </button>
           </div>
           <div className="overflow-x-auto">
@@ -228,10 +292,15 @@ export function BatchIssuancePanel({
               </thead>
               <tbody className="divide-y divide-border">
                 {batchPreview.items.slice(0, 25).map((item) => (
-                  <tr className="transition hover:bg-surface-muted/60" key={item.studentId}>
+                  <tr
+                    className="transition hover:bg-surface-muted/60"
+                    key={item.studentId}
+                  >
                     <td className="whitespace-nowrap px-5 py-4">
                       <p className="font-medium text-fg">{item.holderName}</p>
-                      <p className="text-xs tabular-nums text-fg-subtle">{item.studentId}</p>
+                      <p className="text-xs tabular-nums text-fg-subtle">
+                        {item.studentId}
+                      </p>
                     </td>
                     <td className="px-5 py-4 text-fg-muted">
                       {item.faculty} · {item.programme}
@@ -239,7 +308,9 @@ export function BatchIssuancePanel({
                     <td className="px-5 py-4">
                       <Badge tone={itemTone(item.status)}>{item.status}</Badge>
                     </td>
-                    <td className="px-5 py-4 text-fg-muted">{item.reason ?? "Ready for offer generation"}</td>
+                    <td className="px-5 py-4 text-fg-muted">
+                      {item.reason ?? "Ready for offer generation"}
+                    </td>
                   </tr>
                 ))}
               </tbody>

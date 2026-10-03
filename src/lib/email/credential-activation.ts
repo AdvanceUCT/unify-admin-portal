@@ -55,5 +55,6 @@ export async function sendCredentialActivationEmail(
     from,
     ...renderCredentialActivationEmail(input),
     to: input.to,
+    signal: AbortSignal.timeout(20_000),
   });
 }

@@ -9,6 +9,8 @@ beforeAll(async () => {
   if (new URL(process.env.DATABASE_URL ?? "http://invalid").pathname !== "/unify_wallet_test" || process.env.NODE_ENV === "production") throw new Error("Requires isolated CI database");
   let profile = await prisma.universityProfile.findFirst();
   if (!profile) profile = await prisma.universityProfile.create({ data: { name: "CI", abbreviation: "CI", contactEmail: "ci@example.invalid", paymentWalletEnabled: true } });
+  // This suite may follow another suite that created a disabled university.
+  await prisma.universityProfile.update({ where: { id: profile.id }, data: { paymentWalletEnabled: true } });
   universityId = profile.id;
 });
 afterAll(async () => prisma.$disconnect());

@@ -5,11 +5,19 @@
 
 import "server-only";
 import { randomUUID } from "node:crypto";
+import {
+  prepareOffer,
+  deliverPreparedOffer,
+} from "@/lib/credentials/preparedOffer";
+import { renewalPreview } from "@/lib/credentials/academicPeriod";
+import { currentValidityPolicy } from "@/lib/credentials/validityPolicy";
 
-import { BatchIssuanceItemStatus, BatchIssuanceRunStatus, CredentialDeliveryStatus } from "@/generated/prisma/enums";
+import {
+  BatchIssuanceItemStatus,
+  BatchIssuanceRunStatus,
+} from "@/generated/prisma/enums";
 import type { CredentialIssuance } from "@/generated/prisma/client";
 import type {
-  ActivationDelivery,
   BatchIssuancePreviewItem,
   BatchIssuancePreviewResult,
   BatchIssuanceRunDetail,
@@ -18,26 +26,21 @@ import type {
   BatchIssuanceSelection,
   StudentRecord,
 } from "@/lib/api/types";
-import { toPublicWalletActivationLink } from "@/lib/api/activationLinks";
-import { createBatchActivationLinks } from "@/lib/agentClient";
 import { mapWithConcurrency } from "@/lib/async/mapWithConcurrency";
 import { writeAuditLog } from "@/lib/audit/audit";
 import { env } from "@/lib/config/env";
-import { recordCredentialOfferSentAudit } from "@/lib/credentials/audit";
 import {
-  createCredentialIssuanceFromOffer,
   findActiveCredentialIssuance,
   overlayCredentialStatuses,
-  reconcileCredentialEventLogs,
 } from "@/lib/credentials/status";
 import { prisma } from "@/lib/db/prisma";
-import { getAllStudents, getStudentsByIdentifiers } from "@/lib/students/repository";
-import { sendCredentialActivationEmail } from "@/lib/email/credential-activation";
+import {
+  getAllStudents,
+  getStudentsByIdentifiers,
+} from "@/lib/students/repository";
 import { formatCredentialStatus } from "@/lib/formatters";
 import {
   parseBatchIssuanceSelection,
-  attributesForStudent,
-  credentialValidityWindowFrom,
   getActiveCredentialDefinition,
   MAX_BATCH_ISSUANCE_LIMIT,
   StudentIssuanceError,
@@ -91,22 +94,30 @@ const failedItemStatuses = new Set<BatchIssuanceItemStatus>([
  * Converts a DB enum run status from SNAKE_CASE to PascalCase for API responses,
  * e.g. `PARTIALLY_FAILED` → `PartiallyFailed`.
  */
-function publicRunStatus(status: BatchIssuanceRunStatus): BatchIssuanceRunSummary["status"] {
+function publicRunStatus(
+  status: BatchIssuanceRunStatus,
+): BatchIssuanceRunSummary["status"] {
   return status
     .toLowerCase()
     .replace(/_([a-z])/g, (_match, char: string) => char.toUpperCase())
-    .replace(/^([a-z])/, (_match, char: string) => char.toUpperCase()) as BatchIssuanceRunSummary["status"];
+    .replace(/^([a-z])/, (_match, char: string) =>
+      char.toUpperCase(),
+    ) as BatchIssuanceRunSummary["status"];
 }
 
 /**
  * Same as `publicRunStatus` but for item-level statuses,
  * e.g. `DELIVERY_FAILED` → `DeliveryFailed`.
  */
-function publicItemStatus(status: BatchIssuanceItemStatus): BatchIssuanceRunItem["status"] {
+function publicItemStatus(
+  status: BatchIssuanceItemStatus,
+): BatchIssuanceRunItem["status"] {
   return status
     .toLowerCase()
     .replace(/_([a-z])/g, (_match, char: string) => char.toUpperCase())
-    .replace(/^([a-z])/, (_match, char: string) => char.toUpperCase()) as BatchIssuanceRunItem["status"];
+    .replace(/^([a-z])/, (_match, char: string) =>
+      char.toUpperCase(),
+    ) as BatchIssuanceRunItem["status"];
 }
 
 function iso(value?: Date | null) {
@@ -120,20 +131,21 @@ function batchItemIdempotencyKey(batchId: string, batchItemId: string) {
 function fullName(student: StudentRecord) {
   return `${student.profile.firstName} ${student.profile.lastName}`;
 }
-
 function uniqueStrings(values: Array<string | null | undefined>) {
-  return [...new Set(values.filter((value): value is string => Boolean(value)))];
+  return [
+    ...new Set(values.filter((value): value is string => Boolean(value))),
+  ];
 }
-
-function credentialLookupIdsForItem(item: PersistedBatchItem, student?: StudentRecord) {
-  return uniqueStrings([item.studentId, student?.credential.studentNumber, student?.profile.id]);
-}
-
-function filterMatches(student: StudentRecord, selection: BatchIssuanceSelection) {
+function filterMatches(
+  student: StudentRecord,
+  selection: BatchIssuanceSelection,
+) {
   return (
     (!selection.faculty || student.credential.faculty === selection.faculty) &&
-    (!selection.programme || student.credential.programme === selection.programme) &&
-    (!selection.credentialStatus || student.credential.lifecycleState === selection.credentialStatus)
+    (!selection.programme ||
+      student.credential.programme === selection.programme) &&
+    (!selection.credentialStatus ||
+      student.credential.lifecycleState === selection.credentialStatus)
   );
 }
 
@@ -141,7 +153,11 @@ function skipReasonFor(student: StudentRecord) {
   return `Credential status is ${formatCredentialStatus(student.credential.lifecycleState)}.`;
 }
 
-function previewItem(student: StudentRecord, status: "Eligible" | "Skipped", reason?: string): BatchIssuancePreviewItem {
+function previewItem(
+  student: StudentRecord,
+  status: "Eligible" | "Skipped",
+  reason?: string,
+): BatchIssuancePreviewItem {
   return {
     credentialId: student.credential.id,
     email: student.profile.email,
@@ -156,25 +172,46 @@ function previewItem(student: StudentRecord, status: "Eligible" | "Skipped", rea
 
 function toSummary(run: PersistedBatchRun): BatchIssuanceRunSummary {
   return {
-    activatedCount: run.items ? run.items.filter((item) => item.status === BatchIssuanceItemStatus.ACTIVATED || item.credentialIssuance?.status === "ISSUED").length : run.activatedCount,
+    activatedCount: run.items
+      ? run.items.filter(
+          (item) =>
+            item.status === BatchIssuanceItemStatus.ACTIVATED ||
+            item.credentialIssuance?.status === "ISSUED",
+        ).length
+      : run.activatedCount,
     actorId: run.actorId,
     batchId: run.batchId,
     cohortId: run.cohortId,
     completedAt: iso(run.completedAt),
     createdAt: run.createdAt.toISOString(),
     eligibleCount: run.eligibleCount,
-    failedCount: run.items ? run.items.filter((item) => failedItemStatuses.has(item.status)).length : run.failedCount,
+    failedCount: run.items
+      ? run.items.filter((item) => failedItemStatuses.has(item.status)).length
+      : run.failedCount,
     filters: run.filters as BatchIssuanceSelection,
-    issuedCount: run.items ? run.items.filter((item) => item.status === BatchIssuanceItemStatus.DELIVERED || item.status === BatchIssuanceItemStatus.ACTIVATED).length : run.issuedCount,
+    issuedCount: run.items
+      ? run.items.filter(
+          (item) =>
+            item.status === BatchIssuanceItemStatus.DELIVERED ||
+            item.status === BatchIssuanceItemStatus.ACTIVATED,
+        ).length
+      : run.issuedCount,
     queuedAt: iso(run.queuedAt),
     requestedCount: run.requestedCount,
-    skippedCount: run.items ? run.items.filter((item) => item.status === BatchIssuanceItemStatus.SKIPPED).length : run.skippedCount,
+    skippedCount: run.items
+      ? run.items.filter(
+          (item) => item.status === BatchIssuanceItemStatus.SKIPPED,
+        ).length
+      : run.skippedCount,
     startedAt: iso(run.startedAt),
     status: publicRunStatus(run.status),
   };
 }
 
-function toItem(item: PersistedBatchItem, student?: StudentRecord): BatchIssuanceRunItem {
+function toItem(
+  item: PersistedBatchItem,
+  student?: StudentRecord,
+): BatchIssuanceRunItem {
   const issuance = item.credentialIssuance;
 
   return {
@@ -182,7 +219,10 @@ function toItem(item: PersistedBatchItem, student?: StudentRecord): BatchIssuanc
     activationUrl: issuance?.activationUrl ?? undefined,
     credentialExchangeId: issuance?.credentialExchangeId ?? undefined,
     credentialId: issuance?.id ?? item.credentialIssuanceId ?? item.studentId,
-    deliveredAt: issuance?.deliveryStatus === "DELIVERED" ? issuance.createdAt.toISOString() : undefined,
+    deliveredAt:
+      issuance?.deliveryStatus === "DELIVERED"
+        ? issuance.createdAt.toISOString()
+        : undefined,
     email: issuance?.email ?? student?.profile.email,
     expiresAt: iso(issuance?.activationExpiresAt),
     faculty: student?.credential.faculty,
@@ -200,8 +240,15 @@ function toItem(item: PersistedBatchItem, student?: StudentRecord): BatchIssuanc
  * The lookup map uses both `studentNumber` and `profile.id` as keys since batch
  * items can be stored under either identifier depending on how the run was created.
  */
-async function toDetail(run: PersistedBatchRun & { items: PersistedBatchItem[] }, knownStudents?: StudentRecord[]): Promise<BatchIssuanceRunDetail> {
-  const students = knownStudents ?? await getStudentsByIdentifiers(uniqueStrings(run.items.map((item) => item.studentId)));
+async function toDetail(
+  run: PersistedBatchRun & { items: PersistedBatchItem[] },
+  knownStudents?: StudentRecord[],
+): Promise<BatchIssuanceRunDetail> {
+  const students =
+    knownStudents ??
+    (await getStudentsByIdentifiers(
+      uniqueStrings(run.items.map((item) => item.studentId)),
+    ));
   const studentsById = new Map(
     students.flatMap((student) => [
       [student.credential.studentNumber, student] as const,
@@ -211,17 +258,10 @@ async function toDetail(run: PersistedBatchRun & { items: PersistedBatchItem[] }
 
   return {
     ...toSummary(run),
-    items: run.items.map((item) => toItem(item, studentsById.get(item.studentId))),
+    items: run.items.map((item) =>
+      toItem(item, studentsById.get(item.studentId)),
+    ),
   };
-}
-
-async function sendActivationEmail(student: StudentRecord, delivery: { activationUrl: string; expiresAt: string }) {
-  await sendCredentialActivationEmail({
-    activationUrl: delivery.activationUrl,
-    expiresAt: delivery.expiresAt,
-    studentName: fullName(student),
-    to: student.profile.email,
-  });
 }
 
 /**
@@ -231,29 +271,46 @@ async function sendActivationEmail(student: StudentRecord, delivery: { activatio
  * @param selectionInput - Optional filters (faculty, programme, enrolment/credential status, limit).
  * @returns Preview result with eligible/skipped counts and a per-student item list.
  */
-async function prepareBatchPreview(selectionInput?: BatchIssuanceSelection): Promise<{ preview: BatchIssuancePreviewResult; students: StudentRecord[] }> {
+async function prepareBatchPreview(
+  selectionInput?: BatchIssuanceSelection,
+): Promise<{ preview: BatchIssuancePreviewResult; students: StudentRecord[] }> {
   const selection = parseBatchIssuanceSelection(selectionInput);
   const students = await overlayCredentialStatuses(await getAllStudents());
-  const matchingStudents = students.filter((student) => filterMatches(student, selection));
-  const allEligibleStudents = selectStudentRecordsForCredentialIssuance(students, {
-    ...selection,
-    limit: Number.MAX_SAFE_INTEGER,
-  });
+  const matchingStudents = students.filter((student) =>
+    filterMatches(student, selection),
+  );
+  const allEligibleStudents = selectStudentRecordsForCredentialIssuance(
+    students,
+    {
+      ...selection,
+      limit: Number.MAX_SAFE_INTEGER,
+    },
+  );
   const effectiveLimit = selection.limit ?? MAX_BATCH_ISSUANCE_LIMIT;
   const eligibleStudents = allEligibleStudents.slice(0, effectiveLimit);
-  const eligibleIds = new Set(eligibleStudents.map((student) => student.profile.id));
-  const allEligibleIds = new Set(allEligibleStudents.map((student) => student.profile.id));
-  const selectedIds = new Set(eligibleStudents.map((student) => student.profile.id));
+  const eligibleIds = new Set(
+    eligibleStudents.map((student) => student.profile.id),
+  );
+  const allEligibleIds = new Set(
+    allEligibleStudents.map((student) => student.profile.id),
+  );
+  const selectedIds = new Set(
+    eligibleStudents.map((student) => student.profile.id),
+  );
   const skippedItems = matchingStudents
     .filter((student) => !eligibleIds.has(student.profile.id))
-    .map((student) => previewItem(
-      student,
-      "Skipped",
-      allEligibleIds.has(student.profile.id)
-        ? `Batch maximum of ${effectiveLimit} students reached.`
-        : skipReasonFor(student),
-    ));
-  const eligibleItems = eligibleStudents.map((student) => previewItem(student, "Eligible"));
+    .map((student) =>
+      previewItem(
+        student,
+        "Skipped",
+        allEligibleIds.has(student.profile.id)
+          ? `Batch maximum of ${effectiveLimit} students reached.`
+          : skipReasonFor(student),
+      ),
+    );
+  const eligibleItems = eligibleStudents.map((student) =>
+    previewItem(student, "Eligible"),
+  );
 
   return {
     students,
@@ -261,6 +318,11 @@ async function prepareBatchPreview(selectionInput?: BatchIssuanceSelection): Pro
       cohortId: selection.cohortId ?? SIMULATED_STUDENT_COHORT_ID,
       eligibleCount: selectedIds.size,
       filters: selection,
+      validity: renewalPreview(
+        await currentValidityPolicy(),
+        new Date(),
+        selection,
+      ),
       items: [...eligibleItems, ...skippedItems],
       requestedCount: eligibleItems.length + skippedItems.length,
       skippedCount: skippedItems.length,
@@ -268,7 +330,9 @@ async function prepareBatchPreview(selectionInput?: BatchIssuanceSelection): Pro
   };
 }
 
-export async function previewBatchIssuance(selectionInput?: BatchIssuanceSelection): Promise<BatchIssuancePreviewResult> {
+export async function previewBatchIssuance(
+  selectionInput?: BatchIssuanceSelection,
+): Promise<BatchIssuancePreviewResult> {
   return (await prepareBatchPreview(selectionInput)).preview;
 }
 
@@ -303,7 +367,10 @@ export async function createQueuedBatchRun({
       items: {
         create: preview.items.map((item) => ({
           skipReason: item.reason,
-          status: item.status === "Eligible" ? BatchIssuanceItemStatus.PENDING : BatchIssuanceItemStatus.SKIPPED,
+          status:
+            item.status === "Eligible"
+              ? BatchIssuanceItemStatus.PENDING
+              : BatchIssuanceItemStatus.SKIPPED,
           studentId: item.studentId,
         })),
       },
@@ -342,7 +409,10 @@ export async function createQueuedBatchRun({
  * @returns The final `BatchIssuanceRunDetail`.
  * @throws If the batch run is not found.
  */
-export async function processBatchRun(batchId: string, actorIdOverride?: string | null): Promise<BatchIssuanceRunDetail> {
+export async function processBatchRun(
+  batchId: string,
+  actorIdOverride?: string | null,
+): Promise<BatchIssuanceRunDetail> {
   const run = await prisma.batchIssuanceRun.findUnique({
     include: { items: { include: { credentialIssuance: true } } },
     where: { batchId },
@@ -352,221 +422,99 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
   }
   const auditActorId = actorIdOverride ?? run.actorId;
 
-  const pendingItems = run.items.filter((item) => retryableItemStatuses.has(item.status));
+  const pendingItems = run.items.filter((item) =>
+    retryableItemStatuses.has(item.status),
+  );
 
   const offerCreatedAt = new Date();
   await prisma.batchIssuanceRun.update({
-    data: { startedAt: offerCreatedAt, status: BatchIssuanceRunStatus.PROCESSING },
+    data: {
+      startedAt: offerCreatedAt,
+      status: BatchIssuanceRunStatus.PROCESSING,
+    },
     where: { batchId },
   });
 
   if (pendingItems.length === 0) {
     await prisma.batchIssuanceRun.update({
       where: { batchId },
-      data: { status: BatchIssuanceRunStatus.COMPLETED, completedAt: new Date() },
+      data: {
+        status: BatchIssuanceRunStatus.COMPLETED,
+        completedAt: new Date(),
+      },
     });
     return getBatchRunDetail(batchId);
   }
 
   const students = await getAllStudents();
-  const activeSchema = await getActiveCredentialDefinition();
-  const validityWindow = credentialValidityWindowFrom(offerCreatedAt, activeSchema.credentialValidityDays);
-  const studentsById = new Map(
-    students.flatMap((student) => [
-      [student.credential.studentNumber, student] as const,
-      [student.profile.id, student] as const,
-    ]),
-  );
-  const blockedItems = new Set<string>();
-
-  await Promise.all(
-    pendingItems.map(async (item) => {
-      const student = studentsById.get(item.studentId);
-      let activeIssuance: CredentialIssuance | null = null;
-
-      for (const studentId of credentialLookupIdsForItem(item, student)) {
-        activeIssuance = await findActiveCredentialIssuance({
-          credentialDefinitionId: activeSchema.credentialDefinitionId,
-          studentId,
-        });
-        if (activeIssuance) break;
-      }
-
-      if (activeIssuance) {
-        blockedItems.add(item.id);
-        await prisma.batchIssuanceItem.update({
-          data: {
-            credentialIssuanceId: activeIssuance.id,
-            skipReason: `Student already has an active credential issuance in status ${activeIssuance.status}.`,
-            status: BatchIssuanceItemStatus.SKIPPED,
-          },
-          where: { id: item.id },
-        });
-      }
-    }),
-  );
-  const allowedPendingItems = pendingItems.filter((item) => !blockedItems.has(item.id));
-  let itemsForAgent = allowedPendingItems
-    .map((item) => ({ item, student: studentsById.get(item.studentId) }))
-    .filter((entry): entry is { item: typeof allowedPendingItems[number]; student: StudentRecord } => Boolean(entry.student));
-
-  await Promise.all(
-    allowedPendingItems
-      .filter((item) => !studentsById.has(item.studentId))
-      .map((item) =>
-        prisma.batchIssuanceItem.update({
-          data: {
-            failureReason: "Student record was not found during batch processing.",
-            status: BatchIssuanceItemStatus.FAILED,
-          },
-          where: { id: item.id },
-        }),
-      ),
-  );
-
-  let agentResult: Awaited<ReturnType<typeof createBatchActivationLinks>> = { failures: [], offers: [] };
-  if (itemsForAgent.length > 0) {
-    try {
-      agentResult = await createBatchActivationLinks({
-        credentialDefinitionId: activeSchema.credentialDefinitionId,
-        ...(activeSchema.revocationRegistryDefinitionId
-          ? { revocationRegistryDefinitionId: activeSchema.revocationRegistryDefinitionId }
-          : {}),
-        students: itemsForAgent
-          .map(({ item, student }) => ({
-            attributes: attributesForStudent(student, activeSchema.schemaAttributes, validityWindow),
-            email: student.profile.email,
-            externalId: item.studentId,
-            idempotencyKey: batchItemIdempotencyKey(batchId, item.id),
-          })),
-      });
-    } catch (error) {
-      const failureReason = error instanceof Error ? error.message : "Agent service request failed.";
-      await Promise.all(
-        itemsForAgent.map(({ item }) =>
-          prisma.batchIssuanceItem.update({
-            data: {
-              failureReason,
-              status: BatchIssuanceItemStatus.FAILED,
-            },
-            where: { id: item.id },
-          }),
-        ),
-      );
-      itemsForAgent = [];
-    }
-  }
-  const offerByStudentId = new Map(agentResult.offers.map((offer) => [offer.externalId, offer]));
-  const failureByStudentId = new Map(agentResult.failures.map((failure) => [failure.externalId, failure]));
-
+  const selection = parseBatchIssuanceSelection(run.filters);
   await mapWithConcurrency(
-    itemsForAgent,
+    pendingItems,
     env.BATCH_ISSUANCE_PROCESSING_CONCURRENCY,
-    async ({ item, student }) => {
+    async (item) => {
       try {
-        const offer = offerByStudentId.get(item.studentId);
-        const failure = failureByStudentId.get(item.studentId);
-
-        if (failure || !offer) {
-          await prisma.batchIssuanceItem.update({
-            data: {
-              failureReason: failure?.message ?? "Agent service did not return an offer for this student.",
-              status: BatchIssuanceItemStatus.FAILED,
-            },
-            where: { id: item.id },
-          });
-          return;
-        }
-
-        const publicActivationUrl = toPublicWalletActivationLink(offer.activationUrl);
-        const publicOffer = { ...offer, activationUrl: publicActivationUrl };
-        const issuance = await createCredentialIssuanceFromOffer({
-          activationId: offer.activationId,
-          activationUrl: publicActivationUrl,
-          credentialDefinitionId: activeSchema.credentialDefinitionId,
-          credentialExchangeId: offer.credentialExchangeId,
-          credentialValidFrom: validityWindow.validFrom,
-          credentialExpiresAt: validityWindow.expiresAt,
-          credentialRevocationId: offer.credentialRevocationId,
-          deliveryStatus: CredentialDeliveryStatus.PENDING,
-          email: offer.email,
-          expiresAt: offer.expiresAt,
-          revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId,
-          schemaVersion: activeSchema.schemaVersion ?? undefined,
-          studentId: item.studentId,
-          wasDelivered: false,
+        const student = students.find(
+          (candidate) =>
+            candidate.profile.id === item.studentId ||
+            candidate.credential.studentNumber === item.studentId,
+        );
+        if (!student)
+          throw new Error(
+            "Student record was not found during batch processing.",
+          );
+        const key = batchItemIdempotencyKey(batchId, item.id);
+        const replay = await prisma.credentialOfferAttempt.findUnique({
+          where: { key },
         });
+        if (!replay) {
+          const active = await findActiveCredentialIssuance({
+            studentId: item.studentId,
+            credentialDefinitionId: (await getActiveCredentialDefinition())
+              .credentialDefinitionId,
+          });
+          if (active) {
+            await prisma.batchIssuanceItem.update({
+              where: { id: item.id },
+              data: {
+                status: "SKIPPED",
+                skipReason:
+                  "Student already has an active credential issuance.",
+              },
+            });
+            return;
+          }
+        }
+        const attempt =
+          replay ??
+          (await prepareOffer({
+            key,
+            student,
+            now: offerCreatedAt,
+            actorId: auditActorId,
+            options: selection,
+          }));
+        const issuance = await deliverPreparedOffer(attempt);
         await prisma.batchIssuanceItem.update({
           where: { id: item.id },
-          data: { credentialIssuanceId: issuance.id, failureReason: null, status: BatchIssuanceItemStatus.OFFER_CREATED },
-        });
-        await prisma.credentialIssuance.updateMany({
-          data: { status: "OFFER_SENT" },
-          where: { id: issuance.id, status: "FAILED" },
-        });
-        await reconcileCredentialEventLogs(offer.credentialExchangeId);
-
-        let delivery: Partial<ActivationDelivery>;
-        try {
-          await sendActivationEmail(student, publicOffer);
-          delivery = { deliveredAt: new Date().toISOString(), emailStatus: "Sent", status: "Delivered" };
-        } catch (error) {
-          delivery = {
-            emailStatus: "Failed",
-            failureReason: error instanceof Error ? error.message : String(error),
-            status: "Failed",
-          };
-        }
-
-        const deliveryStatus = delivery.status === "Delivered"
-          ? CredentialDeliveryStatus.DELIVERED
-          : CredentialDeliveryStatus.FAILED;
-        await prisma.credentialIssuance.update({
-          data: {
-            deliveryStatus,
-            failureReason: delivery.failureReason ?? null,
-          },
-          where: { id: issuance.id },
-        });
-        if (deliveryStatus === CredentialDeliveryStatus.FAILED) {
-          await prisma.credentialIssuance.updateMany({
-            data: { status: "FAILED" },
-            where: { id: issuance.id, status: "OFFER_SENT" },
-          });
-        }
-
-        await recordCredentialOfferSentAudit({
-          actorId: auditActorId,
-          batchId,
-          batchItemId: item.id,
-          credentialDefinitionId: activeSchema.credentialDefinitionId,
-          credentialExchangeId: offer.credentialExchangeId,
-          credentialIssuanceId: issuance.id,
-          deliveryStatus,
-          failureReason: delivery.failureReason,
-          studentId: item.studentId,
-        });
-
-        await prisma.batchIssuanceItem.update({
           data: {
             credentialIssuanceId: issuance.id,
-            failureReason: delivery.failureReason,
-            status: delivery.status === "Delivered"
-              ? BatchIssuanceItemStatus.DELIVERED
-              : BatchIssuanceItemStatus.DELIVERY_FAILED,
+            status: issuance.status === "ISSUED" ? "ACTIVATED" : "DELIVERED",
+            failureReason: null,
           },
-          where: { id: item.id },
         });
       } catch (error) {
-        const failureReason = error instanceof Error ? error.message : "Portal post-processing failed.";
-        try {
-          await prisma.batchIssuanceItem.update({
-            data: { failureReason, status: BatchIssuanceItemStatus.FAILED },
-            where: { id: item.id },
-          });
-        } catch {
-          console.error("[batch-issuance] failed to persist an item failure", { batchId, batchItemId: item.id });
-        }
+        const attempt = await prisma.credentialOfferAttempt.findUnique({
+          where: { key: batchItemIdempotencyKey(batchId, item.id) },
+        });
+        await prisma.batchIssuanceItem.update({
+          where: { id: item.id },
+          data: {
+            credentialIssuanceId: attempt?.issuanceId,
+            status: attempt?.issuanceId ? "DELIVERY_FAILED" : "FAILED",
+            failureReason:
+              error instanceof Error ? error.message : "Issuance failed.",
+          },
+        });
       }
     },
   );
@@ -575,9 +523,17 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
     include: { items: { include: { credentialIssuance: true } } },
     where: { batchId },
   });
-  const delivered = updatedRun.items.filter((item) => item.status === BatchIssuanceItemStatus.DELIVERED).length;
-  const failed = updatedRun.items.filter((item) => failedItemStatuses.has(item.status)).length;
-  const skipped = updatedRun.items.filter((item) => item.status === BatchIssuanceItemStatus.SKIPPED).length;
+  const delivered = updatedRun.items.filter(
+    (item) =>
+      item.status === BatchIssuanceItemStatus.DELIVERED ||
+      item.status === BatchIssuanceItemStatus.ACTIVATED,
+  ).length;
+  const failed = updatedRun.items.filter((item) =>
+    failedItemStatuses.has(item.status),
+  ).length;
+  const skipped = updatedRun.items.filter(
+    (item) => item.status === BatchIssuanceItemStatus.SKIPPED,
+  ).length;
   const status =
     failed > 0 && delivered > 0
       ? BatchIssuanceRunStatus.PARTIALLY_FAILED
@@ -590,6 +546,9 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
       completedAt: new Date(),
       failedCount: failed,
       issuedCount: delivered,
+      activatedCount: updatedRun.items.filter(
+        (item) => item.status === BatchIssuanceItemStatus.ACTIVATED,
+      ).length,
       skippedCount: skipped,
       status,
     },
@@ -622,7 +581,9 @@ export async function listBatchRuns(): Promise<BatchIssuanceRunSummary[]> {
   return runs.map(toSummary);
 }
 
-export async function getBatchRunDetail(batchId: string): Promise<BatchIssuanceRunDetail> {
+export async function getBatchRunDetail(
+  batchId: string,
+): Promise<BatchIssuanceRunDetail> {
   const run = await prisma.batchIssuanceRun.findUnique({
     include: { items: { include: { credentialIssuance: true } } },
     where: { batchId },
@@ -633,14 +594,32 @@ export async function getBatchRunDetail(batchId: string): Promise<BatchIssuanceR
   return toDetail(run);
 }
 
-export async function retryFailedBatchRun(batchId: string, actorId?: string | null) {
+export async function retryFailedBatchRun(
+  batchId: string,
+  actorId?: string | null,
+) {
   // Claim the retry atomically so overlapping requests cannot start two processors.
   const queued = await prisma.batchIssuanceRun.updateMany({
-    where: { batchId, status: { in: [BatchIssuanceRunStatus.FAILED, BatchIssuanceRunStatus.PARTIALLY_FAILED] } },
-    data: { status: BatchIssuanceRunStatus.QUEUED, queuedAt: new Date(), completedAt: null },
+    where: {
+      batchId,
+      status: {
+        in: [
+          BatchIssuanceRunStatus.FAILED,
+          BatchIssuanceRunStatus.PARTIALLY_FAILED,
+        ],
+      },
+    },
+    data: {
+      status: BatchIssuanceRunStatus.QUEUED,
+      queuedAt: new Date(),
+      completedAt: null,
+    },
   });
   if (!queued.count) {
-    throw new StudentIssuanceError("Only a finished batch with failed items can be retried.", 409);
+    throw new StudentIssuanceError(
+      "Only a finished batch with failed items can be retried.",
+      409,
+    );
   }
   await prisma.batchIssuanceItem.updateMany({
     where: { batchRun: { batchId }, status: { in: [...failedItemStatuses] } },
@@ -656,21 +635,37 @@ export async function retryFailedBatchRun(batchId: string, actorId?: string | nu
 }
 
 /** Runs inside Next.js after(); catches unexpected failures without leaving an active run. */
-export async function processBatchRunInBackground(batchId: string, actorId?: string | null) {
+export async function processBatchRunInBackground(
+  batchId: string,
+  actorId?: string | null,
+) {
   try {
     await processBatchRun(batchId, actorId);
   } catch {
     console.error("[batch-issuance] background processing failed", { batchId });
     await prisma.batchIssuanceItem.updateMany({
-      where: { batchRun: { batchId }, status: { in: [...retryableItemStatuses] } },
-      data: { status: BatchIssuanceItemStatus.FAILED, failureReason: "Background processing was interrupted. Retry the failed items." },
+      where: {
+        batchRun: { batchId },
+        status: { in: [...retryableItemStatuses] },
+      },
+      data: {
+        status: BatchIssuanceItemStatus.FAILED,
+        failureReason:
+          "Background processing was interrupted. Retry the failed items.",
+      },
     });
     const run = await getBatchRunDetail(batchId);
     await prisma.batchIssuanceRun.update({
       where: { batchId },
       data: {
-        status: run.issuedCount > 0 ? BatchIssuanceRunStatus.PARTIALLY_FAILED : BatchIssuanceRunStatus.FAILED,
-        completedAt: new Date(), failedCount: run.failedCount, issuedCount: run.issuedCount, skippedCount: run.skippedCount,
+        status:
+          run.issuedCount > 0
+            ? BatchIssuanceRunStatus.PARTIALLY_FAILED
+            : BatchIssuanceRunStatus.FAILED,
+        completedAt: new Date(),
+        failedCount: run.failedCount,
+        issuedCount: run.issuedCount,
+        skippedCount: run.skippedCount,
       },
     });
   }

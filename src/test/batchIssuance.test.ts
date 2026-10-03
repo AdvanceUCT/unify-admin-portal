@@ -1,499 +1,142 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { createBatchActivationLinks } from "@/lib/agentClient";
-import { sendCredentialActivationEmail } from "@/lib/email/credential-activation";
-import { resetMockActivationStore } from "@/lib/api/mockActivationStore";
-import { recordCredentialOfferSentAudit } from "@/lib/credentials/audit";
-import {
-  parseBatchIssuanceSelection,
-  queueRealBatchIssuance,
-  queueRealStudentIssuance,
-  queueRealStudentRenewal,
-  StudentIssuanceError,
-} from "@/lib/issuance/batchIssuance";
-import { assertCredentialIssuanceAllowed, createCredentialIssuanceFromOffer, overlayCredentialStatus, overlayCredentialStatusForStudent } from "@/lib/credentials/status";
-import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
-import { getUniversityProfile } from "@/lib/university/profile";
-
-const prismaMocks = vi.hoisted(() => ({
-  auditCreate: vi.fn(),
-  issuanceFindFirst: vi.fn(),
-  issuanceFindUnique: vi.fn(),
-  issuanceUpdate: vi.fn(),
-  issuanceUpdateMany: vi.fn(),
-  transaction: vi.fn(),
-}));
-
-vi.mock("@/lib/agentClient", () => ({
-  createBatchActivationLinks: vi.fn(),
-}));
-
-vi.mock("@/lib/email/credential-activation", () => ({
-  sendCredentialActivationEmail: vi.fn(),
-}));
-
 vi.mock("@/lib/config/env", () => ({
   env: { BATCH_ISSUANCE_PROCESSING_CONCURRENCY: 4 },
 }));
-
-vi.mock("@/lib/credentials/audit", () => ({
-  recordCredentialOfferSentAudit: vi.fn(async () => undefined),
+import { beforeEach, describe, expect, it, vi } from "vitest";
+const mocks = vi.hoisted(() => ({
+  findAttempt: vi.fn(),
+  prepare: vi.fn(),
+  deliver: vi.fn(),
+  student: vi.fn(),
+  issuance: vi.fn(),
+  enrolment: vi.fn(),
+  record: vi.fn(),
+  overlay: vi.fn(),
 }));
-
+vi.mock("@/lib/credentials/preparedOffer", () => ({
+  prepareOffer: mocks.prepare,
+  deliverPreparedOffer: mocks.deliver,
+}));
+vi.mock("@/lib/credentials/validityPolicy", () => ({
+  currentValidityPolicy: vi.fn(async () => ({
+    startMonth: 2,
+    startDay: 1,
+    expiryMonth: 11,
+    expiryDay: 30,
+  })),
+}));
+vi.mock("@/lib/students/repository", () => ({
+  getStudentById: mocks.student,
+  getAllStudents: vi.fn(async () => []),
+}));
 vi.mock("@/lib/credentials/status", () => ({
-  assertCredentialIssuanceAllowed: vi.fn(async () => undefined),
-  createCredentialIssuanceFromOffer: vi.fn(async (params: { renewedFromIssuanceId?: string; studentId: string }) => ({
-    id: params.renewedFromIssuanceId
-      ? "credential-renewal-100"
-      : params.studentId === "WOOJOS100"
-        ? "credential-demo-100"
-        : "credential-demo-001",
-  })),
-  overlayCredentialStatus: vi.fn((student) => ({
-    ...student,
-    credential: { ...student.credential, lifecycleState: "ACTIVE" },
-  })),
-  overlayCredentialStatuses: vi.fn(async (students) => students),
-  overlayCredentialStatusForStudent: vi.fn(async (student) => student),
-  reconcileCredentialEventLogs: vi.fn(async () => undefined),
+  overlayCredentialStatus: mocks.overlay,
+  overlayCredentialStatusForStudent: mocks.overlay,
 }));
-
-vi.mock("@/lib/db/prisma", () => {
-  const transaction = {
-    credentialAuditLog: {
-      create: prismaMocks.auditCreate,
-    },
-    credentialIssuance: {
-      update: prismaMocks.issuanceUpdate,
-    },
-  };
-
-  return {
-    prisma: {
-      $transaction: prismaMocks.transaction.mockImplementation((operation: (client: typeof transaction) => unknown) =>
-        operation(transaction),
-      ),
-      credentialIssuance: {
-        findFirst: prismaMocks.issuanceFindFirst,
-        findUnique: prismaMocks.issuanceFindUnique,
-        update: prismaMocks.issuanceUpdate,
-        updateMany: prismaMocks.issuanceUpdateMany,
-      },
-    },
-  };
-});
-
-vi.mock("@/lib/university/profile", () => ({
-  getUniversityProfile: vi.fn(),
+vi.mock("@/lib/db/prisma", () => ({
+  prisma: {
+    credentialOfferAttempt: { findUnique: mocks.findAttempt },
+    credentialIssuance: { findFirst: mocks.issuance },
+    credentialRenewalEnrolment: { findFirst: mocks.enrolment },
+    credentialRenewalRecord: { findUnique: mocks.record },
+  },
 }));
-
-vi.mock("@/lib/students/repository", async () => {
-  const { getMockAdminState } = await import("@/lib/api/mockActivationStore");
-  return {
-    getAllStudents: vi.fn(async () => getMockAdminState().students),
-    getStudentById: vi.fn(async (id: string) =>
-      getMockAdminState().students.find((student) => student.profile.id === id),
-    ),
-  };
-});
-
-vi.mock("@/lib/university/credentialSchema", () => ({
-  getActiveCredentialSchema: vi.fn(),
-}));
-
-describe("real batch issuance orchestration", () => {
-  beforeEach(() => {
-    resetMockActivationStore();
-    vi.mocked(createBatchActivationLinks).mockReset();
-    vi.mocked(sendCredentialActivationEmail).mockReset();
-    vi.mocked(recordCredentialOfferSentAudit).mockReset();
-    vi.mocked(recordCredentialOfferSentAudit).mockResolvedValue(undefined);
-    vi.mocked(assertCredentialIssuanceAllowed).mockReset();
-    vi.mocked(assertCredentialIssuanceAllowed).mockResolvedValue(undefined);
-    vi.mocked(createCredentialIssuanceFromOffer).mockReset();
-    vi.mocked(createCredentialIssuanceFromOffer).mockImplementation(async (params: { renewedFromIssuanceId?: string; studentId: string }) => ({
-      id: params.renewedFromIssuanceId
-        ? "credential-renewal-100"
-        : params.studentId === "WOOJOS100"
-          ? "credential-demo-100"
-          : "credential-demo-001",
-    }) as never);
-    vi.mocked(overlayCredentialStatus).mockReset();
-    vi.mocked(overlayCredentialStatus).mockImplementation((student) => ({
-      ...student,
-      credential: { ...student.credential, lifecycleState: "ACTIVE" },
-    }));
-    vi.mocked(overlayCredentialStatusForStudent).mockReset();
-    vi.mocked(overlayCredentialStatusForStudent).mockImplementation(async (student) => student);
-    vi.mocked(getUniversityProfile).mockReset();
-    vi.mocked(getUniversityProfile).mockResolvedValue({
-      defaultCredentialValidityDays: 365,
-      id: "profile-001",
-    } as never);
-    vi.mocked(getActiveCredentialSchema).mockReset();
-    vi.mocked(getActiveCredentialSchema).mockResolvedValue({
-      credentialDefinitionId: "cred-def-id",
-      schemaAttributes: ["studentNumber", "firstName", "lastName", "faculty", "year"],
-      schemaVersion: "1.0",
-    } as never);
-    prismaMocks.auditCreate.mockReset();
-    prismaMocks.issuanceFindFirst.mockReset();
-    prismaMocks.issuanceFindUnique.mockReset();
-    prismaMocks.issuanceUpdate.mockReset();
-    prismaMocks.issuanceUpdateMany.mockReset();
-    prismaMocks.issuanceUpdateMany.mockResolvedValue({ count: 1 });
-    prismaMocks.transaction.mockClear();
-    prismaMocks.transaction.mockImplementation((operation) =>
-      operation({
-        credentialAuditLog: { create: prismaMocks.auditCreate },
-        credentialIssuance: { update: prismaMocks.issuanceUpdate },
-      }),
-    );
+import {
+  parseBatchIssuanceSelection,
+  queueRealStudentIssuance,
+  queueRealStudentRenewal,
+} from "@/lib/issuance/batchIssuance";
+import { getSimulatedUniversityStudentRecordById } from "@/lib/student-records/simulatedUniversityRecords";
+const student = getSimulatedUniversityStudentRecordById("student-demo-100")!;
+const now = new Date("2026-08-10T10:00:00Z");
+beforeEach(() => {
+  vi.resetAllMocks();
+  mocks.student.mockResolvedValue(student);
+  mocks.overlay.mockImplementation((value) => value);
+  mocks.prepare.mockResolvedValue({ id: "attempt" });
+  mocks.deliver.mockResolvedValue({
+    id: "new",
+    activationExpiresAt: new Date("2026-08-11T10:00:00Z"),
   });
-
-  it("rejects synchronous batch limits above one hundred", () => {
+});
+describe("issuance and expired-only manual renewal", () => {
+  it("validates batch limits and enrolment options", () => {
     expect(() => parseBatchIssuanceSelection({ limit: 101 })).toThrow(
-      "Batch issuance limit must be an integer between 1 and 100.",
+      "between 1 and 100",
     );
+    expect(() =>
+      parseBatchIssuanceSelection({ autoRenew: true, renewalYears: 0 }),
+    ).toThrow();
+    expect(
+      parseBatchIssuanceSelection({ autoRenew: true, renewalYears: 3 }),
+    ).toMatchObject({ autoRenew: true, renewalYears: 3 });
   });
-
-  it("issues Joshua's simulated student credential through the agent service and sends email", async () => {
-    vi.mocked(createBatchActivationLinks).mockResolvedValue({
-      failures: [],
-      offers: [
-        {
-          activationId: "activation-001",
-          activationUrl: "unifywallet://activate?token=real-token",
-          credentialExchangeId: "credential-exchange-001",
-          email: "joshuawood.dc@gmail.com",
-          expiresAt: "2026-04-28T10:00:00.000Z",
-          externalId: "student-demo-100",
-        },
-      ],
+  it("persists issuance options with a stable academic-year key", async () => {
+    await queueRealStudentIssuance(student.profile.id, now, "admin", {
+      autoRenew: true,
+      renewalYears: 3,
     });
-
-    const agentRequest = vi.mocked(createBatchActivationLinks);
-    const result = await queueRealBatchIssuance(new Date("2026-04-27T10:00:00Z"));
-
-    expect(agentRequest).toHaveBeenCalledWith({
-      credentialDefinitionId: "cred-def-id",
-      students: expect.arrayContaining([
-        expect.objectContaining({
-          email: "joshuawood.dc@gmail.com",
-          externalId: "student-demo-100",
-        }),
-      ]),
-    });
-    const joshuaRequest = agentRequest.mock.calls[0][0].students.find(
-      (student) => student.externalId === "student-demo-100",
-    );
-    expect(joshuaRequest).toBeDefined();
-    expect(joshuaRequest).not.toHaveProperty("walletId");
-    expect(joshuaRequest?.attributes).toEqual([
-      { name: "studentNumber", value: "WOOJOS100" },
-      { name: "firstName", value: "Joshua" },
-      { name: "lastName", value: "Wood" },
-      { name: "faculty", value: "Health Sciences" },
-      { name: "year", value: "2026" },
-    ]);
-    expect(sendCredentialActivationEmail).toHaveBeenCalledWith(
+    expect(mocks.prepare).toHaveBeenCalledWith(
       expect.objectContaining({
-        activationUrl: "http://localhost:3000/activate?token=real-token",
-        studentName: "Joshua Wood",
-        to: "joshuawood.dc@gmail.com",
-      }),
-    );
-    expect(result.activationDeliveries[0]).toMatchObject({
-      activationUrl: "http://localhost:3000/activate?token=real-token",
-      credentialExchangeId: "credential-exchange-001",
-      credentialId: "credential-demo-100",
-      email: "joshuawood.dc@gmail.com",
-      status: "Delivered",
-      studentId: "student-demo-100",
-    });
-    expect(recordCredentialOfferSentAudit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        credentialExchangeId: "credential-exchange-001",
-        deliveryStatus: "DELIVERED",
-        studentId: "WOOJOS100",
-      }),
-    );
-    expect(vi.mocked(recordCredentialOfferSentAudit).mock.calls[0][0]).not.toHaveProperty("email");
-  });
-
-  it("issues only Joshua when requested from the student detail action", async () => {
-    vi.mocked(createBatchActivationLinks).mockResolvedValue({
-      failures: [],
-      offers: [
-        {
-          activationId: "activation-joshua",
-          activationUrl: "unifywallet://activate?token=joshua-token",
-          credentialExchangeId: "credential-exchange-joshua",
-          email: "joshuawood.dc@gmail.com",
-          expiresAt: "2026-04-28T10:00:00.000Z",
-          externalId: "student-demo-100",
-        },
-      ],
-    });
-
-    const result = await queueRealStudentIssuance("student-demo-100", new Date("2026-04-27T10:00:00Z"));
-
-    expect(createBatchActivationLinks).toHaveBeenCalledWith({
-      credentialDefinitionId: "cred-def-id",
-      students: [
-        expect.objectContaining({
-          email: "joshuawood.dc@gmail.com",
-          externalId: "student-demo-100",
-        }),
-      ],
-    });
-    expect(result.requestedCount).toBe(1);
-    expect(result.issuedCredentialIds).toEqual(["credential-demo-100"]);
-  });
-
-  it("uses one offer timestamp for validity attributes and DB expiry", async () => {
-    vi.mocked(getUniversityProfile).mockResolvedValueOnce({
-      defaultCredentialValidityDays: 30,
-      id: "profile-001",
-    } as never);
-    vi.mocked(getActiveCredentialSchema).mockResolvedValueOnce({
-      credentialDefinitionId: "cred-def-id",
-      schemaAttributes: ["studentNumber", "validFrom", "issuedAt", "expiresAt"],
-      schemaVersion: "1.0",
-    } as never);
-    vi.mocked(createBatchActivationLinks).mockResolvedValue({
-      failures: [],
-      offers: [
-        {
-          activationId: "activation-joshua",
-          activationUrl: "unifywallet://activate?token=joshua-token",
-          credentialExchangeId: "credential-exchange-joshua",
-          email: "joshuawood.dc@gmail.com",
-          expiresAt: "2026-04-28T10:00:00.000Z",
-          externalId: "student-demo-100",
-        },
-      ],
-    });
-
-    await queueRealStudentIssuance("student-demo-100", new Date("2026-04-27T10:00:00.000Z"));
-
-    const studentPayload = vi.mocked(createBatchActivationLinks).mock.calls[0][0].students[0];
-    expect(studentPayload.attributes).toEqual([
-      { name: "studentNumber", value: "WOOJOS100" },
-      { name: "validFrom", value: "2026-04-27T10:00:00.000Z" },
-      { name: "issuedAt", value: "2026-04-27T10:00:00.000Z" },
-      { name: "expiresAt", value: "2026-05-27T10:00:00.000Z" },
-    ]);
-    expect(createCredentialIssuanceFromOffer).toHaveBeenCalledWith(
-      expect.objectContaining({
-        credentialExpiresAt: new Date("2026-05-27T10:00:00.000Z"),
+        key: `student-issuance:${student.credential.studentNumber}:2026`,
+        options: { autoRenew: true, renewalYears: 3 },
       }),
     );
   });
-
-  it("records an offer audit log when email delivery fails", async () => {
-    vi.mocked(createBatchActivationLinks).mockResolvedValue({
-      failures: [],
-      offers: [
-        {
-          activationId: "activation-joshua",
-          activationUrl: "unifywallet://activate?token=joshua-token",
-          credentialExchangeId: "credential-exchange-joshua",
-          email: "joshuawood.dc@gmail.com",
-          expiresAt: "2026-04-28T10:00:00.000Z",
-          externalId: "student-demo-100",
-        },
-      ],
-    });
-    vi.mocked(sendCredentialActivationEmail).mockRejectedValueOnce(new Error("Email provider unavailable."));
-
-    const result = await queueRealStudentIssuance("student-demo-100", new Date("2026-04-27T10:00:00Z"));
-
-    expect(result.failures?.[0]).toMatchObject({
-      message: "Email provider unavailable.",
-    });
-    expect(recordCredentialOfferSentAudit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        batchId: null,
-        credentialExchangeId: "credential-exchange-joshua",
-        deliveryStatus: "FAILED",
-        failureReason: "Email provider unavailable.",
-        studentId: "WOOJOS100",
-      }),
-    );
-    expect(vi.mocked(recordCredentialOfferSentAudit).mock.calls[0][0]).not.toHaveProperty("email");
+  it("resumes a prepared attempt rather than preparing changed attributes", async () => {
+    const frozen = { id: "frozen" };
+    mocks.findAttempt.mockResolvedValue(frozen);
+    await queueRealStudentIssuance(student.profile.id, now);
+    expect(mocks.prepare).not.toHaveBeenCalled();
+    expect(mocks.deliver).toHaveBeenCalledWith(frozen);
   });
-
-  it("does not issue a credential for a student that is no longer in an issuable state", async () => {
-    vi.mocked(assertCredentialIssuanceAllowed).mockRejectedValueOnce(
-      new Error("Student already has an active credential issuance in status OFFER_SENT."),
-    );
-
-    await expect(queueRealStudentIssuance("student-demo-001")).rejects.toMatchObject({
-      message: "Student already has an active credential issuance in status OFFER_SENT.",
-      status: 409,
-    } satisfies Partial<StudentIssuanceError>);
-    expect(createBatchActivationLinks).not.toHaveBeenCalled();
-  });
-
-  it("creates a replacement offer for renewal without blocking on the existing active issuance", async () => {
-    prismaMocks.issuanceFindFirst.mockResolvedValue({
-      credentialDefinitionId: "cred-def-id",
-      credentialExchangeId: "credential-exchange-old",
-      id: "issuance-old",
-      studentId: "WOOJOS100",
-    });
-    vi.mocked(overlayCredentialStatusForStudent).mockImplementationOnce(async (student) => ({
+  it.each([
+    "ACTIVE",
+    "SUSPENDED",
+    "REVOKED",
+    "OFFER_SENT",
+    "ACCEPTED",
+    "FAILED",
+  ])("rejects manual renewal of %s credentials", async (lifecycleState) => {
+    mocks.issuance.mockResolvedValue({ id: "old" });
+    mocks.overlay.mockReturnValue({
       ...student,
-      credential: { ...student.credential, lifecycleState: "ACTIVE" },
-    }));
-    vi.mocked(createBatchActivationLinks).mockResolvedValue({
-      failures: [],
-      offers: [
-        {
-          activationId: "activation-renewal",
-          activationUrl: "unifywallet://activate?token=renewal-token",
-          credentialExchangeId: "credential-exchange-renewal",
-          email: "joshuawood.dc@gmail.com",
-          expiresAt: "2026-04-28T10:00:00.000Z",
-          externalId: "student-demo-100",
-        },
-      ],
+      credential: { ...student.credential, lifecycleState },
     });
-
-    const result = await queueRealStudentRenewal("student-demo-100", new Date("2026-04-27T10:00:00Z"), "admin-1");
-
-    expect(assertCredentialIssuanceAllowed).not.toHaveBeenCalled();
-    expect(createBatchActivationLinks).toHaveBeenCalledWith({
-      credentialDefinitionId: "cred-def-id",
-      students: [
-        expect.objectContaining({
-          email: "joshuawood.dc@gmail.com",
-          externalId: "student-demo-100",
-          idempotencyKey: "credential-renewal:issuance-old",
-        }),
-      ],
-    });
-    expect(result.activationDeliveries[0]).toMatchObject({
-      credentialId: "credential-renewal-100",
-      status: "Delivered",
-    });
-    expect(prismaMocks.issuanceUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ renewalStatus: "COMPLETED", renewedIntoIssuanceId: "credential-renewal-100" }),
-        where: expect.objectContaining({ id: "issuance-old" }),
-      }),
-    );
-    expect(prismaMocks.auditCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          action: "CREDENTIAL_RENEWAL_OFFER_CREATED",
-          actorId: "admin-1",
-        }),
-      }),
-    );
-  });
-
-  it("keeps a renewal retryable when activation email delivery fails", async () => {
-    prismaMocks.issuanceFindFirst.mockResolvedValue({
-      credentialDefinitionId: "cred-def-id",
-      credentialExchangeId: "credential-exchange-old",
-      id: "issuance-old",
-      studentId: "WOOJOS100",
-    });
-    vi.mocked(createBatchActivationLinks).mockResolvedValue({
-      failures: [],
-      offers: [{
-        activationId: "activation-renewal",
-        activationUrl: "unifywallet://activate?token=renewal-token",
-        credentialExchangeId: "credential-exchange-renewal",
-        email: "joshuawood.dc@gmail.com",
-        expiresAt: "2026-04-28T10:00:00.000Z",
-        externalId: "student-demo-100",
-      }],
-    });
-    vi.mocked(sendCredentialActivationEmail).mockRejectedValueOnce(new Error("Email provider unavailable."));
-
     await expect(
-      queueRealStudentRenewal("student-demo-100", new Date("2026-04-27T10:00:00Z"), "admin-1"),
-    ).rejects.toThrow("Email provider unavailable.");
-
-    expect(prismaMocks.issuanceUpdate).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
-        renewalFailureReason: "Email provider unavailable.",
-        renewalStatus: "FAILED",
-      }),
-      where: { id: "issuance-old" },
-    }));
+      queueRealStudentRenewal(student.profile.id, now),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(mocks.prepare).not.toHaveBeenCalled();
   });
-
-  it("records a failed renewal reason when the agent activation-link call times out", async () => {
-    prismaMocks.issuanceFindFirst.mockResolvedValue({
-      credentialDefinitionId: "cred-def-id",
-      credentialExchangeId: "credential-exchange-old",
-      id: "issuance-old",
-      studentId: "WOOJOS100",
-    });
-    vi.mocked(overlayCredentialStatusForStudent).mockImplementationOnce(async (student) => ({
+  it("preserves an existing enrolment instead of restarting its allowance", async () => {
+    mocks.issuance.mockResolvedValue({ id: "old" });
+    mocks.overlay.mockReturnValue({
       ...student,
-      credential: { ...student.credential, lifecycleState: "ACTIVE" },
-    }));
-    vi.mocked(createBatchActivationLinks).mockRejectedValueOnce(
-      new Error("Agent service request timed out after 60000ms."),
-    );
-
-    await expect(
-      queueRealStudentRenewal("student-demo-100", new Date("2026-04-27T10:00:00Z"), "admin-1"),
-    ).rejects.toThrow("Agent service request timed out after 60000ms.");
-
-    expect(prismaMocks.issuanceUpdateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          renewalFailureReason: null,
-          renewalStatus: "PENDING",
-        }),
-        where: expect.objectContaining({ id: "issuance-old" }),
-      }),
-    );
-    expect(prismaMocks.issuanceUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: {
-          renewalFailureReason: "Agent service request timed out after 60000ms.",
-          renewalStatus: "FAILED",
-        },
-        where: { id: "issuance-old" },
-      }),
-    );
-    expect(prismaMocks.auditCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          action: "CREDENTIAL_RENEWAL_FAILED",
-          message: "Agent service request timed out after 60000ms.",
-        }),
-      }),
-    );
-    expect(createCredentialIssuanceFromOffer).not.toHaveBeenCalled();
-  });
-
-  it("rejects manual renewal before a credential is active or expired", async () => {
-    prismaMocks.issuanceFindFirst.mockResolvedValue({
-      credentialDefinitionId: "cred-def-id",
-      credentialExchangeId: "credential-exchange-old",
-      id: "issuance-old",
-      studentId: "WOOJOS100",
+      credential: { ...student.credential, lifecycleState: "EXPIRED" },
     });
-    vi.mocked(overlayCredentialStatus).mockImplementationOnce((student) => ({
+    mocks.enrolment.mockResolvedValue({ id: "enrolment" });
+    mocks.record.mockResolvedValue({ id: "period", preparedAt: null });
+    await queueRealStudentRenewal(student.profile.id, now, "admin", {
+      autoRenew: true,
+      renewalYears: 10,
+    });
+    expect(mocks.prepare).toHaveBeenCalledWith(
+      expect.objectContaining({
+        renewalId: "period",
+        options: { autoRenew: false },
+        supersedesIssuanceId: "old",
+      }),
+    );
+  });
+  it("blocks an unresolved replacement for the same period", async () => {
+    mocks.issuance.mockResolvedValue({ id: "old" });
+    mocks.overlay.mockReturnValue({
       ...student,
-      credential: { ...student.credential, lifecycleState: "OFFER_SENT" },
-    }));
-
+      credential: { ...student.credential, lifecycleState: "EXPIRED" },
+    });
+    mocks.enrolment.mockResolvedValue({ id: "enrolment" });
+    mocks.record.mockResolvedValue({ preparedAt: now });
     await expect(
-      queueRealStudentRenewal("student-demo-100", new Date("2026-04-27T10:00:00Z"), "admin-1"),
-    ).rejects.toMatchObject({
-      message: "Credential is not ready for renewal in its current lifecycle state.",
-      status: 409,
-    } satisfies Partial<StudentIssuanceError>);
-
-    expect(prismaMocks.issuanceUpdateMany).not.toHaveBeenCalled();
-    expect(createBatchActivationLinks).not.toHaveBeenCalled();
+      queueRealStudentRenewal(student.profile.id, now),
+    ).rejects.toThrow("replacement already exists");
   });
 });

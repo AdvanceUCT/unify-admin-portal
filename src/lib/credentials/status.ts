@@ -19,7 +19,7 @@ import {
 import type { CredentialAutomationJob, CredentialEventLog, CredentialIssuance } from "@/generated/prisma/client";
 import type { CredentialActivityEvent, DashboardSummary, StudentRecord } from "@/lib/api/types";
 import { toPublicCredentialStatus, type CredentialLifecycleSource } from "@/lib/credentials/lifecycle";
-import { nextRenewalAt } from "@/lib/credentials/renewalCadence";
+import { reconcileRenewalActivation } from "./renewalActivation";
 import { prisma } from "@/lib/db/prisma";
 import {
   derivedCredentialEventId,
@@ -86,7 +86,6 @@ export function overlayCredentialStatus(
   issuance?: CredentialLifecycleSource &
     Pick<CredentialIssuance, "credentialDefinitionId" | "credentialExchangeId" | "credentialExpiresAt" | "credentialValidFrom" | "id" | "issuedAt" | "schemaVersion"> &
     { automationJobs?: CredentialAutomationJob[] },
-  renewalSettings?: { automaticCredentialRenewalEnabled: boolean; renewalCadenceMonths: number } | null,
 ): StudentRecord {
   const currentJob = issuance?.automationJobs?.find((job) =>
     job.status === "PENDING" || job.status === "PROCESSING" || job.status === "FAILED",
@@ -104,10 +103,7 @@ export function overlayCredentialStatus(
       schemaVersion: issuance?.schemaVersion ?? student.credential.schemaVersion,
       validFrom: issuance?.credentialValidFrom?.toISOString() ?? student.credential.validFrom,
       expiresAt: issuance?.credentialExpiresAt?.toISOString() ?? student.credential.expiresAt,
-      nextRenewalAt:
-        renewalSettings?.automaticCredentialRenewalEnabled && issuance?.issuedAt
-          ? nextRenewalAt(issuance.issuedAt, renewalSettings.renewalCadenceMonths).toISOString()
-          : undefined,
+      nextRenewalAt: undefined,
       scheduledReactivationAt: scheduledReactivation?.dueAt.toISOString(),
       automation: currentJob
         ? {
@@ -137,14 +133,11 @@ export async function overlayCredentialStatuses(students: StudentRecord[]): Prom
   }
   const studentIds = students.flatMap((student) => [student.credential.studentNumber, student.profile.id]);
 
-  const [issuances, renewalSettings] = await Promise.all([
+  const [issuances] = await Promise.all([
     prisma.credentialIssuance.findMany({
       include: { automationJobs: { orderBy: { createdAt: "desc" }, take: 10 } },
       orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
       where: { studentId: { in: studentIds } },
-    }),
-    prisma.universityProfile.findFirst({
-      select: { automaticCredentialRenewalEnabled: true, renewalCadenceMonths: true },
     }),
   ]);
   const issuancesByStudent = latestIssuanceByStudent(issuances);
@@ -161,27 +154,23 @@ export async function overlayCredentialStatuses(students: StudentRecord[]): Prom
     return overlayCredentialStatus(
       student,
       withStudentAutomation(latestIssuance, automationJobs),
-      renewalSettings,
     );
   });
 }
 
 export async function overlayCredentialStatusForStudent(student: StudentRecord): Promise<StudentRecord> {
-  const [issuances, renewalSettings] = await Promise.all([
+  const [issuances] = await Promise.all([
     prisma.credentialIssuance.findMany({
       include: { automationJobs: { orderBy: { createdAt: "desc" }, take: 10 } },
       orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
       where: { studentId: { in: [student.credential.studentNumber, student.profile.id] } },
-    }),
-    prisma.universityProfile.findFirst({
-      select: { automaticCredentialRenewalEnabled: true, renewalCadenceMonths: true },
     }),
   ]);
 
   const issuance = issuances[0];
   const automationJobs = issuances.flatMap((candidate) => candidate.automationJobs)
     .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
-  return overlayCredentialStatus(student, withStudentAutomation(issuance, automationJobs), renewalSettings);
+  return overlayCredentialStatus(student, withStudentAutomation(issuance, automationJobs));
 }
 
 export async function findActiveCredentialIssuance(params: {
@@ -250,7 +239,7 @@ export async function createCredentialIssuanceFromOffer(params: {
         : CredentialIssuanceStatus.OFFER_SENT,
       studentId: params.studentId,
       renewedFromIssuanceId: params.renewedFromIssuanceId,
-      renewalStatus: params.renewedFromIssuanceId ? CredentialRenewalStatus.PENDING : CredentialRenewalStatus.NONE,
+      renewalStatus: CredentialRenewalStatus.NONE,
       renewalRequestedAt: params.renewedFromIssuanceId ? new Date() : undefined,
     };
   return prisma.credentialIssuance.upsert({
@@ -364,6 +353,7 @@ export async function reconcileCredentialEventLogs(credentialExchangeId: string)
       });
     }
   }
+  await reconcileRenewalActivation(issuance.id);
 }
 
 /**
@@ -405,6 +395,7 @@ export async function recordCredentialStateChangedEvent(payload: CredentialState
   });
 
   if (createResult.count === 0) {
+    await reconcileCredentialEventLogs(payload.credentialExchangeId);
     return { duplicate: true, status: existingIssuance?.status };
   }
 
@@ -496,6 +487,7 @@ export async function recordCredentialStateChangedEvent(payload: CredentialState
     }
   }
 
+  if (existingIssuance) await reconcileRenewalActivation(existingIssuance.id);
   return { duplicate: false, status: mappedStatus };
 }
 
