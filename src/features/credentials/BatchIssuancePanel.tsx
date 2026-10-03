@@ -8,7 +8,7 @@
 import Link from "next/link";
 import { Eye, LoaderCircle, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { createBatchRun, previewBatchIssuance } from "@/lib/api/client";
@@ -49,6 +49,7 @@ export function BatchIssuancePanel({
   programmesByFaculty: Record<string, string[]>;
 }) {
   const router = useRouter();
+  function invalidatePreview() { setBatchPreview(null); }
   const [credentialStatus, setCredentialStatus] = useState<"" | CredentialLifecycleState>("");
   const [faculty, setFaculty] = useState("");
   const [programme, setProgramme] = useState("");
@@ -56,6 +57,8 @@ export function BatchIssuancePanel({
   const [error, setError] = useState<string | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isNavigating, startNavigation] = useTransition();
+  const isStarting = isProcessing || isNavigating;
 
   const facultyOptions = Object.keys(programmesByFaculty);
   const allProgrammeOptions = Object.values(programmesByFaculty).flat();
@@ -66,11 +69,12 @@ export function BatchIssuancePanel({
     programme: programme || undefined,
   };
   const programmeOptions = faculty ? programmesByFaculty[faculty] : allProgrammeOptions;
-  const canConfirm = Boolean(batchPreview?.eligibleCount) && !isProcessing;
+  const canConfirm = Boolean(batchPreview?.eligibleCount) && !isStarting && !isPreviewing;
 
   function handleFacultyChange(nextFaculty: string) {
     const nextProgrammeOptions = nextFaculty ? programmesByFaculty[nextFaculty] : allProgrammeOptions;
     setFaculty(nextFaculty);
+    invalidatePreview();
 
     if (programme && !nextProgrammeOptions.includes(programme)) {
       setProgramme("");
@@ -80,6 +84,7 @@ export function BatchIssuancePanel({
   async function handlePreview() {
     setError(null);
     setIsPreviewing(true);
+    invalidatePreview();
 
     try {
       setBatchPreview(await previewBatchIssuance(selection));
@@ -95,8 +100,8 @@ export function BatchIssuancePanel({
     setIsProcessing(true);
 
     try {
-      const run = await createBatchRun(selection);
-      router.push(`/credentials/issuance/batch/runs/${encodeURIComponent(run.batchId)}`);
+      const run = await createBatchRun(batchPreview!.filters);
+      startNavigation(() => router.push(`/credentials/issuance/batch/runs/${encodeURIComponent(run.batchId)}`));
     } catch (processError) {
       setError(processError instanceof Error ? processError.message : "Batch run failed.");
     } finally {
@@ -111,7 +116,7 @@ export function BatchIssuancePanel({
           <div>
             <h2 className="text-section-title text-fg">Create batch run</h2>
             <p className="mt-1 text-sm text-fg-muted">
-              Preview eligible students before generating up to 100 offers per synchronous batch.
+              Preview up to 100 students. Issuance continues in the background; you can leave and return to batch history.
             </p>
           </div>
           <Link
@@ -127,6 +132,7 @@ export function BatchIssuancePanel({
           <label className="space-y-1.5 text-sm">
             <span className="font-medium text-fg">Faculty</span>
             <select
+              disabled={isPreviewing || isStarting}
               className="h-10 w-full rounded-md border border-border bg-surface px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
               onChange={(event) => handleFacultyChange(event.target.value)}
               value={faculty}
@@ -142,8 +148,9 @@ export function BatchIssuancePanel({
           <label className="space-y-1.5 text-sm">
             <span className="font-medium text-fg">Programme</span>
             <select
+              disabled={isPreviewing || isStarting}
               className="h-10 w-full rounded-md border border-border bg-surface px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-              onChange={(event) => setProgramme(event.target.value)}
+              onChange={(event) => (setProgramme(event.target.value), invalidatePreview())}
               value={programme}
             >
               <option value="">All programmes</option>
@@ -157,8 +164,9 @@ export function BatchIssuancePanel({
           <label className="space-y-1.5 text-sm">
             <span className="font-medium text-fg">Credential status</span>
             <select
+              disabled={isPreviewing || isStarting}
               className="h-10 w-full rounded-md border border-border bg-surface px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-              onChange={(event) => setCredentialStatus(event.target.value as "" | CredentialLifecycleState)}
+              onChange={(event) => (setCredentialStatus(event.target.value as "" | CredentialLifecycleState), invalidatePreview())}
               value={credentialStatus}
             >
               {credentialStatusOptions.map((option) => (
@@ -171,7 +179,7 @@ export function BatchIssuancePanel({
           <div className="flex items-end">
             <button
               className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-fg-subtle"
-              disabled={isPreviewing || isProcessing}
+              disabled={isPreviewing || isStarting}
               onClick={handlePreview}
               type="button"
             >
@@ -204,8 +212,8 @@ export function BatchIssuancePanel({
               onClick={handleConfirm}
               type="button"
             >
-              {isProcessing ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Send aria-hidden className="size-4" />}
-              {isProcessing ? "Processing" : `Generate ${batchPreview.eligibleCount} offers`}
+              {isStarting ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Send aria-hidden className="size-4" />}
+              {isStarting ? "Starting batch" : `Generate ${batchPreview.eligibleCount} offers`}
             </button>
           </div>
           <div className="overflow-x-auto">

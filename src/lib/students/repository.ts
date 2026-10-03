@@ -71,6 +71,18 @@ export async function getAllStudents(): Promise<StudentRecord[]> {
   return students.map((student) => toStudentRecord(student, settings.name, settings.validityDays));
 }
 
+/** Fetch only the records referenced by a persisted batch run. */
+export async function getStudentsByIdentifiers(identifiers: string[]): Promise<StudentRecord[]> {
+  if (identifiers.length === 0) return [];
+  const [students, settings] = await Promise.all([
+    prisma.student.findMany({
+      where: { OR: [{ id: { in: identifiers } }, { studentNumber: { in: identifiers } }] },
+    }),
+    institutionSettings(),
+  ]);
+  return students.map((student) => toStudentRecord(student, settings.name, settings.validityDays));
+}
+
 export async function getStudentById(id: string): Promise<StudentRecord | undefined> {
   const [student, settings] = await Promise.all([
     prisma.student.findUnique({ where: { id } }),

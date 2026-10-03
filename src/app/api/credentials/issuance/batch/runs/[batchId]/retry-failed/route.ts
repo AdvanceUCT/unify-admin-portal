@@ -3,11 +3,14 @@
  * @module app/api/credentials/issuance/batch/runs/[batchId]/retry-failed/route
  */
 
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
 import { assertCan, PermissionError, type SessionWithRole } from "@/lib/auth/permissions";
 import { getCurrentAdminSession, getSessionForAudit } from "@/lib/auth/session";
-import { retryFailedBatchRun } from "@/lib/issuance/batchRuns";
+import { retryFailedBatchRun, processBatchRunInBackground } from "@/lib/issuance/batchRuns";
+import { StudentIssuanceError } from "@/lib/issuance/batchIssuance";
+
+export const maxDuration = 300;
 
 /** Handles POST requests to `/api/credentials/issuance/batch/runs/[batchId]/retry-failed`. */
 export async function POST(_request: Request, { params }: { params: Promise<{ batchId: string }> }) {
@@ -22,11 +25,13 @@ export async function POST(_request: Request, { params }: { params: Promise<{ ba
 
   try {
     const [{ batchId }, auditSession] = await Promise.all([params, getSessionForAudit()]);
-    return NextResponse.json(await retryFailedBatchRun(batchId, auditSession.actorId));
+    const run = await retryFailedBatchRun(batchId, auditSession.actorId);
+    after(() => processBatchRunInBackground(run.batchId, auditSession.actorId));
+    return NextResponse.json(run, { status: 202, headers: { Location: `/api/credentials/issuance/batch/runs/${encodeURIComponent(batchId)}` } });
   } catch (error) {
     return NextResponse.json(
       { error: { message: error instanceof Error ? error.message : "Batch retry failed." } },
-      { status: 502 },
+      { status: error instanceof StudentIssuanceError ? error.status : 502 },
     );
   }
 }
