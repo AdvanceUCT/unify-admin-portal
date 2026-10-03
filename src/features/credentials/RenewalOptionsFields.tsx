@@ -115,12 +115,12 @@ export function RenewalOptionsFields({
           {result.error}
         </p>
       )}
-      {!result.preview && !result.error && (
+      {(value.autoRenew || existingFinalYear) && !result.preview && !result.error && (
         <p role="status" className="text-xs text-fg-subtle">
           Resolving validity...
         </p>
       )}
-      {result.preview && (
+      {(value.autoRenew || existingFinalYear) && result.preview && (
         <div className="rounded-lg bg-surface-muted px-3 py-2.5">
           <dl className="flex flex-wrap gap-x-6 gap-y-2 text-xs">
             <div>

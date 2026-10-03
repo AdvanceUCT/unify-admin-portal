@@ -12,7 +12,7 @@ Settings changes affect future, unprepared offers for existing enrolments. Alrea
 
 ## Monitoring and recovery
 
-Credentials → Renewals provides Upcoming and History views, student/date/status filters, pagination, remaining years, delivery and activation outcomes, and recent scheduler runs. Student details also shows the enrolment and cancellation controls.
+Issue Credentials > Renewals opens with all queued academic periods. Select a period to search students and filter by faculty, programme, or renewal status. History shows previously triggered renewals, dates, and delivery outcomes. Pagination retains the selected period and filters. Scheduler diagnostics are collapsed under Settings > Validity & renewal. Student details shows a compact enrolment and cancellation card below the credential details.
 
 An offer being delivered is not holder activation. Students still accept offers in the wallet, so issuing on the shared start date can leave a gap until acceptance. The following academic year's offer remains eligible even if a prior offer was ignored. Fully elapsed periods are skipped. Activation reconciliation revokes superseded activated credentials, including across missed intermediate activations.
 

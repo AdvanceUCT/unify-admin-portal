@@ -49,13 +49,16 @@ function midnight(year: number, month: number, day: number) {
   return new Date(Date.UTC(year, month - 1, clamped, -2));
 }
 
+export function annualPeriodCrossesYear(policy: AnnualPeriodPolicy) {
+  return policy.expiryMonth * 100 + policy.expiryDay <
+    policy.startMonth * 100 + policy.startDay;
+}
+
 export function academicPeriod(
   policy: AnnualPeriodPolicy,
   academicYear: number,
 ) {
-  const crossesYear =
-    policy.expiryMonth * 100 + policy.expiryDay <
-    policy.startMonth * 100 + policy.startDay;
+  const crossesYear = annualPeriodCrossesYear(policy);
   const start = midnight(academicYear, policy.startMonth, policy.startDay);
   const expiresAt = new Date(
     midnight(

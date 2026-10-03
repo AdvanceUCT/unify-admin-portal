@@ -628,14 +628,14 @@ it("shows suspension from the activated credential and retains cancellation hist
   });
   expect(overview.records).toHaveLength(2);
   expect(overview.records.every((record) => record.suspended)).toBe(true);
-  expect(
-    (
-      await renewalOverview({
-        view: "history",
-        student: student.credential.studentNumber,
-      })
-    ).records[0].attempts[0].issuance?.deliveryStatus,
-  ).toBe("DELIVERED");
+  expect((await renewalOverview({ view: "history", student: student.credential.studentNumber })).records).toEqual([]);
+  await prisma.credentialIssuance.update({ where: { id: issuance.id }, data: { lifecycleStatus: "ACTIVE" } });
+  vi.setSystemTime(new Date("2027-02-01T10:00:00Z"));
+  await processAnnualRenewal((await claimAnnualRenewal(new Date()))!, new Date());
+  await prisma.credentialIssuance.update({ where: { id: issuance.id }, data: { lifecycleStatus: "SUSPENDED" } });
+  const history = await renewalOverview({ view: "history", student: student.credential.studentNumber });
+  expect(history.records[0].attempts[0].issuance?.deliveryStatus).toBe("DELIVERED");
+  expect(history.records[0].suspended).toBe(true);
   await cancelRenewalEnrolment(enrolment.id, "test-admin");
   const details = await studentRenewalEnrolment([
     student.credential.studentNumber,
@@ -713,4 +713,39 @@ it("summarizes operations without student rows and supports academic-year and at
   await expect(renewalOverview({ year: "invalid" })).rejects.toThrow(
     "four-digit year",
   );
+});
+
+
+it("filters entire renewal periods by student, faculty and programme without conflating changed dates", async () => {
+  const { enrolment } = await enrol();
+  await prisma.student.update({ where: { id: student.profile.id }, data: { faculty: "Science", programme: "Computer Science" } });
+  const first = await prisma.credentialRenewalRecord.findUniqueOrThrow({ where: { enrolmentId_academicYear: { enrolmentId: enrolment.id, academicYear: 2027 } } });
+  const secondStudent = await prisma.student.create({ data: { studentNumber: `FILTER-${randomUUID()}`, firstName: "Other", lastName: "Student", email: "other@example.invalid", faculty: "Arts", programme: "History" } });
+  const otherEnrolment = await prisma.credentialRenewalEnrolment.create({ data: { studentId: secondStudent.id, initialYear: 2026, finalYear: 2027 } });
+  await prisma.credentialRenewalRecord.create({ data: { enrolmentId: otherEnrolment.id, academicYear: 2027, dueAt: new Date("2027-02-28T22:00:00Z"), expiresAt: first.expiresAt } });
+  const filtered = await renewalOverview({ view: "upcoming", year: "2027", faculty: "Science", programme: "Computer Science", student: student.credential.studentNumber });
+  expect(filtered.total).toBe(1);
+  expect(filtered.records[0].student?.faculty).toBe("Science");
+  expect((await renewalOverview({ view: "upcoming", faculty: "Science", programme: "History" })).total).toBe(0);
+  expect((await renewalOverview({ view: "upcoming", faculty: "Arts" })).records[0].student?.id).toBe(secondStudent.id);
+  const exact = await renewalOverview({ view: "upcoming", year: "2027", periodStart: first.dueAt.toISOString(), periodExpiry: first.expiresAt.toISOString() });
+  expect(exact.total).toBe(1);
+  expect(exact.records[0].id).toBe(first.id);
+  expect((await renewalOverview({ view: "upcoming", status: "OVERDUE" }, new Date("2027-02-10T10:00:00Z"))).records.map((record) => record.id)).toEqual([first.id]);
+  await prisma.credentialRenewalRecord.update({ where: { id: first.id }, data: { preparedAt: new Date("2027-02-10T10:00:00Z"), status: "AWAITING_ACTIVATION", attemptCount: 1, deliveredAt: new Date("2027-02-10T10:01:00Z") } });
+  const history = await renewalOverview({ view: "history", from: "2027-02-10", to: "2027-02-10", faculty: "Science" });
+  expect(history.total).toBe(1);
+  expect(history.records[0].triggeredAt).toEqual(new Date("2027-02-10T10:00:00Z"));
+  expect((await renewalOverview({ view: "history", to: "2027-02-09" })).total).toBe(0);
+  const summary = await renewalOverview({ view: "summary" });
+  expect(summary.periods.some((period) => period.status === "AWAITING_ACTIVATION")).toBe(false);
+  await expect(renewalOverview({ periodStart: "invalid" })).rejects.toThrow("valid timestamps");
+});
+
+it("includes every queued period, including failed renewals, beyond the former group limit", async () => {
+  const { enrolment } = await enrol();
+  await prisma.credentialRenewalRecord.createMany({ data: Array.from({ length: 105 }, (_, index) => ({ enrolmentId: enrolment.id, academicYear: 2030 + index, dueAt: new Date(`${2030 + index}-02-01T00:00:00+02:00`), expiresAt: new Date(`${2030 + index}-12-01T00:00:00+02:00`), status: index === 104 ? "FAILED" : "SCHEDULED" })) });
+  const summary = await renewalOverview({ view: "summary" });
+  expect(summary.periods).toHaveLength(107);
+  expect(summary.periods.at(-1)?.status).toBe("FAILED");
 });

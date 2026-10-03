@@ -2,6 +2,7 @@
 import { useState, useTransition } from "react";
 import { LoaderCircle, Save } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
+import { annualPeriodCrossesYear, parseAnnualDate } from "@/lib/credentials/academicPeriod";
 import { formatRenewalDate } from "@/lib/credentials/renewalPresentation";
 import {
   getRenewalSettingsPreviewAction,
@@ -10,10 +11,31 @@ import {
 
 type Change = {
   data: FormData;
+  description: string | null;
   impact: Awaited<ReturnType<typeof getRenewalSettingsPreviewAction>>;
 };
 const primaryButton =
   "inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50";
+
+const annualDateFormatter = new Intl.DateTimeFormat("en-ZA", {
+  day: "numeric", month: "short", timeZone: "Africa/Johannesburg",
+});
+function formatAnnualDateInput(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 4);
+  return digits.length > 2 ? `${digits.slice(0, 2)}-${digits.slice(2)}` : digits;
+}
+
+function describePeriod(startDate: string, expiryDate: string) {
+  try {
+    const start = parseAnnualDate(startDate, "DD-MM");
+    const expiry = parseAnnualDate(expiryDate, "DD-MM");
+    const policy = { startMonth: start.month, startDay: start.day, expiryMonth: expiry.month, expiryDay: expiry.day };
+    const displayDate = (month: number, day: number) => annualDateFormatter.format(new Date(Date.UTC(2000, month - 1, day, 12)));
+    return `${displayDate(start.month, start.day)} to ${displayDate(expiry.month, expiry.day)} ${annualPeriodCrossesYear(policy) ? "of the following calendar year" : "in the same calendar year"}.`;
+  } catch {
+    return null;
+  }
+}
 
 export function RenewalSettingsForm({
   startDate,
@@ -24,6 +46,8 @@ export function RenewalSettingsForm({
   expiryDate: string;
   canEdit: boolean;
 }) {
+  const [dates, setDates] = useState({ startDate, expiryDate });
+  const description = describePeriod(dates.startDate, dates.expiryDate);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [change, setChange] = useState<Change | null>(null);
@@ -49,7 +73,7 @@ export function RenewalSettingsForm({
                 String(data.get("startDate")),
                 String(data.get("expiryDate")),
               );
-              setChange({ data, impact });
+              setChange({ data, impact, description });
             } catch (error) {
               setError(
                 error instanceof Error
@@ -68,13 +92,13 @@ export function RenewalSettingsForm({
             {
               name: "startDate",
               label: "Annual start",
-              value: startDate,
+              value: dates.startDate,
               placeholder: "01-02",
             },
             {
               name: "expiryDate",
               label: "Annual expiry",
-              value: expiryDate,
+              value: dates.expiryDate,
               placeholder: "30-11",
             },
           ].map((field) => (
@@ -89,7 +113,8 @@ export function RenewalSettingsForm({
                 inputMode="numeric"
                 maxLength={5}
                 name={field.name}
-                defaultValue={field.value}
+                value={field.value}
+                onChange={(event) => setDates((previous) => ({ ...previous, [field.name]: formatAnnualDateInput(event.target.value) }))}
                 placeholder={field.placeholder}
                 className="h-10 w-full rounded-md border border-border bg-surface px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 disabled:bg-surface-muted disabled:text-fg-subtle"
               />
@@ -97,8 +122,8 @@ export function RenewalSettingsForm({
           ))}
         </fieldset>
         <p className="text-sm text-fg-subtle">
-          Repeats annually in South African time. Credentials remain valid
-          through the expiry day.
+          {description ? <>Annual period: <span className="font-medium text-fg-muted">{description}</span>{" "}</> : "An expiry before the start date falls in the following year. "}
+          Dates repeat in South African time; expiry includes the entire selected day.
         </p>
         {error && !change && (
           <p
@@ -140,6 +165,7 @@ export function RenewalSettingsForm({
               This updates dates for future renewals. Existing offers and
               credentials keep their dates.
             </p>
+            {change.description && <p className="rounded-md border border-border bg-surface-muted px-3 py-2 text-sm text-fg">Annual period: {change.description}</p>}
             <div className="grid grid-cols-2 gap-3 rounded-lg bg-surface-muted p-3 text-sm">
               <div>
                 <p className="text-fg-subtle">Renewals changing</p>

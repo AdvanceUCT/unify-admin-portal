@@ -155,3 +155,9 @@ describe("saveRenewalSettingsAction", () => {
     );
   });
 });
+
+
+it("accepts a September start and January expiry without enforcing same-year ordering", async () => {
+  await saveRenewalSettingsAction(renewalForm({ startDate: "01-09", expiryDate: "31-01" }));
+  expect(policyMocks.save).toHaveBeenCalledWith({ startMonth: 9, startDay: 1, expiryMonth: 1, expiryDay: 31 }, "admin_1");
+});

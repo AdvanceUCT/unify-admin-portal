@@ -11,6 +11,10 @@ export async function renewalOverview(
     to?: string;
     page?: string;
     year?: string;
+    faculty?: string;
+    programme?: string;
+    periodStart?: string;
+    periodExpiry?: string;
   } = {},
   now = new Date(),
 ) {
@@ -28,14 +32,21 @@ export async function renewalOverview(
     (!/^\d{4}$/.test(params.year) || Number(params.year) < 1900)
   )
     throw new Error("Academic year must be a four-digit year.");
-  const matchingStudents = params.student
+  for (const value of [params.periodStart, params.periodExpiry]) {
+    if (value && (!/^\d{4}-\d{2}-\d{2}T/.test(value) || !Number.isFinite(Date.parse(value))))
+      throw new Error("Period boundaries must be valid timestamps.");
+  }
+  const hasStudentFilters = Boolean(params.student || params.faculty || params.programme);
+  const matchingStudents = hasStudentFilters
     ? await prisma.student.findMany({
         where: {
-          OR: ["studentNumber", "firstName", "lastName", "email"].map(
+          ...(params.faculty ? { faculty: params.faculty } : {}),
+          ...(params.programme ? { programme: params.programme } : {}),
+          ...(params.student ? { OR: ["studentNumber", "firstName", "lastName", "email"].map(
             (field) => ({
               [field]: { contains: params.student, mode: "insensitive" },
             }),
-          ),
+          ) } : {}),
         },
         select: { id: true, studentNumber: true },
       })
@@ -46,14 +57,15 @@ export async function renewalOverview(
       : params.view === "history"
         ? {
             OR: [
-              { preparedAt: { not: null } },
+              { attempts: { some: { automatic: true } } },
+              { attemptCount: { gt: 0 } },
               { status: { in: ["SKIPPED", "CANCELLED"] } },
             ],
           }
         : {
-            status: { in: ["SCHEDULED", "DEFERRED", "RETRYING", "PROCESSING"] },
+            status: { in: ["SCHEDULED", "DEFERRED", "RETRYING", "PROCESSING", "FAILED", "NEEDS_ATTENTION"] },
           }),
-    ...(params.student
+    ...(hasStudentFilters
       ? {
           enrolment: {
             studentId: {
@@ -65,25 +77,24 @@ export async function renewalOverview(
           },
         }
       : {}),
-    ...(params.status ? { status: params.status } : {}),
+    ...(params.status === "OVERDUE"
+      ? { status: { in: ["SCHEDULED", "RETRYING", "PROCESSING"] } }
+      : params.status ? { status: params.status } : {}),
     ...(params.year ? { academicYear: Number(params.year) } : {}),
-    ...(params.from || params.to
-      ? {
-          dueAt: {
-            ...(params.from
-              ? { gte: new Date(`${params.from}T00:00:00+02:00`) }
-              : {}),
-            ...(params.to
-              ? {
-                  lt: new Date(
-                    new Date(`${params.to}T00:00:00+02:00`).getTime() +
-                      86400000,
-                  ),
-                }
-              : {}),
-          },
-        }
-      : {}),
+    AND: [
+      ...(params.periodStart ? [{ dueAt: new Date(params.periodStart) }] : []),
+      ...(params.periodExpiry ? [{ expiresAt: new Date(params.periodExpiry) }] : []),
+      ...(params.status === "OVERDUE" ? [{ dueAt: { lte: now } }, { expiresAt: { gt: now } }] : []),
+      ...(params.from || params.to ? (() => {
+        const range = {
+          ...(params.from ? { gte: new Date(`${params.from}T00:00:00+02:00`) } : {}),
+          ...(params.to ? { lt: new Date(new Date(`${params.to}T00:00:00+02:00`).getTime() + 86400000) } : {}),
+        };
+        return params.view === "history"
+          ? [{ OR: [{ preparedAt: range }, { preparedAt: null, updatedAt: range }] }]
+          : [{ dueAt: range }];
+      })() : []),
+    ],
   };
   const [records, total, grouped, overdue, runs, lastCompleted, periodGroups] =
     await Promise.all([
@@ -93,7 +104,7 @@ export async function renewalOverview(
           enrolment: true,
           attempts: { orderBy: { createdAt: "desc" } },
         },
-        orderBy: { dueAt: params.view === "history" ? "desc" : "asc" },
+        orderBy: params.view === "history" ? [{ preparedAt: { sort: "desc", nulls: "last" } }, { updatedAt: "desc" }, { id: "asc" }] : [{ dueAt: "asc" }, { id: "asc" }],
         take: params.view === "summary" ? 0 : 25,
         skip: (Math.floor(page) - 1) * 25,
       }),
@@ -104,7 +115,7 @@ export async function renewalOverview(
       }),
       prisma.credentialRenewalRecord.count({
         where: {
-          status: { in: ["SCHEDULED", "DEFERRED", "RETRYING", "PROCESSING"] },
+          status: { in: ["SCHEDULED", "DEFERRED", "RETRYING", "PROCESSING", "FAILED", "NEEDS_ATTENTION"] },
           dueAt: { lte: now },
           expiresAt: { gt: now },
         },
@@ -122,19 +133,18 @@ export async function renewalOverview(
             by: ["academicYear", "dueAt", "expiresAt", "status"],
             where: {
               status: {
-                in: ["SCHEDULED", "DEFERRED", "RETRYING", "PROCESSING"],
+                in: ["SCHEDULED", "DEFERRED", "RETRYING", "PROCESSING", "FAILED", "NEEDS_ATTENTION"],
               },
             },
             _count: { _all: true },
             orderBy: { dueAt: "asc" },
-            take: 100,
           })
         : Promise.resolve([]),
     ]);
   const ids = [...new Set(records.map((record) => record.enrolment.studentId))];
   const students = await prisma.student.findMany({
     where: { OR: [{ id: { in: ids } }, { studentNumber: { in: ids } }] },
-    select: { id: true, studentNumber: true, firstName: true, lastName: true },
+    select: { id: true, studentNumber: true, firstName: true, lastName: true, faculty: true, programme: true },
   });
   const offerIds = records.flatMap((record) =>
     record.attempts.flatMap((attempt) =>
@@ -183,6 +193,7 @@ export async function renewalOverview(
       now.getTime() - lastCompleted.completedAt.getTime() > 49 * 3600000,
     records: records.map((record) => ({
       ...record,
+      triggeredAt: record.preparedAt ?? (record.attemptCount > 0 || ["SKIPPED", "CANCELLED"].includes(record.status) ? record.updatedAt : null),
       attempts: record.attempts.map((attempt) => ({
         ...attempt,
         issuance: offers.find((offer) => offer.id === attempt.issuanceId),

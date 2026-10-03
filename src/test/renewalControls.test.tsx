@@ -38,7 +38,7 @@ describe("renewal controls", () => {
       />,
     );
     expect(screen.getByRole("checkbox")).not.toBeChecked();
-    await screen.findByText(/Valid from/);
+    expect(screen.queryByText(/Valid from/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("checkbox"));
     expect(change).toHaveBeenCalledWith({ autoRenew: true, renewalYears: 3 });
   });

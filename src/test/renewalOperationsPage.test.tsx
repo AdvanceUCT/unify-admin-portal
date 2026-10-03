@@ -4,10 +4,12 @@ const mocks = vi.hoisted(() => ({
   overview: vi.fn(),
   session: vi.fn(),
   redirect: vi.fn(),
+  programmes: vi.fn(),
 }));
 vi.mock("@/lib/credentials/renewalOverview", () => ({
   renewalOverview: mocks.overview,
 }));
+vi.mock("@/lib/students/repository", () => ({ getStudentProgrammesByFaculty: mocks.programmes }));
 vi.mock("@/lib/auth/session", () => ({ requireRoleForRender: mocks.session }));
 vi.mock("next/navigation", () => ({
   redirect: mocks.redirect,
@@ -16,7 +18,7 @@ vi.mock("next/navigation", () => ({
 }));
 import RenewalsPage from "@/app/(admin)/credentials/issuance/renewals/page";
 import LegacyRenewalsPage from "@/app/(admin)/credentials/renewals/page";
-import { IssuanceTabs } from "@/features/credentials/IssuanceTabs";
+import IssuanceLayout from "@/app/(admin)/credentials/issuance/layout";
 
 const dueAt = new Date("2027-01-31T22:00:00Z"),
   expiresAt = new Date("2027-11-30T22:00:00Z");
@@ -40,10 +42,13 @@ const record = {
     firstName: "Ada",
     lastName: "Student",
     studentNumber: "ST-1",
+    faculty: "Science",
+    programme: "Computer Science",
   },
 };
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.programmes.mockResolvedValue({ Science: ["Computer Science"], Arts: ["History"] });
   mocks.session.mockResolvedValue({ user: { role: "ADMIN" } });
   mocks.overview.mockResolvedValue({
     asOf: new Date("2026-10-03T10:00:00Z"),
@@ -65,30 +70,41 @@ afterEach(cleanup);
 it("opens an operations summary without displaying student rows", async () => {
   render(await RenewalsPage({ searchParams: Promise.resolve({}) }));
   expect(mocks.overview).toHaveBeenCalledWith({ view: "summary" });
-  expect(screen.getByText("Renewal periods")).toBeInTheDocument();
+  expect(screen.getByText("Queued renewal periods")).toBeInTheDocument();
   expect(screen.getByText("Academic year 2027")).toBeInTheDocument();
-  expect(screen.getByText("Daily processing")).toBeInTheDocument();
+  expect(screen.queryByText("Daily processing")).not.toBeInTheDocument();
+  expect(screen.queryByText("Awaiting activation")).not.toBeInTheDocument();
   expect(screen.queryByText("Ada Student")).not.toBeInTheDocument();
   expect(screen.queryByRole("table")).not.toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Review" })).toHaveAttribute(
+  expect(screen.getByRole("link", { name: /Academic year 2027/ })).toHaveAttribute(
     "href",
-    "/credentials/issuance/renewals?view=upcoming&year=2027",
+    `/credentials/issuance/renewals?${new URLSearchParams({view: "upcoming", year: "2027", periodStart: dueAt.toISOString(), periodExpiry: expiresAt.toISOString()})}`,
   );
 });
 it("shows filtered student records only after opening the queue", async () => {
   render(
     await RenewalsPage({
-      searchParams: Promise.resolve({ view: "upcoming", year: "2027" }),
+      searchParams: Promise.resolve({ view: "upcoming", year: "2027", periodStart: dueAt.toISOString(), periodExpiry: expiresAt.toISOString() }),
     }),
   );
   expect(mocks.overview).toHaveBeenCalledWith({
     view: "upcoming",
     year: "2027",
+    periodStart: dueAt.toISOString(),
+    periodExpiry: expiresAt.toISOString(),
   });
   expect(screen.getByText("Ada Student")).toBeInTheDocument();
-  expect(screen.getByText(/to 30 Nov 2027/)).toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "Faculty" })).toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "Programme" })).toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "Renewal status" })).toBeInTheDocument();
+  expect(screen.getByText(/01 Feb 2027 - 30 Nov 2027/)).toBeInTheDocument();
+  expect(screen.queryByRole("columnheader", { name: "Period" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("columnheader", { name: "Academic year" })).not.toBeInTheDocument();
+  expect(screen.getByRole("columnheader", { name: "Programme" })).toBeInTheDocument();
+  expect(screen.getByText("Ada Student").parentElement).toHaveClass("flex", "flex-col", "items-center");
+  expect(screen.getByText("ST-1").parentElement).toBe(screen.getByText("Ada Student").parentElement);
   expect(
-    screen.getByRole("button", { name: "Cancel auto-renewal" }),
+    screen.getByRole("button", { name: "Cancel" }),
   ).toBeInTheDocument();
 });
 it("keeps issuer drill-down views read-only", async () => {
@@ -98,19 +114,14 @@ it("keeps issuer drill-down views read-only", async () => {
   );
   expect(screen.getByText("Ada Student")).toBeInTheDocument();
   expect(
-    screen.queryByRole("button", { name: "Cancel auto-renewal" }),
+    screen.queryByRole("button", { name: "Cancel" }),
   ).not.toBeInTheDocument();
   expect(screen.getByText("View only")).toBeInTheDocument();
 });
-it("places Renewals in the issuance tabs", () => {
-  render(<IssuanceTabs />);
-  expect(screen.getByRole("link", { name: "Renewals" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
-  expect(
-    screen.getByRole("link", { name: "Batch issuance" }),
-  ).toBeInTheDocument();
+it("does not render parent issuance tabs on the actual pages", () => {
+  render(<IssuanceLayout><p>Issuance content</p></IssuanceLayout>);
+  expect(screen.getByText("Issuance content")).toBeInTheDocument();
+  expect(screen.queryByRole("navigation", { name: "Issuance sections" })).not.toBeInTheDocument();
 });
 it("redirects existing renewal links while preserving filters", async () => {
   await LegacyRenewalsPage({
@@ -119,27 +130,4 @@ it("redirects existing renewal links while preserving filters", async () => {
   expect(mocks.redirect).toHaveBeenCalledWith(
     "/credentials/issuance/renewals?view=history&student=ST-1",
   );
-});
-
-it("surfaces a failed scheduler run even when it completed recently", async () => {
-  const base = await mocks.overview();
-  const run = {
-    id: "run-1",
-    startedAt: base.asOf,
-    completedAt: base.asOf,
-    status: "FAILED",
-    processed: 0,
-    failed: 0,
-    error: "Agent unavailable",
-  };
-  mocks.overview.mockResolvedValue({
-    ...base,
-    runs: [run],
-    lastCompleted: run,
-    stale: false,
-  });
-  render(await RenewalsPage({ searchParams: Promise.resolve({}) }));
-  expect(screen.getByText("Last run failed")).toBeInTheDocument();
-  expect(screen.getByRole("alert")).toHaveTextContent("Agent unavailable");
-  expect(screen.queryByText("Running on schedule")).not.toBeInTheDocument();
 });

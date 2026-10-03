@@ -33,6 +33,7 @@ import { env } from "@/lib/config/env";
 import { getDocumentSignedUrlForRender } from "@/lib/storage/supabase";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfileForRender } from "@/lib/university/profile";
+import { RenewalSchedulerDetails } from "./RenewalSchedulerDetails";
 import { RenewalSettingsForm } from "./RenewalSettingsForm";
 import { AgentServiceHealthCard } from "./AgentServiceHealthCard";
 import { BillingOperationsCard } from "./BillingOperationsCard";
@@ -200,6 +201,7 @@ export default async function SettingsPage() {
             No university profile exists yet. Complete the setup wizard first.
           </p>
         )}
+        {canEditProfile && <Suspense fallback={null}><RenewalSchedulerDetails /></Suspense>}
       </SettingsCard>
 
       <SettingsCard

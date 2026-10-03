@@ -82,3 +82,14 @@ it("accepts day-month settings without swapping ambiguous dates", () => {
   expect(parseAnnualDate("29-02", "DD-MM")).toEqual({ month: 2, day: 29 });
   expect(() => parseAnnualDate("30-02", "DD-MM")).toThrow();
 });
+
+
+it("resolves September-January validity, including January's final day and subsequent renewals", () => {
+  const september = { startMonth: 9, startDay: 1, expiryMonth: 1, expiryDay: 31 };
+  expect(academicPeriod(september, 2026)).toEqual({ academicYear: 2026, start: new Date("2026-08-31T22:00:00Z"), expiresAt: new Date("2027-01-31T22:00:00Z") });
+  const preview = renewalPreview(september, new Date("2026-10-03T10:00:00Z"), { autoRenew: true, renewalYears: 3 });
+  expect(preview).toMatchObject({ academicYear: 2026, finalYear: 2028, expiresAt: "2027-01-31T22:00:00.000Z", renewalDates: ["2027-08-31T22:00:00.000Z", "2028-08-31T22:00:00.000Z"] });
+  expect(issuancePeriod(september, new Date("2027-01-31T21:59:59.999Z")).academicYear).toBe(2026);
+  expect(issuancePeriod(september, new Date("2027-01-31T22:00:00Z")).academicYear).toBe(2027);
+  expect(issuancePeriod(september, new Date("2027-02-10T10:00:00Z"))).toMatchObject({ academicYear: 2027, expiresAt: new Date("2028-01-31T22:00:00Z") });
+});

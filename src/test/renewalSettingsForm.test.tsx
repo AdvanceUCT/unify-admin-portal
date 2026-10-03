@@ -78,3 +78,28 @@ it("shows read-only settings to an issuer", () => {
     screen.queryByRole("button", { name: "Save period" }),
   ).not.toBeInTheDocument();
 });
+
+
+it("explains a January expiry belongs to the following year and confirms those dates", async () => {
+  render(<RenewalSettingsForm startDate="01-09" expiryDate="31-01" canEdit />);
+  expect(screen.getByText(/01 Sept to 31 Jan of the following calendar year/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Save period" }));
+  const dialog = await screen.findByRole("dialog");
+  expect(dialog).toHaveTextContent("01 Sept to 31 Jan of the following calendar year");
+  const confirm = await screen.findByRole("button", { name: "Confirm and save" });
+  await waitFor(() => expect(confirm).not.toBeDisabled());
+  fireEvent.click(confirm);
+  await screen.findByRole("status");
+  expect(mocks.preview).toHaveBeenCalledWith("01-09", "31-01");
+  const data = mocks.save.mock.calls[0][0] as FormData;
+  expect(data.get("startDate")).toBe("01-09");
+  expect(data.get("expiryDate")).toBe("31-01");
+});
+it("updates the rollover explanation as dates are edited", () => {
+  render(<RenewalSettingsForm startDate="01-02" expiryDate="30-11" canEdit />);
+  expect(screen.getByText(/same calendar year/)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText(/Annual start/), { target: { value: "01-09" } });
+  fireEvent.change(screen.getByLabelText(/Annual expiry/), { target: { value: "31-01" } });
+  expect(screen.getByText(/following calendar year/)).toBeInTheDocument();
+  expect(screen.queryByText(/same calendar year/)).not.toBeInTheDocument();
+});

@@ -4,6 +4,8 @@
  */
 
 import { studentRenewalEnrolment } from "@/lib/credentials/renewalOverview";
+import { StatusText } from "@/components/ui/StatusText";
+import { formatRenewalDate, renewalStatusLabel } from "@/lib/credentials/renewalPresentation";
 import { RenewalAction } from "@/features/credentials/RenewalAction";
 import { formatAcademicDateTime as formatDateTime } from "@/lib/formatters";
 import { notFound } from "next/navigation";
@@ -53,25 +55,34 @@ export async function StudentCredentialDetailPage({
   return (
     <div className="space-y-6">
       <BackButton href={backHref} label={backLabel} />
+      <StudentCredentialIssueView
+        delivery={delivery}
+        student={student}
+        existingFinalYear={
+          enrolment?.status === "ACTIVE" ? enrolment.finalYear : undefined
+        }
+      />
       {enrolment && (
-        <section className="rounded-xl border border-border p-5">
-          <h2 className="font-semibold">Auto-renewal</h2>
-          <p>
-            Status: {enrolment.status.toLowerCase()}. Final academic year:{" "}
-            {enrolment.finalYear}.
-          </p>
+        <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-section-title text-fg">Auto-renewal</h2>
+          <StatusText tone={enrolment.status === "ACTIVE" ? "success" : "neutral"}>{renewalStatusLabel(enrolment.status)}</StatusText>
+          </div>
+          <dl className="mt-4 flex flex-wrap gap-x-10 gap-y-3 text-sm">
+            <div><dt className="text-fg-subtle">Final academic year</dt><dd className="mt-1 font-medium text-fg">{enrolment.finalYear}</dd></div>
           {next && enrolment.status === "ACTIVE" && (
-            <p>Next renewal: {formatDateTime(next.dueAt.toISOString())}.</p>
+            <div><dt className="text-fg-subtle">Next renewal</dt><dd className="mt-1 font-medium text-fg">{formatRenewalDate(next.dueAt)}</dd></div>
           )}
+          </dl>
           {enrolment.cancelledAt && (
-            <p>
+            <p className="mt-3 text-sm text-fg-muted">
               Cancelled {formatDateTime(enrolment.cancelledAt.toISOString())} by{" "}
               {enrolment.cancelledBy}.
             </p>
           )}
           {!!enrolment.cancellations.length && (
-            <details>
-              <summary>Cancellation history</summary>
+            <details className="mt-3 text-xs text-fg-muted">
+              <summary className="cursor-pointer font-medium text-brand-700">Cancellation history</summary>
               {enrolment.cancellations.map((cancellation) => (
                 <p key={cancellation.id}>
                   {formatDateTime(cancellation.cancelledAt!.toISOString())} by{" "}
@@ -83,21 +94,15 @@ export async function StudentCredentialDetailPage({
           )}
           {enrolment.status === "ACTIVE" &&
             ["SUPER_ADMIN", "ADMIN"].includes(session.user.role ?? "") && (
-              <RenewalAction
+              <div className="mt-4 border-t border-border pt-3"><RenewalAction
                 id={enrolment.id}
                 action="cancel"
                 label="Cancel auto-renewal"
-              />
+              /></div>
             )}
         </section>
       )}
-      <StudentCredentialIssueView
-        delivery={delivery}
-        student={student}
-        existingFinalYear={
-          enrolment?.status === "ACTIVE" ? enrolment.finalYear : undefined
-        }
-      />
+
     </div>
   );
 }
