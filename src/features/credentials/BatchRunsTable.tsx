@@ -1,9 +1,14 @@
+"use client";
+
 /**
  * @fileoverview Lists recent batch issuance runs and their completion totals.
  * @module features/credentials/BatchRunsTable
  */
 
+import { getBatchRuns } from "@/lib/api/client";
+import { useBatchPolling } from "./useBatchPolling";
 import Link from "next/link";
+import { LoaderCircle } from "lucide-react";
 
 import { Badge } from "@/components/ui/Badge";
 import type { BatchIssuanceRunStatus, BatchIssuanceRunSummary } from "@/lib/api/types";
@@ -16,9 +21,13 @@ function runTone(status: BatchIssuanceRunStatus) {
   return "neutral";
 }
 
-export function BatchRunsTable({ runs }: { runs: BatchIssuanceRunSummary[] }) {
+export function BatchRunsTable({ runs: initialRuns }: { runs: BatchIssuanceRunSummary[] }) {
+  const { value: runs, pollError } = useBatchPolling(initialRuns,
+    values => values.some(run => run.status === "Queued" || run.status === "Processing"),
+    signal => getBatchRuns(signal), 5000);
   return (
     <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+      {pollError ? <p className="p-4 text-sm text-fg-muted" role="status">{pollError}</p> : null}
       <div className="overflow-x-auto">
         <table className="w-full text-center text-body">
           <thead className="border-b border-border">
@@ -49,7 +58,12 @@ export function BatchRunsTable({ runs }: { runs: BatchIssuanceRunSummary[] }) {
                     <p className="text-xs text-fg-subtle">{run.cohortId}</p>
                   </td>
                   <td className="px-5 py-4">
-                    <Badge tone={runTone(run.status)}>{run.status}</Badge>
+                    <Badge tone={runTone(run.status)}>
+                      {run.status === "Queued" || run.status === "Processing" ? (
+                        <LoaderCircle aria-hidden className="mr-1.5 size-3.5 animate-spin motion-reduce:animate-none" />
+                      ) : null}
+                      {run.status}
+                    </Badge>
                   </td>
                   <td className="px-5 py-4 text-fg-muted">
                     {run.issuedCount} issued · {run.failedCount} failed · {run.skippedCount} skipped

@@ -162,8 +162,6 @@ export async function previewBatchIssuance(selection: BatchIssuanceSelection = {
 }
 
 export async function createBatchRun(selection: BatchIssuanceSelection = {}) {
-  await wait();
-
   if (shouldUseMockApi()) {
     return fetchJson<BatchIssuanceRunDetail>("/api/credentials/issuance/batch/runs", {
       body: JSON.stringify(selection),
@@ -183,4 +181,11 @@ export async function retryFailedBatchRun(batchId: string) {
   }
 
   return retryMockBatchRun(batchId);
+}
+
+export function getBatchRun(batchId: string, signal?: AbortSignal) {
+  return fetchJson<BatchIssuanceRunDetail>(`/api/credentials/issuance/batch/runs/${encodeURIComponent(batchId)}`, { signal });
+}
+export function getBatchRuns(signal?: AbortSignal) {
+  return fetchJson<import("./types").BatchIssuanceRunSummary[]>("/api/credentials/issuance/batch/runs", { signal });
 }

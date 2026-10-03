@@ -3,12 +3,15 @@
  * @module app/api/credentials/issuance/batch/runs/route
  */
 
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
 import { assertCan, PermissionError, type SessionWithRole } from "@/lib/auth/permissions";
 import { getCurrentAdminSession, getSessionForAudit } from "@/lib/auth/session";
-import { createAndProcessBatchRun, listBatchRuns } from "@/lib/issuance/batchRuns";
+import { listBatchRuns, createQueuedBatchRun, processBatchRunInBackground } from "@/lib/issuance/batchRuns";
 import { parseBatchIssuanceSelection, StudentIssuanceError } from "@/lib/issuance/batchIssuance";
+
+// Includes after-response processing; the host's function limit still applies.
+export const maxDuration = 300;
 
 /** Handles GET requests to `/api/credentials/issuance/batch/runs`. */
 export async function GET() {
@@ -25,8 +28,8 @@ export async function GET() {
 }
 
 /**
- * Creates and immediately processes a new batch issuance run.
- * Returns 201 on success. `StudentIssuanceError` maps to its own status code
+ * Creates and queues a new batch issuance run.
+ * Returns 202 on success. `StudentIssuanceError` maps to its own status code
  * (e.g. 409 for conflicts), everything else falls back to 502.
  */
 export async function POST(request: Request) {
@@ -43,9 +46,9 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => undefined)) as unknown;
     const selection = parseBatchIssuanceSelection(body);
     const auditSession = await getSessionForAudit();
-    return NextResponse.json(await createAndProcessBatchRun({ actorId: auditSession.actorId, selection }), {
-      status: 201,
-    });
+    const run = await createQueuedBatchRun({ actorId: auditSession.actorId, selection });
+    after(() => processBatchRunInBackground(run.batchId));
+    return NextResponse.json(run, { status: 202, headers: { Location: `/api/credentials/issuance/batch/runs/${encodeURIComponent(run.batchId)}` } });
   } catch (error) {
     const status = error instanceof StudentIssuanceError ? error.status : 502;
     return NextResponse.json(

@@ -4,6 +4,7 @@
  */
 
 import "server-only";
+import { randomUUID } from "node:crypto";
 
 import { BatchIssuanceItemStatus, BatchIssuanceRunStatus, CredentialDeliveryStatus } from "@/generated/prisma/enums";
 import type { CredentialIssuance } from "@/generated/prisma/client";
@@ -30,7 +31,7 @@ import {
   reconcileCredentialEventLogs,
 } from "@/lib/credentials/status";
 import { prisma } from "@/lib/db/prisma";
-import { getAllStudents } from "@/lib/students/repository";
+import { getAllStudents, getStudentsByIdentifiers } from "@/lib/students/repository";
 import { sendCredentialActivationEmail } from "@/lib/email/credential-activation";
 import { formatCredentialStatus } from "@/lib/formatters";
 import {
@@ -39,6 +40,7 @@ import {
   credentialValidityWindowFrom,
   getActiveCredentialDefinition,
   MAX_BATCH_ISSUANCE_LIMIT,
+  StudentIssuanceError,
 } from "@/lib/issuance/batchIssuance";
 import {
   selectStudentRecordsForCredentialIssuance,
@@ -76,6 +78,7 @@ type PersistedBatchRun = {
 
 const retryableItemStatuses = new Set<BatchIssuanceItemStatus>([
   BatchIssuanceItemStatus.PENDING,
+  BatchIssuanceItemStatus.OFFER_CREATED,
   BatchIssuanceItemStatus.DELIVERY_FAILED,
   BatchIssuanceItemStatus.FAILED,
 ]);
@@ -108,11 +111,6 @@ function publicItemStatus(status: BatchIssuanceItemStatus): BatchIssuanceRunItem
 
 function iso(value?: Date | null) {
   return value?.toISOString();
-}
-
-function batchIdFrom(now: Date) {
-  const timestamp = now.toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
-  return `batch-${timestamp}`;
 }
 
 function batchItemIdempotencyKey(batchId: string, batchItemId: string) {
@@ -158,19 +156,19 @@ function previewItem(student: StudentRecord, status: "Eligible" | "Skipped", rea
 
 function toSummary(run: PersistedBatchRun): BatchIssuanceRunSummary {
   return {
-    activatedCount: run.activatedCount,
+    activatedCount: run.items ? run.items.filter((item) => item.status === BatchIssuanceItemStatus.ACTIVATED || item.credentialIssuance?.status === "ISSUED").length : run.activatedCount,
     actorId: run.actorId,
     batchId: run.batchId,
     cohortId: run.cohortId,
     completedAt: iso(run.completedAt),
     createdAt: run.createdAt.toISOString(),
     eligibleCount: run.eligibleCount,
-    failedCount: run.failedCount,
+    failedCount: run.items ? run.items.filter((item) => failedItemStatuses.has(item.status)).length : run.failedCount,
     filters: run.filters as BatchIssuanceSelection,
-    issuedCount: run.issuedCount,
+    issuedCount: run.items ? run.items.filter((item) => item.status === BatchIssuanceItemStatus.DELIVERED || item.status === BatchIssuanceItemStatus.ACTIVATED).length : run.issuedCount,
     queuedAt: iso(run.queuedAt),
     requestedCount: run.requestedCount,
-    skippedCount: run.skippedCount,
+    skippedCount: run.items ? run.items.filter((item) => item.status === BatchIssuanceItemStatus.SKIPPED).length : run.skippedCount,
     startedAt: iso(run.startedAt),
     status: publicRunStatus(run.status),
   };
@@ -202,8 +200,8 @@ function toItem(item: PersistedBatchItem, student?: StudentRecord): BatchIssuanc
  * The lookup map uses both `studentNumber` and `profile.id` as keys since batch
  * items can be stored under either identifier depending on how the run was created.
  */
-async function toDetail(run: PersistedBatchRun & { items: PersistedBatchItem[] }): Promise<BatchIssuanceRunDetail> {
-  const students = await getAllStudents();
+async function toDetail(run: PersistedBatchRun & { items: PersistedBatchItem[] }, knownStudents?: StudentRecord[]): Promise<BatchIssuanceRunDetail> {
+  const students = knownStudents ?? await getStudentsByIdentifiers(uniqueStrings(run.items.map((item) => item.studentId)));
   const studentsById = new Map(
     students.flatMap((student) => [
       [student.credential.studentNumber, student] as const,
@@ -233,7 +231,7 @@ async function sendActivationEmail(student: StudentRecord, delivery: { activatio
  * @param selectionInput - Optional filters (faculty, programme, enrolment/credential status, limit).
  * @returns Preview result with eligible/skipped counts and a per-student item list.
  */
-export async function previewBatchIssuance(selectionInput?: BatchIssuanceSelection): Promise<BatchIssuancePreviewResult> {
+async function prepareBatchPreview(selectionInput?: BatchIssuanceSelection): Promise<{ preview: BatchIssuancePreviewResult; students: StudentRecord[] }> {
   const selection = parseBatchIssuanceSelection(selectionInput);
   const students = await overlayCredentialStatuses(await getAllStudents());
   const matchingStudents = students.filter((student) => filterMatches(student, selection));
@@ -258,24 +256,30 @@ export async function previewBatchIssuance(selectionInput?: BatchIssuanceSelecti
   const eligibleItems = eligibleStudents.map((student) => previewItem(student, "Eligible"));
 
   return {
-    cohortId: selection.cohortId ?? SIMULATED_STUDENT_COHORT_ID,
-    eligibleCount: selectedIds.size,
-    filters: selection,
-    items: [...eligibleItems, ...skippedItems],
-    requestedCount: eligibleItems.length + skippedItems.length,
-    skippedCount: skippedItems.length,
+    students,
+    preview: {
+      cohortId: selection.cohortId ?? SIMULATED_STUDENT_COHORT_ID,
+      eligibleCount: selectedIds.size,
+      filters: selection,
+      items: [...eligibleItems, ...skippedItems],
+      requestedCount: eligibleItems.length + skippedItems.length,
+      skippedCount: skippedItems.length,
+    },
   };
 }
 
+export async function previewBatchIssuance(selectionInput?: BatchIssuanceSelection): Promise<BatchIssuancePreviewResult> {
+  return (await prepareBatchPreview(selectionInput)).preview;
+}
+
 /**
- * Creates a new batch run in the DB from a preview result and immediately processes it.
- * Writes a creation audit log before handing off to `processBatchRun`.
+ * Saves a queued batch without waiting for the agent or email delivery.
  *
  * @param actorId - Who triggered the batch, if anyone.
  * @param selection - Optional filters to scope which students are included.
- * @returns The completed `BatchIssuanceRunDetail` after processing.
+ * @returns The queued run detail for immediate navigation.
  */
-export async function createAndProcessBatchRun({
+export async function createQueuedBatchRun({
   actorId,
   selection,
 }: {
@@ -283,8 +287,8 @@ export async function createAndProcessBatchRun({
   selection?: BatchIssuanceSelection;
 }) {
   const now = new Date();
-  const preview = await previewBatchIssuance(selection);
-  const batchId = batchIdFrom(now);
+  const { preview, students } = await prepareBatchPreview(selection);
+  const batchId = `batch-${randomUUID()}`;
   const run = await prisma.batchIssuanceRun.create({
     data: {
       actorId,
@@ -319,7 +323,7 @@ export async function createAndProcessBatchRun({
     },
   });
 
-  return processBatchRun(run.batchId);
+  return toDetail(run, students);
 }
 
 /**
@@ -357,6 +361,10 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
   });
 
   if (pendingItems.length === 0) {
+    await prisma.batchIssuanceRun.update({
+      where: { batchId },
+      data: { status: BatchIssuanceRunStatus.COMPLETED, completedAt: new Date() },
+    });
     return getBatchRunDetail(batchId);
   }
 
@@ -488,6 +496,10 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
           studentId: item.studentId,
           wasDelivered: false,
         });
+        await prisma.batchIssuanceItem.update({
+          where: { id: item.id },
+          data: { credentialIssuanceId: issuance.id, failureReason: null, status: BatchIssuanceItemStatus.OFFER_CREATED },
+        });
         await prisma.credentialIssuance.updateMany({
           data: { status: "OFFER_SENT" },
           where: { id: issuance.id, status: "FAILED" },
@@ -603,6 +615,7 @@ export async function processBatchRun(batchId: string, actorIdOverride?: string 
 
 export async function listBatchRuns(): Promise<BatchIssuanceRunSummary[]> {
   const runs = await prisma.batchIssuanceRun.findMany({
+    include: { items: { include: { credentialIssuance: true } } },
     orderBy: { createdAt: "desc" },
     take: 50,
   });
@@ -621,11 +634,44 @@ export async function getBatchRunDetail(batchId: string): Promise<BatchIssuanceR
 }
 
 export async function retryFailedBatchRun(batchId: string, actorId?: string | null) {
+  // Claim the retry atomically so overlapping requests cannot start two processors.
+  const queued = await prisma.batchIssuanceRun.updateMany({
+    where: { batchId, status: { in: [BatchIssuanceRunStatus.FAILED, BatchIssuanceRunStatus.PARTIALLY_FAILED] } },
+    data: { status: BatchIssuanceRunStatus.QUEUED, queuedAt: new Date(), completedAt: null },
+  });
+  if (!queued.count) {
+    throw new StudentIssuanceError("Only a finished batch with failed items can be retried.", 409);
+  }
+  await prisma.batchIssuanceItem.updateMany({
+    where: { batchRun: { batchId }, status: { in: [...failedItemStatuses] } },
+    data: { status: BatchIssuanceItemStatus.PENDING, failureReason: null },
+  });
   await writeAuditLog({
     action: "BATCH_ISSUANCE_RETRIED",
     actorId,
     targetType: "BatchIssuanceRun",
     targetId: batchId,
   });
-  return processBatchRun(batchId, actorId);
+  return getBatchRunDetail(batchId);
+}
+
+/** Runs inside Next.js after(); catches unexpected failures without leaving an active run. */
+export async function processBatchRunInBackground(batchId: string, actorId?: string | null) {
+  try {
+    await processBatchRun(batchId, actorId);
+  } catch {
+    console.error("[batch-issuance] background processing failed", { batchId });
+    await prisma.batchIssuanceItem.updateMany({
+      where: { batchRun: { batchId }, status: { in: [...retryableItemStatuses] } },
+      data: { status: BatchIssuanceItemStatus.FAILED, failureReason: "Background processing was interrupted. Retry the failed items." },
+    });
+    const run = await getBatchRunDetail(batchId);
+    await prisma.batchIssuanceRun.update({
+      where: { batchId },
+      data: {
+        status: run.issuedCount > 0 ? BatchIssuanceRunStatus.PARTIALLY_FAILED : BatchIssuanceRunStatus.FAILED,
+        completedAt: new Date(), failedCount: run.failedCount, issuedCount: run.issuedCount, skippedCount: run.skippedCount,
+      },
+    });
+  }
 }
