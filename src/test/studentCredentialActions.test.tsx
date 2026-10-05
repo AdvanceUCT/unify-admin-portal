@@ -1,4 +1,25 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+vi.mock("@/features/credentials/RenewalOptionsFields", async () => {
+  const { useEffect } = await import("react");
+  return {
+    RenewalOptionsFields: ({
+      onReady,
+    }: {
+      onReady?: (ready: boolean) => void;
+    }) => {
+      useEffect(() => {
+        onReady?.(true);
+      }, [onReady]);
+      return null;
+    },
+  };
+});
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { StudentCredentialActions } from "@/features/students/StudentCredentialActions";
@@ -18,12 +39,22 @@ describe("StudentCredentialActions", () => {
 
     render(<StudentCredentialActions student={caleb} />);
 
-    expect(screen.getByRole("button", { name: "Issue credential" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Suspend" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Reinstate" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Issue credential" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Suspend" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Reinstate" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Revoke" })).toBeDisabled();
-    expect(screen.getByText("No issued credential exists for this student yet.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Renew" })).not.toBeInTheDocument();
+    expect(
+      screen.getByText("No issued credential exists for this student yet."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Renew" }),
+    ).not.toBeInTheDocument();
   });
 
   it("explains why legacy non-revocable credentials cannot use lifecycle actions yet", () => {
@@ -38,7 +69,9 @@ describe("StudentCredentialActions", () => {
 
     render(<StudentCredentialActions student={legacyStudent} />);
 
-    expect(screen.queryByRole("button", { name: "Issue credential" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Issue credential" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Revoke" })).toBeDisabled();
     expect(
       screen.getByText(
@@ -66,7 +99,9 @@ describe("StudentCredentialActions", () => {
 
     const confirm = screen.getByRole("button", { name: "Confirm" });
     expect(confirm).toBeDisabled();
-    fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "Enrolment review" } });
+    fireEvent.change(screen.getByLabelText("Reason"), {
+      target: { value: "Enrolment review" },
+    });
     fireEvent.click(confirm);
 
     await screen.findByText("Credential suspended.");
@@ -99,16 +134,33 @@ describe("StudentCredentialActions", () => {
 
   it("submits a UTC reactivation time for a timed suspension", async () => {
     if (!caleb) throw new Error("Caleb test record missing.");
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ lifecycleState: "SUSPENDED" }), {
-      headers: { "Content-Type": "application/json" }, status: 200,
-    }));
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ lifecycleState: "SUSPENDED" }), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      }),
+    );
     vi.stubGlobal("fetch", fetchMock);
-    render(<StudentCredentialActions student={{ ...caleb, credential: { ...caleb.credential, lifecycleState: "ACTIVE" as const } }} />);
+    render(
+      <StudentCredentialActions
+        student={{
+          ...caleb,
+          credential: {
+            ...caleb.credential,
+            lifecycleState: "ACTIVE" as const,
+          },
+        }}
+      />,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Suspend" }));
-    fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "Enrolment review" } });
+    fireEvent.change(screen.getByLabelText("Reason"), {
+      target: { value: "Enrolment review" },
+    });
     fireEvent.click(screen.getByLabelText("Reactivate automatically"));
-    fireEvent.change(screen.getByLabelText("Suspension ends"), { target: { value: "2099-07-10T11:00" } });
+    fireEvent.change(screen.getByLabelText("Suspension ends"), {
+      target: { value: "2099-07-10T11:00" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
@@ -139,14 +191,19 @@ describe("StudentCredentialActions", () => {
 
     const confirm = screen.getByRole("button", { name: "Confirm" });
     expect(confirm).toBeDisabled();
-    fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "Student left the university" } });
+    fireEvent.change(screen.getByLabelText("Reason"), {
+      target: { value: "Student left the university" },
+    });
     fireEvent.click(confirm);
 
     await screen.findByText("Credential revoked.");
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/students/student-demo-100/credentials/lifecycle",
       {
-        body: JSON.stringify({ action: "revoke", reason: "Student left the university" }),
+        body: JSON.stringify({
+          action: "revoke",
+          reason: "Student left the university",
+        }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       },
@@ -175,7 +232,9 @@ describe("StudentCredentialActions", () => {
 
     expect(screen.getByRole("button", { name: "Revoke" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
-    fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "Demo cleanup" } });
+    fireEvent.change(screen.getByLabelText("Reason"), {
+      target: { value: "Demo cleanup" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     await screen.findByText("Credential revoked.");
@@ -197,9 +256,13 @@ describe("StudentCredentialActions", () => {
 
     render(<StudentCredentialActions student={suspendedStudent} />);
 
-    expect(screen.getByRole("button", { name: "Reactivate" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Reactivate" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Revoke" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Suspend" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Suspend" }),
+    ).not.toBeInTheDocument();
   });
 
   it("calls the single-student issue endpoint and shows the returned delivery", async () => {
@@ -213,7 +276,8 @@ describe("StudentCredentialActions", () => {
             activationDeliveries: [
               {
                 activationId: "activation-caleb",
-                activationUrl: "http://localhost:3000/activate?token=caleb-token",
+                activationUrl:
+                  "http://localhost:3000/activate?token=caleb-token",
                 batchId: "batch-001",
                 channel: "activation-link",
                 credentialId: "credential-demo-100",
@@ -241,12 +305,23 @@ describe("StudentCredentialActions", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Issue credential" }));
 
-    await screen.findByText("Activation link delivered to caleb.voskuil@gmail.com.");
-    expect(fetch).toHaveBeenCalledWith("/api/students/student-demo-100/credentials/issue", {
-      cache: "no-store",
-      method: "POST",
-    });
-    expect(screen.getByDisplayValue("http://localhost:3000/activate?token=caleb-token")).toBeInTheDocument();
+    await screen.findByText(
+      "Activation link delivered to caleb.voskuil@gmail.com.",
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/students/student-demo-100/credentials/issue",
+      {
+        cache: "no-store",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autoRenew: false, renewalYears: 3 }),
+      },
+    );
+    expect(
+      screen.getByDisplayValue(
+        "http://localhost:3000/activate?token=caleb-token",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open" })).toHaveAttribute(
       "href",
       "http://localhost:3000/activate?token=caleb-token",
@@ -264,13 +339,15 @@ describe("StudentCredentialActions", () => {
             activationDeliveries: [
               {
                 activationId: "activation-caleb",
-                activationUrl: "http://localhost:3000/activate?token=caleb-token",
+                activationUrl:
+                  "http://localhost:3000/activate?token=caleb-token",
                 batchId: "batch-001",
                 channel: "activation-link",
                 credentialId: "credential-demo-100",
                 email: "caleb.voskuil@gmail.com",
                 expiresAt: "2026-04-28T10:00:00.000Z",
-                failureReason: "RESEND_API_KEY is required to send credential activation emails.",
+                failureReason:
+                  "RESEND_API_KEY is required to send credential activation emails.",
                 id: "activation-delivery-activation-caleb",
                 status: "Failed",
                 studentId: "student-demo-100",
@@ -282,7 +359,8 @@ describe("StudentCredentialActions", () => {
               {
                 email: "caleb.voskuil@gmail.com",
                 externalId: "student-demo-100",
-                message: "RESEND_API_KEY is required to send credential activation emails.",
+                message:
+                  "RESEND_API_KEY is required to send credential activation emails.",
               },
             ],
             issuedCredentialIds: [],
@@ -302,14 +380,18 @@ describe("StudentCredentialActions", () => {
     await screen.findByText(
       "Activation link was created, but email delivery failed: RESEND_API_KEY is required to send credential activation emails.",
     );
-    expect(screen.getByDisplayValue("http://localhost:3000/activate?token=caleb-token")).toBeInTheDocument();
+    expect(
+      screen.getByDisplayValue(
+        "http://localhost:3000/activate?token=caleb-token",
+      ),
+    ).toBeInTheDocument();
   });
 
-  it("calls the renewal endpoint for an active credential and shows the returned delivery", async () => {
+  it("calls the renewal endpoint for an expired credential and shows the returned delivery", async () => {
     if (!caleb) throw new Error("Caleb test record missing.");
     const activeStudent = {
       ...caleb,
-      credential: { ...caleb.credential, lifecycleState: "ACTIVE" as const },
+      credential: { ...caleb.credential, lifecycleState: "EXPIRED" as const },
     };
 
     vi.stubGlobal(
@@ -320,7 +402,8 @@ describe("StudentCredentialActions", () => {
             activationDeliveries: [
               {
                 activationId: "activation-renewal-caleb",
-                activationUrl: "http://localhost:3000/activate?token=renewal-token",
+                activationUrl:
+                  "http://localhost:3000/activate?token=renewal-token",
                 batchId: "batch-renewal",
                 channel: "activation-link",
                 credentialId: "credential-renewal-100",
@@ -348,12 +431,23 @@ describe("StudentCredentialActions", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Renew credential" }));
 
-    await screen.findByText("Renewal activation link delivered to caleb.voskuil@gmail.com.");
-    expect(fetch).toHaveBeenCalledWith("/api/students/student-demo-100/credentials/renew", {
-      cache: "no-store",
-      method: "POST",
-    });
-    expect(screen.getByDisplayValue("http://localhost:3000/activate?token=renewal-token")).toBeInTheDocument();
+    await screen.findByText(
+      "Renewal activation link delivered to caleb.voskuil@gmail.com.",
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/students/student-demo-100/credentials/renew",
+      {
+        cache: "no-store",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autoRenew: false, renewalYears: 3 }),
+      },
+    );
+    expect(
+      screen.getByDisplayValue(
+        "http://localhost:3000/activate?token=renewal-token",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("copies an existing activation link", async () => {
@@ -382,7 +476,11 @@ describe("StudentCredentialActions", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
 
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith("http://localhost:3000/activate?token=caleb-token"));
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(
+        "http://localhost:3000/activate?token=caleb-token",
+      ),
+    );
     expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
   });
 });

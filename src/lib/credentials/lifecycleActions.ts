@@ -237,7 +237,8 @@ function canRevokeRevocationBackedPendingCredential(status: string, issuance: {
   credentialRevocationId?: string | null;
   revocationRegistryDefinitionId?: string | null;
 }) {
-  return (status === "OFFER_SENT" || status === "ACCEPTED") && hasRevocationHandle(issuance);
+  // A failed delivery still leaves a revocation-backed offer at the agent.
+  return (status === "OFFER_SENT" || status === "ACCEPTED" || status === "FAILED") && hasRevocationHandle(issuance);
 }
 
 /**

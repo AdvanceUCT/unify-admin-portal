@@ -2,13 +2,13 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 vi.mock("@/lib/config/env", () => ({ env: { DATABASE_URL: process.env.DATABASE_URL, PAYMENT_WALLET_TOPUPS_ENABLED: true, PAYMENT_OTP_BYPASS_ENABLED: true, CREDENTIAL_VALIDITY_LEGACY_DEFINITION_IDS: "ci-legacy-definition" } }));
 import { prisma } from "@/lib/db/prisma";
+import { ensurePaymentTestUniversity } from "./paymentTestUniversity";
 import { requestStudentPaymentActivation, authenticateWalletBearer, refreshStudentPaymentSession } from "@/lib/payments/walletSession";
 const now = new Date("2026-10-01T10:00:00Z");
 let universityId: string;
 beforeAll(async () => {
   if (new URL(process.env.DATABASE_URL ?? "http://invalid").pathname !== "/unify_wallet_test" || process.env.NODE_ENV === "production") throw new Error("Requires isolated CI database");
-  let profile = await prisma.universityProfile.findFirst();
-  if (!profile) profile = await prisma.universityProfile.create({ data: { name: "CI", abbreviation: "CI", contactEmail: "ci@example.invalid", paymentWalletEnabled: true } });
+  const profile = await ensurePaymentTestUniversity();
   universityId = profile.id;
 });
 afterAll(async () => prisma.$disconnect());

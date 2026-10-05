@@ -4,6 +4,7 @@ vi.mock("@/lib/config/env", () => ({ env: { DATABASE_URL: process.env.DATABASE_U
 vi.mock("@/lib/email/resend", () => ({ sendResendEmail: vi.fn(async () => ({ provider: "test" })), escapeHtml: (value: string) => value }));
 import { sendResendEmail } from "@/lib/email/resend";
 import { prisma } from "@/lib/db/prisma";
+import { ensurePaymentTestUniversity } from "./paymentTestUniversity";
 import { requestStudentPaymentActivation, verifyStudentPaymentActivation } from "@/lib/payments/walletSession";
 const now = new Date("2026-10-01T10:00:00Z");
 const request = (studentNumber: string, deviceId: string, ipAddress?: string, time = now) => requestStudentPaymentActivation({ studentNumber, deviceId, ipAddress, now: time });
@@ -14,7 +15,7 @@ function challenge(value: Awaited<ReturnType<typeof request>>) {
 beforeAll(async () => {
   const url = new URL(process.env.DATABASE_URL ?? "http://invalid");
   if (url.pathname !== "/unify_wallet_test" || process.env.NODE_ENV === "production") throw new Error("Requires isolated CI database");
-  if (!await prisma.universityProfile.count()) await prisma.universityProfile.create({ data: { name: "CI", abbreviation: "CI", contactEmail: "ci@example.invalid", paymentWalletEnabled: true } });
+  await ensurePaymentTestUniversity();
 });
 afterAll(async () => prisma.$disconnect());
 it("orders concurrent resend and verification using the same student/device locks", async () => {

@@ -5,6 +5,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/config/env", () => ({ env: { DATABASE_URL: process.env.DATABASE_URL, VENDOR_API_KEY_PEPPER: "isolated-pos-test-pepper-at-least-32-characters", VENDOR_WEBHOOK_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64") } }));
 vi.mock("@/lib/vendors/paymentWebhookTransport", async (importOriginal) => ({ ...await importOriginal<object>(), resolvePaymentWebhookDestination: vi.fn(async () => ({})) }));
 import { prisma } from "@/lib/db/prisma";
+import { ensurePaymentTestUniversity } from "./paymentTestUniversity";
 import { createPaymentRequest, payPaymentRequest, cancelPaymentRequest, getStudentRequestReceipt, getMerchantPaymentRequest, listPaymentRequests } from "@/lib/payments/paymentRequests";
 import { postTopup } from "@/lib/payments/posting";
 import { createVendorApiCredential, authenticateVendorApiKey, revokeVendorApiCredential } from "@/lib/vendors/integrations";
@@ -14,7 +15,7 @@ import { getPayerPaymentReceipt } from "@/lib/payments/paymentReceipts";
 const url = new URL(process.env.DATABASE_URL ?? "http://invalid");
 beforeAll(async () => {
   if (!["/pos_test", "/unify_wallet_test"].includes(url.pathname) || process.env.NODE_ENV === "production") throw new Error("POS service tests require an isolated payment test database.");
-  await prisma.universityProfile.upsert({ where: { id: "pos-test-university" }, create: { id: "pos-test-university", name: "Test", abbreviation: "TEST", contactEmail: "test@example.invalid", paymentWalletEnabled: true }, update: { paymentWalletEnabled: true } });
+  await ensurePaymentTestUniversity();
   await prisma.walletAccount.upsert({ where: { systemCode: "GATEWAY_CLEARING" }, create: { type: "SYSTEM", currency: "ZAR", systemCode: "GATEWAY_CLEARING" }, update: {} });
 });
 

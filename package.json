@@ -37,7 +37,8 @@
     "test:billing:db": "vitest run --config vitest.billing-integration.config.ts",
     "pretest": "npm run prisma:generate",
     "credentials:validity-backfill": "node --conditions=react-server --import tsx scripts/credential-validity-backfill.ts",
-    "precredentials:validity-backfill": "npm run prisma:generate"
+    "precredentials:validity-backfill": "npm run prisma:generate",
+    "test:credentials:db": "vitest run --config vitest.integration.config.ts src/test-integration/annual-renewals-postgres.test.ts src/test-integration/credential-lifecycle-postgres.test.ts src/test-integration/credential-validity-postgres.test.ts"
   },
   "dependencies": {
     "@better-auth/prisma-adapter": "^1.6.11",

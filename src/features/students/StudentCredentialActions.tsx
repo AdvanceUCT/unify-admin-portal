@@ -5,72 +5,122 @@
 
 "use client";
 
-import { Ban, Copy, ExternalLink, LoaderCircle, PauseCircle, RotateCcw, Send } from "lucide-react";
+import {
+  Ban,
+  Copy,
+  ExternalLink,
+  LoaderCircle,
+  PauseCircle,
+  RotateCcw,
+  Send,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
+import { RenewalOptionsFields } from "@/features/credentials/RenewalOptionsFields";
+import type { RenewalOptions } from "@/lib/credentials/academicPeriod";
 import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
-import type { ActivationDelivery, BatchIssuanceResult, StudentRecord } from "@/lib/api/types";
-import { formatActivationDeliveryStatus, formatDateTime } from "@/lib/formatters";
+import type {
+  ActivationDelivery,
+  BatchIssuanceResult,
+  StudentRecord,
+} from "@/lib/api/types";
+import {
+  formatActivationDeliveryStatus,
+  formatDateTime,
+} from "@/lib/formatters";
 
 type StudentCredentialActionsProps = {
   delivery?: ActivationDelivery;
   student: StudentRecord;
+  existingFinalYear?: number;
 };
 
 type LifecycleAction = "reactivate" | "revoke" | "suspend";
 
-const lifecycleCopy: Record<LifecycleAction, { confirmClassName: string; description: string; title: string }> = {
+const lifecycleCopy: Record<
+  LifecycleAction,
+  { confirmClassName: string; description: string; title: string }
+> = {
   reactivate: {
     confirmClassName: "bg-success-fg hover:opacity-90",
-    description: "Verification will succeed again after the updated status list reaches the ledger.",
+    description:
+      "Verification will succeed again after the updated status list reaches the ledger.",
     title: "Reactivate credential",
   },
   revoke: {
     confirmClassName: "bg-danger-fg hover:opacity-90",
-    description: "Revocation is permanent. The student will need a newly issued credential.",
+    description:
+      "Revocation is permanent. The student will need a newly issued credential.",
     title: "Revoke credential",
   },
   suspend: {
     confirmClassName: "bg-warning-fg hover:opacity-90",
-    description: "Verification will fail until the scheduled time or an administrator reactivates this credential.",
+    description:
+      "Verification will fail until the scheduled time or an administrator reactivates this credential.",
     title: "Suspend credential",
   },
 };
 
 const lifecycleButtonToneClassName: Record<LifecycleAction, string> = {
-  reactivate: "border-success-border bg-success-bg text-success-fg hover:bg-success-border",
-  revoke: "border-danger-border bg-danger-bg text-danger-fg hover:bg-danger-border",
-  suspend: "border-warning-border bg-warning-bg text-warning-fg hover:bg-warning-border",
+  reactivate:
+    "border-success-border bg-success-bg text-success-fg hover:bg-success-border",
+  revoke:
+    "border-danger-border bg-danger-bg text-danger-fg hover:bg-danger-border",
+  suspend:
+    "border-warning-border bg-warning-bg text-warning-fg hover:bg-warning-border",
 };
 
 async function readErrorMessage(response: Response) {
-  const body = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
-  return body?.error?.message ?? `Credential request failed with status ${response.status}.`;
+  const body = (await response.json().catch(() => null)) as {
+    error?: { message?: string };
+  } | null;
+  return (
+    body?.error?.message ??
+    `Credential request failed with status ${response.status}.`
+  );
 }
 
-export function StudentCredentialActions({ delivery, student }: StudentCredentialActionsProps) {
+export function StudentCredentialActions({
+  delivery,
+  student,
+  existingFinalYear,
+}: StudentCredentialActionsProps) {
   const router = useRouter();
-  const [currentDelivery, setCurrentDelivery] = useState<ActivationDelivery | undefined>(delivery);
+  const [renewalOptions, setRenewalOptions] = useState<RenewalOptions>({
+    autoRenew: false,
+    renewalYears: 3,
+  });
+  const [previewReady, setPreviewReady] = useState(false);
+  const [currentDelivery, setCurrentDelivery] = useState<
+    ActivationDelivery | undefined
+  >(delivery);
   const [copyLabel, setCopyLabel] = useState("Copy");
   const [error, setError] = useState<string | null>(null);
   const [isIssuing, setIsIssuing] = useState(false);
   const [isRenewing, setIsRenewing] = useState(false);
   const [isChangingLifecycle, setIsChangingLifecycle] = useState(false);
-  const [lifecycleAction, setLifecycleAction] = useState<LifecycleAction | null>(null);
+  const [lifecycleAction, setLifecycleAction] =
+    useState<LifecycleAction | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [reactivateAutomatically, setReactivateAutomatically] = useState(false);
   const [reactivationTime, setReactivationTime] = useState("");
 
   const canIssue = useMemo(() => {
-    const stateAllowsIssue = ["NOT_ISSUED", "FAILED", "REVOKED"].includes(student.credential.lifecycleState);
-    return stateAllowsIssue && (student.credential.lifecycleState === "REVOKED" || currentDelivery?.status !== "Delivered");
+    const stateAllowsIssue = ["NOT_ISSUED", "FAILED", "REVOKED"].includes(
+      student.credential.lifecycleState,
+    );
+    return (
+      stateAllowsIssue &&
+      (student.credential.lifecycleState === "REVOKED" ||
+        currentDelivery?.status !== "Delivered")
+    );
   }, [currentDelivery?.status, student.credential.lifecycleState]);
   const canSuspend = student.credential.lifecycleState === "ACTIVE";
   const canReactivate = student.credential.lifecycleState === "SUSPENDED";
-  const canRenew = ["ACTIVE", "EXPIRED"].includes(student.credential.lifecycleState);
+  const canRenew = student.credential.lifecycleState === "EXPIRED";
   const canRevoke =
     canSuspend ||
     canReactivate ||
@@ -105,10 +155,15 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
     setMessage(null);
 
     try {
-      const response = await fetch(`/api/students/${encodeURIComponent(student.profile.id)}/credentials/issue`, {
-        cache: "no-store",
-        method: "POST",
-      });
+      const response = await fetch(
+        `/api/students/${encodeURIComponent(student.profile.id)}/credentials/issue`,
+        {
+          cache: "no-store",
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(renewalOptions),
+        },
+      );
 
       if (!response.ok) {
         throw new Error(await readErrorMessage(response));
@@ -116,7 +171,8 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
 
       const result = (await response.json()) as BatchIssuanceResult;
       const nextDelivery = result.activationDeliveries[0];
-      const failureReason = nextDelivery?.failureReason ?? result.failures?.[0]?.message;
+      const failureReason =
+        nextDelivery?.failureReason ?? result.failures?.[0]?.message;
       setCurrentDelivery(nextDelivery);
       setMessage(
         nextDelivery?.status === "Delivered"
@@ -125,7 +181,11 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
       );
       router.refresh();
     } catch (issueError) {
-      setError(issueError instanceof Error ? issueError.message : "Credential issue request failed.");
+      setError(
+        issueError instanceof Error
+          ? issueError.message
+          : "Credential issue request failed.",
+      );
     } finally {
       setIsIssuing(false);
     }
@@ -138,10 +198,15 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
     setMessage(null);
 
     try {
-      const response = await fetch(`/api/students/${encodeURIComponent(student.profile.id)}/credentials/renew`, {
-        cache: "no-store",
-        method: "POST",
-      });
+      const response = await fetch(
+        `/api/students/${encodeURIComponent(student.profile.id)}/credentials/renew`,
+        {
+          cache: "no-store",
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(renewalOptions),
+        },
+      );
 
       if (!response.ok) {
         throw new Error(await readErrorMessage(response));
@@ -149,7 +214,8 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
 
       const result = (await response.json()) as BatchIssuanceResult;
       const nextDelivery = result.activationDeliveries[0];
-      const failureReason = nextDelivery?.failureReason ?? result.failures?.[0]?.message;
+      const failureReason =
+        nextDelivery?.failureReason ?? result.failures?.[0]?.message;
       setCurrentDelivery(nextDelivery);
       setMessage(
         nextDelivery?.status === "Delivered"
@@ -158,7 +224,11 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
       );
       router.refresh();
     } catch (renewalError) {
-      setError(renewalError instanceof Error ? renewalError.message : "Credential renewal request failed.");
+      setError(
+        renewalError instanceof Error
+          ? renewalError.message
+          : "Credential renewal request failed.",
+      );
     } finally {
       setIsRenewing(false);
     }
@@ -213,13 +283,22 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
       );
       if (!response.ok) throw new Error(await readErrorMessage(response));
 
-      const label = lifecycleAction === "reactivate" ? "reactivated" : lifecycleAction === "suspend" ? "suspended" : "revoked";
+      const label =
+        lifecycleAction === "reactivate"
+          ? "reactivated"
+          : lifecycleAction === "suspend"
+            ? "suspended"
+            : "revoked";
       setMessage(`Credential ${label}.`);
       setLifecycleAction(null);
       setReason("");
       router.refresh();
     } catch (lifecycleError) {
-      setError(lifecycleError instanceof Error ? lifecycleError.message : "Credential lifecycle request failed.");
+      setError(
+        lifecycleError instanceof Error
+          ? lifecycleError.message
+          : "Credential lifecycle request failed.",
+      );
     } finally {
       setIsChangingLifecycle(false);
     }
@@ -230,12 +309,19 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
     setError(null);
     setIsChangingLifecycle(true);
     try {
-      const response = await fetch(`/api/credentials/automation/${encodeURIComponent(student.credential.automation.id)}/retry`, { method: "POST" });
+      const response = await fetch(
+        `/api/credentials/automation/${encodeURIComponent(student.credential.automation.id)}/retry`,
+        { method: "POST" },
+      );
       if (!response.ok) throw new Error(await readErrorMessage(response));
       setMessage("Credential automation retry completed.");
       router.refresh();
     } catch (retryError) {
-      setError(retryError instanceof Error ? retryError.message : "Credential automation retry failed.");
+      setError(
+        retryError instanceof Error
+          ? retryError.message
+          : "Credential automation retry failed.",
+      );
     } finally {
       setIsChangingLifecycle(false);
     }
@@ -259,42 +345,72 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
 
         {student.credential.scheduledReactivationAt ? (
           <p className="mt-4 rounded-md border border-warning-border bg-warning-bg px-3 py-2 text-sm text-warning-fg">
-            Scheduled to reactivate after {formatDateTime(student.credential.scheduledReactivationAt)}.
+            Scheduled to reactivate after{" "}
+            {formatDateTime(student.credential.scheduledReactivationAt)}.
           </p>
         ) : student.credential.lifecycleState === "SUSPENDED" ? (
           <p className="mt-4 text-sm text-fg-subtle">Suspended indefinitely.</p>
         ) : null}
         {student.credential.nextRenewalAt ? (
-          <p className="mt-3 text-sm text-fg-subtle">Next automatic renewal: {formatDateTime(student.credential.nextRenewalAt)}</p>
+          <p className="mt-3 text-sm text-fg-subtle">
+            Next automatic renewal:{" "}
+            {formatDateTime(student.credential.nextRenewalAt)}
+          </p>
         ) : null}
         {student.credential.automation?.status === "FAILED" ? (
           <div className="mt-4 rounded-md border border-danger-border bg-danger-bg px-3 py-2 text-sm text-danger-fg">
-            <p>{student.credential.automation.lastError ?? "Credential automation failed."}</p>
-            <button className="mt-2 rounded-md border border-danger-border px-3 py-1.5 font-medium disabled:opacity-50" disabled={isChangingLifecycle} onClick={retryAutomation} type="button">Retry now</button>
+            <p>
+              {student.credential.automation.lastError ??
+                "Credential automation failed."}
+            </p>
+            <button
+              className="mt-2 rounded-md border border-danger-border px-3 py-1.5 font-medium disabled:opacity-50"
+              disabled={isChangingLifecycle}
+              onClick={retryAutomation}
+              type="button"
+            >
+              Retry now
+            </button>
           </div>
         ) : null}
 
+        {canIssue || canRenew ? (
+          <RenewalOptionsFields
+            value={renewalOptions}
+            onChange={setRenewalOptions}
+            onReady={setPreviewReady}
+            existingFinalYear={existingFinalYear}
+          />
+        ) : null}
         {canIssue || canRenew ? (
           <div className="mt-4 flex flex-wrap gap-2">
             {canIssue ? (
               <button
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand-600 px-3 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-fg-subtle"
-                disabled={isIssuing}
+                disabled={isIssuing || !previewReady}
                 onClick={issueCredential}
                 type="button"
               >
-                {isIssuing ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Send aria-hidden className="size-4" />}
+                {isIssuing ? (
+                  <LoaderCircle aria-hidden className="size-4 animate-spin" />
+                ) : (
+                  <Send aria-hidden className="size-4" />
+                )}
                 {isIssuing ? "Issuing..." : "Issue credential"}
               </button>
             ) : null}
             {canRenew ? (
               <button
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={isRenewing}
+                disabled={isRenewing || !previewReady}
                 onClick={renewCredential}
                 type="button"
               >
-                {isRenewing ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <RotateCcw aria-hidden className="size-4" />}
+                {isRenewing ? (
+                  <LoaderCircle aria-hidden className="size-4 animate-spin" />
+                ) : (
+                  <RotateCcw aria-hidden className="size-4" />
+                )}
                 {isRenewing ? "Renewing..." : "Renew credential"}
               </button>
             ) : null}
@@ -348,23 +464,31 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
         <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-section-title text-fg">Activation delivery</h2>
-            <Badge tone={currentDelivery.status === "Failed" ? "danger" : "success"}>
+            <Badge
+              tone={currentDelivery.status === "Failed" ? "danger" : "success"}
+            >
               {formatActivationDeliveryStatus(currentDelivery.status)}
             </Badge>
           </div>
           <dl className="mt-4 space-y-3 text-sm">
             <div className="flex justify-between gap-4">
               <dt className="text-fg-subtle">Email</dt>
-              <dd className="text-right text-fg">{currentDelivery.email ?? student.profile.email}</dd>
+              <dd className="text-right text-fg">
+                {currentDelivery.email ?? student.profile.email}
+              </dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-fg-subtle">Expires</dt>
-              <dd className="text-right text-fg">{formatDateTime(currentDelivery.expiresAt)}</dd>
+              <dd className="text-right text-fg">
+                {formatDateTime(currentDelivery.expiresAt)}
+              </dd>
             </div>
             {currentDelivery.failureReason ? (
               <div className="flex justify-between gap-4">
                 <dt className="text-fg-subtle">Failure</dt>
-                <dd className="max-w-xs text-right text-danger-fg">{currentDelivery.failureReason}</dd>
+                <dd className="max-w-xs text-right text-danger-fg">
+                  {currentDelivery.failureReason}
+                </dd>
               </div>
             ) : null}
           </dl>
@@ -402,9 +526,14 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
       >
         {lifecycleAction ? (
           <div className="space-y-3">
-            <p className="text-sm text-fg-muted">{lifecycleCopy[lifecycleAction].description}</p>
+            <p className="text-sm text-fg-muted">
+              {lifecycleCopy[lifecycleAction].description}
+            </p>
             <div>
-              <label className="block text-sm font-medium text-fg" htmlFor="lifecycle-reason">
+              <label
+                className="block text-sm font-medium text-fg"
+                htmlFor="lifecycle-reason"
+              >
                 Reason
               </label>
               <textarea
@@ -420,15 +549,39 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
             {lifecycleAction === "suspend" ? (
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-sm font-medium text-fg">
-                  <input checked={reactivateAutomatically} disabled={isChangingLifecycle} onChange={(event) => setReactivateAutomatically(event.target.checked)} type="checkbox" />
+                  <input
+                    checked={reactivateAutomatically}
+                    disabled={isChangingLifecycle}
+                    onChange={(event) =>
+                      setReactivateAutomatically(event.target.checked)
+                    }
+                    type="checkbox"
+                  />
                   Reactivate automatically
                 </label>
                 {reactivateAutomatically ? (
-                  <label className="block text-sm font-medium text-fg" htmlFor="reactivation-time">
+                  <label
+                    className="block text-sm font-medium text-fg"
+                    htmlFor="reactivation-time"
+                  >
                     Suspension ends
-                    <input className="mt-1.5 h-10 w-full rounded-md border border-border px-3 text-sm" disabled={isChangingLifecycle} id="reactivation-time" onChange={(event) => setReactivationTime(event.target.value)} required type="datetime-local" value={reactivationTime} />
+                    <input
+                      className="mt-1.5 h-10 w-full rounded-md border border-border px-3 text-sm"
+                      disabled={isChangingLifecycle}
+                      id="reactivation-time"
+                      onChange={(event) =>
+                        setReactivationTime(event.target.value)
+                      }
+                      required
+                      type="datetime-local"
+                      value={reactivationTime}
+                    />
                   </label>
-                ) : <p className="text-sm text-fg-subtle">No end time: an administrator must reactivate it manually.</p>}
+                ) : (
+                  <p className="text-sm text-fg-subtle">
+                    No end time: an administrator must reactivate it manually.
+                  </p>
+                )}
               </div>
             ) : null}
             <div className="flex flex-wrap justify-end gap-2">
@@ -442,11 +595,19 @@ export function StudentCredentialActions({ delivery, student }: StudentCredentia
               </button>
               <button
                 className={`inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${lifecycleCopy[lifecycleAction].confirmClassName}`}
-                disabled={isChangingLifecycle || !reason.trim() || (lifecycleAction === "suspend" && reactivateAutomatically && !reactivationTime)}
+                disabled={
+                  isChangingLifecycle ||
+                  !reason.trim() ||
+                  (lifecycleAction === "suspend" &&
+                    reactivateAutomatically &&
+                    !reactivationTime)
+                }
                 onClick={submitLifecycleChange}
                 type="button"
               >
-                {isChangingLifecycle ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : null}
+                {isChangingLifecycle ? (
+                  <LoaderCircle aria-hidden className="size-4 animate-spin" />
+                ) : null}
                 Confirm
               </button>
             </div>

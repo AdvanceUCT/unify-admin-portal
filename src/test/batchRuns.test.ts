@@ -1,9 +1,27 @@
+vi.mock("@/lib/credentials/preparedOffer", () => ({
+  prepareOffer: mocks.prepareOffer,
+  deliverPreparedOffer: mocks.deliverPreparedOffer,
+}));
+vi.mock("@/lib/credentials/validityPolicy", () => ({
+  currentValidityPolicy: vi.fn(async () => ({
+    startMonth: 2,
+    startDay: 1,
+    expiryMonth: 11,
+    expiryDay: 30,
+  })),
+}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BatchIssuanceItemStatus, BatchIssuanceRunStatus } from "@/generated/prisma/enums";
+import {
+  BatchIssuanceItemStatus,
+  BatchIssuanceRunStatus,
+} from "@/generated/prisma/enums";
 import type { StudentRecord } from "@/lib/api/types";
 
 const mocks = vi.hoisted(() => ({
+  prepareOffer: vi.fn(),
+  deliverPreparedOffer: vi.fn(),
+  findAttempt: vi.fn(),
   batchIssuanceItemUpdate: vi.fn(),
   batchIssuanceItemUpdateMany: vi.fn(),
   batchIssuanceRunCreate: vi.fn(),
@@ -49,6 +67,7 @@ vi.mock("@/lib/credentials/status", () => ({
 
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
+    credentialOfferAttempt: { findUnique: mocks.findAttempt },
     batchIssuanceItem: {
       update: mocks.batchIssuanceItemUpdate,
       updateMany: mocks.batchIssuanceItemUpdateMany,
@@ -72,7 +91,9 @@ vi.mock("@/lib/email/credential-activation", () => ({
 }));
 
 vi.mock("@/lib/issuance/batchIssuance", () => ({
-  attributesForStudent: vi.fn(() => [{ name: "studentNumber", value: "STU001" }]),
+  attributesForStudent: vi.fn(() => [
+    { name: "studentNumber", value: "STU001" },
+  ]),
   credentialValidityWindowFrom: vi.fn((validFrom: Date) => ({
     expiresAt: new Date("2027-01-01T00:00:00.000Z"),
     validFrom,
@@ -84,7 +105,14 @@ vi.mock("@/lib/issuance/batchIssuance", () => ({
     schemaVersion: "1.0",
   })),
   MAX_BATCH_ISSUANCE_LIMIT: 100,
-  StudentIssuanceError: class extends Error { constructor(message: string, public status: number) { super(message); } },
+  StudentIssuanceError: class extends Error {
+    constructor(
+      message: string,
+      public status: number,
+    ) {
+      super(message);
+    }
+  },
   parseBatchIssuanceSelection: vi.fn((selection) => selection ?? {}),
 }));
 
@@ -94,11 +122,19 @@ vi.mock("@/lib/students/repository", () => ({
 }));
 
 vi.mock("@/lib/student-records/simulatedUniversityRecords", () => ({
-  selectStudentRecordsForCredentialIssuance: mocks.selectStudentRecordsForCredentialIssuance,
+  selectStudentRecordsForCredentialIssuance:
+    mocks.selectStudentRecordsForCredentialIssuance,
   SIMULATED_STUDENT_COHORT_ID: "simulated-2026-cohort",
 }));
 
-import { createQueuedBatchRun, getBatchRunDetail, previewBatchIssuance, processBatchRun, processBatchRunInBackground, retryFailedBatchRun } from "@/lib/issuance/batchRuns";
+import {
+  createQueuedBatchRun,
+  getBatchRunDetail,
+  previewBatchIssuance,
+  processBatchRun,
+  processBatchRunInBackground,
+  retryFailedBatchRun,
+} from "@/lib/issuance/batchRuns";
 
 const student: StudentRecord = {
   credential: {
@@ -153,6 +189,12 @@ const pendingRun = {
 describe("persisted batch runs", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.findAttempt.mockResolvedValue(null);
+    mocks.prepareOffer.mockResolvedValue({ id: "attempt" });
+    mocks.deliverPreparedOffer.mockResolvedValue({
+      id: "issuance-1",
+      status: "OFFER_SENT",
+    });
     mocks.getAllStudents.mockResolvedValue([student]);
     mocks.getStudentsByIdentifiers.mockResolvedValue([student]);
     mocks.findActiveCredentialIssuance.mockResolvedValue(null);
@@ -202,18 +244,27 @@ describe("persisted batch runs", () => {
   it("saves a queued run without calling the agent", async () => {
     mocks.selectStudentRecordsForCredentialIssuance.mockReturnValue([student]);
     mocks.batchIssuanceRunCreate.mockResolvedValueOnce(pendingRun);
-    expect((await createQueuedBatchRun({ actorId: "admin-1" })).status).toBe("Queued");
+    expect((await createQueuedBatchRun({ actorId: "admin-1" })).status).toBe(
+      "Queued",
+    );
     expect(mocks.createBatchActivationLinks).not.toHaveBeenCalled();
-    expect(mocks.batchIssuanceRunCreate).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ batchId: expect.stringMatching(/^batch-[a-f0-9-]{36}$/), status: "QUEUED" }),
-    }));
+    expect(mocks.batchIssuanceRunCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          batchId: expect.stringMatching(/^batch-[a-f0-9-]{36}$/),
+          status: "QUEUED",
+        }),
+      }),
+    );
     expect(mocks.getAllStudents).toHaveBeenCalledTimes(1);
     expect(mocks.getStudentsByIdentifiers).not.toHaveBeenCalled();
   });
 
   it("rejects a retry already claimed by another request", async () => {
     mocks.batchIssuanceRunUpdateMany.mockResolvedValueOnce({ count: 0 });
-    await expect(retryFailedBatchRun("batch-1", "admin-2")).rejects.toMatchObject({ status: 409 });
+    await expect(
+      retryFailedBatchRun("batch-1", "admin-2"),
+    ).rejects.toMatchObject({ status: 409 });
     expect(mocks.batchIssuanceItemUpdateMany).not.toHaveBeenCalled();
     expect(mocks.createBatchActivationLinks).not.toHaveBeenCalled();
   });
@@ -221,34 +272,62 @@ describe("persisted batch runs", () => {
   it("queues only failed items and records the retrying administrator", async () => {
     mocks.batchIssuanceRunUpdateMany.mockResolvedValueOnce({ count: 1 });
     mocks.batchIssuanceRunFindUnique.mockResolvedValueOnce(pendingRun);
-    expect((await retryFailedBatchRun("batch-1", "admin-2")).status).toBe("Queued");
+    expect((await retryFailedBatchRun("batch-1", "admin-2")).status).toBe(
+      "Queued",
+    );
     expect(mocks.batchIssuanceItemUpdateMany).toHaveBeenCalledWith({
-      where: { batchRun: { batchId: "batch-1" }, status: { in: ["FAILED", "DELIVERY_FAILED"] } },
+      where: {
+        batchRun: { batchId: "batch-1" },
+        status: { in: ["FAILED", "DELIVERY_FAILED"] },
+      },
       data: { status: "PENDING", failureReason: null },
     });
-    expect(mocks.writeAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "BATCH_ISSUANCE_RETRIED", actorId: "admin-2" }));
+    expect(mocks.writeAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "BATCH_ISSUANCE_RETRIED",
+        actorId: "admin-2",
+      }),
+    );
     expect(mocks.createBatchActivationLinks).not.toHaveBeenCalled();
   });
 
   it("derives live counts from items before finalization", async () => {
-    mocks.batchIssuanceRunFindUnique.mockResolvedValueOnce({ ...pendingRun, status: "PROCESSING", items: [
-      { ...pendingItem, status: "DELIVERED" }, { ...pendingItem, status: "FAILED" }, { ...pendingItem, status: "SKIPPED" },
-    ] });
-    expect(await getBatchRunDetail("batch-1")).toMatchObject({ issuedCount: 1, failedCount: 1, skippedCount: 1 });
+    mocks.batchIssuanceRunFindUnique.mockResolvedValueOnce({
+      ...pendingRun,
+      status: "PROCESSING",
+      items: [
+        { ...pendingItem, status: "DELIVERED" },
+        { ...pendingItem, status: "FAILED" },
+        { ...pendingItem, status: "SKIPPED" },
+      ],
+    });
+    expect(await getBatchRunDetail("batch-1")).toMatchObject({
+      issuedCount: 1,
+      failedCount: 1,
+      skippedCount: 1,
+    });
     expect(mocks.getStudentsByIdentifiers).toHaveBeenCalledWith(["STU001"]);
     expect(mocks.getAllStudents).not.toHaveBeenCalled();
   });
 
   it("marks unfinished work failed after an unexpected background error", async () => {
-    mocks.batchIssuanceRunFindUnique.mockRejectedValueOnce(new Error("Unexpected failure"))
-      .mockResolvedValueOnce({ ...pendingRun, items: [{ ...pendingItem, status: "FAILED" }] });
+    mocks.batchIssuanceRunFindUnique
+      .mockRejectedValueOnce(new Error("Unexpected failure"))
+      .mockResolvedValueOnce({
+        ...pendingRun,
+        items: [{ ...pendingItem, status: "FAILED" }],
+      });
     const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
     try {
       await processBatchRunInBackground("batch-1");
-      expect(mocks.batchIssuanceRunUpdate).toHaveBeenCalledWith(expect.objectContaining({
-        data: expect.objectContaining({ status: "FAILED", failedCount: 1 }),
-      }));
-    } finally { log.mockRestore(); }
+      expect(mocks.batchIssuanceRunUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: "FAILED", failedCount: 1 }),
+        }),
+      );
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it("fails pending items and finalizes the run when the agent batch call times out", async () => {
@@ -267,26 +346,32 @@ describe("persisted batch runs", () => {
     };
 
     mocks.batchIssuanceRunFindUnique.mockResolvedValueOnce(pendingRun);
-    mocks.createBatchActivationLinks.mockRejectedValueOnce(new Error(timeoutMessage));
+    mocks.deliverPreparedOffer.mockRejectedValueOnce(new Error(timeoutMessage));
     mocks.batchIssuanceItemUpdate.mockResolvedValueOnce(failedItem);
     mocks.batchIssuanceRunFindUniqueOrThrow.mockResolvedValueOnce({
       ...pendingRun,
       items: [failedItem],
     });
     mocks.batchIssuanceRunUpdate
-      .mockResolvedValueOnce({ ...pendingRun, status: BatchIssuanceRunStatus.PROCESSING })
+      .mockResolvedValueOnce({
+        ...pendingRun,
+        status: BatchIssuanceRunStatus.PROCESSING,
+      })
       .mockResolvedValueOnce(failedRun);
 
     const result = await processBatchRun("batch-1");
 
     expect(mocks.batchIssuanceRunUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ status: BatchIssuanceRunStatus.PROCESSING }),
+        data: expect.objectContaining({
+          status: BatchIssuanceRunStatus.PROCESSING,
+        }),
         where: { batchId: "batch-1" },
       }),
     );
     expect(mocks.batchIssuanceItemUpdate).toHaveBeenCalledWith({
       data: {
+        credentialIssuanceId: undefined,
         failureReason: timeoutMessage,
         status: BatchIssuanceItemStatus.FAILED,
       },
@@ -336,48 +421,44 @@ describe("persisted batch runs", () => {
 
     mocks.batchIssuanceRunFindUnique.mockResolvedValueOnce({
       ...pendingRun,
-      items: [{ ...pendingItem, status: BatchIssuanceItemStatus.DELIVERY_FAILED }],
+      items: [
+        { ...pendingItem, status: BatchIssuanceItemStatus.DELIVERY_FAILED },
+      ],
     });
     mocks.createBatchActivationLinks.mockResolvedValueOnce({
       failures: [],
-      offers: [{
-        activationId: "activation-1",
-        activationUrl: "unifywallet://activate?token=token-1",
-        credentialExchangeId: "credential-exchange-1",
-        email: "student@example.edu",
-        expiresAt: "2026-04-28T10:00:00.000Z",
-        externalId: "STU001",
-      }],
+      offers: [
+        {
+          activationId: "activation-1",
+          activationUrl: "unifywallet://activate?token=token-1",
+          credentialExchangeId: "credential-exchange-1",
+          email: "student@example.edu",
+          expiresAt: "2026-04-28T10:00:00.000Z",
+          externalId: "STU001",
+        },
+      ],
     });
     mocks.batchIssuanceRunFindUniqueOrThrow.mockResolvedValueOnce({
       ...pendingRun,
       items: [deliveredItem],
     });
     mocks.batchIssuanceRunUpdate
-      .mockResolvedValueOnce({ ...pendingRun, status: BatchIssuanceRunStatus.PROCESSING })
+      .mockResolvedValueOnce({
+        ...pendingRun,
+        status: BatchIssuanceRunStatus.PROCESSING,
+      })
       .mockResolvedValueOnce(completedRun);
 
     const result = await processBatchRun("batch-1");
 
-    expect(mocks.createBatchActivationLinks).toHaveBeenCalledWith({
-      credentialDefinitionId: "cred-def-1",
-      students: [
-        expect.objectContaining({
-          email: "student@example.edu",
-          externalId: "STU001",
-          idempotencyKey: "batch-issuance:batch-1:item-1",
-        }),
-      ],
-    });
-    expect(mocks.createCredentialIssuanceFromOffer).toHaveBeenCalledWith(
+    expect(mocks.prepareOffer).toHaveBeenCalledWith(
       expect.objectContaining({
-        credentialExchangeId: "credential-exchange-1",
-        studentId: "STU001",
+        key: "batch-issuance:batch-1:item-1",
+        student,
+        options: {},
       }),
     );
-    expect(mocks.createCredentialIssuanceFromOffer.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.sendCredentialActivationEmail.mock.invocationCallOrder[0],
-    );
+    expect(mocks.deliverPreparedOffer).toHaveBeenCalledWith({ id: "attempt" });
     expect(result.status).toBe("Completed");
     expect(result.items[0]).toMatchObject({
       credentialId: "issuance-1",
@@ -387,7 +468,11 @@ describe("persisted batch runs", () => {
   });
 
   it("does not send missing student records to the agent", async () => {
-    const missingItem = { ...pendingItem, id: "item-missing", studentId: "MISSING001" };
+    const missingItem = {
+      ...pendingItem,
+      id: "item-missing",
+      studentId: "MISSING001",
+    };
     const failedItem = {
       ...missingItem,
       failureReason: "Student record was not found during batch processing.",
@@ -401,11 +486,20 @@ describe("persisted batch runs", () => {
       status: BatchIssuanceRunStatus.FAILED,
     };
 
-    mocks.batchIssuanceRunFindUnique.mockResolvedValueOnce({ ...pendingRun, items: [missingItem] });
+    mocks.batchIssuanceRunFindUnique.mockResolvedValueOnce({
+      ...pendingRun,
+      items: [missingItem],
+    });
     mocks.batchIssuanceItemUpdate.mockResolvedValueOnce(failedItem);
-    mocks.batchIssuanceRunFindUniqueOrThrow.mockResolvedValueOnce({ ...pendingRun, items: [failedItem] });
+    mocks.batchIssuanceRunFindUniqueOrThrow.mockResolvedValueOnce({
+      ...pendingRun,
+      items: [failedItem],
+    });
     mocks.batchIssuanceRunUpdate
-      .mockResolvedValueOnce({ ...pendingRun, status: BatchIssuanceRunStatus.PROCESSING })
+      .mockResolvedValueOnce({
+        ...pendingRun,
+        status: BatchIssuanceRunStatus.PROCESSING,
+      })
       .mockResolvedValueOnce(failedRun);
 
     const result = await processBatchRun("batch-1");
@@ -413,6 +507,7 @@ describe("persisted batch runs", () => {
     expect(mocks.createBatchActivationLinks).not.toHaveBeenCalled();
     expect(mocks.batchIssuanceItemUpdate).toHaveBeenCalledWith({
       data: {
+        credentialIssuanceId: undefined,
         failureReason: "Student record was not found during batch processing.",
         status: BatchIssuanceItemStatus.FAILED,
       },

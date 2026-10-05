@@ -34,6 +34,7 @@ const navItems: (PortalNavItem & { allowedRoles?: readonly AdminRole[] })[] = [
     children: [
       { href: "/credentials/issuance/batch", label: "Batch issuance" },
       { href: "/credentials/issuance/individual", label: "Individual issuance" },
+      { href: "/credentials/issuance/renewals", label: "Renewals" },
     ],
   },
   { href: "/vendors", label: "Vendors", icon: "vendors" },

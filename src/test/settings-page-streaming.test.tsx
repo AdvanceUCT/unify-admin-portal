@@ -1,3 +1,8 @@
+vi.mock("@/lib/db/prisma", () => ({
+  prisma: {
+    credentialValidityPolicy: { findFirst: vi.fn().mockResolvedValue(null) },
+  },
+}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AgentHealth } from "@/lib/agentClient";
@@ -19,8 +24,12 @@ const {
   requireRoleMock: vi.fn(),
 }));
 
-vi.mock("@/lib/agentClient", () => ({ checkAgentHealth: checkAgentHealthMock }));
-vi.mock("@/lib/auth/session", () => ({ requireRoleForRender: requireRoleMock }));
+vi.mock("@/lib/agentClient", () => ({
+  checkAgentHealth: checkAgentHealthMock,
+}));
+vi.mock("@/lib/auth/session", () => ({
+  requireRoleForRender: requireRoleMock,
+}));
 vi.mock("@/lib/billing/operationsSummary", () => ({
   getBillingOperationsSummary: getBillingOperationsSummaryMock,
 }));
@@ -34,11 +43,15 @@ vi.mock("@/lib/config/env", () => ({
     WEBHOOK_SIGNING_SECRET: "secret",
   },
 }));
-vi.mock("@/lib/storage/supabase", () => ({ getDocumentSignedUrlForRender: getDocumentSignedUrlMock }));
+vi.mock("@/lib/storage/supabase", () => ({
+  getDocumentSignedUrlForRender: getDocumentSignedUrlMock,
+}));
 vi.mock("@/lib/university/credentialSchema", () => ({
   getActiveCredentialSchema: getActiveCredentialSchemaMock,
 }));
-vi.mock("@/lib/university/profile", () => ({ getUniversityProfileForRender: getUniversityProfileMock }));
+vi.mock("@/lib/university/profile", () => ({
+  getUniversityProfileForRender: getUniversityProfileMock,
+}));
 
 import SettingsPage from "@/app/(admin)/settings/page";
 
@@ -83,7 +96,9 @@ describe("SettingsPage streaming", () => {
       },
     });
     getUniversityProfileMock.mockResolvedValue(profile);
-    getDocumentSignedUrlMock.mockResolvedValue("https://cdn.example.edu/logo.png");
+    getDocumentSignedUrlMock.mockResolvedValue(
+      "https://cdn.example.edu/logo.png",
+    );
     getActiveCredentialSchemaMock.mockResolvedValue(null);
     checkAgentHealthMock.mockReturnValue(health.promise);
     getBillingOperationsSummaryMock.mockReturnValue(billing.promise);
@@ -125,7 +140,9 @@ describe("SettingsPage streaming", () => {
       },
     });
     getUniversityProfileMock.mockResolvedValue(profile);
-    getDocumentSignedUrlMock.mockResolvedValue("https://cdn.example.edu/logo.png");
+    getDocumentSignedUrlMock.mockResolvedValue(
+      "https://cdn.example.edu/logo.png",
+    );
     getActiveCredentialSchemaMock.mockResolvedValue(null);
     checkAgentHealthMock.mockResolvedValue({
       checkedAt: new Date().toISOString(),

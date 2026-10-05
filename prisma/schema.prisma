@@ -449,9 +449,6 @@ model UniversityProfile {
   issuerDid                           String?
   setupStatus                         SetupStatus             @default(PENDING)
   setupCompletedAt                    DateTime?
-  defaultCredentialValidityDays       Int                     @default(365)
-  renewalCadenceMonths                Int                     @default(12)
-  automaticCredentialRenewalEnabled   Boolean                 @default(false)
   paymentWalletEnabled                Boolean                 @default(false)
   paymentWalletRefundWindowSeconds    Int                     @default(600)
   paymentWalletSettlementDelaySeconds Int                     @default(600)
@@ -1631,4 +1628,98 @@ model PaymentWebhookAttempt {
   completedAt DateTime?
   @@unique([deliveryId, sequence])
   @@map("payment_webhook_attempt")
+}
+
+// Annual policies and durable renewal enrolments.
+model CredentialValidityPolicy {
+  id          String                   @id @default(cuid())
+  version     Int                      @unique @default(autoincrement())
+  startMonth  Int
+  startDay    Int
+  expiryMonth Int
+  expiryDay   Int
+  createdBy   String
+  createdAt   DateTime                 @default(now())
+  attempts    CredentialOfferAttempt[]
+
+  @@map("credential_validity_policy")
+}
+
+model CredentialRenewalEnrolment {
+  id                    String                    @id @default(cuid())
+  studentId             String
+  originatingIssuanceId String?
+  initialYear           Int
+  finalYear             Int
+  status                String                    @default("ACTIVE")
+  cancelledAt           DateTime?
+  cancelledBy           String?
+  createdAt             DateTime                  @default(now())
+  records               CredentialRenewalRecord[]
+
+  @@index([studentId, status])
+  @@map("credential_renewal_enrolment")
+}
+
+model CredentialRenewalRecord {
+  id                    String                     @id @default(cuid())
+  enrolmentId           String
+  enrolment             CredentialRenewalEnrolment @relation(fields: [enrolmentId], references: [id])
+  academicYear          Int
+  dueAt                 DateTime
+  expiresAt             DateTime
+  status                String                     @default("SCHEDULED")
+  preparedAt            DateTime?
+  activeAttemptId       String?
+  replacementIssuanceId String?
+  deliveredAt           DateTime?
+  activatedAt           DateTime?
+  attemptCount          Int                        @default(0)
+  retryAt               DateTime?
+  leaseExpiresAt        DateTime?
+  leaseToken            String?
+  lastError             String?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+  attempts              CredentialOfferAttempt[]
+
+  @@unique([enrolmentId, academicYear])
+  @@index([status, dueAt, retryAt])
+  @@map("credential_renewal_record")
+}
+
+model CredentialOfferAttempt {
+  id                   String                   @id @default(cuid())
+  automatic            Boolean                  @default(false)
+  key                  String                   @unique
+  studentId            String
+  policyId             String
+  policy               CredentialValidityPolicy @relation(fields: [policyId], references: [id])
+  academicYear         Int
+  validFrom            DateTime
+  expiresAt            DateTime
+  payload              Json
+  renewalId            String?
+  renewal              CredentialRenewalRecord? @relation(fields: [renewalId], references: [id])
+  issuanceId           String?                  @unique
+  supersedesIssuanceId String?
+  actorId              String?
+  createdAt            DateTime                 @default(now())
+
+  @@index([studentId, createdAt])
+  @@map("credential_offer_attempt")
+}
+
+model CredentialAutomationRun {
+  id          String    @id @default(cuid())
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  status      String    @default("PROCESSING")
+  processed   Int       @default(0)
+  failed      Int       @default(0)
+  totals      Json?
+  error       String?
+
+  @@index([startedAt])
+  @@map("credential_automation_run")
 }

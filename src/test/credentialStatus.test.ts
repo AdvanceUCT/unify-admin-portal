@@ -1,6 +1,12 @@
-import { describe, expect, it } from "vitest";
+vi.mock("@/lib/credentials/renewalActivation", () => ({
+  reconcileRenewalActivation: vi.fn(),
+}));
+import { describe, expect, it, vi } from "vitest";
 
-import { CredentialIssuanceStatus, CredentialLifecycleStatus } from "@/generated/prisma/enums";
+import {
+  CredentialIssuanceStatus,
+  CredentialLifecycleStatus,
+} from "@/generated/prisma/enums";
 import {
   derivedCredentialEventId,
   isRelevantCredentialStateChangedPayload,
@@ -10,11 +16,19 @@ import { toPublicCredentialStatus } from "@/lib/credentials/lifecycle";
 
 describe("credential status mapping", () => {
   it("maps Credo credential exchange states to portal statuses", () => {
-    expect(mapCredoStateToCredentialStatus("offer-sent")).toBe(CredentialIssuanceStatus.OFFER_SENT);
+    expect(mapCredoStateToCredentialStatus("offer-sent")).toBe(
+      CredentialIssuanceStatus.OFFER_SENT,
+    );
     expect(mapCredoStateToCredentialStatus("request-received")).toBeUndefined();
-    expect(mapCredoStateToCredentialStatus("credential-issued")).toBeUndefined();
-    expect(mapCredoStateToCredentialStatus("done")).toBe(CredentialIssuanceStatus.ISSUED);
-    expect(mapCredoStateToCredentialStatus("problem-report")).toBe(CredentialIssuanceStatus.FAILED);
+    expect(
+      mapCredoStateToCredentialStatus("credential-issued"),
+    ).toBeUndefined();
+    expect(mapCredoStateToCredentialStatus("done")).toBe(
+      CredentialIssuanceStatus.ISSUED,
+    );
+    expect(mapCredoStateToCredentialStatus("problem-report")).toBe(
+      CredentialIssuanceStatus.FAILED,
+    );
   });
 
   it("identifies the credential state changes worth storing", () => {
@@ -56,7 +70,9 @@ describe("credential status mapping", () => {
       type: "credential.stateChanged" as const,
     };
 
-    expect(derivedCredentialEventId(payload)).toBe(derivedCredentialEventId(payload));
+    expect(derivedCredentialEventId(payload)).toBe(
+      derivedCredentialEventId(payload),
+    );
   });
 
   it("maps issued credentials without revocation handles to the legacy lifecycle state", () => {
@@ -109,5 +125,4 @@ describe("credential status mapping", () => {
       ),
     ).toBe("SUSPENDED");
   });
-
 });

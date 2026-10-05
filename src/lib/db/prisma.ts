@@ -35,7 +35,7 @@ function hasCurrentModelDelegates(client: PrismaClient | undefined): client is P
     candidate?.batchIssuanceItem &&
       candidate.batchIssuanceRun &&
       candidate.walletAccount &&
-      candidate.walletTransaction && candidate.paymentRequest,
+      candidate.walletTransaction && candidate.paymentRequest && candidate.credentialOfferAttempt && candidate.credentialRenewalRecord,
   );
 }
 

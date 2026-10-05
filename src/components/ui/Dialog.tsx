@@ -57,7 +57,7 @@ export function Dialog({
       <div
         aria-labelledby="dialog-title"
         aria-modal="true"
-        className="w-full max-w-md rounded-xl border border-border bg-surface p-5 shadow-lg"
+        className="w-full max-w-md whitespace-normal rounded-xl border border-border bg-surface p-5 text-left shadow-lg"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
       >
@@ -69,7 +69,7 @@ export function Dialog({
             <X aria-hidden="true" size={18} />
           </IconButton>
         </div>
-        <div className="mt-3 text-body text-fg-muted">{children}</div>
+        <div className="mt-3 break-words text-body text-fg-muted">{children}</div>
       </div>
     </div>
   );
