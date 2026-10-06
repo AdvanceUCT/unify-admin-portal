@@ -22,10 +22,10 @@ export type LivePaymentEvent = {
   currency: "ZAR";
   completedAt: string;
   reference?: string;
-  refundableUntil?: string;
   totalRefundedMinor: number;
   remainingRefundableMinor: number;
-  refundStatus: "REFUNDABLE" | "EXPIRED" | "FULLY_REFUNDED";
+  refundStatus: "NONE" | "PARTIALLY_REFUNDED" | "FULLY_REFUNDED";
+  canRefund: boolean;
 };
 
 type RefundResponse = {
@@ -35,7 +35,6 @@ type RefundResponse = {
   totalRefundedMinor: number;
   remainingRefundableMinor: number;
   refundStatus: LivePaymentEvent["refundStatus"];
-  refundableUntil?: string;
 };
 
 async function parseErrorMessage(response: Response) {
@@ -133,7 +132,7 @@ export function LivePaymentList({
   }, [branchId, branchIdsKey, liveCursor, maxItems]);
 
   async function refundPayment(payment: LivePaymentEvent) {
-    if (payment.refundStatus !== "REFUNDABLE") return;
+    if (!payment.canRefund) return;
     setRefundMessage(undefined);
     const amountMinor = payment.remainingRefundableMinor;
 
@@ -156,7 +155,7 @@ export function LivePaymentList({
               totalRefundedMinor: result.totalRefundedMinor,
               remainingRefundableMinor: result.remainingRefundableMinor,
               refundStatus: result.refundStatus,
-              refundableUntil: result.refundableUntil ?? item.refundableUntil,
+              canRefund: item.canRefund && result.remainingRefundableMinor > 0,
             }
           : item
       )));
@@ -204,10 +203,7 @@ export function LivePaymentList({
                 Refunded {formatMoneyMinor(payment.totalRefundedMinor, payment.currency)}
               </p>
             ) : null}
-            {payment.refundableUntil ? (
-              <p className="text-xs text-fg-subtle">Refundable until {formatDateTime(payment.refundableUntil)}</p>
-            ) : null}
-            {payment.refundStatus === "REFUNDABLE" ? (
+            {payment.canRefund ? (
               <button
                 className="mt-1 rounded-md border border-border px-3 py-1 text-xs font-medium text-fg-muted transition hover:border-border-strong hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={refundingTransactionId === payment.transactionId}
@@ -218,7 +214,7 @@ export function LivePaymentList({
               </button>
             ) : (
               <p className="text-xs text-fg-subtle">
-                {payment.refundStatus === "FULLY_REFUNDED" ? "Fully refunded" : "Refund window closed"}
+                {payment.refundStatus === "FULLY_REFUNDED" ? "Fully refunded" : "Refunds unavailable"}
               </p>
             )}
           </div>

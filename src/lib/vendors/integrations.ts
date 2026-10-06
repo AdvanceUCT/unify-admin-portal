@@ -88,8 +88,16 @@ export async function authenticateVendorApiKey(header: string | null, requiredSc
     const { PosApiError } = await import("@/lib/payments/posErrors");
     throw new PosApiError("MISSING_SCOPE", "This API key does not have the required scope.", 403);
   }
-  if (requiredScope && (requiredScope.startsWith("payments:") || requiredScope.startsWith("refunds:")) && credential.vendorProfile.paymentProfile?.status !== "APPROVED") {
+  // Suspended vendors keep read access to sale and refund history; every money-moving scope is blocked.
+  const paymentStatus = credential.vendorProfile.paymentProfile?.status;
+  const movesMoney = requiredScope && requiredScope !== "payments:read" &&
+    (requiredScope.startsWith("payments:") || requiredScope.startsWith("refunds:"));
+  const readsPayments = requiredScope === "payments:read";
+  if ((movesMoney && paymentStatus !== "APPROVED") || (readsPayments && paymentStatus !== "APPROVED" && paymentStatus !== "SUSPENDED")) {
     const { PosApiError } = await import("@/lib/payments/posErrors");
+    if (paymentStatus === "SUSPENDED") {
+      throw new PosApiError("VENDOR_PAYMENT_SUSPENDED", "This vendor's payments are suspended. Top up the wallet to restore payments and refunds.", 403);
+    }
     throw new PosApiError("VENDOR_NOT_PAYMENT_ENABLED", "This vendor cannot currently accept payments.", 403);
   }
   await prisma.vendorApiCredential.update({ where: { id: credential.id }, data: { lastUsedAt: new Date() } });

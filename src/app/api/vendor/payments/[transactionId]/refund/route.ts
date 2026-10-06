@@ -10,7 +10,7 @@ import { getCurrentVendorSession } from "@/lib/auth/session";
 import { listActivePaymentBranchIdsForContext } from "@/lib/payments/branchOnboarding";
 import { WalletDomainError } from "@/lib/payments/errors";
 import { getApprovedVendorContextForUser } from "@/lib/vendors/context";
-import { createVendorPaymentRefund } from "@/lib/vendors/refunds";
+import { refundSpend } from "@/lib/vendors/refunds";
 
 const refundSchema = z.object({
   amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
@@ -26,9 +26,13 @@ function refundErrorResponse(error: unknown) {
   }
   if (error instanceof WalletDomainError) {
     const status =
-      error.code === "IDEMPOTENCY_CONFLICT" ? 409 :
-      error.code === "ACCOUNT_NOT_FOUND" ? 404 :
-      error.code === "INSUFFICIENT_FUNDS" ? 409 :
+      error.code === "IDEMPOTENCY_CONFLICT" ||
+      error.code === "REFUND_AMOUNT_EXCEEDED" ||
+      error.code === "PAYMENT_FULLY_REFUNDED" ? 409 :
+      error.code === "ACCOUNT_NOT_FOUND" || error.code === "PAYMENT_NOT_REFUNDABLE" ? 404 :
+      error.code === "VENDOR_PAYMENT_SUSPENDED" ||
+      error.code === "VENDOR_NOT_PAYMENT_ENABLED" ||
+      error.code === "BRANCH_NOT_PAYMENT_ENABLED" ? 403 :
       error.code === "PAYMENT_WALLET_DISABLED" ? 503 :
       400;
     return NextResponse.json({ error: { code: error.code, message: error.message } }, { status });
@@ -62,11 +66,13 @@ export async function POST(
 
     const { transactionId } = await context.params;
     const body = refundSchema.parse(await request.json());
-    const refund = await createVendorPaymentRefund({
-      context: { ...vendorContext, branchIds: paymentBranchIds },
-      transactionId,
+    const refund = await refundSpend({
+      vendorProfileId: vendorContext.vendorProfileId,
+      allowedBranchIds: paymentBranchIds,
+      target: { transactionId },
       amountMinor: body.amountMinor,
       idempotencyKey: body.idempotencyKey,
+      actor: { userId: session.user.id },
     });
 
     return NextResponse.json(refund, {

@@ -21,18 +21,17 @@ type RefundResponse = {
   totalRefundedMinor: number;
   remainingRefundableMinor: number;
   refundStatus: LivePaymentEvent["refundStatus"];
-  refundableUntil?: string;
 };
 
 const REFUND_STATUS_LABEL: Record<LivePaymentEvent["refundStatus"], string> = {
-  REFUNDABLE: "Refundable",
-  EXPIRED: "Window closed",
+  NONE: "Not refunded",
+  PARTIALLY_REFUNDED: "Partially refunded",
   FULLY_REFUNDED: "Fully refunded",
 };
 
 const REFUND_STATUS_TONE: Record<LivePaymentEvent["refundStatus"], StatusTone> = {
-  REFUNDABLE: "success",
-  EXPIRED: "neutral",
+  NONE: "neutral",
+  PARTIALLY_REFUNDED: "warning",
   FULLY_REFUNDED: "warning",
 };
 
@@ -140,7 +139,7 @@ export function LivePaymentTable({
   }, [filters, filtersKey, liveCursor]);
 
   async function refundPayment(payment: LivePaymentEvent) {
-    if (payment.refundStatus !== "REFUNDABLE") return;
+    if (!payment.canRefund) return;
     setRefundMessage(undefined);
     const amountMinor = payment.remainingRefundableMinor;
 
@@ -163,7 +162,7 @@ export function LivePaymentTable({
               totalRefundedMinor: result.totalRefundedMinor,
               remainingRefundableMinor: result.remainingRefundableMinor,
               refundStatus: result.refundStatus,
-              refundableUntil: result.refundableUntil ?? item.refundableUntil,
+              canRefund: item.canRefund && result.remainingRefundableMinor > 0,
             }
           : item
       )));
@@ -201,7 +200,7 @@ export function LivePaymentTable({
           <tbody className="divide-y divide-border">
             {items.map((payment) => {
               const canRefundPayment =
-                payment.refundStatus === "REFUNDABLE" &&
+                payment.canRefund &&
                 activePaymentBranchIdSet.has(payment.branchId);
 
               return (
@@ -220,9 +219,6 @@ export function LivePaymentTable({
                     <StatusText tone={REFUND_STATUS_TONE[payment.refundStatus]}>
                       {REFUND_STATUS_LABEL[payment.refundStatus]}
                     </StatusText>
-                    {payment.refundableUntil && payment.refundStatus === "REFUNDABLE" ? (
-                      <p className="mt-1 text-xs text-fg-subtle">Until {formatDateTime(payment.refundableUntil)}</p>
-                    ) : null}
                   </td>
                   <td className="max-w-44 truncate px-4 py-3 font-mono text-xs text-fg-muted">
                     {payment.reference ?? payment.transactionId}

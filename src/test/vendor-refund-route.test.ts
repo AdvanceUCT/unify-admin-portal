@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const auth = vi.hoisted(() => ({ getCurrentVendorSession: vi.fn() }));
 const context = vi.hoisted(() => ({ getApprovedVendorContextForUser: vi.fn() }));
 const branchOnboarding = vi.hoisted(() => ({ listActivePaymentBranchIdsForContext: vi.fn() }));
-const refunds = vi.hoisted(() => ({ createVendorPaymentRefund: vi.fn() }));
+const refunds = vi.hoisted(() => ({ refundSpend: vi.fn() }));
 
 vi.mock("@/lib/auth/session", () => auth);
 vi.mock("@/lib/vendors/context", () => context);
@@ -34,13 +34,13 @@ describe("vendor refund route", () => {
       branchIds: ["branch-1"],
     });
     branchOnboarding.listActivePaymentBranchIdsForContext.mockResolvedValue(["branch-1"]);
-    refunds.createVendorPaymentRefund.mockResolvedValue({
+    refunds.refundSpend.mockResolvedValue({
       originalTransactionId: "spend-1",
       refundTransactionId: "refund-1",
       refundedAmountMinor: 400,
       totalRefundedMinor: 400,
       remainingRefundableMinor: 600,
-      refundStatus: "REFUNDABLE",
+      refundStatus: "PARTIALLY_REFUNDED",
     });
   });
 
@@ -52,7 +52,7 @@ describe("vendor refund route", () => {
     });
 
     expect(response.status).toBe(401);
-    expect(refunds.createVendorPaymentRefund).not.toHaveBeenCalled();
+    expect(refunds.refundSpend).not.toHaveBeenCalled();
   });
 
   it("rejects vendors without an approved context", async () => {
@@ -63,7 +63,7 @@ describe("vendor refund route", () => {
     });
 
     expect(response.status).toBe(403);
-    expect(refunds.createVendorPaymentRefund).not.toHaveBeenCalled();
+    expect(refunds.refundSpend).not.toHaveBeenCalled();
   });
 
   it("validates refund request shape", async () => {
@@ -72,7 +72,7 @@ describe("vendor refund route", () => {
     });
 
     expect(response.status).toBe(400);
-    expect(refunds.createVendorPaymentRefund).not.toHaveBeenCalled();
+    expect(refunds.refundSpend).not.toHaveBeenCalled();
   });
 
   it("creates a scoped vendor refund", async () => {
@@ -81,11 +81,13 @@ describe("vendor refund route", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(refunds.createVendorPaymentRefund).toHaveBeenCalledWith({
-      context: expect.objectContaining({ vendorProfileId: "vendor-1" }),
-      transactionId: "spend-1",
+    expect(refunds.refundSpend).toHaveBeenCalledWith({
+      vendorProfileId: "vendor-1",
+      allowedBranchIds: ["branch-1"],
+      target: { transactionId: "spend-1" },
       amountMinor: 400,
       idempotencyKey: "refund-1",
+      actor: { userId: "user-1" },
     });
     await expect(response.json()).resolves.toEqual({
       originalTransactionId: "spend-1",
@@ -93,7 +95,17 @@ describe("vendor refund route", () => {
       refundedAmountMinor: 400,
       totalRefundedMinor: 400,
       remainingRefundableMinor: 600,
-      refundStatus: "REFUNDABLE",
+      refundStatus: "PARTIALLY_REFUNDED",
     });
+  });
+
+  it("maps a suspended vendor to 403", async () => {
+    const { WalletDomainError } = await import("@/lib/payments/errors");
+    refunds.refundSpend.mockRejectedValue(new WalletDomainError("VENDOR_PAYMENT_SUSPENDED", "Suspended."));
+    const response = await POST(refundRequest({ amountMinor: 400, idempotencyKey: "refund-1" }), {
+      params: Promise.resolve({ transactionId: "spend-1" }),
+    });
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "VENDOR_PAYMENT_SUSPENDED" } });
   });
 });

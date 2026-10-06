@@ -176,3 +176,57 @@ describe("Refund webhook outbox in PostgreSQL", () => {
     expect(await prisma.paymentWebhookEvent.count({ where: { refundTransactionId: legacyRefund.id } })).toBe(0);
   });
 });
+
+describe("POS refund API route in PostgreSQL", () => {
+  async function apiFixture(scopes = ["payments:create", "payments:read", "refunds:create"]) {
+    const f = await fixture();
+    const { createVendorApiCredential } = await import("@/lib/vendors/integrations");
+    const key = await createVendorApiCredential(f.vendor.id, "POS refunds", scopes, [f.branch.id]);
+    const sale = await createPaymentRequest(f.access, { branchId: f.branch.id, orderReference: `order-${randomUUID()}`, amountMinor: 5000, currency: "ZAR", idempotencyKey: randomUUID() });
+    return { ...f, token: key.token, sale };
+  }
+  async function callRefund(token: string, requestId: string, body: unknown) {
+    const { POST } = await import("@/app/api/vendor/v1/payment-requests/[id]/refunds/route");
+    const response = await POST(new Request(`http://localhost/api/vendor/v1/payment-requests/${requestId}/refunds`, {
+      method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify(body),
+    }), { params: Promise.resolve({ id: requestId }) });
+    return { status: response.status, body: await response.json() };
+  }
+
+  it("enforces scope, ownership and paid status, then creates and replays a referenced refund", async () => {
+    const f = await apiFixture();
+    const other = await apiFixture();
+    const noScope = await apiFixture(["payments:read"]);
+    const body = { amountMinor: 3500, idempotencyKey: randomUUID() };
+
+    expect(await callRefund(noScope.token, noScope.sale.id, body)).toMatchObject({ status: 403, body: { error: { code: "MISSING_SCOPE" } } });
+    expect(await callRefund(f.token, other.sale.id, body)).toMatchObject({ status: 404, body: { error: { code: "REQUEST_NOT_FOUND" } } });
+    expect(await callRefund(f.token, f.sale.id, body)).toMatchObject({ status: 409, body: { error: { code: "REQUEST_NOT_PAID" } } });
+    expect(await callRefund(f.token, f.sale.id, { ...body, extra: true })).toMatchObject({ status: 400 });
+
+    await payPaymentRequest(f.student.id, f.sale.id, { idempotencyKey: randomUUID() });
+    const created = await callRefund(f.token, f.sale.id, body);
+    expect(created).toMatchObject({ status: 201, body: {
+      refund: { paymentRequestId: f.sale.id, amountMinor: 3500, currency: "ZAR", source: "API" },
+      paymentRequest: { id: f.sale.id, refundedMinor: 3500, refundableMinor: 1500, refundStatus: "PARTIALLY_REFUNDED", refunds: [{ amountMinor: 3500, source: "API" }] },
+    } });
+    const replay = await callRefund(f.token, f.sale.id, body);
+    expect(replay.status).toBe(200);
+    expect(replay.body.refund.id).toBe(created.body.refund.id);
+    expect(await callRefund(f.token, f.sale.id, { ...body, amountMinor: 100 })).toMatchObject({ status: 409, body: { error: { code: "IDEMPOTENCY_CONFLICT" } } });
+    expect(await callRefund(f.token, f.sale.id, { amountMinor: 2000, idempotencyKey: randomUUID() })).toMatchObject({ status: 409, body: { error: { code: "REFUND_AMOUNT_EXCEEDED" } } });
+
+    // Key scoped to a branch the vendor no longer accepts payments on.
+    await prisma.vendorBranchPaymentAcceptance.update({ where: { vendorBranchId: f.branch.id }, data: { status: "SUSPENDED", suspendedAt: new Date() } });
+    expect(await callRefund(f.token, f.sale.id, { amountMinor: 100, idempotencyKey: randomUUID() })).toMatchObject({ status: 403, body: { error: { code: "BRANCH_NOT_ALLOWED" } } });
+  });
+
+  it("keeps payments:read but blocks refunds:create while suspended", async () => {
+    const f = await apiFixture();
+    await payPaymentRequest(f.student.id, f.sale.id, { idempotencyKey: randomUUID() });
+    await prisma.vendorPaymentProfile.update({ where: { vendorProfileId: f.vendor.id }, data: { status: "SUSPENDED", suspensionCode: "OVERDRAFT", suspendedAt: new Date() } });
+    const { authenticateVendorApiKey } = await import("@/lib/vendors/integrations");
+    await expect(authenticateVendorApiKey(`Bearer ${f.token}`, "payments:read")).resolves.toMatchObject({ id: f.vendor.id });
+    expect(await callRefund(f.token, f.sale.id, { amountMinor: 100, idempotencyKey: randomUUID() })).toMatchObject({ status: 403, body: { error: { code: "VENDOR_PAYMENT_SUSPENDED" } } });
+  });
+});

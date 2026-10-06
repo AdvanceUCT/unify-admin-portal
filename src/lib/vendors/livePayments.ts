@@ -6,8 +6,15 @@
 import "server-only";
 
 import { Prisma } from "@/generated/prisma/client";
-import { WalletTransactionStatus, WalletTransactionType } from "@/generated/prisma/enums";
+import {
+  BranchPaymentAcceptanceStatus,
+  VendorBranchStatus,
+  VendorPaymentProfileStatus,
+  WalletTransactionStatus,
+  WalletTransactionType,
+} from "@/generated/prisma/enums";
 import { prisma } from "@/lib/db/prisma";
+import { type RefundStatus, refundStatusFor } from "@/lib/payments/refundStatus";
 import type { ApprovedVendorContext } from "@/lib/vendors/context";
 
 const DEFAULT_PAYMENT_LIMIT = 20;
@@ -15,8 +22,6 @@ const PAYMENT_EVENTS_PAGE_SIZE = 10;
 const PAYMENT_EVENTS_EXPORT_LIMIT = 10_000;
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 const ZERO_MINOR = BigInt(0);
-
-type RefundStatus = "REFUNDABLE" | "EXPIRED" | "FULLY_REFUNDED";
 
 type Cursor = { completedAt: string; id: string };
 
@@ -69,29 +74,37 @@ export function decodeLivePaymentCursor(value: string): Cursor {
   }
 }
 
-function serializePayment(transaction: {
-  id: string;
-  amountMinor: bigint;
-  currency: string;
-  completedAt: Date | null;
-  createdAt: Date;
-  reference: string | null;
-  vendorBranchId: string | null;
-  refundableUntil: Date | null;
-  vendorBranch: { name: string } | null;
+const paymentInclude = {
+  linkedTransactions: {
+    where: { type: WalletTransactionType.REFUND, status: WalletTransactionStatus.COMPLETED },
+    select: { amountMinor: true, status: true, type: true },
+  },
+  vendorBranch: { select: { name: true, active: true, status: true, paymentAcceptance: { select: { status: true } } } },
   initiatorAccount: {
-    student: {
-      studentNumber: string;
-      firstName: string;
-      lastName: string;
-    } | null;
-  } | null;
-  linkedTransactions: Array<{
-    amountMinor: bigint;
-    status: WalletTransactionStatus;
-    type: WalletTransactionType;
-  }>;
-}) {
+    select: {
+      student: {
+        select: {
+          studentNumber: true,
+          firstName: true,
+          lastName: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.WalletTransactionInclude;
+
+type PaymentRecord = Prisma.WalletTransactionGetPayload<{ include: typeof paymentInclude }>;
+
+/** Refunds need an APPROVED payment profile (suspended vendors cannot refund). */
+async function vendorCanRefund(context: ApprovedVendorContext) {
+  const profile = await prisma.vendorPaymentProfile.findUnique({
+    where: { vendorProfileId: context.vendorProfileId },
+    select: { status: true },
+  });
+  return profile?.status === VendorPaymentProfileStatus.APPROVED;
+}
+
+function serializePayment(transaction: PaymentRecord, vendorRefundsEnabled: boolean) {
   const student = transaction.initiatorAccount?.student;
   const studentName = student
     ? `${student.firstName} ${student.lastName}`.trim() || "Student"
@@ -103,10 +116,13 @@ function serializePayment(transaction: {
       : total
   ), ZERO_MINOR);
   const remainingRefundableMinor = transaction.amountMinor - totalRefundedMinor;
-  const refundStatus: RefundStatus =
-    remainingRefundableMinor <= ZERO_MINOR ? "FULLY_REFUNDED" :
-    !transaction.refundableUntil || Date.now() > transaction.refundableUntil.getTime() ? "EXPIRED" :
-    "REFUNDABLE";
+  const refundStatus = refundStatusFor(transaction.amountMinor, totalRefundedMinor);
+  const branch = transaction.vendorBranch;
+  const branchAcceptsPayments = Boolean(
+    branch?.active &&
+    branch.status === VendorBranchStatus.ACTIVE &&
+    branch.paymentAcceptance?.status === BranchPaymentAcceptanceStatus.ACTIVE,
+  );
 
   return {
     eventId: transaction.id,
@@ -121,8 +137,8 @@ function serializePayment(transaction: {
     totalRefundedMinor: toSafeNumber(totalRefundedMinor),
     remainingRefundableMinor: toSafeNumber(remainingRefundableMinor > ZERO_MINOR ? remainingRefundableMinor : ZERO_MINOR),
     refundStatus,
+    canRefund: remainingRefundableMinor > ZERO_MINOR && vendorRefundsEnabled && branchAcceptsPayments,
     ...(transaction.reference ? { reference: transaction.reference } : {}),
-    ...(transaction.refundableUntil ? { refundableUntil: transaction.refundableUntil.toISOString() } : {}),
   };
 }
 
@@ -179,29 +195,13 @@ export async function listRecentVendorPayments(
       vendorBranchId: { in: branchIds },
       completedAt: { not: null },
     },
-    include: {
-      linkedTransactions: {
-        where: { type: WalletTransactionType.REFUND, status: WalletTransactionStatus.COMPLETED },
-        select: { amountMinor: true, status: true, type: true },
-      },
-      vendorBranch: { select: { name: true } },
-      initiatorAccount: {
-        select: {
-          student: {
-            select: {
-              studentNumber: true,
-              firstName: true,
-              lastName: true,
-            },
-          },
-        },
-      },
-    },
+    include: paymentInclude,
     orderBy: [{ completedAt: "desc" }, { id: "desc" }],
     take: Math.min(Math.max(options.limit ?? DEFAULT_PAYMENT_LIMIT, 1), DEFAULT_PAYMENT_LIMIT),
   });
 
-  return transactions.map(serializePayment);
+  const refundsEnabled = await vendorCanRefund(context);
+  return transactions.map((transaction) => serializePayment(transaction, refundsEnabled));
 }
 
 export async function listVendorPaymentEvents(
@@ -211,28 +211,14 @@ export async function listVendorPaymentEvents(
   const page = normalizedPage(filters.page);
   const rows = await prisma.walletTransaction.findMany({
     where: paymentTransactionsWhere(context, filters),
-    include: {
-      linkedTransactions: {
-        where: { type: WalletTransactionType.REFUND, status: WalletTransactionStatus.COMPLETED },
-        select: { amountMinor: true, status: true, type: true },
-      },
-      vendorBranch: { select: { name: true } },
-      initiatorAccount: {
-        select: {
-          student: {
-            select: {
-              studentNumber: true,
-              firstName: true,
-              lastName: true,
-            },
-          },
-        },
-      },
-    },
+    include: paymentInclude,
     orderBy: [{ completedAt: "desc" }, { id: "desc" }],
   });
 
-  const filtered = rows.map(serializePayment).filter((payment) => matchesPaymentFilters(payment, filters));
+  const refundsEnabled = await vendorCanRefund(context);
+  const filtered = rows
+    .map((row) => serializePayment(row, refundsEnabled))
+    .filter((payment) => matchesPaymentFilters(payment, filters));
   const start = (page - 1) * PAYMENT_EVENTS_PAGE_SIZE;
 
   return {
@@ -255,28 +241,14 @@ export async function exportVendorPaymentEventsCsv(
 ) {
   const rows = await prisma.walletTransaction.findMany({
     where: paymentTransactionsWhere(context, filters),
-    include: {
-      linkedTransactions: {
-        where: { type: WalletTransactionType.REFUND, status: WalletTransactionStatus.COMPLETED },
-        select: { amountMinor: true, status: true, type: true },
-      },
-      vendorBranch: { select: { name: true } },
-      initiatorAccount: {
-        select: {
-          student: {
-            select: {
-              studentNumber: true,
-              firstName: true,
-              lastName: true,
-            },
-          },
-        },
-      },
-    },
+    include: paymentInclude,
     orderBy: [{ completedAt: "desc" }, { id: "desc" }],
     take: PAYMENT_EVENTS_EXPORT_LIMIT,
   });
-  const payments = rows.map(serializePayment).filter((payment) => matchesPaymentFilters(payment, filters));
+  const refundsEnabled = await vendorCanRefund(context);
+  const payments = rows
+    .map((row) => serializePayment(row, refundsEnabled))
+    .filter((payment) => matchesPaymentFilters(payment, filters));
   const header = [
     "Completed At",
     "Branch",
@@ -287,7 +259,6 @@ export async function exportVendorPaymentEventsCsv(
     "Total Refunded",
     "Remaining Refundable",
     "Refund Status",
-    "Refundable Until",
     "Reference",
     "Transaction ID",
   ];
@@ -301,7 +272,6 @@ export async function exportVendorPaymentEventsCsv(
     payment.totalRefundedMinor,
     payment.remainingRefundableMinor,
     payment.refundStatus,
-    payment.refundableUntil,
     payment.reference,
     payment.transactionId,
   ].map(csvCell).join(","));
@@ -337,31 +307,15 @@ export async function getLivePaymentEvents(
         { completedAt, id: { gt: cursor.id } },
       ],
     },
-    include: {
-      linkedTransactions: {
-        where: { type: WalletTransactionType.REFUND, status: WalletTransactionStatus.COMPLETED },
-        select: { amountMinor: true, status: true, type: true },
-      },
-      vendorBranch: { select: { name: true } },
-      initiatorAccount: {
-        select: {
-          student: {
-            select: {
-              studentNumber: true,
-              firstName: true,
-              lastName: true,
-            },
-          },
-        },
-      },
-    },
+    include: paymentInclude,
     orderBy: [{ completedAt: "asc" }, { id: "asc" }],
     take: 20,
   });
 
   const last = transactions.at(-1);
+  const refundsEnabled = await vendorCanRefund(context);
   return {
-    events: transactions.map(serializePayment),
+    events: transactions.map((transaction) => serializePayment(transaction, refundsEnabled)),
     nextCursor: last
       ? encodeLivePaymentCursor({ completedAt: (last.completedAt ?? last.createdAt).toISOString(), id: last.id })
       : rawCursor,

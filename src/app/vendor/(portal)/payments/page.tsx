@@ -30,7 +30,7 @@ function pageParam(value: string | string[] | undefined) {
 
 function refundStatusParam(value: string | string[] | undefined): VendorPaymentEventFilters["refundStatus"] {
   const status = firstParam(value);
-  return status === "REFUNDABLE" || status === "EXPIRED" || status === "FULLY_REFUNDED"
+  return status === "NONE" || status === "PARTIALLY_REFUNDED" || status === "FULLY_REFUNDED"
     ? status
     : undefined;
 }

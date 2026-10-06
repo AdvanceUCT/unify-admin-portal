@@ -6,7 +6,7 @@
 "use client";
 
 import { Dialog } from "@/components/ui/Dialog";
-import { formatDateTime, formatMoneyMinor } from "@/lib/formatters";
+import { formatMoneyMinor } from "@/lib/formatters";
 import type { LivePaymentEvent } from "@/features/vendors/LivePaymentList";
 
 export function RefundPaymentDialog({
@@ -56,12 +56,6 @@ export function RefundPaymentDialog({
                 <dd className="font-medium tabular-nums text-fg">
                   {formatMoneyMinor(payment.totalRefundedMinor, payment.currency)}
                 </dd>
-              </div>
-            ) : null}
-            {payment.refundableUntil ? (
-              <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-2">
-                <dt className="text-fg-subtle">Window</dt>
-                <dd className="truncate font-medium text-fg">{formatDateTime(payment.refundableUntil)}</dd>
               </div>
             ) : null}
           </dl>

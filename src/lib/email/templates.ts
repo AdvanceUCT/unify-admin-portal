@@ -85,6 +85,18 @@ export function renderVendorApplicationRevokedEmail(input: VendorApplication & {
   ] });
 }
 
+const walletFooter = "UNIFY Vendor Portal · Wallet and payout updates";
+type VendorWalletEmail = { contactName: string; companyName: string; deficit: string; topUpUrl: string };
+export function renderVendorOverdraftStartedEmail(input: VendorWalletEmail & { suspendAt: Date }) {
+  return renderEmail({ subject: "Your UNIFY wallet balance is negative", preview: "A refund took your wallet below zero. Payouts are paused until it recovers.", category: "WALLET UPDATE", heading: "Your wallet is overdrawn", footer: walletFooter, blocks: [
+    { kind: "paragraph", text: `Hi ${input.contactName},` },
+    { kind: "paragraph", text: `A refund has taken ${input.companyName}'s UNIFY wallet below zero. It is overdrawn by ${input.deficit}.` },
+    { kind: "paragraph", text: "Payouts are paused while your balance is negative. New sales pay the deficit down automatically, or you can top up your wallet." },
+    { kind: "notice", tone: "attention", label: "Suspension date", text: `Payments and refunds will be suspended on ${emailDate(input.suspendAt)} unless your balance recovers.` },
+    { kind: "action", label: "Top up wallet", url: input.topUpUrl },
+  ] });
+}
+
 export type VendorHelpEmailContent = {
   title: string; details: string; submittedAt?: Date;
   submittedBy: { name: string; email: string };

@@ -7,7 +7,10 @@ import {
   listVendorPaymentEvents,
 } from "@/lib/vendors/livePayments";
 
-const database = vi.hoisted(() => ({ walletTransaction: { findMany: vi.fn() } }));
+const database = vi.hoisted(() => ({
+  walletTransaction: { findMany: vi.fn() },
+  vendorPaymentProfile: { findUnique: vi.fn() },
+}));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db/prisma", () => ({ prisma: database }));
 
@@ -27,8 +30,7 @@ const payment = {
   createdAt: new Date("2026-09-11T08:09:58.000Z"),
   reference: "spend-1",
   vendorBranchId: "branch-1",
-  refundableUntil: new Date("2999-09-11T08:20:00.000Z"),
-  vendorBranch: { name: "Main Branch" },
+  vendorBranch: { name: "Main Branch", active: true, status: "ACTIVE", paymentAcceptance: { status: "ACTIVE" } },
   linkedTransactions: [],
   initiatorAccount: {
     student: {
@@ -40,7 +42,10 @@ const payment = {
 };
 
 describe("live vendor payment feed", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    database.vendorPaymentProfile.findUnique.mockResolvedValue({ status: "APPROVED" });
+  });
 
   it("initializes a cursor without replaying old payments", async () => {
     const result = await getLivePaymentEvents(context);
@@ -63,7 +68,8 @@ describe("live vendor payment feed", () => {
       reference: "spend-1",
       totalRefundedMinor: 0,
       remainingRefundableMinor: 1250,
-      refundStatus: "REFUNDABLE",
+      refundStatus: "NONE",
+      canRefund: true,
     });
     expect(database.walletTransaction.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({

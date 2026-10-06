@@ -585,6 +585,11 @@ export function postSpendInTransaction(transaction: Prisma.TransactionClient, in
   return postWalletOperationInTransaction(transaction, { kind: "SPEND", input });
 }
 
+/** Shares the posting transaction with the refund service's scope and balance checks. */
+export function postRefundInTransaction(transaction: Prisma.TransactionClient, input: PostRefundInput) {
+  return postWalletOperationInTransaction(transaction, { kind: "REFUND", input });
+}
+
 export function postTopup(input: PostTopupInput) {
   return postWalletOperation({ kind: "TOPUP", input });
 }

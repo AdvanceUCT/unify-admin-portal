@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db/prisma";
 import { postSpendInTransaction, runSerializableTransaction } from "./posting";
 import { getMobileWalletBalance, resolveWalletPaymentDestination } from "./walletMobile";
 import { PosApiError } from "./posErrors";
+import { refundSource, refundStatusFor } from "./refundStatus";
 
 export type MerchantAccess = { id: string; branchIds: string[]; credentialId: string };
 export const createPaymentRequestSchema = z.object({
@@ -16,7 +17,13 @@ export const createPaymentRequestSchema = z.object({
   idempotencyKey: z.string().trim().min(1).max(128),
 }).strict();
 export const payRequestSchema = z.object({ idempotencyKey: z.string().trim().min(1).max(128) }).strict();
-const requestInclude = { vendorProfile: { select: { companyName: true } }, vendorBranch: { select: { name: true } }, walletTransaction: true } as const;
+const requestInclude = {
+  vendorProfile: { select: { companyName: true } }, vendorBranch: { select: { name: true } },
+  walletTransaction: { include: { linkedTransactions: {
+    where: { type: "REFUND", status: "COMPLETED" }, orderBy: [{ completedAt: "asc" }, { id: "asc" }],
+    select: { id: true, amountMinor: true, initiatedByUserId: true, completedAt: true, createdAt: true },
+  } } },
+} as const satisfies Prisma.PaymentRequestInclude;
 type RequestRecord = Prisma.PaymentRequestGetPayload<{ include: typeof requestInclude }>;
 
 function effectiveStatus(record: { status: string; expiresAt: Date }) {
@@ -30,6 +37,23 @@ export function paymentRequestSummary(record: RequestRecord) {
     createdAt: record.createdAt.toISOString(), expiresAt: record.expiresAt.toISOString(),
     completedAt: record.completedAt?.toISOString() ?? null,
     transactionId: record.walletTransactionId, qrPayload: `unifywallet://pay-request/${record.id}`,
+  };
+}
+/** Merchant-only view: adds refund totals and history (never exposed on the student QR resolve endpoint). */
+export function merchantPaymentRequestSummary(record: RequestRecord) {
+  const summary = paymentRequestSummary(record);
+  const refunds = summary.status === "PAID" ? record.walletTransaction?.linkedTransactions ?? [] : [];
+  const refundedMinor = refunds.reduce((total, refund) => total + refund.amountMinor, BigInt(0));
+  const paid = summary.status === "PAID";
+  return {
+    ...summary,
+    refundedMinor: Number(refundedMinor),
+    refundableMinor: paid ? Math.max(0, summary.amountMinor - Number(refundedMinor)) : 0,
+    refundStatus: refundStatusFor(record.amountMinor, refundedMinor),
+    refunds: refunds.map((refund) => ({
+      id: refund.id, amountMinor: Number(refund.amountMinor), currency: "ZAR" as const,
+      source: refundSource(refund), createdAt: (refund.completedAt ?? refund.createdAt).toISOString(),
+    })),
   };
 }
 function assertAccess(access: MerchantAccess, record: { vendorProfileId: string; vendorBranchId: string }) {
@@ -48,7 +72,7 @@ export async function createPaymentRequest(access: MerchantAccess, raw: unknown)
     if (record.vendorBranchId !== input.branchId || record.orderReference !== input.orderReference || record.amountMinor !== BigInt(input.amountMinor) || record.currency !== input.currency) {
       throw new PosApiError("IDEMPOTENCY_CONFLICT", "This key was used for a different sale.", 409);
     }
-    return paymentRequestSummary(record);
+    return merchantPaymentRequestSummary(record);
   };
   const existing = await prisma.paymentRequest.findUnique({ where: { vendorProfileId_idempotencyKey: { vendorProfileId: access.id, idempotencyKey: input.idempotencyKey } }, include: requestInclude });
   if (existing) return matchExisting(existing);
@@ -57,7 +81,7 @@ export async function createPaymentRequest(access: MerchantAccess, raw: unknown)
   await resolveWalletPaymentDestination(acceptance.qrIdentifier);
   const now = new Date();
   try {
-    return paymentRequestSummary(await prisma.paymentRequest.create({ data: {
+    return merchantPaymentRequestSummary(await prisma.paymentRequest.create({ data: {
       id: randomBytes(24).toString("base64url"), vendorProfileId: access.id, vendorBranchId: input.branchId,
       credentialId: access.credentialId, orderReference: input.orderReference, idempotencyKey: input.idempotencyKey,
       amountMinor: BigInt(input.amountMinor), currency: input.currency, createdAt: now, expiresAt: new Date(now.getTime() + 600_000),
@@ -78,7 +102,7 @@ export async function listPaymentRequests(access: Pick<MerchantAccess, "id" | "b
   if (query.cursor && !await prisma.paymentRequest.findFirst({ where: { ...where, id: query.cursor }, select: { id: true } })) throw new PosApiError("INVALID_CURSOR", "Invalid page cursor.");
   const records = await prisma.paymentRequest.findMany({ where, include: requestInclude, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: query.limit + 1, ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}) });
   const hasMore = records.length > query.limit;
-  const items = records.slice(0, query.limit).map(paymentRequestSummary);
+  const items = records.slice(0, query.limit).map(merchantPaymentRequestSummary);
   return { items, nextCursor: hasMore ? items.at(-1)?.id : null };
 }
 export async function getMerchantPaymentRequest(access: Pick<MerchantAccess, "id" | "branchIds">, id: string) {
@@ -86,7 +110,7 @@ export async function getMerchantPaymentRequest(access: Pick<MerchantAccess, "id
   await expireRequests(where);
   const record = await prisma.paymentRequest.findFirst({ where, include: requestInclude });
   if (!record) throw new PosApiError("REQUEST_NOT_FOUND", "Payment request was not found.", 404);
-  return paymentRequestSummary(record);
+  return merchantPaymentRequestSummary(record);
 }
 async function lockedRequest(tx: Prisma.TransactionClient, id: string) {
   await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "payment_request" WHERE "id" = ${id} FOR UPDATE`);
@@ -97,8 +121,8 @@ async function lockedRequest(tx: Prisma.TransactionClient, id: string) {
 export async function cancelPaymentRequest(access: MerchantAccess, id: string) {
   const result = await runSerializableTransaction(async (tx) => {
     const record = await lockedRequest(tx, id); assertAccess(access, record);
-    if (record.status === "PENDING") return paymentRequestSummary(await tx.paymentRequest.update({ where: { id }, data: { status: effectiveStatus(record) === "EXPIRED" ? "EXPIRED" : "CANCELLED" }, include: requestInclude }));
-    return paymentRequestSummary(record);
+    if (record.status === "PENDING") return merchantPaymentRequestSummary(await tx.paymentRequest.update({ where: { id }, data: { status: effectiveStatus(record) === "EXPIRED" ? "EXPIRED" : "CANCELLED" }, include: requestInclude }));
+    return merchantPaymentRequestSummary(record);
   });
   if (result.status === "PAID") throw new PosApiError("REQUEST_ALREADY_PAID", "A paid sale cannot be cancelled.", 409);
   return result;
