@@ -35,7 +35,9 @@ describe("runOwnPayoutAction", () => {
   it("runs payouts for the signed-in vendor owner only", async () => {
     vi.mocked(runVendorWalletPayoutForVendor).mockResolvedValue({
       vendorsScanned: 1,
-      skippedNoFunds: 0,
+      skippedBelowThreshold: 0,
+      skippedNegative: 0,
+      thresholdMinor: 50_000,
       batchesCreated: 1,
       completed: 1,
       processing: 0,
@@ -69,7 +71,9 @@ describe("runOwnPayoutAction", () => {
   it("reports no eligible funds without pretending a payout happened", async () => {
     vi.mocked(runVendorWalletPayoutForVendor).mockResolvedValue({
       vendorsScanned: 1,
-      skippedNoFunds: 1,
+      skippedBelowThreshold: 1,
+      skippedNegative: 0,
+      thresholdMinor: 50_000,
       batchesCreated: 0,
       completed: 0,
       processing: 0,
@@ -83,7 +87,7 @@ describe("runOwnPayoutAction", () => {
     expect(result).toMatchObject({
       status: "skipped",
       amountMinor: 0,
-      message: "No eligible payout balance is available right now.",
+      message: expect.stringMatching(/^Payouts start once your available balance reaches R.?500,00\.$/),
     });
   });
 
@@ -103,7 +107,9 @@ describe("runOwnPayoutAction", () => {
   it("shows the safe Paystack provider message for a failed payout batch", async () => {
     vi.mocked(runVendorWalletPayoutForVendor).mockResolvedValue({
       vendorsScanned: 1,
-      skippedNoFunds: 0,
+      skippedBelowThreshold: 0,
+      skippedNegative: 0,
+      thresholdMinor: 50_000,
       batchesCreated: 1,
       completed: 0,
       processing: 0,

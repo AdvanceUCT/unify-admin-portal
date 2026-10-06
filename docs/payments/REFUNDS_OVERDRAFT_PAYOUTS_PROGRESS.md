@@ -116,7 +116,51 @@ No migrations.
   `build` pass (route `/api/vendor/v1/payment-requests/[id]/refunds` listed); `test:payments:db` 8 files / 86
   tests passed.
 
-## Phase 3 — Payouts + overdraft monitor — ⬜
+## Phase 3 — Payouts + overdraft monitor — ✅ Gate 3 passed
+
+No migrations. `vercel.json` unchanged (the existing 00:35 SAST cron now runs both steps).
+
+**Code**
+
+- `src/lib/vendors/payouts.ts`:
+  - `calculateVendorPayoutAmount` is balance-based (P2): returns `postedBalanceMinor`, `reservedPayoutMinor`
+    (PENDING/PROCESSING/REQUIRES_RECONCILIATION batches), `availableMinor` (may be ≤ 0), `thresholdMinor`,
+    `eligible`. `availableForPayoutAt`/`cutoffAt` no longer affect eligibility.
+  - `runVendorWalletPayouts` sweeps all eligible profiles in pages of 25 ordered by `id` (P6). Each vendor's
+    calculate-and-create runs in a short transaction holding `SELECT … FROM vendor_payment_profile … FOR UPDATE`
+    and re-checks the profile is still `APPROVED` (P5); one batch for the full available amount only when
+    `available ≥ threshold` (P3); Paystack is called after commit as before. Summary has `skippedBelowThreshold`,
+    `skippedNegative` and `thresholdMinor` (replacing `skippedNoFunds`); `PayoutBatch.cutoffAt = now`.
+  - `runVendorWalletPayoutForVendor` (demo) uses the same path and threshold (P7); `cutoffAt` input removed.
+  - `getVendorPayoutOverview` adds `thresholdMinor`, `amountToThresholdMinor`, `overdraft`
+    (`deficitMinor`, `negativeSince`, `suspendAt`), `suspension` (`code`, `suspendedAt`, `reason`) and `canTopUp`
+    (owner, top-ups enabled, balance negative, profile APPROVED or SUSPENDED/OVERDRAFT); `walletBalanceMinor` and
+    `availableMinor` may be negative.
+  - Provider-confirmed payouts already post even if the balance dropped (Phase 1 B3 + posting change).
+- New `src/lib/vendors/overdraft.ts`: `suspendOverdrawnVendors`, `reinstateRecoveredVendors`,
+  `reinstateIfRecovered`, `runOverdraftMonitor` (reinstate, then suspend). Each change re-checks state in a
+  serializable transaction and writes `VENDOR_PAYMENT_SUSPENDED` / `VENDOR_PAYMENT_REINSTATED` audit entries
+  (`actorId: null`) in the same transaction; emails are sent afterwards, best-effort. Only `OVERDRAFT`
+  suspensions are reinstated (E4).
+- `src/app/api/cron/vendor-wallet-payouts/route.ts`: runs `runOverdraftMonitor()` then `runVendorWalletPayouts()`
+  and returns `{ overdraft, payouts }`.
+- `runOwnPayoutAction`: the "skipped" message explains a negative balance or the threshold amount.
+- Email: "payments suspended" and "payments restored" templates and senders in `src/lib/email/vendor-wallet.ts`.
+
+**Tests**
+
+- Rewritten `vendor-payouts.test.ts`: simulated demo payout of the full available balance under the profile lock;
+  threshold table (at threshold pays, 1 cent below skips, in-flight reservations subtracted, negative skipped);
+  sweep across pages (26 vendors). Updated `vendor-payout-actions.test.ts` (new summary shape, threshold message),
+  `email-templates.test.ts` (two new templates).
+- Postgres (`refunds-overdraft-postgres.test.ts`): no suspension at 13 d 23 h, suspension at 14 d with audit entry,
+  idempotent repeat run, suspended vendor cannot sell or refund; reinstatement only after recovery via vendor
+  top-up and only for `OVERDRAFT`; two concurrent payout runs for one vendor create exactly one batch.
+
+**Evidence**
+
+- `lint` 0 errors (same 12 pre-existing warnings); `typecheck` pass; `npm test` 145 files / 988 tests passed;
+  `build` pass; `test:payments:db` 8 files / 89 tests passed.
 
 ## Phase 4 — Vendor top-ups (backend) — ⬜
 
@@ -138,4 +182,7 @@ No migrations.
 | 8 | 2 | `listActivePaymentBranchIdsForContext` now accepts `Pick<ApprovedVendorContext, "vendorProfileId" \| "branchIds">`. | Reused for API keys (key branches ∩ active payment branches) without inventing a fake portal context. |
 | 9 | 2 | Route-level API tests live in the Postgres suite instead of a mocked `vendor-api-refund-route.test.ts`. | Exercises real key hashing, scopes and DB guards end to end with fewer mocks; `payment-webhook-routes.test.ts` needed no change. |
 | 10 | 2 | The status-model change, `canRefund` and removal of refund-window copy in the list/table/filter/dialog were done here; partial-amount input, balance and overdraft warning in the dialog remain Phase 5. | The `RefundStatus` type change forces those components to change to keep typecheck green. |
-| 11 | 2 | Only the "overdraft started" email template exists so far; "suspended" and "restored" come with the Phase 3 monitor. | Phase scope. |
+| 11 | 2 | Only the "overdraft started" email template exists so far; "suspended" and "restored" come with the Phase 3 monitor. | Phase scope; done in Phase 3. |
+| 12 | 3 | Overdraft-monitor and payout-concurrency tests live in the Postgres suite instead of a mocked `vendor-overdraft.test.ts`. | Day-boundary filters and the row lock are only meaningful against real queries; the "more than 25 vendors" case stays a unit test. |
+| 13 | 3 | Payout run summary drops `skippedNoFunds` (replaced by `skippedBelowThreshold` / `skippedNegative`) and adds `thresholdMinor`; the cron response is now `{ overdraft, payouts }`. | Spec §7.6/§7.7; only internal consumers. |
+| 14 | 3 | `getVendorPayoutOverview` is still only loaded for owners on the payments page. | Staff seeing the overdraft panel (§9.2) is UI work for Phase 5. |

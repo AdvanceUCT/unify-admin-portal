@@ -4,7 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/config/env", () => ({ env: { DATABASE_URL: process.env.DATABASE_URL, VENDOR_API_KEY_PEPPER: "isolated-pos-test-pepper-at-least-32-characters", VENDOR_WEBHOOK_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64") } }));
+vi.mock("@/lib/config/env", () => ({ env: { APP_URL: "http://localhost:3000", DATABASE_URL: process.env.DATABASE_URL, VENDOR_API_KEY_PEPPER: "isolated-pos-test-pepper-at-least-32-characters", VENDOR_WEBHOOK_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64") } }));
 vi.mock("@/lib/vendors/paymentWebhookTransport", async (importOriginal) => ({ ...await importOriginal<object>(), resolvePaymentWebhookDestination: vi.fn(async () => ({})) }));
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
@@ -228,5 +228,69 @@ describe("POS refund API route in PostgreSQL", () => {
     const { authenticateVendorApiKey } = await import("@/lib/vendors/integrations");
     await expect(authenticateVendorApiKey(`Bearer ${f.token}`, "payments:read")).resolves.toMatchObject({ id: f.vendor.id });
     expect(await callRefund(f.token, f.sale.id, { amountMinor: 100, idempotencyKey: randomUUID() })).toMatchObject({ status: 403, body: { error: { code: "VENDOR_PAYMENT_SUSPENDED" } } });
+  });
+});
+
+describe("Overdraft monitor and threshold payouts in PostgreSQL", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  async function overdrawnVendor() {
+    const f = await fixture();
+    const sale = await spend(f, 2000);
+    await postPayout({ vendorAccountId: f.vendorAccountId, amountMinor: BigInt(2000), idempotencyKey: randomUUID(), providerPaymentId: randomUUID(), payoutDestinationReference: "RCP_test" });
+    await refund(sale.id, 500);
+    const { negativeSince } = await balance(f.vendorAccountId);
+    return { ...f, sale, negativeSince: negativeSince! };
+  }
+  const profileOf = (f: Fixture) => prisma.vendorPaymentProfile.findUniqueOrThrow({ where: { vendorProfileId: f.vendor.id } });
+
+  it("suspends after N full days, never before, and only once", async () => {
+    const { suspendOverdrawnVendors } = await import("@/lib/vendors/overdraft");
+    const f = await overdrawnVendor();
+
+    expect((await suspendOverdrawnVendors(new Date(f.negativeSince.getTime() + 14 * DAY - 60 * 60 * 1000))).suspended).not.toContain(f.vendor.id);
+    expect((await profileOf(f)).status).toBe("APPROVED");
+
+    const now = new Date(f.negativeSince.getTime() + 14 * DAY);
+    expect((await suspendOverdrawnVendors(now)).suspended).toContain(f.vendor.id);
+    expect(await profileOf(f)).toMatchObject({ status: "SUSPENDED", suspensionCode: "OVERDRAFT", suspendedAt: now });
+    expect(await prisma.auditLog.count({ where: { action: "VENDOR_PAYMENT_SUSPENDED", targetId: (await profileOf(f)).id } })).toBe(1);
+    expect((await suspendOverdrawnVendors(now)).suspended).not.toContain(f.vendor.id);
+
+    // Suspended vendors cannot sell or refund.
+    await expect(spend(f, 100)).rejects.toMatchObject({ code: "VENDOR_NOT_PAYMENT_ENABLED" });
+    await expect(refund(f.sale.id, 100)).rejects.toMatchObject({ code: "VENDOR_PAYMENT_SUSPENDED" });
+  });
+
+  it("reinstates only overdraft suspensions once the balance is back at zero or above", async () => {
+    const { reinstateIfRecovered, reinstateRecoveredVendors, suspendOverdrawnVendors } = await import("@/lib/vendors/overdraft");
+    const f = await overdrawnVendor();
+    await suspendOverdrawnVendors(new Date(f.negativeSince.getTime() + 14 * DAY));
+    expect(await reinstateIfRecovered(f.vendor.id)).toBe(false);
+
+    const topup = await prisma.walletTransaction.create({ data: { type: "VENDOR_TOPUP", amountMinor: BigInt(500), initiatorAccountId: f.vendorAccountId, idempotencyKey: randomUUID(), paymentProvider: "PAYSTACK", providerPaymentId: randomUUID() } });
+    await completePendingVendorTopup({ walletTransactionId: topup.id, vendorAccountId: f.vendorAccountId });
+    expect(await reinstateIfRecovered(f.vendor.id)).toBe(true);
+    expect(await profileOf(f)).toMatchObject({ status: "APPROVED", suspensionCode: null, suspendedAt: null, suspensionReason: null });
+
+    const manual = await fixture();
+    await prisma.vendorPaymentProfile.update({ where: { vendorProfileId: manual.vendor.id }, data: { status: "SUSPENDED", suspendedAt: new Date(), suspensionReason: "Admin review" } });
+    expect((await reinstateRecoveredVendors()).reinstated).not.toContain(manual.vendor.id);
+    expect((await profileOf(manual)).status).toBe("SUSPENDED");
+  });
+
+  it("serializes concurrent payout runs so funds are reserved once", async () => {
+    const { runVendorWalletPayoutForVendor } = await import("@/lib/vendors/payouts");
+    const f = await fixture(BigInt(100000));
+    await spend(f, 60000);
+    await prisma.vendorPaymentProfile.update({ where: { vendorProfileId: f.vendor.id }, data: { payoutProvider: "PAYSTACK", payoutDestinationReference: "RCP_test" } });
+    const run = () => runVendorWalletPayoutForVendor({ vendorProfileId: f.vendor.id, initiatedByUserId: f.user.id, simulateProviderTransfer: true });
+
+    const [first, second] = await Promise.all([run(), run()]);
+    expect(first.batchesCreated + second.batchesCreated).toBe(1);
+    const batches = await prisma.payoutBatch.findMany({ where: { vendorPaymentProfile: { vendorProfileId: f.vendor.id } } });
+    expect(batches).toHaveLength(1);
+    expect(batches[0]).toMatchObject({ amountMinor: BigInt(60000), status: "COMPLETED" });
+    expect((await balance(f.vendorAccountId)).postedBalanceMinor).toBe(BigInt(0));
   });
 });

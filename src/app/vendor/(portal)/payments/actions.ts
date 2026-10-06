@@ -8,6 +8,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { formatMoneyMinor } from "@/lib/formatters";
 import { PaystackProviderError } from "@/lib/paymentProviders/paystack/errors";
 import { requireVendorOwnerContext } from "@/lib/vendors/context";
 import { runVendorWalletPayoutForVendor, saveVendorPayoutDestination } from "@/lib/vendors/payouts";
@@ -71,7 +72,9 @@ export async function runOwnPayoutAction(): Promise<RunOwnPayoutResult> {
         currency: "ZAR",
         message: summary.vendorsScanned === 0
           ? "No approved payout destination is ready for this vendor yet."
-          : "No eligible payout balance is available right now.",
+          : summary.skippedNegative > 0
+            ? "Payouts are paused while your wallet balance is negative."
+            : `Payouts start once your available balance reaches ${formatMoneyMinor(summary.thresholdMinor)}.`,
       };
     }
 

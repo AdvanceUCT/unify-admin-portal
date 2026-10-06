@@ -1,5 +1,5 @@
 /**
- * @fileoverview CRON_SECRET-protected scheduled vendor wallet payout runner.
+ * @fileoverview CRON_SECRET-protected daily job: overdraft monitor, then the threshold payout sweep.
  * @module app/api/cron/vendor-wallet-payouts/route
  */
 
@@ -8,6 +8,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { env } from "@/lib/config/env";
+import { runOverdraftMonitor } from "@/lib/vendors/overdraft";
 import { runVendorWalletPayouts } from "@/lib/vendors/payouts";
 
 function authorized(request: Request, secret: string) {
@@ -25,8 +26,9 @@ export async function GET(request: Request) {
   }
 
   try {
-    const summary = await runVendorWalletPayouts();
-    return NextResponse.json(summary);
+    const overdraft = await runOverdraftMonitor();
+    const payouts = await runVendorWalletPayouts();
+    return NextResponse.json({ overdraft, payouts });
   } catch (error) {
     return NextResponse.json(
       {
