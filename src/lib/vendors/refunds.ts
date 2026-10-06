@@ -83,7 +83,7 @@ async function readBalance(transaction: Prisma.TransactionClient, accountId: str
 
 export type RefundInput = {
   vendorProfileId: string;
-  /** Portal: active payment branches in context. API: key branches ∩ active payment branches. */
+  /** Authorized historical branches; posting checks current eligibility. API: key branches ∩ active payment branches. */
   allowedBranchIds: string[];
   target: RefundTarget;
   amountMinor: number;

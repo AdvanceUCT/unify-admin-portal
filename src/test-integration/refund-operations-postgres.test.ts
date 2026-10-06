@@ -168,6 +168,49 @@ describe("Payout balances and reservations", () => {
     expect(await balanceOf(f.vendorAccountId)).toBe(BigInt(0));
     expect((await run(f)).batchesCreated).toBe(0);
   });
+  it("a new reservation waits for an earlier debit and batch completion", async () => {
+    const f = await funded();
+    const batch = await prisma.payoutBatch.create({ data: { vendorPaymentProfileId: f.profile.id, amountMinor: BigInt(10000), cutoffAt: new Date(), provider: "PAYSTACK", providerIdempotencyKey: randomUUID(), payoutDestinationReference: "RCP_test", status: "PROCESSING" } });
+    const ready = deferred(), release = deferred();
+    const original = prisma.$transaction.bind(prisma);
+    const spy = vi.spyOn(prisma, "$transaction").mockImplementation((async (callback: unknown, options: unknown) => original(async tx => {
+      const update = tx.payoutBatch.update.bind(tx.payoutBatch);
+      tx.payoutBatch.update = (async (...args: Parameters<typeof update>) => {
+        if (args[0].where.id === batch.id && args[0].data.status === "COMPLETED") { ready.resolve(); await release.promise; }
+        return update(...args);
+      }) as unknown as typeof update;
+      return (callback as (tx: Prisma.TransactionClient) => Promise<unknown>)(tx);
+    }, options as { isolationLevel?: "Serializable" })) as typeof prisma.$transaction);
+    const providerId = randomUUID();
+    const completing = completePayoutBatchWithTransfer({ providerReference: batch.providerIdempotencyKey, transfer: { providerTransferId: providerId, transferCode: providerId, reference: batch.providerIdempotencyKey, status: "success", amountMinor: batch.amountMinor, currency: "ZAR" } });
+    try {
+      await ready.promise;
+      const next = run(f);
+      try { await waitForBalanceLock(); } finally { release.resolve(); }
+      await completing;
+      const result = await next;
+      expect(result.batchesCreated).toBe(1);
+      expect(result.batches[0].amountMinor).toBe(50000);
+      expect(await balanceOf(f.vendorAccountId)).toBe(BigInt(0));
+    } finally { release.resolve(); spy.mockRestore(); }
+  });
+  it("a materialization failure retains the reservation until recovery", async () => {
+    const f = await funded(); const original = prisma.$transaction.bind(prisma);
+    const spy = vi.spyOn(prisma, "$transaction").mockImplementation((async (callback: unknown, options: unknown) => original(async tx => {
+      const update = tx.payoutBatch.update.bind(tx.payoutBatch);
+      tx.payoutBatch.update = ((...args: Parameters<typeof update>) => { if (args[0].data.status === "COMPLETED") throw new Error("batch completion interrupted"); return update(...args); }) as unknown as typeof update;
+      return (callback as (tx: Prisma.TransactionClient) => Promise<unknown>)(tx);
+    }, options as { isolationLevel?: "Serializable" })) as typeof prisma.$transaction);
+    try { expect((await run(f)).requiresReconciliation).toBe(1); } finally { spy.mockRestore(); }
+    expect(await balanceOf(f.vendorAccountId)).toBe(BigInt(60000));
+    expect((await run(f)).batchesCreated).toBe(0);
+    const batch = await prisma.payoutBatch.findFirstOrThrow({ where: { vendorPaymentProfileId: f.profile.id } });
+    expect(batch.status).toBe("REQUIRES_RECONCILIATION");
+    const providerId = `simulated:${batch.providerIdempotencyKey}`;
+    await completePayoutBatchWithTransfer({ providerReference: batch.providerIdempotencyKey, transfer: { providerTransferId: providerId, transferCode: providerId, reference: batch.providerIdempotencyKey, status: "success", amountMinor: batch.amountMinor, currency: "ZAR" } });
+    expect(await balanceOf(f.vendorAccountId)).toBe(BigInt(0));
+    expect(await prisma.walletTransaction.count({ where: { initiatorAccountId: f.vendorAccountId, type: "PAYOUT" } })).toBe(1);
+  });
   it("repairs an old ledger-completed batch without another debit", async () => {
     const f = await funded();
     const batch = await prisma.payoutBatch.create({ data: { vendorPaymentProfileId: f.profile.id, amountMinor: BigInt(60000), cutoffAt: new Date(), provider: "PAYSTACK", providerIdempotencyKey: randomUUID(), payoutDestinationReference: "RCP_test", status: "PROCESSING" } });

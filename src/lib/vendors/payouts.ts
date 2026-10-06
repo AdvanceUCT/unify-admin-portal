@@ -350,8 +350,8 @@ async function handleTransferOutcome(reference: string, transfer: PaystackInitia
     return batch.status === "COMPLETED" ? "completed" as const : "requires_reconciliation" as const;
   }
   if (["failed", "reversed"].includes(status)) {
-    await markPayoutBatchFailed(reference, `PAYSTACK_TRANSFER_${status.toUpperCase()}`, transfer.transferCode);
-    return "failed" as const;
+    const batch = await markPayoutBatchFailed(reference, `PAYSTACK_TRANSFER_${status.toUpperCase()}`, transfer.transferCode);
+    return batch.status === "COMPLETED" ? "completed" as const : "failed" as const;
   }
   const batch = await transitionPayout(reference, {
       status: PayoutBatchStatus.PROCESSING,
@@ -571,12 +571,12 @@ export async function handlePaystackTransferWebhook(input: {
   }
 
   if (eventType === "transfer.failed" || eventType === "transfer.reversed") {
-    await markPayoutBatchFailed(
+    const batch = await markPayoutBatchFailed(
       input.reference,
       eventType === "transfer.failed" ? "PAYSTACK_TRANSFER_FAILED" : "PAYSTACK_TRANSFER_REVERSED",
       input.transferCode,
     );
-    return "failed" as const;
+    return batch.status === "COMPLETED" ? "completed" as const : "failed" as const;
   }
 
   return "ignored" as const;

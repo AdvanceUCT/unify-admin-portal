@@ -12,6 +12,7 @@ export class RefundRecoveryClient {
   private state: RefundRecoveryState = initial;
   private scope?: Scope;
   private epoch = 0;
+  private legacyKey?: string;
   private listeners = new Set<() => void>();
   constructor(private options: { baseUrl: string; storage: () => Pick<Storage, "getItem" | "setItem" | "removeItem">; fetch?: typeof fetch; legacyDraft?: () => RefundDraft | undefined; clearLegacy?: () => void }) {}
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
@@ -36,7 +37,7 @@ export class RefundRecoveryClient {
     } else {
       // Clear only after a validated, authoritative terminal outcome.
       this.options.storage().removeItem(this.key());
-      this.options.clearLegacy?.();
+      if (this.legacyKey === op.idempotencyKey) this.options.clearLegacy?.();
       this.set({ draft: undefined, operation: undefined, outcome: op, error: undefined });
     }
     return op;
@@ -52,6 +53,7 @@ export class RefundRecoveryClient {
       this.scope = { vendorProfileId: recovery.vendorProfileId, operatorId: recovery.operatorId };
       const raw = this.options.storage().getItem(this.key());
       const draft = raw ? draftSchema.parse(JSON.parse(raw)) : this.options.legacyDraft?.();
+      if (!raw && draft) this.legacyKey = draft.idempotencyKey;
       this.set({ draft, operation: undefined, outcome: undefined });
       if (recovery.operation) this.accept(recovery.operation);
       else if (draft) {
@@ -67,7 +69,7 @@ export class RefundRecoveryClient {
   private registration(draft: RefundDraft) { const { operationId: _id, ...body } = draft; void _id; return body; }
   private async run(action: "execute" | "cancel", draft: RefundDraft) {
     let op = this.state.operation;
-    if (!op) op = this.accept(await this.request("", this.registration(draft)), draft);
+    if (!op) op = this.accept(draft.operationId ? await this.request(`/${encodeURIComponent(draft.operationId)}`) : await this.request("", this.registration(draft)), draft);
     if (op.status !== "PENDING") return op;
     return this.accept(await this.request(`/${encodeURIComponent(op.id)}/${action}`, {}), draft);
   }
