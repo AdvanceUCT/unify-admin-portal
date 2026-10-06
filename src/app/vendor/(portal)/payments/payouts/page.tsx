@@ -7,6 +7,9 @@ import { BackButton } from "@/components/ui/BackButton";
 import { PayoutHistoryFilterBar } from "@/features/vendors/PayoutHistoryFilterBar";
 import { PayoutHistoryTable } from "@/features/vendors/PayoutHistoryTable";
 import type { PayoutBatchStatus, PayoutInitiationSource } from "@/generated/prisma/enums";
+import { formatMoneyMinor } from "@/lib/formatters";
+import { getUniversityPaymentWalletSettings } from "@/lib/payments/config";
+import { DEFAULT_PAYOUT_THRESHOLD_MINOR } from "@/lib/payments/constants";
 import { requireApprovedVendorContextForRender } from "@/lib/vendors/context";
 import { listVendorPayoutHistory, type VendorPayoutHistoryFilters } from "@/lib/vendors/payoutHistory";
 
@@ -57,7 +60,11 @@ export default async function VendorPayoutHistoryPage({
     page: pageParam(params.page),
     status: statusParam(params.status),
   };
-  const result = await listVendorPayoutHistory(context, filters);
+  const [result, walletSettings] = await Promise.all([
+    listVendorPayoutHistory(context, filters),
+    getUniversityPaymentWalletSettings(),
+  ]);
+  const thresholdMinor = walletSettings?.paymentWalletPayoutThresholdMinor ?? BigInt(DEFAULT_PAYOUT_THRESHOLD_MINOR);
   const showingStart = result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1;
   const showingEnd = Math.min(result.total, result.page * result.pageSize);
 
@@ -71,6 +78,10 @@ export default async function VendorPayoutHistoryPage({
             <h1 className="text-page-title text-fg">Payout history</h1>
             <p className="mt-1 text-sm text-fg-subtle">
               Review scheduled and manual payout batches from your vendor wallet.
+            </p>
+            <p className="mt-1 text-sm text-fg-subtle">
+              Payouts run automatically each night at about 00:35 SAST and pay your full available balance once it
+              reaches {formatMoneyMinor(Number(thresholdMinor))}. Payouts pause while your balance is negative.
             </p>
           </div>
           <p className="text-sm text-fg-muted">Showing {showingStart}-{showingEnd} of {result.total}</p>

@@ -98,7 +98,7 @@ export function PayoutDestinationCard({
         <div>
           <h2 className="text-section-title text-fg">Payout destination</h2>
           <p className="mt-1 text-sm text-fg-subtle">
-            Save the bank destination Paystack will use when settled wallet takings are paid out.
+            Save the bank destination Paystack will use when your wallet balance is paid out.
           </p>
         </div>
         <Badge tone={hasDestination ? "success" : "warning"}>

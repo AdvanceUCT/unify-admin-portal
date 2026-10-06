@@ -79,6 +79,19 @@ At minimum, document:
 
 The wallet is on Credo 0.6.3 while the agent is on 0.5.x. Do not upgrade either independently without a compatibility matrix covering offer receipt, mediator pickup, proof presentation, revocation and connectionless invitations.
 
+#### Vendor overdraft is uncapped and cannot be collected by bank debit
+
+Refunds have no time limit and may take a vendor wallet below zero ([REFUNDS_OVERDRAFT_PAYOUTS.md](../payments/REFUNDS_OVERDRAFT_PAYOUTS.md)). UNIFY cannot debit vendor bank accounts, so the maximum loss per vendor is the sum of its already-paid-out sales (refunds can never exceed the original sales), for example a vendor and student colluding to pay out and then refund. Controls: payouts pause while the balance is negative; the nightly job (00:35 SAST, before the payout sweep) suspends a vendor whose balance has been negative for `paymentWalletOverdraftSuspensionDays` (default 14), which blocks new sales, refunds and payouts; POS refunds must reference the original sale.
+
+Operations:
+
+- `SUPER_ADMIN` sets the payout threshold (default R 500) and suspension days at `/settings/payment-wallet`; changes apply at the next nightly run and are audited (`PAYMENT_WALLET_SETTINGS_UPDATED`). The page also shows how many vendors are negative or suspended.
+- Overdraft suspensions (`suspensionCode = OVERDRAFT`) lift automatically once the balance is back at zero or above, immediately after a confirmed vendor top-up or at the next nightly run. Suspensions with any other cause are never lifted automatically. Both directions are audited (`VENDOR_PAYMENT_SUSPENDED` / `VENDOR_PAYMENT_REINSTATED`) with a system actor.
+- The admin vendor page shows each vendor's balance, overdraft start and suspension details (read only).
+- A vendor top-up left `UNKNOWN` (verification mismatch or duplicate provider ID) blocks further top-ups for that vendor until it is resolved; there is no admin tool for this yet.
+
+A real deployment would need a bank-debit or collections arrangement, and a multi-vendor stored-value wallet would likely need a bank partner or licensed payment-provider structure.
+
 #### Vendor repository ambiguity
 
 The active vendor portal is inside the admin repository; the standalone portal still receives Dependabot alerts and looks active. Archive it or add a conspicuous deprecation notice and disable unnecessary automation. This reduces false ownership signals and dependency noise.

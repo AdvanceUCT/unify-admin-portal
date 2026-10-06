@@ -31,16 +31,30 @@ export function RunPayoutButton({
   compact = false,
   embedded = false,
   hasDestination,
+  paymentsSuspended,
+  thresholdMinor,
 }: {
   availableMinor: number;
   compact?: boolean;
   embedded?: boolean;
   hasDestination: boolean;
+  paymentsSuspended: boolean;
+  thresholdMinor: number;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [result, setResult] = useState<RunOwnPayoutResult | null>(null);
-  const canRun = hasDestination && availableMinor > 0 && !isPending;
+  // Same rules as the nightly sweep (P7): the full available balance, once it reaches the threshold.
+  const disabledReason = !hasDestination
+    ? "Save a payout destination before running a payout."
+    : paymentsSuspended
+      ? "Payouts are paused while payments are suspended."
+      : availableMinor < 0
+        ? "Payouts are paused while your wallet balance is negative."
+        : availableMinor < thresholdMinor
+          ? `Payouts start once your available balance reaches ${formatMoney(thresholdMinor)}. ${formatMoney(thresholdMinor - availableMinor)} to go.`
+          : null;
+  const canRun = disabledReason === null && !isPending;
 
   function handleRunPayout() {
     setResult(null);
@@ -58,7 +72,7 @@ export function RunPayoutButton({
           <div>
             <p className="text-sm font-semibold text-fg">Demo payout run</p>
             <p className="mt-1 text-xs text-fg-subtle">
-              Runs this vendor&apos;s eligible payout now without waiting for the scheduled cron job.
+              Runs this vendor&apos;s payout now, with the same threshold, instead of waiting for the nightly run.
             </p>
           </div>
         )}
@@ -87,13 +101,11 @@ export function RunPayoutButton({
         </button>
       </div>
 
-      {!hasDestination ? (
-        <p className="text-xs text-fg-subtle">Save a payout destination before running a payout.</p>
-      ) : availableMinor <= 0 ? (
-        <p className="text-xs text-fg-subtle">There is no eligible payout balance right now.</p>
+      {disabledReason ? (
+        <p className="text-xs text-fg-subtle">{disabledReason}</p>
       ) : (
         <p className="text-xs text-fg-subtle">
-          Ready to pay out {formatMoney(availableMinor)} {" "} from this vendor&apos;s eligible settled wallet takings.
+          Ready to pay out {formatMoney(availableMinor)}, your full available balance.
         </p>
       )}
 

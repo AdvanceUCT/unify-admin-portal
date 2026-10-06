@@ -11,10 +11,10 @@ import { prisma } from "@/lib/db/prisma";
 import { sendVendorPaymentsRestoredEmail, sendVendorPaymentsSuspendedEmail } from "@/lib/email/vendor-wallet";
 import { formatMoneyMinor } from "@/lib/formatters";
 import { getUniversityPaymentWalletSettings } from "@/lib/payments/config";
+import { DEFAULT_OVERDRAFT_SUSPENSION_DAYS } from "@/lib/payments/constants";
 import { runSerializableTransaction } from "@/lib/payments/posting";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const DEFAULT_OVERDRAFT_SUSPENSION_DAYS = 14;
 const ZERO_MINOR = BigInt(0);
 
 const profileWithBalance = {

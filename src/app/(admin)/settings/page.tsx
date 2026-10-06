@@ -13,6 +13,7 @@ import {
   Gauge,
   Link as LinkIcon,
   Receipt,
+  Wallet,
   Webhook,
 } from "lucide-react";
 import Link from "next/link";
@@ -302,6 +303,21 @@ export default async function SettingsPage() {
             href="/settings/verification-billing"
           >
             Manage verification billing →
+          </Link>
+        </SettingsCard>
+      )}
+
+      {canManageVerificationBilling && (
+        <SettingsCard
+          description="Vendor payout threshold and overdraft suspension rules for the student payment wallet."
+          icon={Wallet}
+          title="Payment wallet"
+        >
+          <Link
+            className="text-sm font-medium text-brand-700 hover:underline"
+            href="/settings/payment-wallet"
+          >
+            Manage payment wallet settings →
           </Link>
         </SettingsCard>
       )}

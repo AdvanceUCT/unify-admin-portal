@@ -1,6 +1,6 @@
 # Reliable checkout: merchant integration and operations
 
-This increment groups AD-212, AD-215, AD-216, AD-217, AD-220, AD-224, AD-225 and AD-227. Refund execution and OTP onboarding changes remain outside its scope. The POS uses test money, TechNest and its explicitly approved Rondebosch Branch.
+This increment groups AD-212, AD-215, AD-216, AD-217, AD-220, AD-224, AD-225 and AD-227. OTP onboarding changes remain outside its scope. Refunds and the `payment_request.refunded` callback were added later by [REFUNDS_OVERDRAFT_PAYOUTS.md](payments/REFUNDS_OVERDRAFT_PAYOUTS.md). The POS uses test money, TechNest and its explicitly approved Rondebosch Branch.
 
 ```mermaid
 sequenceDiagram
@@ -69,6 +69,32 @@ Example body (whitespace/order shown here is illustrative; verify the received r
 ```
 
 `payment_request.cancelled` / `payment_request.expired` have matching terminal statuses and null transaction/completion fields. No student identity, payer ID or credential attributes appear in these events.
+
+`payment_request.refunded` (version 1) is emitted once per completed refund on a payment request, whether the refund came from the POS API or the vendor portal, and is created in the same database transaction as the refund. A request has exactly one terminal event and may have any number of refund events. `amountMinor` stays the original sale amount; `refundedMinor` / `refundableMinor` are cumulative as of this refund:
+
+```json
+{
+  "id": "event-uuid",
+  "version": 1,
+  "type": "payment_request.refunded",
+  "occurredAt": "2026-10-06T12:00:00.000Z",
+  "data": {
+    "requestId": "aBcdEF0123456789aBcdEF0123456789",
+    "branchId": "approved-branch-id",
+    "orderReference": "sale-001",
+    "amountMinor": 5000,
+    "currency": "ZAR",
+    "status": "PAID",
+    "transactionId": "original-spend-id",
+    "completedAt": "2026-10-06T11:00:00.000Z",
+    "refund": { "id": "refund-transaction-id", "amountMinor": 3500, "source": "PORTAL", "createdAt": "2026-10-06T12:00:00.000Z" },
+    "refundedMinor": 3500,
+    "refundableMinor": 1500
+  }
+}
+```
+
+Later refunds may already exist by the time the receiver rereads the request. Accept a refund event only when the authoritative request's `refunds[]` contains `refund.id` with the same `amountMinor`, its `refundedMinor` is at least `data.refundedMinor`, and branch, request ID and order reference match.
 
 Node verification example:
 

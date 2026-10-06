@@ -162,7 +162,7 @@ export function VendorIntegrationSettings({
         <fieldset className="mt-4 space-y-2">
           <legend className="text-sm font-medium">Key permissions</legend>
           <div className="flex flex-wrap gap-4">{VENDOR_API_SCOPES.map((scope) => <label key={scope} className="text-sm"><input type="checkbox" checked={scopes.includes(scope)} onChange={(event) => setScopes((current) => event.target.checked ? [...current, scope] : current.filter((value) => value !== scope))} /> {scope}</label>)}</div>
-          <p className="text-xs text-fg-subtle">Refund scope prepares access for a future API; it does not enable refunds here.</p>
+          <p className="text-xs text-fg-subtle">Refund scope lets your POS refund its own paid sales.</p>
         </fieldset>
         <fieldset className="mt-4 space-y-2">
           <legend className="text-sm font-medium">Permitted branches</legend>

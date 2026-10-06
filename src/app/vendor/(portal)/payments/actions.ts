@@ -53,6 +53,11 @@ export async function savePayoutDestinationAction(formData: FormData) {
   redirect(`${returnTo}?payout=updated`);
 }
 
+function randToMinor(value: string) {
+  const trimmed = value.trim();
+  return /^\d+(?:\.\d{1,2})?$/.test(trimmed) ? Math.round(Number(trimmed) * 100) : Number.NaN;
+}
+
 /** Owner-only: starts a wallet top-up (only while overdrawn) and redirects to Paystack checkout. */
 export async function startVendorTopupAction(formData: FormData) {
   const { context } = await requireVendorOwnerContext();
@@ -60,7 +65,7 @@ export async function startVendorTopupAction(formData: FormData) {
   try {
     const topUp = await createVendorWalletTopup({
       context,
-      amountMinor: Number(readString(formData, "amountMinor")),
+      amountMinor: randToMinor(readString(formData, "amount")),
       idempotencyKey: readString(formData, "idempotencyKey"),
     });
     destination = topUp.authorizationUrl

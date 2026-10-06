@@ -1,5 +1,10 @@
 # Payment wallet implementation status
 
+> **Superseded in part (October 2026):** the refund-window, settlement-delay and payout-eligibility
+> sections below describe the original design. Refunds have no time limit, vendor balances may go
+> negative, and payouts are a daily threshold sweep; see
+> [`docs/payments/REFUNDS_OVERDRAFT_PAYOUTS.md`](payments/REFUNDS_OVERDRAFT_PAYOUTS.md).
+
 **Status date:** 4 September 2026  
 **Current milestone:** Ledger foundation implemented and verified against the migrated test database; ready for the first sandbox vertical slice.
 

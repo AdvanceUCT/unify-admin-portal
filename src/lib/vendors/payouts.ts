@@ -25,15 +25,18 @@ import {
 import { resolvePaystackWalletTopupConfig } from "@/lib/paymentProviders/paystack/config";
 import { PaystackProviderError } from "@/lib/paymentProviders/paystack/errors";
 import { getUniversityPaymentWalletSettings } from "@/lib/payments/config";
-import { PAYSTACK_WALLET_PROVIDER, WALLET_CURRENCY } from "@/lib/payments/constants";
+import {
+  DEFAULT_OVERDRAFT_SUSPENSION_DAYS,
+  DEFAULT_PAYOUT_THRESHOLD_MINOR,
+  PAYSTACK_WALLET_PROVIDER,
+  WALLET_CURRENCY,
+} from "@/lib/payments/constants";
 import { WalletDomainError } from "@/lib/payments/errors";
 import { postPayout } from "@/lib/payments/posting";
 import { encryptVendorSecret } from "@/lib/vendors/integrationCrypto";
 import type { ApprovedVendorContext } from "@/lib/vendors/context";
 
 const PAYOUT_SWEEP_PAGE_SIZE = 25;
-const DEFAULT_PAYOUT_THRESHOLD_MINOR = BigInt(50_000);
-const DEFAULT_OVERDRAFT_SUSPENSION_DAYS = 14;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RESERVED_PAYOUT_STATUSES = [
   PayoutBatchStatus.PENDING,
@@ -163,7 +166,7 @@ export async function saveVendorPayoutDestination(
 async function payoutSettings() {
   const settings = await getUniversityPaymentWalletSettings();
   return {
-    thresholdMinor: settings?.paymentWalletPayoutThresholdMinor ?? DEFAULT_PAYOUT_THRESHOLD_MINOR,
+    thresholdMinor: settings?.paymentWalletPayoutThresholdMinor ?? BigInt(DEFAULT_PAYOUT_THRESHOLD_MINOR),
     overdraftSuspensionDays: settings?.paymentWalletOverdraftSuspensionDays ?? DEFAULT_OVERDRAFT_SUSPENSION_DAYS,
   };
 }
@@ -620,6 +623,7 @@ export async function getVendorPayoutOverview(context: ApprovedVendorContext) {
     availableMinor: toSafeNumber(availableMinor),
     reservedPayoutMinor: calculation ? toSafeNumber(calculation.reservedPayoutMinor) : 0,
     thresholdMinor: toSafeNumber(settings.thresholdMinor),
+    overdraftSuspensionDays: settings.overdraftSuspensionDays,
     amountToThresholdMinor: toSafeNumber(
       settings.thresholdMinor > availableMinor ? settings.thresholdMinor - availableMinor : BigInt(0),
     ),

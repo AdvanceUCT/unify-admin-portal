@@ -171,8 +171,18 @@ Authorization: Bearer unify_vk_...
 {"branchId":"your-branch","orderReference":"sale-001","amountMinor":3500,"currency":"ZAR","idempotencyKey":"unique-sale-key"}
 
 GET /api/vendor/v1/payment-requests/{id}
-POST /api/vendor/v1/payment-requests/{id}/cancel`}</pre>
-        <p className="mt-2 text-sm">Requests expire after ten minutes. PAID is authoritative; pending, cancelled and expired requests are not receipts. Configure separate signed payment callbacks below. Refund execution is outside this demo.</p>
+POST /api/vendor/v1/payment-requests/{id}/cancel
+
+POST /api/vendor/v1/payment-requests/{id}/refunds
+{"amountMinor":1500,"idempotencyKey":"unique-refund-key"}`}</pre>
+        <p className="mt-2 text-sm">Requests expire after ten minutes. PAID is authoritative; pending, cancelled and expired requests are not receipts. Configure separate signed payment callbacks below.</p>
+        <p className="mt-2 text-sm">
+          Refunds need a key with the <code className="font-mono">refunds:create</code> scope and can only reference a PAID request from the
+          key&apos;s branches. Partial and repeated refunds are allowed up to the original amount, with no time limit; reuse the same
+          idempotency key to retry safely. Each completed refund, including those made in this portal, sends a signed{" "}
+          <code className="font-mono">payment_request.refunded</code> callback, and the request&apos;s <code className="font-mono">refunds</code>{" "}
+          list is the authoritative record.
+        </p>
         <Link href="/vendor/payment-requests" className="text-brand-600">View payment requests →</Link>
       </section>
       <PaymentWebhookSettings branches={branches} />

@@ -295,6 +295,34 @@ export async function getVendorWalletTopup(vendorProfileId: string, topUpId: str
   return serialize(attempt);
 }
 
+/** True when an overdraft suspension was lifted after this top-up started (for "Payments restored"). */
+export async function vendorWalletTopupRestoredPayments(vendorProfileId: string, topUpId: string) {
+  const attempt = await prisma.vendorWalletTopupAttempt.findFirst({
+    where: { id: topUpId, vendorProfileId, status: WalletTopupAttemptStatus.SUCCEEDED },
+    select: { createdAt: true, vendorProfile: { select: { paymentProfile: { select: { id: true } } } } },
+  });
+  const paymentProfileId = attempt?.vendorProfile.paymentProfile?.id;
+  if (!attempt || !paymentProfileId) return false;
+  const reinstated = await prisma.auditLog.count({
+    where: {
+      action: AuditAction.VENDOR_PAYMENT_REINSTATED,
+      targetType: "VendorPaymentProfile",
+      targetId: paymentProfileId,
+      createdAt: { gte: attempt.createdAt },
+    },
+  });
+  return reinstated > 0;
+}
+
+/** The vendor's one unresolved attempt (T3), if any, so the top-up page can resume it. */
+export async function getUnresolvedVendorWalletTopup(vendorProfileId: string) {
+  const attempt = await prisma.vendorWalletTopupAttempt.findFirst({
+    where: { vendorProfileId, status: { in: UNRESOLVED } },
+    include: attemptInclude,
+  });
+  return attempt ? serialize(attempt) : null;
+}
+
 async function markSucceeded(attempt: AttemptRecord, completedAt: Date) {
   const updated = await updateAttempt(attempt.id, { status: WalletTopupAttemptStatus.SUCCEEDED, completedAt, failureCode: null });
   await writeAuditLog({

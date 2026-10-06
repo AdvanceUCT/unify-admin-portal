@@ -20,6 +20,9 @@ export function VendorWalletBalanceCard({
   canRunDemoPayout: boolean;
   overview: PayoutOverview;
 }) {
+  const isNegative = overview.walletBalanceMinor < 0;
+  const threshold = formatMoneyMinor(overview.thresholdMinor, overview.walletCurrency);
+
   return (
     <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
       <div className="grid gap-0 lg:grid-cols-[1.25fr_0.9fr]">
@@ -30,7 +33,7 @@ export function VendorWalletBalanceCard({
                 <WalletCards aria-hidden="true" size={17} />
                 <span>Wallet balance</span>
               </div>
-              <p className="mt-4 text-4xl font-semibold leading-none text-fg sm:text-5xl">
+              <p className={`mt-4 text-4xl font-semibold leading-none sm:text-5xl ${isNegative ? "text-danger-fg" : "text-fg"}`}>
                 {formatMoneyMinor(overview.walletBalanceMinor, overview.walletCurrency)}
               </p>
             </div>
@@ -46,6 +49,20 @@ export function VendorWalletBalanceCard({
           <p className="mt-4 max-w-xl text-sm text-fg-subtle">
             Student wallet payments collected by your approved branches.
           </p>
+          <p className={`mt-2 max-w-xl text-sm ${isNegative || overview.suspension ? "text-danger-fg" : "text-fg-muted"}`}>
+            {isNegative
+              ? "Payouts are paused while your balance is negative."
+              : overview.suspension
+                ? "Payouts are paused while payments are suspended."
+                : overview.amountToThresholdMinor > 0
+                ? `Payouts run automatically each night once your available balance reaches ${threshold}. ${formatMoneyMinor(overview.amountToThresholdMinor, overview.walletCurrency)} to go.`
+                : `Your available balance of ${formatMoneyMinor(overview.availableMinor, overview.walletCurrency)} will be paid out in tonight's payout run.`}
+          </p>
+          {overview.reservedPayoutMinor > 0 ? (
+            <p className="mt-1 max-w-xl text-xs text-fg-subtle">
+              {formatMoneyMinor(overview.reservedPayoutMinor, overview.walletCurrency)} in payouts already in progress.
+            </p>
+          ) : null}
         </div>
 
         <div className="flex flex-col justify-center border-t border-border p-6 sm:p-7 lg:border-l lg:border-t-0">
@@ -77,6 +94,8 @@ export function VendorWalletBalanceCard({
                 compact
                 embedded
                 hasDestination={overview.hasDestination}
+                paymentsSuspended={overview.suspension !== null}
+                thresholdMinor={overview.thresholdMinor}
               />
             </div>
           ) : null}

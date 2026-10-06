@@ -195,7 +195,7 @@ Keeping both portals in this repository allows application approval, vendor memb
 4. Approval creates or restores the vendor owner's membership, creates a default branch when necessary, and provisions the branch as a verification service point with the Agent Service.
 5. The owner can add branches, invite staff, assign staff to branches, review verification activity, and configure checkout integrations.
 6. If portal payments are enabled, the owner saves a payout destination and submits branch payment-access requests for admin review.
-7. Approved payment branches receive payment QR identifiers, can accept branch payments, and can refund eligible payments inside the configured refund window.
+7. Approved payment branches receive payment QR identifiers, accept branch payments, and can refund completed payments in full or in part from the portal or the POS API, with no platform time limit. A refund may take the vendor wallet below zero: payouts pause, and payments are suspended if it stays negative for the configured number of days (default 14) until sales or an owner top-up recover it. Payouts run nightly for the full available balance once it reaches the payout threshold (default R 500).
 8. Vendors review monthly verification invoices and, when checkout is enabled, pay them through Paystack test-mode hosted checkout.
 9. Staff members use the same Vendor Portal but can see and operate only the active branches assigned to them.
 
@@ -214,6 +214,8 @@ Keeping both portals in this repository allows application approval, vendor memb
 | `/vendor/verifications` | Branch-scoped history with student, university, date, and status filters plus CSV export |
 | `/vendor/payments` | Branch-scoped payment history, live updates, CSV export, refund actions, and owner payment summary |
 | `/vendor/payments/payouts` | Vendor payout batch history and status filters |
+| `/vendor/payments/top-up` | Owner-only Paystack test-mode top-up that pays down a negative wallet balance |
+| `/vendor/payments/top-up/return` | Owner-only top-up confirmation after Paystack checkout |
 | `/vendor/invoices` | Owner-only verification invoice list |
 | `/vendor/invoices/[invoiceId]` | Invoice detail, PDF download, payment attempts, and Paystack checkout when enabled |
 | `/vendor/integrations` | Owner-only API-key and signed result-webhook management |
@@ -451,8 +453,10 @@ Configure a shared annual credential start and expiry under **Settings ? Validit
 2. A vendor owner saves a payout destination and submits branch payment-access requests.
 3. An administrator approves or rejects each branch request from the Admin Portal.
 4. Approval provisions the branch payment QR identifier and vendor payment account.
-5. Completed branch payments appear in `/vendor/payments` with branch-scoped filters, live updates, CSV export, and refund actions.
-6. Vendor owners can review payment balances, payout batches, and scheduled or manual payout results.
+5. Completed branch payments appear in `/vendor/payments` with branch-scoped filters, live updates, CSV export, and full or partial refund actions. POS integrations can refund their own paid requests through `POST /api/vendor/v1/payment-requests/{id}/refunds` (`refunds:create` scope).
+6. Vendor owners can review payment balances, payout batches, and scheduled or manual payout results. The nightly cron (00:35 SAST) first suspends vendors negative for too long and reinstates recovered ones, then pays each approved vendor its full available balance once it reaches the threshold.
+7. While the balance is negative, the owner can top up the deficit through Paystack test checkout; a confirmed top-up that clears the deficit restores suspended payments immediately.
+8. A `SUPER_ADMIN` sets the payout threshold and overdraft suspension days under `/settings/payment-wallet`.
 
 ### Verification billing
 
@@ -512,6 +516,7 @@ If the change affects payment posting, payment migrations, billing policy, invoi
 - Public result access uses unguessable capability tokens and returns minimal data.
 - Static service-point links create dynamic sessions; they are not reusable proof results.
 - Payment balances must be changed only through server-side posting functions; do not update projection tables, ledger entries, or completed transactions directly.
-- Paystack browser redirects and inline callback success are not proof of payment. Confirm invoice payments and payouts server-side or through signed webhooks.
+- Paystack browser redirects and inline callback success are not proof of payment. Confirm invoice payments, vendor top-ups and payouts server-side or through signed webhooks.
+- Accepted risk: vendor overdraft has no cap and UNIFY cannot debit vendor bank accounts, so the maximum loss per vendor is the sum of its already-paid-out sales (refunds can never exceed the original sales). Suspension after the configured overdraft period and POS refunds that must reference the original sale limit this; see `docs/payments/REFUNDS_OVERDRAFT_PAYOUTS.md` §4.
 - Verification billing records and issued invoices are audit artifacts. Use forward corrections, exceptions, or new policy versions rather than editing historical charges.
 - Do not delete or rewrite applied production migrations. Add a new forward migration instead.

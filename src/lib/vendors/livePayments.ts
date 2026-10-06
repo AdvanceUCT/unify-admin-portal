@@ -14,6 +14,8 @@ import {
   WalletTransactionType,
 } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/db/prisma";
+import { getUniversityPaymentWalletSettings } from "@/lib/payments/config";
+import { DEFAULT_OVERDRAFT_SUSPENSION_DAYS } from "@/lib/payments/constants";
 import { type RefundStatus, refundStatusFor } from "@/lib/payments/refundStatus";
 import type { ApprovedVendorContext } from "@/lib/vendors/context";
 
@@ -94,6 +96,27 @@ const paymentInclude = {
 } satisfies Prisma.WalletTransactionInclude;
 
 type PaymentRecord = Prisma.WalletTransactionGetPayload<{ include: typeof paymentInclude }>;
+
+/** Wallet state the refund dialog uses for its overdraft warning (spec §9.1). */
+export async function getVendorRefundGuidance(context: ApprovedVendorContext) {
+  const [profile, walletAccount, settings] = await Promise.all([
+    prisma.vendorPaymentProfile.findUnique({
+      where: { vendorProfileId: context.vendorProfileId },
+      select: { status: true },
+    }),
+    prisma.walletAccount.findUnique({
+      where: { vendorProfileId: context.vendorProfileId },
+      select: { balance: { select: { postedBalanceMinor: true } } },
+    }),
+    getUniversityPaymentWalletSettings(),
+  ]);
+  const balanceMinor = walletAccount?.balance?.postedBalanceMinor ?? ZERO_MINOR;
+  return {
+    walletBalanceMinor: Number(balanceMinor),
+    overdraftSuspensionDays: settings?.paymentWalletOverdraftSuspensionDays ?? DEFAULT_OVERDRAFT_SUSPENSION_DAYS,
+    paymentsSuspended: profile?.status === VendorPaymentProfileStatus.SUSPENDED,
+  };
+}
 
 /** Refunds need an APPROVED payment profile (suspended vendors cannot refund). */
 async function vendorCanRefund(context: ApprovedVendorContext) {

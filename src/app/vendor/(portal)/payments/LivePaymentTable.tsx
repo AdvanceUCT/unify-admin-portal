@@ -9,19 +9,10 @@ import { Loader2, RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { StatusText, type StatusTone } from "@/components/ui/StatusText";
-import { RefundPaymentDialog } from "@/features/vendors/RefundPaymentDialog";
+import { RefundPaymentDialog, type RefundGuidance } from "@/features/vendors/RefundPaymentDialog";
 import { formatDateTime, formatMoneyMinor } from "@/lib/formatters";
-import type { LivePaymentEvent } from "@/features/vendors/LivePaymentList";
+import { useRefundIdempotencyKey, type LivePaymentEvent, type RefundResponse } from "@/features/vendors/LivePaymentList";
 import type { VendorPaymentEventFilters } from "@/lib/vendors/livePayments";
-
-type RefundResponse = {
-  originalTransactionId: string;
-  refundTransactionId: string;
-  refundedAmountMinor: number;
-  totalRefundedMinor: number;
-  remainingRefundableMinor: number;
-  refundStatus: LivePaymentEvent["refundStatus"];
-};
 
 const REFUND_STATUS_LABEL: Record<LivePaymentEvent["refundStatus"], string> = {
   NONE: "Not refunded",
@@ -74,13 +65,17 @@ export function LivePaymentTable({
   filters,
   initialItems,
   liveCursor,
+  refundGuidance,
 }: {
   activePaymentBranchIds: string[];
   filters: VendorPaymentEventFilters;
   initialItems: LivePaymentEvent[];
   liveCursor?: string;
+  refundGuidance?: RefundGuidance;
 }) {
   const [items, setItems] = useState(initialItems);
+  const [guidance, setGuidance] = useState(refundGuidance);
+  const refundIdempotencyKey = useRefundIdempotencyKey();
   const [refundMessage, setRefundMessage] = useState<string>();
   const [refundPaymentToConfirm, setRefundPaymentToConfirm] = useState<LivePaymentEvent | null>(null);
   const [refundingTransactionId, setRefundingTransactionId] = useState<string>();
@@ -138,10 +133,9 @@ export function LivePaymentTable({
     };
   }, [filters, filtersKey, liveCursor]);
 
-  async function refundPayment(payment: LivePaymentEvent) {
+  async function refundPayment(payment: LivePaymentEvent, amountMinor: number) {
     if (!payment.canRefund) return;
     setRefundMessage(undefined);
-    const amountMinor = payment.remainingRefundableMinor;
 
     setRefundingTransactionId(payment.transactionId);
     try {
@@ -150,11 +144,13 @@ export function LivePaymentTable({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           amountMinor,
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: refundIdempotencyKey.forAttempt(payment.transactionId, amountMinor),
         }),
       });
       if (!response.ok) throw new Error(await parseErrorMessage(response));
       const result = await response.json() as RefundResponse;
+      refundIdempotencyKey.clear();
+      setGuidance((current) => current && { ...current, walletBalanceMinor: result.vendorBalanceMinor });
       setItems((current) => current.map((item) => (
         item.transactionId === result.originalTransactionId
           ? {
@@ -239,7 +235,11 @@ export function LivePaymentTable({
                         {refundingTransactionId === payment.transactionId ? "Refunding" : "Refund"}
                       </button>
                     ) : (
-                      <span className="text-xs text-fg-subtle">No action</span>
+                      <span className="text-xs text-fg-subtle">
+                        {guidance?.paymentsSuspended && payment.remainingRefundableMinor > 0
+                          ? "Payments suspended"
+                          : "No action"}
+                      </span>
                     )}
                   </td>
                 </tr>
@@ -254,10 +254,11 @@ export function LivePaymentTable({
         )}
       </div>
       <RefundPaymentDialog
+        guidance={guidance}
         isPending={Boolean(refundingTransactionId)}
         onClose={() => setRefundPaymentToConfirm(null)}
-        onConfirm={() => {
-          if (refundPaymentToConfirm) void refundPayment(refundPaymentToConfirm);
+        onConfirm={(amountMinor) => {
+          if (refundPaymentToConfirm) void refundPayment(refundPaymentToConfirm, amountMinor);
         }}
         payment={refundPaymentToConfirm}
       />
