@@ -124,6 +124,20 @@ describe("Durable refund instructions", () => {
     await prisma.vendorApiCredential.update({ where: { id: f.credential.id }, data: { revokedAt: new Date() } });
     await expect(refundOperation(api(f), apiOp.id)).rejects.toMatchObject({ status: 401 });
   });
+  it("staff recover an inactive assigned branch, but not after assignment or application revocation", async () => {
+    const f = await fixture(); const sale = await paid(f);
+    const user = await prisma.user.create({ data: { email: `${randomUUID()}@example.invalid`, name: "Refund staff", userType: "VENDOR" } });
+    const membership = await prisma.vendorMembership.create({ data: { userId: user.id, vendorProfileId: f.vendor.id, role: "STAFF", branches: { create: { vendorBranchId: f.branch.id } } } });
+    const access = { vendorProfileId: f.vendor.id, actor: { userId: user.id } };
+    const op = await registerRefundOperation(access, { target: { transactionId: sale.id }, amountMinor: 1000, idempotencyKey: randomUUID() });
+    const completed = await refundOperation(access, op.id, "execute");
+    await prisma.vendorBranch.update({ where: { id: f.branch.id }, data: { active: false } });
+    expect((await refundOperation(access, op.id, "execute")).result?.refundTransactionId).toBe(completed.result?.refundTransactionId);
+    await prisma.vendorBranchMembership.deleteMany({ where: { vendorMembershipId: membership.id } });
+    await expect(refundOperation(access, op.id)).rejects.toMatchObject({ status: 404 });
+    await prisma.vendorApplication.updateMany({ where: { vendorProfileId: f.vendor.id }, data: { status: "REVOKED", revokedAt: new Date() } });
+    await expect(refundOperation(owner(f), op.id)).rejects.toMatchObject({ status: 403 });
+  });
   it("rolls execution and its outbox back on an unexpected database failure", async () => {
     const f = await fixture(); const sale = await paid(f); const op = await instruction(f, sale.id);
     const originalTransaction = prisma.$transaction.bind(prisma);
