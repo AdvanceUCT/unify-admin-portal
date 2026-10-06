@@ -29,13 +29,14 @@ function hasCurrentModelDelegates(client: PrismaClient | undefined): client is P
     walletAccount?: unknown;
     walletTransaction?: unknown;
     paymentRequest?: unknown;
+    refundOperation?: unknown;
   };
 
   return Boolean(
     candidate?.batchIssuanceItem &&
       candidate.batchIssuanceRun &&
       candidate.walletAccount &&
-      candidate.walletTransaction && candidate.paymentRequest && candidate.credentialOfferAttempt && candidate.credentialRenewalRecord,
+      candidate.walletTransaction && candidate.paymentRequest && candidate.refundOperation && candidate.credentialOfferAttempt && candidate.credentialRenewalRecord,
   );
 }
 

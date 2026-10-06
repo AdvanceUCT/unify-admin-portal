@@ -20,6 +20,7 @@ import {
   saveValidityPolicy,
 } from "@/lib/credentials/validityPolicy";
 import { validateLogoFile } from "@/lib/images/logoValidation";
+import { OVERDRAFT_SUSPENSION_DAYS_MAX } from "@/lib/payments/constants";
 import {
   deleteVendorDocument,
   uploadUniversityLogo,
@@ -331,4 +332,78 @@ export async function runBillingReconciliationNowAction() {
 
   revalidatePath("/settings");
   return getBillingOperationsSummary();
+}
+
+export type PaymentWalletSettingsResult = { status: "saved" } | { status: "error"; message: string };
+
+const RAND_AMOUNT_PATTERN = /^\d+(?:\.\d{1,2})?$/;
+
+function parseThresholdMinor(value: string) {
+  const trimmed = value.trim();
+  if (!RAND_AMOUNT_PATTERN.test(trimmed)) return null;
+  const amountMinor = Math.round(Number(trimmed) * 100);
+  return Number.isSafeInteger(amountMinor) && amountMinor > 0 ? amountMinor : null;
+}
+
+function parseSuspensionDays(value: string) {
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const days = Number(trimmed);
+  return days >= 1 && days <= OVERDRAFT_SUSPENSION_DAYS_MAX ? days : null;
+}
+
+/**
+ * SUPER_ADMIN only (spec §3.6). Updates the platform-wide payout threshold and
+ * overdraft suspension days; both take effect at the next nightly run.
+ */
+export async function updatePaymentWalletSettingsAction(formData: FormData): Promise<PaymentWalletSettingsResult> {
+  const session = await requireRole(["SUPER_ADMIN"]);
+
+  const thresholdMinor = parseThresholdMinor(String(formData.get("payoutThreshold") ?? ""));
+  if (thresholdMinor === null) {
+    return { status: "error", message: "Payout threshold must be an amount in rand greater than zero, e.g. 500.00." };
+  }
+  const suspensionDays = parseSuspensionDays(String(formData.get("overdraftSuspensionDays") ?? ""));
+  if (suspensionDays === null) {
+    return {
+      status: "error",
+      message: `Overdraft suspension must be a whole number of days between 1 and ${OVERDRAFT_SUSPENSION_DAYS_MAX}.`,
+    };
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const universities = await tx.universityProfile.findMany({
+      take: 2,
+      select: { id: true, paymentWalletPayoutThresholdMinor: true, paymentWalletOverdraftSuspensionDays: true },
+    });
+    if (universities.length !== 1) return false;
+    const [current] = universities;
+
+    await tx.universityProfile.update({
+      where: { id: current.id },
+      data: {
+        paymentWalletPayoutThresholdMinor: BigInt(thresholdMinor),
+        paymentWalletOverdraftSuspensionDays: suspensionDays,
+      },
+    });
+    await writeAuditLog({
+      action: AuditAction.PAYMENT_WALLET_SETTINGS_UPDATED,
+      actorId: session.user.id,
+      targetType: "UniversityProfile",
+      targetId: current.id,
+      meta: {
+        oldPayoutThresholdMinor: Number(current.paymentWalletPayoutThresholdMinor),
+        newPayoutThresholdMinor: thresholdMinor,
+        oldOverdraftSuspensionDays: current.paymentWalletOverdraftSuspensionDays,
+        newOverdraftSuspensionDays: suspensionDays,
+      },
+    }, tx);
+    return true;
+  });
+  if (!updated) {
+    return { status: "error", message: "Exactly one university profile is required. Complete the setup wizard first." };
+  }
+
+  revalidatePath("/settings");
+  return { status: "saved" };
 }

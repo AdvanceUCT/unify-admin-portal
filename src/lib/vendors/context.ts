@@ -19,7 +19,7 @@ export type ApprovedVendorContext = {
   branchIds: string[];
 };
 
-async function resolveApprovedVendorContextForUser(userId: string): Promise<ApprovedVendorContext | null> {
+async function resolveApprovedVendorContextForUser(userId: string, includeInactiveBranches = false): Promise<ApprovedVendorContext | null> {
   const membership = await prisma.vendorMembership.findFirst({
     where: {
       userId,
@@ -35,7 +35,7 @@ async function resolveApprovedVendorContextForUser(userId: string): Promise<Appr
           branches: { select: { id: true } },
         },
       },
-      branches: { where: { vendorBranch: { active: true } }, select: { vendorBranchId: true } },
+      branches: { ...(includeInactiveBranches ? {} : { where: { vendorBranch: { active: true } } }), select: { vendorBranchId: true } },
     },
   });
   if (!membership) return null;
@@ -54,8 +54,8 @@ async function resolveApprovedVendorContextForUser(userId: string): Promise<Appr
 
 const getApprovedVendorContextForUserCachedForRender = cache(resolveApprovedVendorContextForUser);
 
-export async function getApprovedVendorContextForUser(userId: string): Promise<ApprovedVendorContext | null> {
-  return resolveApprovedVendorContextForUser(userId);
+export async function getApprovedVendorContextForUser(userId: string, includeInactiveBranches = false): Promise<ApprovedVendorContext | null> {
+  return resolveApprovedVendorContextForUser(userId, includeInactiveBranches);
 }
 
 export async function getApprovedVendorContextForUserForRender(

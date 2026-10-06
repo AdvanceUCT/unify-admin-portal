@@ -8,9 +8,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { formatMoneyMinor } from "@/lib/formatters";
 import { PaystackProviderError } from "@/lib/paymentProviders/paystack/errors";
 import { requireVendorOwnerContext } from "@/lib/vendors/context";
 import { runVendorWalletPayoutForVendor, saveVendorPayoutDestination } from "@/lib/vendors/payouts";
+import { createVendorWalletTopup } from "@/lib/vendors/walletTopups";
 
 export type RunOwnPayoutResult = {
   status: "completed" | "processing" | "failed" | "requires_reconciliation" | "skipped";
@@ -51,6 +53,30 @@ export async function savePayoutDestinationAction(formData: FormData) {
   redirect(`${returnTo}?payout=updated`);
 }
 
+function randToMinor(value: string) {
+  const trimmed = value.trim();
+  return /^\d+(?:\.\d{1,2})?$/.test(trimmed) ? Math.round(Number(trimmed) * 100) : Number.NaN;
+}
+
+/** Owner-only: starts a wallet top-up (only while overdrawn) and redirects to Paystack checkout. */
+export async function startVendorTopupAction(formData: FormData) {
+  const { context } = await requireVendorOwnerContext();
+  let destination: string;
+  try {
+    const topUp = await createVendorWalletTopup({
+      context,
+      amountMinor: randToMinor(readString(formData, "amount")),
+      idempotencyKey: readString(formData, "idempotencyKey"),
+    });
+    destination = topUp.authorizationUrl
+      ?? `/vendor/payments/top-up/return?topUpId=${encodeURIComponent(topUp.topUpId)}&reference=${encodeURIComponent(topUp.reference)}`;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to start the top-up.";
+    redirect(`/vendor/payments/top-up?topUpError=${encodeURIComponent(message)}`);
+  }
+  redirect(destination);
+}
+
 export async function runOwnPayoutAction(): Promise<RunOwnPayoutResult> {
   const { session, context } = await requireVendorOwnerContext();
 
@@ -71,7 +97,9 @@ export async function runOwnPayoutAction(): Promise<RunOwnPayoutResult> {
         currency: "ZAR",
         message: summary.vendorsScanned === 0
           ? "No approved payout destination is ready for this vendor yet."
-          : "No eligible payout balance is available right now.",
+          : summary.skippedNegative > 0
+            ? "Payouts are paused while your wallet balance is negative."
+            : `Payouts start once your available balance reaches ${formatMoneyMinor(summary.thresholdMinor)}.`,
       };
     }
 

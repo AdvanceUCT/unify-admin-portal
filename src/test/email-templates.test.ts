@@ -16,6 +16,9 @@ const messages = [
   templates.renderVendorApplicationRejectedEmail({ ...base, applicationUrl: url, reason: "Update <details> & documents.\nThen resubmit." }),
   templates.renderVendorApplicationRevokedEmail({ ...base, reason: "Approval conditions <changed>." }),
   templates.renderVendorHelpRequestEmail({ title: "Access <problem>", details: "First line\nSecond line & notes", submittedAt: expiresAt, submittedBy: { name: base.name, email: "alex@example.invalid" }, vendor: { companyName: base.companyName } }),
+  templates.renderVendorOverdraftStartedEmail({ ...base, deficit: "R 20.00", suspendAt: expiresAt, topUpUrl: url }),
+  templates.renderVendorPaymentsSuspendedEmail({ ...base, deficit: "R 20.00", days: 14, topUpUrl: url }),
+  templates.renderVendorPaymentsRestoredEmail(base),
 ];
 
 describe("Wallet Signature email templates", () => {

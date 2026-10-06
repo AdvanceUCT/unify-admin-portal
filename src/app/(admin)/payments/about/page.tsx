@@ -46,10 +46,35 @@ export default async function PaymentsAboutPage() {
                 sale.
               </li>
               <li>
-                Vendor refunds reverse that internal spend during the short refund window. They are
-                not Paystack card refunds.
+                Vendor refunds reverse all or part of that internal spend, from the vendor portal or
+                the vendor&apos;s POS. There is no platform time limit; vendors apply their own refund
+                policy. They are not Paystack card refunds.
               </li>
             </ol>
+          </div>
+
+          <div className="space-y-3">
+            <h2 className="text-section-title text-fg">Payouts and overdraft</h2>
+            <ul className="list-disc space-y-3 pl-5 text-sm leading-relaxed text-fg-muted">
+              <li>
+                Each night at about 00:35 SAST, vendors are paid their full available balance once it
+                reaches the payout threshold set in{" "}
+                <Link className="text-info-fg underline hover:no-underline" href="/settings">
+                  Settings
+                </Link>
+                . Smaller balances roll over to the next night.
+              </li>
+              <li>
+                A refund may take a vendor wallet below zero. Payouts pause while the balance is
+                negative, and new sales pay the deficit down automatically.
+              </li>
+              <li>
+                If the balance stays negative for the configured number of days, the vendor&apos;s
+                payments are suspended: no new sales, refunds or payouts. The vendor owner can top up
+                the deficit through Paystack test checkout, and payments are restored automatically
+                once the balance is back at zero or above.
+              </li>
+            </ul>
           </div>
 
           <div className="space-y-3">
@@ -74,9 +99,9 @@ export default async function PaymentsAboutPage() {
                 variables. This portal does not store Paystack secret keys in the database.
               </li>
               <li>
-                Vendor payouts are separate from branch payment approval. The current proof of
-                concept can calculate or simulate payout flows, but real disbursement should be
-                treated as a separate operational decision.
+                Vendor payouts are separate from branch payment approval. Payouts use Paystack test
+                transfers in this proof of concept; real disbursement should be treated as a separate
+                operational decision.
               </li>
               <li>
                 Wallet balances are financial records. Corrections should be explicit ledger

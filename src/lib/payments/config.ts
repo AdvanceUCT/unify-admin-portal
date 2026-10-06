@@ -15,8 +15,8 @@ export async function getUniversityPaymentWalletSettings() {
       name: true,
       abbreviation: true,
       paymentWalletEnabled: true,
-      paymentWalletRefundWindowSeconds: true,
-      paymentWalletSettlementDelaySeconds: true,
+      paymentWalletPayoutThresholdMinor: true,
+      paymentWalletOverdraftSuspensionDays: true,
     },
   });
 }

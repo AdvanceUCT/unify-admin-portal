@@ -66,8 +66,8 @@ export function VendorPaymentsFilterBar({
           Refund status
           <select className={inputClassName} defaultValue={filters.refundStatus ?? ""} disabled={isPending} name="refundStatus">
             <option value="">All payments</option>
-            <option value="REFUNDABLE">Refundable</option>
-            <option value="EXPIRED">Window closed</option>
+            <option value="NONE">Not refunded</option>
+            <option value="PARTIALLY_REFUNDED">Partially refunded</option>
             <option value="FULLY_REFUNDED">Fully refunded</option>
           </select>
         </label>

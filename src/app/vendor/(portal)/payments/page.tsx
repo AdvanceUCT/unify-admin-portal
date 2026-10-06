@@ -18,6 +18,7 @@ import { ExportCsvButton } from "../verifications/ExportCsvButton";
 import { LivePaymentTable } from "./LivePaymentTable";
 import { VendorPaymentsFilterBar } from "./VendorPaymentsFilterBar";
 import { VendorWalletBalanceCard } from "./VendorWalletBalanceCard";
+import { VendorWalletStatusBanner } from "./VendorWalletStatusBanner";
 
 function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -30,7 +31,7 @@ function pageParam(value: string | string[] | undefined) {
 
 function refundStatusParam(value: string | string[] | undefined): VendorPaymentEventFilters["refundStatus"] {
   const status = firstParam(value);
-  return status === "REFUNDABLE" || status === "EXPIRED" || status === "FULLY_REFUNDED"
+  return status === "NONE" || status === "PARTIALLY_REFUNDED" || status === "FULLY_REFUNDED"
     ? status
     : undefined;
 }
@@ -156,9 +157,14 @@ export default async function VendorPaymentsPage({
   };
   const canPollLivePayments = resultPageCanPollLivePayments(selectedBranchId, activePaymentBranchIds);
   const [payoutOverview, result] = await Promise.all([
-    context.role === "OWNER" ? getVendorPayoutOverview(context) : Promise.resolve(null),
+    getVendorPayoutOverview(context),
     listVendorPaymentEvents(paymentContext, filters),
   ]);
+  const refundGuidance = {
+    walletBalanceMinor: payoutOverview.walletBalanceMinor,
+    overdraftSuspensionDays: payoutOverview.overdraftSuspensionDays,
+    paymentsSuspended: payoutOverview.suspension !== null,
+  };
   const showBranchFilter = context.role === "OWNER" && branches.length > 1;
   const showingStart = result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1;
   const showingEnd = Math.min(result.total, result.page * result.pageSize);
@@ -166,9 +172,11 @@ export default async function VendorPaymentsPage({
   return (
     <div className="space-y-6">
       <Link href="/vendor/payment-requests" className="text-sm text-brand-600">View POS payment requests →</Link>
-      {payoutOverview ? (
+      <VendorWalletStatusBanner overview={payoutOverview} />
+
+      {context.role === "OWNER" ? (
         <VendorWalletBalanceCard
-          canRunDemoPayout={context.role === "OWNER"}
+          canRunDemoPayout
           overview={payoutOverview}
         />
       ) : null}
@@ -202,6 +210,7 @@ export default async function VendorPaymentsPage({
           initialItems={result.events}
           key={[filters.query, filters.refundStatus, filters.dateFrom, filters.dateTo, filters.branchId, result.page].map((value) => value ?? "").join("|")}
           liveCursor={result.page === 1 && canPollLivePayments ? encodeLivePaymentCursor({ completedAt: new Date().toISOString(), id: "_" }) : undefined}
+          refundGuidance={refundGuidance}
         />
         <div className="flex items-center justify-between border-t border-border px-5 py-4">
           <Link

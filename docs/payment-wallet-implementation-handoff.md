@@ -1,5 +1,10 @@
 # Payment Wallet — Codebase-Adapted Implementation Handoff
 
+> **Superseded in part (October 2026):** the refund window (§8.5 "Ten-minute refund"), the settlement
+> delay and the payout eligibility rules in this document no longer apply. Refunds have no time limit,
+> vendor balances may go negative, and payouts are a daily threshold sweep; see
+> [`docs/payments/REFUNDS_OVERDRAFT_PAYOUTS.md`](payments/REFUNDS_OVERDRAFT_PAYOUTS.md).
+
 ## 1. Purpose and status
 
 This document defines the implementation strategy for adding a student payment wallet to the existing UNIFY Admin and Vendor Portal codebase.

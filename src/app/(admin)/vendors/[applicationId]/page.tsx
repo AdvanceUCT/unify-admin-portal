@@ -19,6 +19,7 @@ import {
 import { RejectForm } from "../RejectForm";
 import { RevokeButton } from "../RevokeButton";
 import { MarkApplicationViewed } from "./MarkApplicationViewed";
+import { VendorWalletSummary } from "./VendorWalletSummary";
 
 const DOCUMENT_KEYS = [
   "docRegistrationCertificate",
@@ -102,6 +103,8 @@ export default async function VendorApplicationDetailPage({
       </div>
 
       <VendorApplicationDetails application={application} documentUrls={documentUrls} />
+
+      <VendorWalletSummary vendorProfileId={application.vendorProfileId} />
     </div>
   );
 }

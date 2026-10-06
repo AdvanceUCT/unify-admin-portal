@@ -15,7 +15,7 @@ import { requireVendorSessionForRender } from "@/lib/auth/session";
 import { getUniversityProfileForRender } from "@/lib/university/profile";
 import { getVendorApplicationForUser } from "@/lib/vendors/applications";
 import { getApprovedVendorContextForUserForRender } from "@/lib/vendors/context";
-import { encodeLivePaymentCursor, listRecentVendorPayments } from "@/lib/vendors/livePayments";
+import { encodeLivePaymentCursor, getVendorRefundGuidance, listRecentVendorPayments } from "@/lib/vendors/livePayments";
 import { encodeLiveVerificationCursor } from "@/lib/vendors/liveVerifications";
 import { getVendorVerificationStats, listRecentVendorVerifications } from "@/lib/vendors/verifications";
 
@@ -42,11 +42,12 @@ export default async function VendorDashboardPage() {
       (vendor.defaultBranch && context.branchIds.includes(vendor.defaultBranch.id) ? vendor.defaultBranch : null) ??
       vendor.branches[0] ??
       null;
-    const [stats, recentVerifications, recentPayments, universityProfile] = await Promise.all([
+    const [stats, recentVerifications, recentPayments, universityProfile, refundGuidance] = await Promise.all([
       getVendorVerificationStats(context.vendorProfileId, { branchIds: context.branchIds }),
       listRecentVendorVerifications(context.vendorProfileId, 5, { branchIds: context.branchIds }),
       listRecentVendorPayments(context, { limit: 5 }),
       getUniversityProfileForRender(),
+      getVendorRefundGuidance(context),
     ]);
     const viewAllVerificationsHref = context.branchIds.length === 1
       ? `/vendor/verifications?branchId=${encodeURIComponent(context.branchIds[0])}`
@@ -82,6 +83,7 @@ export default async function VendorDashboardPage() {
             initialItems={recentPayments}
             liveCursor={recentPaymentsCursor}
             maxItems={5}
+            refundGuidance={refundGuidance}
           />
         </section>
         <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">

@@ -147,7 +147,7 @@ export async function listMobileWalletActivity(studentId: string, limit = DEFAUL
     const title =
       type === WalletTransactionType.TOPUP ? "Wallet top-up" :
       type === WalletTransactionType.SPEND ? branch?.vendorProfile.companyName ?? "Wallet payment" :
-      type === WalletTransactionType.REFUND ? "Wallet refund" :
+      type === WalletTransactionType.REFUND ? branch?.vendorProfile.companyName ?? "Wallet refund" :
       "Wallet activity";
     const subtitle =
       type === WalletTransactionType.SPEND || type === WalletTransactionType.REFUND

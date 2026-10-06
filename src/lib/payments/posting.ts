@@ -59,6 +59,12 @@ export type CompletePendingTopupInput = {
   completedAt?: Date;
 };
 
+export type CompletePendingVendorTopupInput = {
+  walletTransactionId: string;
+  vendorAccountId: string;
+  completedAt?: Date;
+};
+
 type WalletPostingEntry = {
   accountId: string;
   direction: LedgerDirection;
@@ -78,8 +84,6 @@ type PreparedPosting = {
   providerPaymentId?: string;
   providerPayerReference?: string;
   entries: WalletPostingEntry[];
-  refundableUntil?: Date;
-  availableForPayoutAt?: Date;
   eligibilityError?: WalletDomainError;
 };
 
@@ -153,10 +157,6 @@ function validateBase(input: PostingBase) {
   };
 }
 
-function addSeconds(value: Date, seconds: number) {
-  return new Date(value.getTime() + seconds * 1_000);
-}
-
 function sameIdempotentRequest(
   existing: {
     type: WalletTransactionType;
@@ -214,8 +214,6 @@ async function getPaymentWalletSettings(transaction: Prisma.TransactionClient) {
     select: {
       id: true,
       paymentWalletEnabled: true,
-      paymentWalletRefundWindowSeconds: true,
-      paymentWalletSettlementDelaySeconds: true,
     },
   });
 
@@ -225,10 +223,43 @@ async function getPaymentWalletSettings(transaction: Prisma.TransactionClient) {
   return profiles[0];
 }
 
+const branchEligibilitySelect = {
+  active: true,
+  status: true,
+  paymentAcceptance: { select: { status: true } },
+  vendorProfile: {
+    select: {
+      applications: {
+        where: { status: VendorApplicationStatus.APPROVED },
+        take: 1,
+        select: { id: true },
+      },
+      paymentProfile: { select: { status: true } },
+      walletAccount: { select: { id: true } },
+    },
+  },
+} satisfies Prisma.VendorBranchSelect;
+
+type BranchEligibility = Prisma.VendorBranchGetPayload<{ select: typeof branchEligibilitySelect }>;
+
+function isBranchPaymentEnabled(branch: BranchEligibility) {
+  return (
+    branch.active &&
+    branch.status === VendorBranchStatus.ACTIVE &&
+    branch.paymentAcceptance?.status === BranchPaymentAcceptanceStatus.ACTIVE
+  );
+}
+
+function isVendorPaymentEnabled(branch: BranchEligibility) {
+  return (
+    branch.vendorProfile.applications.length === 1 &&
+    branch.vendorProfile.paymentProfile?.status === VendorPaymentProfileStatus.APPROVED
+  );
+}
+
 async function preparePosting(
   transaction: Prisma.TransactionClient,
   operation: WalletOperation,
-  settings: Awaited<ReturnType<typeof getPaymentWalletSettings>>,
 ): Promise<PreparedPosting> {
   // Build the intended double-entry posting before any mutation happens.
   // Eligibility failures are carried back on the prepared object so the
@@ -266,22 +297,7 @@ async function preparePosting(
     const vendorBranchId = normalizeRequired(operation.input.vendorBranchId, "Vendor branch id");
     const branch = await transaction.vendorBranch.findUnique({
       where: { id: vendorBranchId },
-      select: {
-        active: true,
-        status: true,
-        paymentAcceptance: { select: { status: true } },
-        vendorProfile: {
-          select: {
-            applications: {
-              where: { status: VendorApplicationStatus.APPROVED },
-              take: 1,
-              select: { id: true },
-            },
-            paymentProfile: { select: { status: true } },
-            walletAccount: { select: { id: true } },
-          },
-        },
-      },
+      select: branchEligibilitySelect,
     });
 
     if (!branch) {
@@ -291,17 +307,8 @@ async function preparePosting(
       throw new WalletDomainError("VENDOR_NOT_PAYMENT_ENABLED", "Vendor is not enabled for payments.");
     }
 
-    const branchEnabled =
-      branch.active &&
-      branch.status === VendorBranchStatus.ACTIVE &&
-      branch.paymentAcceptance?.status === BranchPaymentAcceptanceStatus.ACTIVE;
-    const vendorEnabled =
-      branch.vendorProfile.applications.length === 1 &&
-      branch.vendorProfile.paymentProfile?.status === VendorPaymentProfileStatus.APPROVED;
-
-    const completedAt = new Date();
-    const refundableUntil = addSeconds(completedAt, settings.paymentWalletRefundWindowSeconds);
-    const settlementAt = addSeconds(completedAt, settings.paymentWalletSettlementDelaySeconds);
+    const branchEnabled = isBranchPaymentEnabled(branch);
+    const vendorEnabled = isVendorPaymentEnabled(branch);
 
     return {
       ...common,
@@ -309,8 +316,6 @@ async function preparePosting(
       amountMinor: operation.input.amountMinor,
       initiatorAccountId: studentAccountId,
       vendorBranchId,
-      refundableUntil,
-      availableForPayoutAt: settlementAt > refundableUntil ? settlementAt : refundableUntil,
       eligibilityError: !branchEnabled
         ? new WalletDomainError(
             "BRANCH_NOT_PAYMENT_ENABLED",
@@ -390,6 +395,25 @@ async function preparePosting(
     throw new WalletDomainError("INVALID_POSTING", "Refund must reference a valid completed spend.");
   }
 
+  // Refunds have no time window (R2). They are limited by vendor and branch
+  // eligibility (R3) and by the amount not yet refunded (R1). Both checks are
+  // carried as eligibility errors so idempotent replays still return first.
+  const [branch, refunded] = await Promise.all([
+    transaction.vendorBranch.findUniqueOrThrow({
+      where: { id: original.vendorBranchId },
+      select: branchEligibilitySelect,
+    }),
+    transaction.walletTransaction.aggregate({
+      where: {
+        type: WalletTransactionType.REFUND,
+        status: WalletTransactionStatus.COMPLETED,
+        linkedTransactionId: original.id,
+      },
+      _sum: { amountMinor: true },
+    }),
+  ]);
+  const remainingMinor = original.amountMinor - (refunded._sum.amountMinor ?? ZERO_MINOR);
+
   return {
     ...common,
     type: WalletTransactionType.REFUND,
@@ -397,6 +421,24 @@ async function preparePosting(
     initiatorAccountId: originalVendor.accountId,
     vendorBranchId: original.vendorBranchId,
     linkedTransactionId: original.id,
+    eligibilityError:
+      branch.vendorProfile.paymentProfile?.status === VendorPaymentProfileStatus.SUSPENDED
+        ? new WalletDomainError(
+            "VENDOR_PAYMENT_SUSPENDED",
+            "Your payment account is suspended. Top up your wallet to restore payments and refunds.",
+          )
+        : !isVendorPaymentEnabled(branch)
+          ? new WalletDomainError("VENDOR_NOT_PAYMENT_ENABLED", "Vendor is not enabled for payments.")
+          : !isBranchPaymentEnabled(branch)
+            ? new WalletDomainError("BRANCH_NOT_PAYMENT_ENABLED", "Vendor branch is not enabled for payments.")
+            : remainingMinor <= ZERO_MINOR
+              ? new WalletDomainError("PAYMENT_FULLY_REFUNDED", "This payment has already been fully refunded.")
+              : operation.input.amountMinor > remainingMinor
+                ? new WalletDomainError(
+                    "REFUND_AMOUNT_EXCEEDED",
+                    "Refund amount exceeds the remaining refundable amount.",
+                  )
+                : undefined,
     entries: [
       { accountId: originalVendor.accountId, direction: LedgerDirection.DEBIT, amountMinor: operation.input.amountMinor },
       { accountId: originalStudent.accountId, direction: LedgerDirection.CREDIT, amountMinor: operation.input.amountMinor },
@@ -424,7 +466,7 @@ function assertAccountStatuses(
 async function postWalletOperationInTransaction(transaction: Prisma.TransactionClient, operation: WalletOperation) {
     validateBase(operation.input);
     const settings = await getPaymentWalletSettings(transaction);
-    const posting = await preparePosting(transaction, operation, settings);
+    const posting = await preparePosting(transaction, operation);
     const accountIds = posting.entries.map((entry) => entry.accountId).sort((a, b) => a.localeCompare(b));
 
     // Lock balances in a stable order before checking funds and writing
@@ -474,12 +516,16 @@ async function postWalletOperationInTransaction(transaction: Prisma.TransactionC
     assertAccountStatuses(posting, accounts);
 
     // System clearing accounts may go negative as provider-facing suspense
-    // accounts; student and vendor accounts may not.
+    // accounts. Vendor accounts may go into overdraft only through refunds and
+    // provider-confirmed payouts; student accounts never may.
+    const vendorMayOverdraw =
+      posting.type === WalletTransactionType.REFUND || posting.type === WalletTransactionType.PAYOUT;
     for (const entry of posting.entries) {
       if (entry.direction !== LedgerDirection.DEBIT) continue;
       const account = accounts.find((candidate) => candidate.id === entry.accountId)!;
       if (
         account.type !== WalletAccountType.SYSTEM &&
+        !(account.type === WalletAccountType.VENDOR && vendorMayOverdraw) &&
         account.balance!.postedBalanceMinor < entry.amountMinor
       ) {
         throw new WalletDomainError("INSUFFICIENT_FUNDS", "Wallet account has insufficient funds.");
@@ -487,13 +533,6 @@ async function postWalletOperationInTransaction(transaction: Prisma.TransactionC
     }
 
     const completedAt = new Date();
-    if (posting.type === WalletTransactionType.SPEND) {
-      posting.refundableUntil = addSeconds(completedAt, settings.paymentWalletRefundWindowSeconds);
-      const settlementAt = addSeconds(completedAt, settings.paymentWalletSettlementDelaySeconds);
-      posting.availableForPayoutAt = settlementAt > posting.refundableUntil
-        ? settlementAt
-        : posting.refundableUntil;
-    }
 
     // Create the transaction as PENDING, attach immutable ledger entries, then
     // mark it COMPLETE. Database invariants enforce that the entries balance.
@@ -512,8 +551,6 @@ async function postWalletOperationInTransaction(transaction: Prisma.TransactionC
         paymentProvider: posting.paymentProvider,
         providerPaymentId: posting.providerPaymentId,
         providerPayerReference: posting.providerPayerReference,
-        refundableUntil: posting.refundableUntil,
-        availableForPayoutAt: posting.availableForPayoutAt,
       },
     });
 
@@ -548,6 +585,15 @@ export function postSpendInTransaction(transaction: Prisma.TransactionClient, in
   return postWalletOperationInTransaction(transaction, { kind: "SPEND", input });
 }
 
+/** Shares the posting transaction with the refund service's scope and balance checks. */
+export function postRefundInTransaction(transaction: Prisma.TransactionClient, input: PostRefundInput) {
+  return postWalletOperationInTransaction(transaction, { kind: "REFUND", input });
+}
+
+export function postPayoutInTransaction(transaction: Prisma.TransactionClient, input: PostPayoutInput) {
+  return postWalletOperationInTransaction(transaction, { kind: "PAYOUT", input });
+}
+
 export function postTopup(input: PostTopupInput) {
   return postWalletOperation({ kind: "TOPUP", input });
 }
@@ -564,13 +610,36 @@ export function postPayout(input: PostPayoutInput) {
   return postWalletOperation({ kind: "PAYOUT", input });
 }
 
-export async function completePendingTopup(input: CompletePendingTopupInput) {
-  const walletTransactionId = normalizeRequired(input.walletTransactionId, "Wallet transaction id");
-  const studentAccountId = normalizeRequired(input.studentAccountId, "Student account id");
+export function completePendingTopup(input: CompletePendingTopupInput) {
+  return completePendingCredit(
+    WalletTransactionType.TOPUP,
+    input.walletTransactionId,
+    normalizeRequired(input.studentAccountId, "Student account id"),
+    input.completedAt,
+  );
+}
+
+/** Completes a Paystack-confirmed vendor top-up; it always credits, even once the deficit has cleared (T5). */
+export function completePendingVendorTopup(input: CompletePendingVendorTopupInput) {
+  return completePendingCredit(
+    WalletTransactionType.VENDOR_TOPUP,
+    input.walletTransactionId,
+    normalizeRequired(input.vendorAccountId, "Vendor account id"),
+    input.completedAt,
+  );
+}
+
+async function completePendingCredit(
+  type: typeof WalletTransactionType.TOPUP | typeof WalletTransactionType.VENDOR_TOPUP,
+  rawWalletTransactionId: string,
+  creditAccountId: string,
+  completedAt?: Date,
+) {
+  const walletTransactionId = normalizeRequired(rawWalletTransactionId, "Wallet transaction id");
 
   // Paystack top-ups are created as pending wallet transactions before the
   // provider call. Only reconciliation completes that skeleton by posting the
-  // gateway-clearing debit and student credit, and repeated confirmations are
+  // gateway-clearing debit and wallet credit, and repeated confirmations are
   // safe to replay.
   return runSerializableTransaction(async (transaction) => {
     const existing = await transaction.walletTransaction.findUnique({
@@ -578,7 +647,7 @@ export async function completePendingTopup(input: CompletePendingTopupInput) {
       include: { entries: true },
     });
 
-    if (!existing || existing.type !== WalletTransactionType.TOPUP || existing.initiatorAccountId !== studentAccountId) {
+    if (!existing || existing.type !== type || existing.initiatorAccountId !== creditAccountId) {
       throw new WalletDomainError("INVALID_POSTING", "Top-up transaction was not found.");
     }
     if (existing.status === WalletTransactionStatus.COMPLETED) {
@@ -596,7 +665,7 @@ export async function completePendingTopup(input: CompletePendingTopupInput) {
       throw new WalletDomainError("ACCOUNT_NOT_FOUND", "Gateway clearing account was not found.");
     }
 
-    const accountIds = [gateway.id, studentAccountId].sort((a, b) => a.localeCompare(b));
+    const accountIds = [gateway.id, creditAccountId].sort((a, b) => a.localeCompare(b));
     await transaction.$queryRaw(
       Prisma.sql`
         SELECT "accountId"
@@ -617,9 +686,9 @@ export async function completePendingTopup(input: CompletePendingTopupInput) {
 
     assertAccountStatuses(
       {
-        type: WalletTransactionType.TOPUP,
+        type,
         amountMinor: existing.amountMinor,
-        initiatorAccountId: studentAccountId,
+        initiatorAccountId: creditAccountId,
         idempotencyKey: existing.idempotencyKey ?? walletTransactionId,
         entries: [],
       },
@@ -638,7 +707,7 @@ export async function completePendingTopup(input: CompletePendingTopupInput) {
         },
         {
           walletTransactionId: existing.id,
-          accountId: studentAccountId,
+          accountId: creditAccountId,
           sequence: 1,
           direction: LedgerDirection.CREDIT,
           amountMinor: existing.amountMinor,
@@ -649,7 +718,7 @@ export async function completePendingTopup(input: CompletePendingTopupInput) {
 
     await transaction.walletTransaction.update({
       where: { id: existing.id },
-      data: { status: WalletTransactionStatus.COMPLETED, completedAt: input.completedAt ?? new Date() },
+      data: { status: WalletTransactionStatus.COMPLETED, completedAt: completedAt ?? new Date() },
     });
 
     return transaction.walletTransaction.findUniqueOrThrow({

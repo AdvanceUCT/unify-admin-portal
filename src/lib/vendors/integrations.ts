@@ -65,7 +65,7 @@ export async function revokeVendorApiCredential(vendorProfileId: string, credent
   if (result.count !== 1) throw new Error("Active API key was not found.");
 }
 
-export async function authenticateVendorApiKey(header: string | null, requiredScope?: VendorApiScope) {
+export async function authenticateVendorApiKey(header: string | null, requiredScope?: VendorApiScope, refundRecovery = false) {
   const token = header?.match(/^Bearer\s+(\S+)$/i)?.[1];
   const prefix = token?.match(/^unify_vk_([a-f0-9]{12})_[A-Za-z0-9_-]+$/)?.[1];
   if (!token || !prefix) return null;
@@ -88,8 +88,16 @@ export async function authenticateVendorApiKey(header: string | null, requiredSc
     const { PosApiError } = await import("@/lib/payments/posErrors");
     throw new PosApiError("MISSING_SCOPE", "This API key does not have the required scope.", 403);
   }
-  if (requiredScope && (requiredScope.startsWith("payments:") || requiredScope.startsWith("refunds:")) && credential.vendorProfile.paymentProfile?.status !== "APPROVED") {
+  // Suspended vendors keep read access to sale and refund history; every money-moving scope is blocked.
+  const paymentStatus = credential.vendorProfile.paymentProfile?.status;
+  const movesMoney = requiredScope && requiredScope !== "payments:read" &&
+    (requiredScope.startsWith("payments:") || requiredScope.startsWith("refunds:"));
+  const readsPayments = requiredScope === "payments:read";
+  if (!(refundRecovery && requiredScope === "refunds:create") && ((movesMoney && paymentStatus !== "APPROVED") || (readsPayments && paymentStatus !== "APPROVED" && paymentStatus !== "SUSPENDED"))) {
     const { PosApiError } = await import("@/lib/payments/posErrors");
+    if (paymentStatus === "SUSPENDED") {
+      throw new PosApiError("VENDOR_PAYMENT_SUSPENDED", "This vendor's payments are suspended. Top up the wallet to restore payments and refunds.", 403);
+    }
     throw new PosApiError("VENDOR_NOT_PAYMENT_ENABLED", "This vendor cannot currently accept payments.", 403);
   }
   await prisma.vendorApiCredential.update({ where: { id: credential.id }, data: { lastUsedAt: new Date() } });

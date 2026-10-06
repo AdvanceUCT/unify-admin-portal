@@ -17,6 +17,7 @@ import { prisma } from "@/lib/db/prisma";
 import { formatMoneyMinor } from "@/lib/formatters";
 import {
   encodeLivePaymentCursor,
+  getVendorRefundGuidance,
   listRecentVendorPayments,
 } from "@/lib/vendors/livePayments";
 import {
@@ -85,7 +86,7 @@ export default async function VendorBranchPage({
   });
   if (!branch) notFound();
 
-  const [stats, history, recentPayments] = await Promise.all([
+  const [stats, history, recentPayments, refundGuidance] = await Promise.all([
     getVendorVerificationStats(context.vendorProfileId, {
       branchIds: [branch.id],
     }),
@@ -96,6 +97,7 @@ export default async function VendorBranchPage({
       branchIds: [branch.id],
       limit: 5,
     }),
+    getVendorRefundGuidance(context),
   ]);
   const qrSvg = branch.verificationUrl
     ? await QRCode.toString(branch.verificationUrl, { type: "svg", margin: 1 })
@@ -385,6 +387,7 @@ export default async function VendorBranchPage({
                   })
             }
             maxItems={5}
+            refundGuidance={refundGuidance}
           />
         </section>
       ) : null}

@@ -17,7 +17,7 @@ function optionalParam(searchParams: URLSearchParams, name: string) {
 
 function refundStatusParam(searchParams: URLSearchParams): VendorPaymentEventFilters["refundStatus"] {
   const status = optionalParam(searchParams, "refundStatus");
-  return status === "REFUNDABLE" || status === "EXPIRED" || status === "FULLY_REFUNDED"
+  return status === "NONE" || status === "PARTIALLY_REFUNDED" || status === "FULLY_REFUNDED"
     ? status
     : undefined;
 }

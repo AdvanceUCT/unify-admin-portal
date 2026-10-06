@@ -9,6 +9,7 @@ datasource db {
 }
 
 model User {
+  refundOperations RefundOperation[]
   id                          String              @id
   name                        String
   email                       String
@@ -29,6 +30,7 @@ model User {
   createdVendorStaffInvites   VendorStaffInvite[] @relation("VendorStaffInviteCreator")
   initiatedWalletTransactions WalletTransaction[] @relation("WalletTransactionInitiatorUser")
   initiatedPayoutBatches      PayoutBatch[]       @relation("PayoutBatchInitiatorUser")
+  initiatedVendorWalletTopups VendorWalletTopupAttempt[]
 
   @@unique([email])
   @@map("user")
@@ -104,6 +106,7 @@ model AdminInvite {
 }
 
 model VendorProfile {
+  refundOperations RefundOperation[]
   paymentWebhookConfigs PaymentWebhookConfig[]
   paymentWebhookEvents PaymentWebhookEvent[]
   paymentRequests PaymentRequest[]
@@ -134,11 +137,13 @@ model VendorProfile {
   walletAccount       WalletAccount?
   verificationCharges VerificationCharge[]
   invoices            VendorInvoice[]
+  walletTopupAttempts VendorWalletTopupAttempt[]
 
   @@map("vendor_profile")
 }
 
 model VendorBranch {
+  refundOperations RefundOperation[]
   paymentWebhookEvents PaymentWebhookEvent[]
   paymentRequests PaymentRequest[]
   id                  String                           @id @default(cuid())
@@ -352,6 +357,7 @@ model VendorVerification {
 }
 
 model VendorApiCredential {
+  refundOperations RefundOperation[]
   scopes String[] @default(["verification:create", "verification:read"])
   branchIds String[] @default([])
   paymentRequests PaymentRequest[]
@@ -449,9 +455,9 @@ model UniversityProfile {
   issuerDid                           String?
   setupStatus                         SetupStatus             @default(PENDING)
   setupCompletedAt                    DateTime?
-  paymentWalletEnabled                Boolean                 @default(false)
-  paymentWalletRefundWindowSeconds    Int                     @default(600)
-  paymentWalletSettlementDelaySeconds Int                     @default(600)
+  paymentWalletEnabled                 Boolean                 @default(false)
+  paymentWalletPayoutThresholdMinor    BigInt                  @default(50000)
+  paymentWalletOverdraftSuspensionDays Int                     @default(14)
   createdAt                           DateTime                @default(now())
   updatedAt                           DateTime                @updatedAt
   credentialSchemas                   CredentialSchema[]
@@ -464,6 +470,7 @@ model UniversityProfile {
 }
 
 model WalletAccount {
+  refundOperations RefundOperation[]
   id                    String                @id @default(cuid())
   type                  WalletAccountType
   status                WalletAccountStatus   @default(ACTIVE)
@@ -488,12 +495,15 @@ model WalletAccountBalance {
   account            WalletAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
   postedBalanceMinor BigInt        @default(0)
   version            BigInt        @default(0)
+  negativeSince      DateTime?
   updatedAt          DateTime      @updatedAt
 
   @@map("wallet_account_balance")
 }
 
 model WalletTransaction {
+  refundInstructions RefundOperation[] @relation("RefundOriginalSpend")
+  refundOperations RefundOperation[] @relation("RefundCompletedPosting")
   paymentRequest PaymentRequest?
   id                     String                  @id @default(cuid())
   type                   WalletTransactionType
@@ -524,6 +534,8 @@ model WalletTransaction {
   gatewayEvents          PaymentGatewayEvent[]
   payoutBatch            PayoutBatch?
   topupAttempt           WalletTopupAttempt?
+  vendorTopupAttempt     VendorWalletTopupAttempt?
+  refundWebhookEvent     PaymentWebhookEvent?
 
   @@unique([initiatorAccountId, type, idempotencyKey], map: "wallet_transaction_idempotency_key", where: raw("\"idempotencyKey\" IS NOT NULL"))
   @@unique([paymentProvider, providerPaymentId], map: "wallet_transaction_provider_payment_key", where: raw("\"providerPaymentId\" IS NOT NULL"))
@@ -615,6 +627,40 @@ model WalletTopupAttempt {
   @@map("wallet_topup_attempt")
 }
 
+model VendorWalletTopupAttempt {
+  id                        String                   @id @default(cuid())
+  walletTransactionId       String                   @unique
+  walletTransaction         WalletTransaction        @relation(fields: [walletTransactionId], references: [id], onDelete: Restrict)
+  vendorProfileId           String
+  vendorProfile             VendorProfile            @relation(fields: [vendorProfileId], references: [id], onDelete: Restrict)
+  initiatedByUserId         String
+  initiatedByUser           User                     @relation(fields: [initiatedByUserId], references: [id], onDelete: Restrict)
+  provider                  String
+  providerAccountRef        String
+  providerMode              String                   @default("test")
+  reference                 String                   @unique
+  accessCode                String?
+  authorizationUrl          String?
+  providerTransactionId     String?
+  amountMinor               BigInt
+  currency                  String                   @default("ZAR")
+  deficitAtStartMinor       BigInt
+  idempotencyKey            String
+  initializationFingerprint String
+  status                    WalletTopupAttemptStatus @default(PENDING)
+  failureCode               String?
+  lastCheckedAt             DateTime?
+  completedAt               DateTime?
+  createdAt                 DateTime                 @default(now())
+  updatedAt                 DateTime                 @updatedAt
+
+  @@unique([vendorProfileId, idempotencyKey])
+  @@unique([vendorProfileId], map: "vendor_wallet_topup_attempt_one_unresolved", where: raw("\"status\" IN ('PENDING', 'UNKNOWN')"))
+  @@unique([provider, providerAccountRef, providerMode, providerTransactionId], map: "vendor_wallet_topup_provider_transaction_key", where: raw("\"providerTransactionId\" IS NOT NULL"))
+  @@index([status, updatedAt])
+  @@map("vendor_wallet_topup_attempt")
+}
+
 model LedgerEntry {
   id                  String            @id @default(cuid())
   walletTransactionId String
@@ -645,6 +691,7 @@ model VendorPaymentProfile {
   approvedByUserId            String?
   suspendedAt                 DateTime?
   suspensionReason            String?
+  suspensionCode              VendorPaymentSuspensionCode?
   createdAt                   DateTime                   @default(now())
   updatedAt                   DateTime                   @updatedAt
   payoutBatches               PayoutBatch[]
@@ -765,6 +812,7 @@ enum WalletTransactionType {
   SPEND
   REFUND
   PAYOUT
+  VENDOR_TOPUP
 }
 
 enum WalletTransactionStatus {
@@ -783,6 +831,10 @@ enum VendorPaymentProfileStatus {
   APPROVED
   SUSPENDED
   CLOSED
+}
+
+enum VendorPaymentSuspensionCode {
+  OVERDRAFT
 }
 
 enum BranchPaymentApplicationStatus {
@@ -1250,6 +1302,10 @@ enum AuditAction {
   BILLING_POLICY_CREATED
   INVOICE_GENERATION_TRIGGERED
   INVOICE_PAYMENT_RECONCILED
+  PAYMENT_WALLET_SETTINGS_UPDATED
+  VENDOR_PAYMENT_SUSPENDED
+  VENDOR_PAYMENT_REINSTATED
+  VENDOR_WALLET_TOPUP_COMPLETED
 }
 
 // ─── Vendor verification invoicing (Paystack POC) ──────────────────────────
@@ -1536,7 +1592,8 @@ enum PaymentRequestStatus {
 }
 
 model PaymentRequest {
-  paymentWebhookEvent PaymentWebhookEvent?
+  refundOperations RefundOperation[]
+  paymentWebhookEvents PaymentWebhookEvent[]
   id String @id
   vendorProfileId String
   vendorProfile VendorProfile @relation(fields: [vendorProfileId], references: [id], onDelete: Restrict)
@@ -1582,8 +1639,10 @@ model PaymentWebhookConfig {
 
 model PaymentWebhookEvent {
   id String @id @default(uuid())
-  requestId String @unique
+  requestId String
   request PaymentRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  refundTransactionId String? @unique
+  refundTransaction WalletTransaction? @relation(fields: [refundTransactionId], references: [id], onDelete: Restrict)
   vendorProfileId String
   vendorProfile VendorProfile @relation(fields: [vendorProfileId], references: [id], onDelete: Restrict)
   branchId String
@@ -1592,6 +1651,9 @@ model PaymentWebhookEvent {
   payload Json
   createdAt DateTime @default(now())
   delivery PaymentWebhookDelivery?
+  // One terminal event per request; refund events are one per refund transaction.
+  @@unique([requestId], map: "payment_webhook_event_terminal_request_key", where: raw("\"refundTransactionId\" IS NULL"))
+  @@index([requestId])
   @@index([vendorProfileId, createdAt, id])
   @@map("payment_webhook_event")
 }
@@ -1722,4 +1784,40 @@ model CredentialAutomationRun {
 
   @@index([startedAt])
   @@map("credential_automation_run")
+}
+
+/// Frozen refund instructions. SQL guards keep terminal outcomes and terms immutable.
+model RefundOperation {
+  id String @id @default(uuid())
+  vendorProfileId String
+  vendorProfile VendorProfile @relation(fields: [vendorProfileId], references: [id], onDelete: Restrict)
+  vendorAccountId String
+  vendorAccount WalletAccount @relation(fields: [vendorAccountId], references: [id], onDelete: Restrict)
+  originalTransactionId String
+  originalTransaction WalletTransaction @relation("RefundOriginalSpend", fields: [originalTransactionId], references: [id], onDelete: Restrict)
+  branchId String
+  branch VendorBranch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  paymentRequestId String?
+  paymentRequest PaymentRequest? @relation(fields: [paymentRequestId], references: [id], onDelete: Restrict)
+  amountMinor BigInt
+  currency String @default("ZAR")
+  idempotencyKey String
+  operatorId String
+  userId String?
+  user User? @relation(fields: [userId], references: [id], onDelete: Restrict)
+  apiCredentialId String?
+  apiCredential VendorApiCredential? @relation(fields: [apiCredentialId], references: [id], onDelete: Restrict)
+  status String @default("PENDING")
+  refundTransactionId String? @unique
+  refundTransaction WalletTransaction? @relation("RefundCompletedPosting", fields: [refundTransactionId], references: [id], onDelete: Restrict)
+  rejectionCode String?
+  rejectionMessage String?
+  rejectionStatus Int?
+  createdAt DateTime @default(now())
+  resolvedAt DateTime?
+
+  @@unique([vendorAccountId, idempotencyKey])
+  @@unique([vendorAccountId, operatorId], map: "refund_operation_one_pending_operator", where: raw("\"status\" = 'PENDING'"))
+  @@index([vendorProfileId, operatorId, status])
+  @@map("refund_operation")
 }

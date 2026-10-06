@@ -8,7 +8,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Avatar } from "@/components/ui/Avatar";
-import { RefundPaymentDialog } from "@/features/vendors/RefundPaymentDialog";
+import { RefundRecoveryPanel, useRefundRecovery } from "@/features/vendors/useRefundRecovery";
+import { RefundPaymentDialog, type RefundGuidance } from "@/features/vendors/RefundPaymentDialog";
 import { formatDateTime, formatMoneyMinor } from "@/lib/formatters";
 
 export type LivePaymentEvent = {
@@ -22,30 +23,22 @@ export type LivePaymentEvent = {
   currency: "ZAR";
   completedAt: string;
   reference?: string;
-  refundableUntil?: string;
   totalRefundedMinor: number;
   remainingRefundableMinor: number;
-  refundStatus: "REFUNDABLE" | "EXPIRED" | "FULLY_REFUNDED";
+  refundStatus: "NONE" | "PARTIALLY_REFUNDED" | "FULLY_REFUNDED";
+  canRefund: boolean;
 };
 
-type RefundResponse = {
+export type RefundResponse = {
   originalTransactionId: string;
   refundTransactionId: string;
   refundedAmountMinor: number;
   totalRefundedMinor: number;
   remainingRefundableMinor: number;
   refundStatus: LivePaymentEvent["refundStatus"];
-  refundableUntil?: string;
+  /** May be negative once a refund overdraws the vendor wallet. */
+  vendorBalanceMinor: number;
 };
-
-async function parseErrorMessage(response: Response) {
-  try {
-    const body = await response.json() as { error?: { message?: string } };
-    return body.error?.message ?? "Refund could not be completed.";
-  } catch {
-    return "Refund could not be completed.";
-  }
-}
 
 export function LivePaymentList({
   branchId,
@@ -53,17 +46,21 @@ export function LivePaymentList({
   initialItems,
   liveCursor,
   maxItems = 20,
+  refundGuidance,
 }: {
   branchId?: string;
   branchIds?: string[];
   initialItems: LivePaymentEvent[];
   liveCursor?: string;
   maxItems?: number;
+  refundGuidance?: RefundGuidance;
 }) {
   const [items, setItems] = useState(initialItems);
+  const [guidance, setGuidance] = useState(refundGuidance);
+  const recovery = useRefundRecovery();
   const [refundMessage, setRefundMessage] = useState<string>();
   const [refundPaymentToConfirm, setRefundPaymentToConfirm] = useState<LivePaymentEvent | null>(null);
-  const [refundingTransactionId, setRefundingTransactionId] = useState<string>();
+
   const itemsRef = useRef(initialItems);
   const branchIdsKey = useMemo(() => (branchIds ?? []).join("\u0000"), [branchIds]);
 
@@ -132,45 +129,22 @@ export function LivePaymentList({
     };
   }, [branchId, branchIdsKey, liveCursor, maxItems]);
 
-  async function refundPayment(payment: LivePaymentEvent) {
-    if (payment.refundStatus !== "REFUNDABLE") return;
-    setRefundMessage(undefined);
-    const amountMinor = payment.remainingRefundableMinor;
+  useEffect(() => recovery.client.subscribe(() => {
+    const result = recovery.client.getSnapshot().outcome?.result;
+    if (!result) return;
+    setGuidance(current => current && { ...current, walletBalanceMinor: result.vendorBalanceMinor });
+    setItems(current => current.map(item => item.transactionId === result.originalTransactionId ? { ...item, totalRefundedMinor: result.totalRefundedMinor, remainingRefundableMinor: result.remainingRefundableMinor, refundStatus: result.refundStatus, canRefund: item.canRefund && result.remainingRefundableMinor > 0 } : item));
+    setRefundMessage(`Refunded ${formatMoneyMinor(result.refundedAmountMinor)}.`);
+    setRefundPaymentToConfirm(null);
+  }), [recovery.client]);
 
-    setRefundingTransactionId(payment.transactionId);
-    try {
-      const response = await fetch(`/api/vendor/payments/${encodeURIComponent(payment.transactionId)}/refund`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          amountMinor,
-          idempotencyKey: crypto.randomUUID(),
-        }),
-      });
-      if (!response.ok) throw new Error(await parseErrorMessage(response));
-      const result = await response.json() as RefundResponse;
-      setItems((current) => current.map((item) => (
-        item.transactionId === result.originalTransactionId
-          ? {
-              ...item,
-              totalRefundedMinor: result.totalRefundedMinor,
-              remainingRefundableMinor: result.remainingRefundableMinor,
-              refundStatus: result.refundStatus,
-              refundableUntil: result.refundableUntil ?? item.refundableUntil,
-            }
-          : item
-      )));
-      setRefundMessage(`Refunded ${formatMoneyMinor(result.refundedAmountMinor, payment.currency)}.`);
-      setRefundPaymentToConfirm(null);
-    } catch (error) {
-      setRefundMessage(error instanceof Error ? error.message : "Refund could not be completed.");
-    } finally {
-      setRefundingTransactionId(undefined);
-    }
+  function refundPayment(payment: LivePaymentEvent, amountMinor: number) {
+    if (payment.canRefund && !recovery.blocked) void recovery.client.submit({ transactionId: payment.transactionId, amountMinor });
   }
 
   return (
     <div>
+      <RefundRecoveryPanel recovery={recovery} />
       {refundMessage ? (
         <p className="border-b border-border bg-surface-muted px-5 py-3 text-sm text-fg-muted">
           {refundMessage}
@@ -204,21 +178,22 @@ export function LivePaymentList({
                 Refunded {formatMoneyMinor(payment.totalRefundedMinor, payment.currency)}
               </p>
             ) : null}
-            {payment.refundableUntil ? (
-              <p className="text-xs text-fg-subtle">Refundable until {formatDateTime(payment.refundableUntil)}</p>
-            ) : null}
-            {payment.refundStatus === "REFUNDABLE" ? (
+            {payment.canRefund ? (
               <button
                 className="mt-1 rounded-md border border-border px-3 py-1 text-xs font-medium text-fg-muted transition hover:border-border-strong hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={refundingTransactionId === payment.transactionId}
+                disabled={recovery.blocked}
                 onClick={() => setRefundPaymentToConfirm(payment)}
                 type="button"
               >
-                {refundingTransactionId === payment.transactionId ? "Refunding…" : "Refund"}
+                {recovery.state.busy ? "Refunding…" : "Refund"}
               </button>
             ) : (
               <p className="text-xs text-fg-subtle">
-                {payment.refundStatus === "FULLY_REFUNDED" ? "Fully refunded" : "Refund window closed"}
+                {payment.refundStatus === "FULLY_REFUNDED"
+                  ? "Fully refunded"
+                  : guidance?.paymentsSuspended
+                    ? "Refunds paused: payments suspended"
+                    : "Refunds unavailable"}
               </p>
             )}
           </div>
@@ -231,10 +206,11 @@ export function LivePaymentList({
         ) : null}
       </div>
       <RefundPaymentDialog
-        isPending={Boolean(refundingTransactionId)}
+        guidance={guidance}
+        isPending={recovery.blocked}
         onClose={() => setRefundPaymentToConfirm(null)}
-        onConfirm={() => {
-          if (refundPaymentToConfirm) void refundPayment(refundPaymentToConfirm);
+        onConfirm={(amountMinor) => {
+          if (refundPaymentToConfirm) void refundPayment(refundPaymentToConfirm, amountMinor);
         }}
         payment={refundPaymentToConfirm}
       />

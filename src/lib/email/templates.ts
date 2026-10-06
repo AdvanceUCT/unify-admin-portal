@@ -85,6 +85,33 @@ export function renderVendorApplicationRevokedEmail(input: VendorApplication & {
   ] });
 }
 
+const walletFooter = "UNIFY Vendor Portal · Wallet and payout updates";
+type VendorWalletEmail = { contactName: string; companyName: string; deficit: string; topUpUrl: string };
+export function renderVendorOverdraftStartedEmail(input: VendorWalletEmail & { suspendAt: Date }) {
+  return renderEmail({ subject: "Your UNIFY wallet balance is negative", preview: "A refund took your wallet below zero. Payouts are paused until it recovers.", category: "WALLET UPDATE", heading: "Your wallet is overdrawn", footer: walletFooter, blocks: [
+    { kind: "paragraph", text: `Hi ${input.contactName},` },
+    { kind: "paragraph", text: `A refund has taken ${input.companyName}'s UNIFY wallet below zero. It is overdrawn by ${input.deficit}.` },
+    { kind: "paragraph", text: "Payouts are paused while your balance is negative. New sales pay the deficit down automatically, or you can top up your wallet." },
+    { kind: "notice", tone: "attention", label: "Suspension date", text: `Payments and refunds will be suspended on ${emailDate(input.suspendAt)} unless your balance recovers.` },
+    { kind: "action", label: "Top up wallet", url: input.topUpUrl },
+  ] });
+}
+export function renderVendorPaymentsSuspendedEmail(input: VendorWalletEmail & { days: number }) {
+  return renderEmail({ subject: "Your UNIFY payments are suspended", preview: "Your wallet stayed overdrawn. Top up to restore payments and refunds.", category: "WALLET UPDATE", heading: "Payments suspended", footer: walletFooter, blocks: [
+    { kind: "paragraph", text: `Hi ${input.contactName},` },
+    { kind: "paragraph", text: `${input.companyName}'s UNIFY wallet has been overdrawn for ${input.days} days, so payments have been suspended.` },
+    { kind: "notice", tone: "attention", label: "Wallet overdrawn", text: `Your wallet is overdrawn by ${input.deficit}. New sales, refunds and payouts are blocked until it recovers.` },
+    { kind: "paragraph", text: "Top up your wallet to restore payments and refunds. Your account is reinstated as soon as the balance is back at zero or above." },
+    { kind: "action", label: "Top up to restore", url: input.topUpUrl },
+  ] });
+}
+export function renderVendorPaymentsRestoredEmail(input: { contactName: string; companyName: string }) {
+  return renderEmail({ subject: "Your UNIFY payments are restored", preview: "Your wallet balance has recovered and payments work again.", category: "WALLET UPDATE", heading: "Payments restored", footer: walletFooter, blocks: [
+    { kind: "paragraph", text: `Hi ${input.contactName},` },
+    { kind: "paragraph", text: `${input.companyName}'s UNIFY wallet balance is back at zero or above, so payments, refunds and payouts have been restored.` },
+  ] });
+}
+
 export type VendorHelpEmailContent = {
   title: string; details: string; submittedAt?: Date;
   submittedBy: { name: string; email: string };

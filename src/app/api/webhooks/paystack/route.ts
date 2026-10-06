@@ -11,7 +11,7 @@ import { confirmInvoicePayment } from "@/lib/billing/paymentConfirmation";
 import { prisma } from "@/lib/db/prisma";
 import { resolvePaystackProviderConfig, resolvePaystackWalletTopupConfig } from "@/lib/paymentProviders/paystack/config";
 import { isPaystackWebhookBodyWithinLimit, verifyPaystackWebhookSignature } from "@/lib/paymentProviders/paystack/signature";
-import { WALLET_TOPUP_REFERENCE_PREFIX } from "@/lib/payments/constants";
+import { VENDOR_WALLET_TOPUP_REFERENCE_PREFIX, WALLET_TOPUP_REFERENCE_PREFIX } from "@/lib/payments/constants";
 import { reconcileWalletTopupByReference } from "@/lib/payments/topups";
 
 const HANDLED_EVENT_TYPE = "charge.success";
@@ -147,7 +147,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ received: true, ignored: true }, { status: 200 });
   }
 
-  if (!reference.startsWith(INVOICE_REFERENCE_PREFIX) && !reference.startsWith(WALLET_TOPUP_REFERENCE_PREFIX)) {
+  if (
+    !reference.startsWith(INVOICE_REFERENCE_PREFIX) &&
+    !reference.startsWith(WALLET_TOPUP_REFERENCE_PREFIX) &&
+    !reference.startsWith(VENDOR_WALLET_TOPUP_REFERENCE_PREFIX)
+  ) {
     return NextResponse.json({ received: true, ignored: true }, { status: 200 });
   }
 
@@ -171,7 +175,9 @@ export async function POST(request: Request) {
   try {
     const result = reference.startsWith(WALLET_TOPUP_REFERENCE_PREFIX)
       ? await reconcileWalletTopupByReference({ reference, config: signatureConfig })
-      : await confirmInvoicePayment(prisma, { reference, config: resolvePaystackProviderConfig() });
+      : reference.startsWith(VENDOR_WALLET_TOPUP_REFERENCE_PREFIX)
+        ? await (await import("@/lib/vendors/walletTopups")).reconcileVendorWalletTopupByReference({ reference, config: signatureConfig })
+        : await confirmInvoicePayment(prisma, { reference, config: resolvePaystackProviderConfig() });
     await markGatewayEventProcessed(prisma, dedupe.id);
     return NextResponse.json({ received: true, outcome: "outcome" in result ? result.outcome : result.status }, { status: 200 });
   } catch (error) {

@@ -489,7 +489,7 @@ export async function getVendorPayoutDestinationSummary(vendorProfileId: string)
   };
 }
 
-export async function listActivePaymentBranchIdsForContext(context: ApprovedVendorContext) {
+export async function listActivePaymentBranchIdsForContext(context: Pick<ApprovedVendorContext, "vendorProfileId" | "branchIds">) {
   if (context.branchIds.length === 0) return [];
 
   const acceptances = await prisma.vendorBranchPaymentAcceptance.findMany({
