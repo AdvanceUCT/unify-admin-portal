@@ -1,7 +1,12 @@
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     credentialValidityPolicy: { findFirst: vi.fn().mockResolvedValue(null) },
+    walletAccountBalance: { count: vi.fn().mockResolvedValue(0) },
+    vendorPaymentProfile: { count: vi.fn().mockResolvedValue(0) },
   },
+}));
+vi.mock("@/lib/payments/config", () => ({
+  getUniversityPaymentWalletSettings: vi.fn().mockResolvedValue(null),
 }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

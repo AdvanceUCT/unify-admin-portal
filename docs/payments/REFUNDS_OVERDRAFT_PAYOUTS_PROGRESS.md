@@ -232,10 +232,10 @@ No migrations.
   `/vendor/payments/top-up/return` (reconcile then bounded-backoff polling reusing `POLL_DELAYS_MS` from the invoice
   flow; success / failed / still confirming; "Payments restored" when a reinstatement was audited after the
   attempt started). Service helpers `getUnresolvedVendorWalletTopup` and `vendorWalletTopupRestoredPayments`.
-- Admin `/settings/payment-wallet` (`SUPER_ADMIN` edits, `ADMIN` read-only): current threshold, suspension days,
-  run time, counts of negative and suspended vendors; form saves both values and writes
-  `PAYMENT_WALLET_SETTINGS_UPDATED` with old/new values in the same transaction. Linked from a `SettingsCard` on
-  `/settings`.
+- Admin "Payment wallet" `SettingsCard` on the main `/settings` page (`SUPER_ADMIN` edits, `ADMIN` sees the values
+  read only): run time, counts of negative and suspended vendors, and a form for the threshold and suspension days.
+  `updatePaymentWalletSettingsAction` in `settings/actions.ts` saves both values and writes
+  `PAYMENT_WALLET_SETTINGS_UPDATED` with old/new values in the same transaction.
 - Admin vendor page: read-only "Payment wallet" card (balance, overdraft, negative since, suspend date, profile
   status, suspension cause/date/reason).
 - Copy (§9.4): integration key scope note, integrations page (refund endpoint, scope, `payment_request.refunded`),
@@ -258,7 +258,7 @@ superseded-in-part notes on `payment-wallet-implementation-handoff.md` and `paym
 **Evidence**
 
 - `lint` 0 errors (same 12 pre-existing warnings); `typecheck` pass; `npm test` 146 files / 996 tests passed;
-  `build` pass (`/settings/payment-wallet`, `/vendor/payments/top-up`, `/vendor/payments/top-up/return` listed);
+  `build` pass (`/vendor/payments/top-up`, `/vendor/payments/top-up/return` listed);
   `test:payments:db` 9 files / 94 tests passed (run because service modules were touched).
 
 ## Phase 6 — POS simulator — ⬜
@@ -289,7 +289,7 @@ superseded-in-part notes on `payment-wallet-implementation-handoff.md` and `paym
 | 20 | 5 | `startVendorTopupAction` reads `amount` in rand (was `amountMinor`). | The form takes rand like other portal money inputs; the action converts to cents. |
 | 21 | 5 | The top-up page resumes an unresolved attempt (continue to Paystack / check status) instead of letting a second start fail with `TOPUP_ALREADY_IN_PROGRESS`. | T3 UX; no rule change. |
 | 22 | 5 | "Payments restored" on the return page is derived from a `VENDOR_PAYMENT_REINSTATED` audit entry after the attempt started. | The webhook may confirm before the browser returns, so the page cannot rely on the status it saw on load. |
-| 23 | 5 | The payment-wallet settings action returns `{status}` for inline validation errors rather than throwing like `verification-billing`. | Matches the inline-error pattern of `RenewalSettingsForm`; `requireRole` still throws for non-SUPER_ADMIN. ADMIN can view the page read-only, like verification billing. |
+| 23 | 5 | Payment-wallet settings are a card on the main `/settings` page, not the planned separate `settings/payment-wallet/` page (spec §7.9 allows either). The action returns `{status}` for inline validation errors rather than throwing. | Requested in review: admin settings stay on one page. Inline errors match `RenewalSettingsForm`; `requireRole` still throws for non-SUPER_ADMIN; ADMIN sees the values read only. |
 | 24 | 5 | Payout/overdraft defaults moved to `constants.ts`; extra copy fixes in `PayoutDestinationCard` and the about page's payout bullet. | Removed three duplicated defaults; leftover "settled" wording contradicted P4. |
 
 ## Open follow-ups

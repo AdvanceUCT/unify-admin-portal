@@ -85,7 +85,7 @@ Refunds have no time limit and may take a vendor wallet below zero ([REFUNDS_OVE
 
 Operations:
 
-- `SUPER_ADMIN` sets the payout threshold (default R 500) and suspension days at `/settings/payment-wallet`; changes apply at the next nightly run and are audited (`PAYMENT_WALLET_SETTINGS_UPDATED`). The page also shows how many vendors are negative or suspended.
+- `SUPER_ADMIN` sets the payout threshold (default R 500) and suspension days in the Payment wallet card on `/settings`; changes apply at the next nightly run and are audited (`PAYMENT_WALLET_SETTINGS_UPDATED`). The card also shows how many vendors are negative or suspended.
 - Overdraft suspensions (`suspensionCode = OVERDRAFT`) lift automatically once the balance is back at zero or above, immediately after a confirmed vendor top-up or at the next nightly run. Suspensions with any other cause are never lifted automatically. Both directions are audited (`VENDOR_PAYMENT_SUSPENDED` / `VENDOR_PAYMENT_REINSTATED`) with a system actor.
 - The admin vendor page shows each vendor's balance, overdraft start and suspension details (read only).
 - A vendor top-up left `UNKNOWN` (verification mismatch or duplicate provider ID) blocks further top-ups for that vendor until it is resolved; there is no admin tool for this yet.

@@ -59,8 +59,8 @@ export default async function PaymentsAboutPage() {
               <li>
                 Each night at about 00:35 SAST, vendors are paid their full available balance once it
                 reaches the payout threshold set in{" "}
-                <Link className="text-info-fg underline hover:no-underline" href="/settings/payment-wallet">
-                  payment wallet settings
+                <Link className="text-info-fg underline hover:no-underline" href="/settings">
+                  Settings
                 </Link>
                 . Smaller balances roll over to the next night.
               </li>

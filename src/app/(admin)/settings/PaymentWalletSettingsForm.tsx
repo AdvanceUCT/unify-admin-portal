@@ -1,6 +1,6 @@
 /**
  * @fileoverview SUPER_ADMIN form for the payout threshold and overdraft suspension days.
- * @module app/(admin)/settings/payment-wallet/PaymentWalletSettingsForm
+ * @module app/(admin)/settings/PaymentWalletSettingsForm
  */
 
 "use client";
@@ -11,12 +11,15 @@ import { useState, useTransition } from "react";
 import { updatePaymentWalletSettingsAction } from "./actions";
 
 const inputClassName =
-  "mt-1.5 h-10 w-full rounded-md border border-border bg-surface px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20";
+  "mt-1.5 h-10 w-full rounded-md border border-border bg-surface px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 disabled:bg-surface-muted disabled:text-fg-subtle";
 
+/** Editable by SUPER_ADMIN only (spec §3.6); other admins see the current values read only. */
 export function PaymentWalletSettingsForm({
+  canEdit,
   overdraftSuspensionDays,
   payoutThreshold,
 }: {
+  canEdit: boolean;
   overdraftSuspensionDays: number;
   payoutThreshold: string;
 }) {
@@ -43,7 +46,7 @@ export function PaymentWalletSettingsForm({
         });
       }}
     >
-      <fieldset className="grid gap-4 sm:grid-cols-2" disabled={pending}>
+      <fieldset className="grid gap-4 sm:grid-cols-2" disabled={!canEdit || pending}>
         <label className="block text-sm">
           <span className="font-medium text-fg-muted">Payout threshold (ZAR)</span>
           <input
@@ -70,9 +73,10 @@ export function PaymentWalletSettingsForm({
           />
         </label>
       </fieldset>
-      <p className="text-xs text-fg-subtle">
-        Both take effect at the next nightly run. Suspension days apply to vendors that are already negative, measured
-        from when their balance went negative.
+      <p className="text-sm text-fg-subtle">
+        Vendors are paid their full available balance once it reaches the threshold; lower it temporarily to demo
+        payouts with small amounts. Suspension days apply to vendors that are already negative, measured from when
+        their balance went negative.{canEdit ? null : " Only a super administrator can change these values."}
       </p>
       {error ? (
         <p className="rounded-md border border-danger-border bg-danger-bg px-3 py-2 text-sm text-danger-fg" role="alert">
@@ -84,16 +88,18 @@ export function PaymentWalletSettingsForm({
           Payment wallet settings saved.
         </p>
       ) : null}
-      <div className="flex justify-end">
-        <button
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={pending}
-          type="submit"
-        >
-          {pending ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Save aria-hidden className="size-4" />}
-          {pending ? "Saving..." : "Save settings"}
-        </button>
-      </div>
+      {canEdit ? (
+        <div className="flex justify-end">
+          <button
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={pending}
+            type="submit"
+          >
+            {pending ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Save aria-hidden className="size-4" />}
+            {pending ? "Saving..." : "Save settings"}
+          </button>
+        </div>
+      ) : null}
     </form>
   );
 }

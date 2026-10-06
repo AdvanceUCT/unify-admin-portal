@@ -3,6 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/auth/session", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/audit/audit", () => ({ writeAuditLog: vi.fn() }));
+vi.mock("@/lib/agentClient", () => ({ checkAgentHealth: vi.fn() }));
+vi.mock("@/lib/credentials/validityPolicy", () => ({ saveValidityPolicy: vi.fn(), previewPolicyChange: vi.fn() }));
+vi.mock("@/lib/storage/supabase", () => ({ deleteVendorDocument: vi.fn(), uploadUniversityLogo: vi.fn() }));
+vi.mock("@/lib/university/profile", () => ({
+  getUniversityProfile: vi.fn(),
+  removeUniversityProfileLogo: vi.fn(),
+  saveUniversityProfileLogoPath: vi.fn(),
+  updateUniversityProfile: vi.fn(),
+}));
 vi.mock("@/lib/db/prisma", () => {
   const tx = { universityProfile: { findMany: vi.fn(), update: vi.fn() } };
   return { prisma: { $transaction: vi.fn((callback: (client: typeof tx) => unknown) => callback(tx)), tx } };
@@ -11,7 +20,7 @@ vi.mock("@/lib/db/prisma", () => {
 import { writeAuditLog } from "@/lib/audit/audit";
 import { requireRole } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
-import { updatePaymentWalletSettingsAction } from "@/app/(admin)/settings/payment-wallet/actions";
+import { updatePaymentWalletSettingsAction } from "@/app/(admin)/settings/actions";
 
 const tx = (prisma as unknown as { tx: { universityProfile: { findMany: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> } } }).tx;
 const superAdmin = { user: { id: "admin-1", role: "SUPER_ADMIN" } } as Awaited<ReturnType<typeof requireRole>>;

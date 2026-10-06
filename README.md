@@ -456,7 +456,7 @@ Configure a shared annual credential start and expiry under **Settings ? Validit
 5. Completed branch payments appear in `/vendor/payments` with branch-scoped filters, live updates, CSV export, and full or partial refund actions. POS integrations can refund their own paid requests through `POST /api/vendor/v1/payment-requests/{id}/refunds` (`refunds:create` scope).
 6. Vendor owners can review payment balances, payout batches, and scheduled or manual payout results. The nightly cron (00:35 SAST) first suspends vendors negative for too long and reinstates recovered ones, then pays each approved vendor its full available balance once it reaches the threshold.
 7. While the balance is negative, the owner can top up the deficit through Paystack test checkout; a confirmed top-up that clears the deficit restores suspended payments immediately.
-8. A `SUPER_ADMIN` sets the payout threshold and overdraft suspension days under `/settings/payment-wallet`.
+8. A `SUPER_ADMIN` sets the payout threshold and overdraft suspension days in the Payment wallet card on `/settings`.
 
 ### Verification billing
 

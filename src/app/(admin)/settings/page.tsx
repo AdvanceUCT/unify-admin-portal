@@ -19,6 +19,7 @@ import {
 import Link from "next/link";
 
 import { SettingsSectionLoading } from "@/components/layout/PortalRouteLoading";
+import { VendorPaymentProfileStatus, WalletAccountType } from "@/generated/prisma/enums";
 import { checkAgentHealth, type AgentHealth } from "@/lib/agentClient";
 import {
   ADMIN_ROLES,
@@ -31,6 +32,7 @@ import {
   type BillingOperationsSummary,
 } from "@/lib/billing/operationsSummary";
 import { env } from "@/lib/config/env";
+import { getUniversityPaymentWalletSettings } from "@/lib/payments/config";
 import { getDocumentSignedUrlForRender } from "@/lib/storage/supabase";
 import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfileForRender } from "@/lib/university/profile";
@@ -38,6 +40,7 @@ import { RenewalSchedulerDetails } from "./RenewalSchedulerDetails";
 import { RenewalSettingsForm } from "./RenewalSettingsForm";
 import { AgentServiceHealthCard } from "./AgentServiceHealthCard";
 import { BillingOperationsCard } from "./BillingOperationsCard";
+import { PaymentWalletSettingsForm } from "./PaymentWalletSettingsForm";
 import { SettingsCard, SettingsField } from "./SettingsCard";
 import { UniversityLogoUpload } from "./UniversityLogoUpload";
 import { UniversityProfileForm } from "./UniversityProfileForm";
@@ -91,6 +94,26 @@ async function BillingOperationsSection({
   return <BillingOperationsCard initialSummary={billingOperationsSummary} />;
 }
 
+async function getPaymentWalletSettingsSummary() {
+  const [settings, negativeVendors, suspendedVendors] = await Promise.all([
+    getUniversityPaymentWalletSettings(),
+    prisma.walletAccountBalance.count({
+      where: { postedBalanceMinor: { lt: 0 }, account: { type: WalletAccountType.VENDOR } },
+    }),
+    prisma.vendorPaymentProfile.count({
+      where: { status: VendorPaymentProfileStatus.SUSPENDED },
+    }),
+  ]);
+  if (!settings) return null;
+
+  return {
+    payoutThreshold: (Number(settings.paymentWalletPayoutThresholdMinor) / 100).toFixed(2),
+    overdraftSuspensionDays: settings.paymentWalletOverdraftSuspensionDays,
+    negativeVendors,
+    suspendedVendors,
+  };
+}
+
 export default async function SettingsPage() {
   const session = await requireRoleForRender(ADMIN_ROLES);
 
@@ -116,6 +139,9 @@ export default async function SettingsPage() {
     profile?.logoPath ? getDocumentSignedUrlForRender(profile.logoPath) : null,
     profile ? getActiveCredentialSchema(profile.id) : null,
   ]);
+  const paymentWallet = canManageVerificationBilling && profile
+    ? await getPaymentWalletSettingsSummary()
+    : null;
   const webhookEndpoint = new URL(
     "/api/webhooks/agent",
     env.APP_URL,
@@ -307,18 +333,30 @@ export default async function SettingsPage() {
         </SettingsCard>
       )}
 
-      {canManageVerificationBilling && (
+      {paymentWallet && (
         <SettingsCard
-          description="Vendor payout threshold and overdraft suspension rules for the student payment wallet."
+          description="Vendor payout threshold and overdraft suspension rules for the student payment wallet. Changes apply at the next nightly run."
           icon={Wallet}
           title="Payment wallet"
         >
-          <Link
-            className="text-sm font-medium text-brand-700 hover:underline"
-            href="/settings/payment-wallet"
-          >
-            Manage payment wallet settings →
-          </Link>
+          <div className="divide-y divide-border">
+            <SettingsField label="Payout run" value="Daily at about 00:35 SAST" />
+            <SettingsField
+              label="Vendors with a negative balance"
+              value={paymentWallet.negativeVendors}
+            />
+            <SettingsField
+              label="Vendors with payments suspended"
+              value={paymentWallet.suspendedVendors}
+            />
+          </div>
+          <div className="mt-5 border-t border-border pt-5">
+            <PaymentWalletSettingsForm
+              canEdit={role === "SUPER_ADMIN"}
+              overdraftSuspensionDays={paymentWallet.overdraftSuspensionDays}
+              payoutThreshold={paymentWallet.payoutThreshold}
+            />
+          </div>
         </SettingsCard>
       )}
 
