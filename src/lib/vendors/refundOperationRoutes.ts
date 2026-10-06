@@ -30,7 +30,7 @@ export async function refundOperationCollection(request: Request, api: boolean) 
     if (!api && !isSameOriginRequest(request)) throw new PosApiError("FORBIDDEN", "Cross-origin refund requests are not allowed.", 403);
     const schema = refundRegistrationSchema.extend(api ? { paymentRequestId: z.string().min(1) } : { transactionId: z.string().min(1) }).strict();
     const body = schema.parse(await request.json());
-    const target = "paymentRequestId" in body ? { paymentRequestId: body.paymentRequestId! } : { transactionId: body.transactionId! };
+    const target = api ? { paymentRequestId: z.string().min(1).parse(body.paymentRequestId) } : { transactionId: z.string().min(1).parse(body.transactionId) };
     return refundJson(await registerRefundOperation(access, { target, amountMinor: body.amountMinor, idempotencyKey: body.idempotencyKey }));
   } catch (error) { return posErrorResponse(error); }
 }

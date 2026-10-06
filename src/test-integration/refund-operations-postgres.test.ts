@@ -129,7 +129,7 @@ describe("Durable refund instructions", () => {
     const originalTransaction = prisma.$transaction.bind(prisma);
     const spy = vi.spyOn(prisma, "$transaction").mockImplementation((async (callback: unknown, options: unknown) => originalTransaction(async tx => {
       const update = tx.refundOperation.update.bind(tx.refundOperation);
-      tx.refundOperation.update = ((...args: Parameters<typeof update>) => { if (args[0].data.status === "COMPLETED") throw new Error("completion write interrupted"); return update(...args); }) as typeof update;
+      tx.refundOperation.update = ((...args: Parameters<typeof update>) => { if (args[0].data.status === "COMPLETED") throw new Error("completion write interrupted"); return update(...args); }) as unknown as typeof update;
       return (callback as (tx: Prisma.TransactionClient) => Promise<unknown>)(tx);
     }, options as { isolationLevel?: "Serializable" })) as typeof prisma.$transaction);
     try { await expect(refundOperation(owner(f), op.id, "execute")).rejects.toThrow("completion write interrupted"); } finally { spy.mockRestore(); }

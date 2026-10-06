@@ -28,6 +28,31 @@ const REFUND_STATUS_TONE: Record<LivePaymentEvent["refundStatus"], StatusTone> =
 };
 
 
+function dateWithinFilter(value: string, filters: VendorPaymentEventFilters) {
+  if (!filters.dateFrom && !filters.dateTo) return true;
+  const time = Date.parse(value);
+  if (!Number.isFinite(time)) return false;
+  if (filters.dateFrom && time < Date.parse(`${filters.dateFrom}T00:00:00.000`)) return false;
+  if (filters.dateTo && time > Date.parse(`${filters.dateTo}T23:59:59.999`)) return false;
+  return true;
+}
+
+function matchesFilters(payment: LivePaymentEvent, filters: VendorPaymentEventFilters) {
+  if (filters.branchId && payment.branchId !== filters.branchId) return false;
+  if (filters.refundStatus && payment.refundStatus !== filters.refundStatus) return false;
+  if (!dateWithinFilter(payment.completedAt, filters)) return false;
+
+  const query = filters.query?.trim().toLowerCase();
+  if (!query) return true;
+  return [
+    payment.studentName,
+    payment.studentNumber,
+    payment.branchName,
+    payment.reference,
+    payment.transactionId,
+  ].some((value) => value?.toLowerCase().includes(query));
+}
+
 export function LivePaymentTable({
   activePaymentBranchIds,
   filters,
