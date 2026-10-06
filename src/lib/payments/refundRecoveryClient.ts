@@ -20,25 +20,34 @@ export class RefundRecoveryClient {
   getServerSnapshot = () => initial;
   private set(value: Partial<RefundRecoveryState>) { this.state = { ...this.state, ...value }; this.listeners.forEach(f => f()); }
   private key() { if (!this.scope) throw new Error("Refund recovery is not hydrated."); return `unify.refund-registration.v1:${this.scope.vendorProfileId}:${this.scope.operatorId}`; }
-  private save(draft: RefundDraft) { this.options.storage().setItem(this.key(), JSON.stringify(draft)); this.set({ draft }); }
+  private save(draft: RefundDraft, canonical = false) {
+    const storage = this.options.storage();
+    const raw = storage.getItem(this.key());
+    if (raw && draftSchema.parse(JSON.parse(raw)).idempotencyKey !== draft.idempotencyKey) {
+      // Another tab may have moved on while this response was delayed. Keep its reference.
+      if (!canonical) throw new Error("Another refund reference is stored. Reload to recover it.");
+    } else storage.setItem(this.key(), JSON.stringify(draft));
+    this.set({ draft });
+  }
   private async request(path = "", body?: object) {
     const response = await (this.options.fetch ?? fetch)(this.options.baseUrl + path, { cache: "no-store", ...(body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error?.message ?? data.error ?? "Refund outcome unavailable. Keep this reference and check again.");
     return data;
   }
-  private accept(value: unknown, draft?: RefundDraft) {
+  private accept(value: unknown, draft?: RefundDraft, canonical = false) {
     const op = refundOperationSchema.parse(value);
     if (!this.scope || op.vendorProfileId !== this.scope.vendorProfileId || (op.status === "PENDING" && op.operatorId !== this.scope.operatorId)) throw new Error("Recover this refund with its original vendor and operator.");
     if (draft && (op.amountMinor !== draft.amountMinor || op.idempotencyKey !== draft.idempotencyKey || (draft.transactionId && op.originalTransactionId !== draft.transactionId) || (draft.paymentRequestId && op.paymentRequestId !== draft.paymentRequestId))) throw new Error("Refund response does not match the frozen instruction.");
     if (op.status === "PENDING") {
-      this.save({ ...(op.paymentRequestId ? { paymentRequestId: op.paymentRequestId } : { transactionId: op.originalTransactionId }), amountMinor: op.amountMinor, idempotencyKey: op.idempotencyKey, operationId: op.id });
-      this.set({ operation: op, outcome: undefined, error: undefined });
+      this.save({ ...(op.paymentRequestId ? { paymentRequestId: op.paymentRequestId } : { transactionId: op.originalTransactionId }), amountMinor: op.amountMinor, idempotencyKey: op.idempotencyKey, operationId: op.id }, canonical);
+      this.set({ hydrated: true, operation: op, outcome: undefined, error: undefined });
     } else {
       // Clear only after a validated, authoritative terminal outcome.
-      this.options.storage().removeItem(this.key());
+      const raw = this.options.storage().getItem(this.key());
+      if (raw && draftSchema.parse(JSON.parse(raw)).idempotencyKey === op.idempotencyKey) this.options.storage().removeItem(this.key());
       if (this.legacyKey === op.idempotencyKey) this.options.clearLegacy?.();
-      this.set({ draft: undefined, operation: undefined, outcome: op, error: undefined });
+      this.set({ hydrated: true, draft: undefined, operation: undefined, outcome: op, error: undefined });
     }
     return op;
   }
@@ -55,7 +64,7 @@ export class RefundRecoveryClient {
       const draft = raw ? draftSchema.parse(JSON.parse(raw)) : this.options.legacyDraft?.();
       if (!raw && draft) this.legacyKey = draft.idempotencyKey;
       this.set({ draft, operation: undefined, outcome: undefined });
-      if (recovery.operation) this.accept(recovery.operation);
+      if (recovery.operation) this.accept(recovery.operation, undefined, true);
       else if (draft) {
         this.save(draft);
         const value = draft.operationId ? await this.request(`/${encodeURIComponent(draft.operationId)}`) : await this.request("", this.registration(draft));

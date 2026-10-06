@@ -90,4 +90,20 @@ describe("durable refund browser recovery", () => {
     } });
     await imported.hydrate(); expect(clearLegacy).toHaveBeenCalledTimes(1);
   });
+  it("a late terminal response cannot delete another tab's newer instruction", async () => {
+    const local = storage(); let release!: (response: Response) => void;
+    const delayed = new Promise<Response>(resolve => { release = resolve; });
+    let key = "";
+    const client = new RefundRecoveryClient({ baseUrl: "/refunds", storage: () => local, fetch: async (url, options) => {
+      if (!options?.method) return json({ ...scope, operation: null });
+      if (String(url).endsWith("/execute")) return delayed;
+      key = JSON.parse(String(options.body)).idempotencyKey; return json(op(key));
+    } });
+    await client.hydrate(); const submission = client.submit({ transactionId: "spend-1", amountMinor: 2000 });
+    while (!client.getSnapshot().operation) await new Promise(resolve => setTimeout(resolve, 0));
+    const storeKey = "unify.refund-registration.v1:vendor-1:user:owner-1";
+    local.setItem(storeKey, JSON.stringify({ transactionId: "spend-2", amountMinor: 1000, idempotencyKey: "newer-key" }));
+    release(json(op(key, "COMPLETED"))); await submission;
+    expect(JSON.parse(local.getItem(storeKey)!).idempotencyKey).toBe("newer-key");
+  });
 });
