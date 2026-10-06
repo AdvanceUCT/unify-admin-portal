@@ -32,7 +32,7 @@ import {
   WALLET_CURRENCY,
 } from "@/lib/payments/constants";
 import { WalletDomainError } from "@/lib/payments/errors";
-import { postPayout } from "@/lib/payments/posting";
+import { postPayoutInTransaction, runSerializableTransaction } from "@/lib/payments/posting";
 import { encryptVendorSecret } from "@/lib/vendors/integrationCrypto";
 import type { ApprovedVendorContext } from "@/lib/vendors/context";
 
@@ -219,10 +219,12 @@ async function reservePayoutBatch(input: {
   initiationSource: PayoutInitiationSource;
   initiatedByUserId?: string;
 }) {
-  return prisma.$transaction(async (transaction) => {
-    await transaction.$queryRaw(
-      Prisma.sql`SELECT "id" FROM "vendor_payment_profile" WHERE "id" = ${input.profileId} FOR UPDATE`,
-    );
+  return runSerializableTransaction(async (transaction) => {
+    const account = await transaction.walletAccount.findFirst({
+      where: { vendorProfile: { paymentProfile: { id: input.profileId } } }, select: { id: true },
+    });
+    if (!account) return { outcome: "ineligible" as const };
+    await lockPayoutRows(transaction, input.profileId, [account.id]);
     const profile = await transaction.vendorPaymentProfile.findUnique({
       where: { id: input.profileId },
       select: { status: true, payoutDestinationReference: true },
@@ -256,22 +258,34 @@ async function reservePayoutBatch(input: {
   });
 }
 
-async function completePayoutBatchWithTransfer(input: {
+async function lockPayoutRows(tx: Prisma.TransactionClient, profileId: string, accountIds: string[], batchId?: string) {
+  await tx.$queryRaw(Prisma.sql`SELECT "accountId" FROM "wallet_account_balance"
+    WHERE "accountId" IN (${Prisma.join(accountIds)}) ORDER BY "accountId" FOR UPDATE`);
+  await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "vendor_payment_profile" WHERE "id" = ${profileId} FOR UPDATE`);
+  if (batchId) await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "payout_batch" WHERE "id" = ${batchId} FOR UPDATE`);
+}
+
+async function withLockedPayout<T>(reference: string, ledger: boolean, operation: (tx: Prisma.TransactionClient, batch: Prisma.PayoutBatchGetPayload<{ include: { vendorPaymentProfile: true } }>, accountId: string) => Promise<T>) {
+  return runSerializableTransaction(async tx => {
+    const initial = await tx.payoutBatch.findUnique({ where: { providerIdempotencyKey: reference }, include: { vendorPaymentProfile: true } });
+    if (!initial) throw new WalletDomainError("PAYOUT_NOT_FOUND", "Payout batch was not found.");
+    const account = await tx.walletAccount.findUnique({ where: { vendorProfileId: initial.vendorPaymentProfile.vendorProfileId }, select: { id: true } });
+    if (!account) throw new WalletDomainError("ACCOUNT_NOT_FOUND", "Vendor wallet account was not found.");
+    const clearing = ledger ? await tx.walletAccount.findUniqueOrThrow({ where: { systemCode: "PAYOUT_CLEARING" }, select: { id: true } }) : null;
+    await lockPayoutRows(tx, initial.vendorPaymentProfileId, clearing ? [account.id, clearing.id] : [account.id], initial.id);
+    const batch = await tx.payoutBatch.findUniqueOrThrow({ where: { id: initial.id }, include: { vendorPaymentProfile: true } });
+    return operation(tx, batch, account.id);
+  });
+}
+
+export async function completePayoutBatchWithTransfer(input: {
   providerReference: string;
   transfer: PaystackInitiateTransferResult;
 }) {
-  const batch = await prisma.payoutBatch.findUnique({
-    where: { providerIdempotencyKey: input.providerReference },
-    include: {
-      vendorPaymentProfile: true,
-      payoutTransaction: true,
-    },
-  });
-
-  if (!batch) throw new WalletDomainError("PAYOUT_NOT_FOUND", "Payout batch was not found.");
+  return withLockedPayout(input.providerReference, true, async (transaction, batch, accountId) => {
   if (batch.status === PayoutBatchStatus.COMPLETED && batch.payoutTransactionId) return batch;
   if (input.transfer.amountMinor !== batch.amountMinor) {
-    await prisma.payoutBatch.update({
+    return transaction.payoutBatch.update({
       where: { id: batch.id },
       data: {
         status: PayoutBatchStatus.REQUIRES_RECONCILIATION,
@@ -279,17 +293,9 @@ async function completePayoutBatchWithTransfer(input: {
         failureCode: "PAYSTACK_TRANSFER_AMOUNT_MISMATCH",
       },
     });
-    throw new WalletDomainError("INVALID_POSTING", "Paystack transfer amount did not match the payout batch.");
   }
-
-  const vendorAccount = await prisma.walletAccount.findUnique({
-    where: { vendorProfileId: batch.vendorPaymentProfile.vendorProfileId },
-    select: { id: true },
-  });
-  if (!vendorAccount) throw new WalletDomainError("ACCOUNT_NOT_FOUND", "Vendor wallet account was not found.");
-
-  const walletTransaction = await postPayout({
-    vendorAccountId: vendorAccount.id,
+  const walletTransaction = await postPayoutInTransaction(transaction, {
+    vendorAccountId: accountId,
     amountMinor: batch.amountMinor,
     idempotencyKey: `payout:${batch.id}`,
     reference: batch.providerIdempotencyKey,
@@ -298,7 +304,7 @@ async function completePayoutBatchWithTransfer(input: {
     initiatedByUserId: batch.initiatedByUserId ?? undefined,
   });
 
-  return prisma.payoutBatch.update({
+  return transaction.payoutBatch.update({
     where: { id: batch.id },
     data: {
       status: PayoutBatchStatus.COMPLETED,
@@ -308,49 +314,51 @@ async function completePayoutBatchWithTransfer(input: {
       failureCode: null,
     },
   });
+  });
+}
+
+async function transitionPayout(reference: string, data: Prisma.PayoutBatchUpdateInput) {
+  return withLockedPayout(reference, false, async (tx, batch) => {
+    if (batch.status === PayoutBatchStatus.COMPLETED) return batch;
+    // A previous release may have crashed after ledger posting. Never release it again.
+    const posted = await tx.walletTransaction.findFirst({ where: { type: "PAYOUT", status: "COMPLETED", idempotencyKey: `payout:${batch.id}`, initiatorAccount: { vendorProfileId: batch.vendorPaymentProfile.vendorProfileId } } });
+    if (posted) return tx.payoutBatch.update({ where: { id: batch.id }, data: { status: "COMPLETED", payoutTransactionId: posted.id, providerPayoutId: posted.providerPaymentId, completedAt: posted.completedAt, failureCode: null } });
+    return tx.payoutBatch.update({ where: { id: batch.id }, data });
+  });
 }
 
 async function markPayoutBatchFailed(reference: string, failureCode: string, providerPayoutId?: string) {
-  return prisma.payoutBatch.update({
-    where: { providerIdempotencyKey: reference },
-    data: {
+  return transitionPayout(reference, {
       status: PayoutBatchStatus.FAILED,
       providerPayoutId,
       failureCode,
-    },
   });
 }
 
 async function markPayoutBatchNeedsReconciliation(reference: string, failureCode: string, providerPayoutId?: string) {
-  return prisma.payoutBatch.update({
-    where: { providerIdempotencyKey: reference },
-    data: {
+  return transitionPayout(reference, {
       status: PayoutBatchStatus.REQUIRES_RECONCILIATION,
       providerPayoutId,
       failureCode,
-    },
   });
 }
 
 async function handleTransferOutcome(reference: string, transfer: PaystackInitiateTransferResult) {
   const status = transfer.status.toLowerCase();
   if (["success", "successful", "completed"].includes(status)) {
-    await completePayoutBatchWithTransfer({ providerReference: reference, transfer });
-    return "completed" as const;
+    const batch = await completePayoutBatchWithTransfer({ providerReference: reference, transfer });
+    return batch.status === "COMPLETED" ? "completed" as const : "requires_reconciliation" as const;
   }
   if (["failed", "reversed"].includes(status)) {
     await markPayoutBatchFailed(reference, `PAYSTACK_TRANSFER_${status.toUpperCase()}`, transfer.transferCode);
     return "failed" as const;
   }
-  await prisma.payoutBatch.update({
-    where: { providerIdempotencyKey: reference },
-    data: {
+  const batch = await transitionPayout(reference, {
       status: PayoutBatchStatus.PROCESSING,
       providerPayoutId: transfer.transferCode,
       failureCode: null,
-    },
   });
-  return "processing" as const;
+  return batch.status === "COMPLETED" ? "completed" as const : "processing" as const;
 }
 
 type PayoutRunSummary = {
@@ -442,13 +450,10 @@ async function payOutVendor(
   summary.batchesCreated += 1;
 
   try {
-    await prisma.payoutBatch.update({
-      where: { id: batch.id },
-      data: {
+    await transitionPayout(reference, {
         status: PayoutBatchStatus.PROCESSING,
         attemptCount: { increment: 1 },
         lastAttemptAt: new Date(),
-      },
     });
 
     const transfer = input.simulateProviderTransfer
@@ -476,6 +481,7 @@ async function payOutVendor(
     const outcome = await handleTransferOutcome(reference, transfer);
     if (outcome === "completed") summary.completed += 1;
     else if (outcome === "failed") summary.failed += 1;
+    else if (outcome === "requires_reconciliation") summary.requiresReconciliation += 1;
     else summary.processing += 1;
     summary.batches.push({
       vendorProfileId: profile.vendorProfileId,
@@ -485,9 +491,11 @@ async function payOutVendor(
       status: outcome,
     });
   } catch (error) {
-    const ambiguous = error instanceof PaystackProviderError && (error.code === "TIMEOUT" || error.code === "UNKNOWN_OUTCOME");
+    // Only explicit provider rejection before acceptance may release a reservation.
+    const ambiguous = !(error instanceof PaystackProviderError) || !["AMOUNT_TOO_SMALL", "AMOUNT_UNSAFE", "NOT_CONFIGURED"].includes(error.code);
     if (ambiguous) {
-      await markPayoutBatchNeedsReconciliation(reference, error.code);
+      const failureCode = error instanceof PaystackProviderError ? error.code : "PAYOUT_MATERIALIZATION_FAILED";
+      await markPayoutBatchNeedsReconciliation(reference, failureCode);
       summary.requiresReconciliation += 1;
       summary.batches.push({
         vendorProfileId: profile.vendorProfileId,
@@ -495,8 +503,8 @@ async function payOutVendor(
         currency: WALLET_CURRENCY,
         reference,
         status: "requires_reconciliation",
-        failureCode: error.code,
-        failureMessage: error.message,
+        failureCode,
+        failureMessage: error instanceof Error ? error.message : undefined,
       });
     } else {
       const failureCode = error instanceof PaystackProviderError ? error.code : "PAYSTACK_TRANSFER_FAILED";

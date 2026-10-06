@@ -7,6 +7,7 @@ const database = vi.hoisted(() => ({
     aggregate: vi.fn(),
     create: vi.fn(),
     findUnique: vi.fn(),
+    findUniqueOrThrow: vi.fn(),
     update: vi.fn(),
   },
   vendorPaymentProfile: {
@@ -18,7 +19,10 @@ const database = vi.hoisted(() => ({
   },
   walletAccount: {
     findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    findUniqueOrThrow: vi.fn(),
   },
+  walletTransaction: { findFirst: vi.fn() },
 }));
 
 const paystackConfig = vi.hoisted(() => ({
@@ -32,7 +36,8 @@ const paystackClient = vi.hoisted(() => ({
 }));
 
 const posting = vi.hoisted(() => ({
-  postPayout: vi.fn(),
+  postPayoutInTransaction: vi.fn(),
+  runSerializableTransaction: vi.fn(),
 }));
 
 const config = vi.hoisted(() => ({ getUniversityPaymentWalletSettings: vi.fn() }));
@@ -60,6 +65,10 @@ describe("vendor wallet payouts", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     database.$transaction.mockImplementation(async (operation) => operation(database));
+    posting.runSerializableTransaction.mockImplementation(async (operation) => operation(database));
+    database.walletAccount.findFirst.mockResolvedValue({ id: "vendor-wallet" });
+    database.walletAccount.findUniqueOrThrow.mockResolvedValue({ id: "payout-clearing" });
+    database.walletTransaction.findFirst.mockResolvedValue(null);
     database.$queryRaw.mockResolvedValue([]);
     config.getUniversityPaymentWalletSettings.mockResolvedValue({
       paymentWalletPayoutThresholdMinor: BigInt(50_000),
@@ -75,19 +84,12 @@ describe("vendor wallet payouts", () => {
     vendorState(60_000);
     database.vendorProfile.findUnique.mockResolvedValue({ companyName: "Campus Cafe" });
     database.walletAccount.findUnique.mockResolvedValue({ id: "vendor-wallet" });
-    database.payoutBatch.create.mockImplementation(async ({ data }) => ({ ...data, id: "payout-batch-1" }));
-    database.payoutBatch.findUnique.mockImplementation(async ({ where }) => ({
-      id: "payout-batch-1",
-      status: "PROCESSING",
-      amountMinor: BigInt(60_000),
-      providerIdempotencyKey: where.providerIdempotencyKey,
-      payoutDestinationReference: "RCP_demo_recipient",
-      initiatedByUserId: "owner-user",
-      vendorPaymentProfile: { vendorProfileId: "vendor-owned" },
-      payoutTransaction: null,
-    }));
+    let latestBatch: Record<string, unknown>;
+    database.payoutBatch.create.mockImplementation(async ({ data }) => (latestBatch = { ...data, id: "payout-batch-1", vendorPaymentProfile: { vendorProfileId: "vendor-owned" }, payoutTransaction: null }));
+    database.payoutBatch.findUnique.mockImplementation(async () => latestBatch);
+    database.payoutBatch.findUniqueOrThrow.mockImplementation(async () => latestBatch);
     database.payoutBatch.update.mockImplementation(async ({ data }) => ({ id: "payout-batch-1", ...data }));
-    posting.postPayout.mockResolvedValue({ id: "wallet-transaction-1" });
+    posting.postPayoutInTransaction.mockResolvedValue({ id: "wallet-transaction-1" });
   });
 
   it("pays the full available balance in a simulated demo payout, under a per-vendor lock", async () => {
@@ -100,9 +102,9 @@ describe("vendor wallet payouts", () => {
     expect(database.vendorPaymentProfile.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ vendorProfileId: "vendor-owned" }),
     }));
-    expect(database.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(database.$queryRaw).toHaveBeenCalled();
     expect(paystackClient.initiateTransfer).not.toHaveBeenCalled();
-    expect(posting.postPayout).toHaveBeenCalledWith(expect.objectContaining({
+    expect(posting.postPayoutInTransaction).toHaveBeenCalledWith(database, expect.objectContaining({
       vendorAccountId: "vendor-wallet",
       amountMinor: BigInt(60_000),
       providerPaymentId: expect.stringMatching(/^simulated:unify-payout-/),

@@ -81,7 +81,7 @@ async function readBalance(transaction: Prisma.TransactionClient, accountId: str
   return balance.postedBalanceMinor;
 }
 
-export async function refundSpend(input: {
+export type RefundInput = {
   vendorProfileId: string;
   /** Portal: active payment branches in context. API: key branches ∩ active payment branches. */
   allowedBranchIds: string[];
@@ -89,7 +89,20 @@ export async function refundSpend(input: {
   amountMinor: number;
   idempotencyKey: string;
   actor: RefundActor;
-}): Promise<RefundResult> {
+};
+
+export async function refundSpend(input: RefundInput): Promise<RefundResult> {
+  const outcome = await runSerializableTransaction(tx => refundSpendInTransaction(tx, input));
+  finishRefund(input.vendorProfileId, outcome.overdraftStarted);
+  return outcome.result;
+}
+
+export function finishRefund(vendorProfileId: string, overdraftStarted: boolean) {
+  if (overdraftStarted) scheduleOverdraftStartedEmail(vendorProfileId);
+  schedulePaymentWebhookDispatch();
+}
+
+export async function refundSpendInTransaction(transaction: Prisma.TransactionClient, input: RefundInput, replayOnly = false) {
   const idempotencyKey = input.idempotencyKey.trim();
   if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) {
     throw new WalletDomainError("INVALID_POSTING", "Refund amount must be positive.");
@@ -99,7 +112,7 @@ export async function refundSpend(input: {
   }
   const amountMinor = BigInt(input.amountMinor);
 
-  const outcome = await runSerializableTransaction(async (transaction) => {
+
     const spendId = await resolveSpendId(transaction, input.vendorProfileId, input.allowedBranchIds, input.target);
     const original = spendId
       ? await transaction.walletTransaction.findFirst({
@@ -136,6 +149,9 @@ export async function refundSpend(input: {
         "IDEMPOTENCY_CONFLICT",
         "Refund request reference was already used for a different refund.",
       );
+    }
+    if (replayOnly && existing?.status !== WalletTransactionStatus.COMPLETED) {
+      throw new Error("Completed refund operation has no completed posting.");
     }
 
     const balanceBefore = await readBalance(transaction, vendorEntry.accountId);
@@ -179,11 +195,7 @@ export async function refundSpend(input: {
         replayed: Boolean(existing),
       } satisfies RefundResult,
     };
-  });
 
-  if (outcome.overdraftStarted) scheduleOverdraftStartedEmail(input.vendorProfileId);
-  schedulePaymentWebhookDispatch();
-  return outcome.result;
 }
 
 function scheduleOverdraftStartedEmail(vendorProfileId: string) {

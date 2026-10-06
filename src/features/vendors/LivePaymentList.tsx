@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Avatar } from "@/components/ui/Avatar";
+import { RefundRecoveryPanel, useRefundRecovery } from "@/features/vendors/useRefundRecovery";
 import { RefundPaymentDialog, type RefundGuidance } from "@/features/vendors/RefundPaymentDialog";
 import { formatDateTime, formatMoneyMinor } from "@/lib/formatters";
 
@@ -39,34 +40,6 @@ export type RefundResponse = {
   vendorBalanceMinor: number;
 };
 
-/**
- * Reuses one idempotency key while the same refund (payment + amount) is retried,
- * so a retry after a lost response replays the original refund instead of adding another.
- */
-export function useRefundIdempotencyKey() {
-  const attemptRef = useRef<{ transactionId: string; amountMinor: number; key: string } | null>(null);
-  return useMemo(() => ({
-    forAttempt(transactionId: string, amountMinor: number) {
-      const current = attemptRef.current;
-      if (current && current.transactionId === transactionId && current.amountMinor === amountMinor) return current.key;
-      attemptRef.current = { transactionId, amountMinor, key: crypto.randomUUID() };
-      return attemptRef.current.key;
-    },
-    clear() {
-      attemptRef.current = null;
-    },
-  }), []);
-}
-
-async function parseErrorMessage(response: Response) {
-  try {
-    const body = await response.json() as { error?: { message?: string } };
-    return body.error?.message ?? "Refund could not be completed.";
-  } catch {
-    return "Refund could not be completed.";
-  }
-}
-
 export function LivePaymentList({
   branchId,
   branchIds,
@@ -84,10 +57,10 @@ export function LivePaymentList({
 }) {
   const [items, setItems] = useState(initialItems);
   const [guidance, setGuidance] = useState(refundGuidance);
-  const refundIdempotencyKey = useRefundIdempotencyKey();
+  const recovery = useRefundRecovery();
   const [refundMessage, setRefundMessage] = useState<string>();
   const [refundPaymentToConfirm, setRefundPaymentToConfirm] = useState<LivePaymentEvent | null>(null);
-  const [refundingTransactionId, setRefundingTransactionId] = useState<string>();
+
   const itemsRef = useRef(initialItems);
   const branchIdsKey = useMemo(() => (branchIds ?? []).join("\u0000"), [branchIds]);
 
@@ -156,46 +129,22 @@ export function LivePaymentList({
     };
   }, [branchId, branchIdsKey, liveCursor, maxItems]);
 
-  async function refundPayment(payment: LivePaymentEvent, amountMinor: number) {
-    if (!payment.canRefund) return;
-    setRefundMessage(undefined);
+  useEffect(() => recovery.client.subscribe(() => {
+    const result = recovery.client.getSnapshot().outcome?.result;
+    if (!result) return;
+    setGuidance(current => current && { ...current, walletBalanceMinor: result.vendorBalanceMinor });
+    setItems(current => current.map(item => item.transactionId === result.originalTransactionId ? { ...item, totalRefundedMinor: result.totalRefundedMinor, remainingRefundableMinor: result.remainingRefundableMinor, refundStatus: result.refundStatus, canRefund: item.canRefund && result.remainingRefundableMinor > 0 } : item));
+    setRefundMessage(`Refunded ${formatMoneyMinor(result.refundedAmountMinor)}.`);
+    setRefundPaymentToConfirm(null);
+  }), [recovery.client]);
 
-    setRefundingTransactionId(payment.transactionId);
-    try {
-      const response = await fetch(`/api/vendor/payments/${encodeURIComponent(payment.transactionId)}/refund`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          amountMinor,
-          idempotencyKey: refundIdempotencyKey.forAttempt(payment.transactionId, amountMinor),
-        }),
-      });
-      if (!response.ok) throw new Error(await parseErrorMessage(response));
-      const result = await response.json() as RefundResponse;
-      refundIdempotencyKey.clear();
-      setGuidance((current) => current && { ...current, walletBalanceMinor: result.vendorBalanceMinor });
-      setItems((current) => current.map((item) => (
-        item.transactionId === result.originalTransactionId
-          ? {
-              ...item,
-              totalRefundedMinor: result.totalRefundedMinor,
-              remainingRefundableMinor: result.remainingRefundableMinor,
-              refundStatus: result.refundStatus,
-              canRefund: item.canRefund && result.remainingRefundableMinor > 0,
-            }
-          : item
-      )));
-      setRefundMessage(`Refunded ${formatMoneyMinor(result.refundedAmountMinor, payment.currency)}.`);
-      setRefundPaymentToConfirm(null);
-    } catch (error) {
-      setRefundMessage(error instanceof Error ? error.message : "Refund could not be completed.");
-    } finally {
-      setRefundingTransactionId(undefined);
-    }
+  function refundPayment(payment: LivePaymentEvent, amountMinor: number) {
+    if (payment.canRefund && !recovery.blocked) void recovery.client.submit({ transactionId: payment.transactionId, amountMinor });
   }
 
   return (
     <div>
+      <RefundRecoveryPanel recovery={recovery} />
       {refundMessage ? (
         <p className="border-b border-border bg-surface-muted px-5 py-3 text-sm text-fg-muted">
           {refundMessage}
@@ -232,11 +181,11 @@ export function LivePaymentList({
             {payment.canRefund ? (
               <button
                 className="mt-1 rounded-md border border-border px-3 py-1 text-xs font-medium text-fg-muted transition hover:border-border-strong hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={refundingTransactionId === payment.transactionId}
+                disabled={recovery.blocked}
                 onClick={() => setRefundPaymentToConfirm(payment)}
                 type="button"
               >
-                {refundingTransactionId === payment.transactionId ? "Refunding…" : "Refund"}
+                {recovery.state.busy ? "Refunding…" : "Refund"}
               </button>
             ) : (
               <p className="text-xs text-fg-subtle">
@@ -258,7 +207,7 @@ export function LivePaymentList({
       </div>
       <RefundPaymentDialog
         guidance={guidance}
-        isPending={Boolean(refundingTransactionId)}
+        isPending={recovery.blocked}
         onClose={() => setRefundPaymentToConfirm(null)}
         onConfirm={(amountMinor) => {
           if (refundPaymentToConfirm) void refundPayment(refundPaymentToConfirm, amountMinor);

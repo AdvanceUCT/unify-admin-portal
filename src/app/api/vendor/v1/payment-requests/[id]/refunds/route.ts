@@ -23,26 +23,21 @@ function apiError(error: unknown) {
   }
 }
 
-/** Handles POST requests to `/api/vendor/v1/payment-requests/[id]/refunds` (referenced POS refunds). */
+/** Compatibility endpoint: registration is durable before execution starts. */
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
  try {
-  const { vendorFromApiRequest } = await import("@/lib/vendors/routeAuth");
-  const access = await vendorFromApiRequest(request, "refunds:create");
-  if (!access) throw new PosApiError("INVALID_API_KEY", "Invalid vendor API key.", 401);
+  const { refundAccess, refundJson } = await import("@/lib/vendors/refundOperationRoutes");
+  const access = await refundAccess(request, true);
   const body = refundSchema.parse(await request.json());
   const id = (await context.params).id;
-  const [{ listActivePaymentBranchIdsForContext }, { refundSpend }, { getMerchantPaymentRequest }] = await Promise.all([
-    import("@/lib/payments/branchOnboarding"), import("@/lib/vendors/refunds"), import("@/lib/payments/paymentRequests"),
-  ]);
-  const allowedBranchIds = await listActivePaymentBranchIdsForContext({ vendorProfileId: access.id, branchIds: access.branchIds });
-  const result = await refundSpend({
-    vendorProfileId: access.id, allowedBranchIds, target: { paymentRequestId: id },
-    amountMinor: body.amountMinor, idempotencyKey: body.idempotencyKey, actor: { apiCredentialId: access.credentialId },
-  });
-  const paymentRequest = await getMerchantPaymentRequest(access, id);
-  return NextResponse.json({
-    refund: { ...result.refund, paymentRequestId: id, transactionId: result.originalTransactionId },
-    paymentRequest,
-  }, { status: result.replayed ? 200 : 201, headers: { "Cache-Control": "no-store" } });
+  const { legacyRefundOperation } = await import("@/lib/vendors/refundOperations");
+  const op = await legacyRefundOperation(access, { target: { paymentRequestId: id }, ...body });
+  if (op.status !== "COMPLETED" || !op.result) return refundJson({ error: op.rejection ? { ...op.rejection, code: op.rejection.code === "BRANCH_NOT_PAYMENT_ENABLED" ? "BRANCH_NOT_ALLOWED" : op.rejection.code } : { code: "REFUND_CANCELLED", message: "This refund was cancelled." }, operation: op }, op.rejection?.status ?? 409);
+  const { getMerchantPaymentRequest } = await import("@/lib/payments/paymentRequests");
+  const { authenticateVendorApiKey } = await import("@/lib/vendors/integrations");
+  const vendor = await authenticateVendorApiKey(request.headers.get("authorization"), "refunds:create", true);
+  if (!vendor) throw new PosApiError("INVALID_API_KEY", "Invalid vendor API key.", 401);
+  const paymentRequest = await getMerchantPaymentRequest({ id: vendor.id, branchIds: vendor.branchIds }, id);
+  return refundJson({ refund: { ...op.result.refund, paymentRequestId: id, transactionId: op.result.originalTransactionId }, paymentRequest, operation: op }, op.result.replayed ? 200 : 201);
  } catch (error) { return posErrorResponse(apiError(error)); }
 }

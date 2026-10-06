@@ -590,6 +590,10 @@ export function postRefundInTransaction(transaction: Prisma.TransactionClient, i
   return postWalletOperationInTransaction(transaction, { kind: "REFUND", input });
 }
 
+export function postPayoutInTransaction(transaction: Prisma.TransactionClient, input: PostPayoutInput) {
+  return postWalletOperationInTransaction(transaction, { kind: "PAYOUT", input });
+}
+
 export function postTopup(input: PostTopupInput) {
   return postWalletOperation({ kind: "TOPUP", input });
 }
