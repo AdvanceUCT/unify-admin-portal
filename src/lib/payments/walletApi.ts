@@ -24,9 +24,15 @@ export function walletErrorResponse(error: unknown) {
   if (error instanceof WalletDomainError) {
     const status =
       error.code === "INVALID_WALLET_SESSION" ? 401 :
-      error.code === "PAYMENT_WALLET_NOT_ELIGIBLE" ? 403 :
+      error.code === "PAYMENT_WALLET_NOT_ELIGIBLE" ||
+      error.code === "VENDOR_PAYMENT_SUSPENDED" ||
+      error.code === "TOPUP_NOT_ALLOWED" ? 403 :
       error.code === "RATE_LIMITED" ? 429 :
-      error.code === "IDEMPOTENCY_CONFLICT" ? 409 :
+      error.code === "IDEMPOTENCY_CONFLICT" ||
+      error.code === "REFUND_AMOUNT_EXCEEDED" ||
+      error.code === "PAYMENT_FULLY_REFUNDED" ||
+      error.code === "TOPUP_AMOUNT_EXCEEDS_DEFICIT" ||
+      error.code === "TOPUP_ALREADY_IN_PROGRESS" ? 409 :
       error.code === "TOPUP_NOT_FOUND" || error.code === "ACCOUNT_NOT_FOUND" ? 404 :
       error.code === "PAYMENT_WALLET_DISABLED" || error.code === "TOPUP_PROVIDER_MISMATCH" ? 503 :
       400;

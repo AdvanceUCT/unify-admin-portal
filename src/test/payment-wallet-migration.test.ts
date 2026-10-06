@@ -36,6 +36,20 @@ const walletPayoutProviderAttributionMigration = readFileSync(
   ),
   "utf8",
 );
+const vendorTopupEnumMigration = readFileSync(
+  resolve(
+    process.cwd(),
+    "prisma/migrations/20261006120000_add_vendor_topup_transaction_type/migration.sql",
+  ),
+  "utf8",
+);
+const refundsOverdraftMigration = readFileSync(
+  resolve(
+    process.cwd(),
+    "prisma/migrations/20261006121000_refunds_overdraft_threshold_payouts/migration.sql",
+  ),
+  "utf8",
+);
 
 describe("payment wallet foundation migration", () => {
   it("creates the immutable ledger and rebuildable balance projection", () => {
@@ -128,5 +142,21 @@ describe("payment wallet foundation migration", () => {
     expect(walletSettingsRenameMigration).toContain(
       'BOOL_OR("paymentWalletEnabled")',
     );
+  });
+
+  it("adds enum values in their own migration before they are referenced", () => {
+    expect(vendorTopupEnumMigration).toContain(`ALTER TYPE "WalletTransactionType" ADD VALUE 'VENDOR_TOPUP'`);
+    expect(vendorTopupEnumMigration).not.toContain("CREATE OR REPLACE FUNCTION");
+  });
+
+  it("removes the refund window atomically and only after redefining the guards", () => {
+    const body = refundsOverdraftMigration;
+    expect(body).toMatch(/^BEGIN;\r?$/m);
+    expect(body.trimEnd()).toMatch(/COMMIT;$/);
+    expect(body).not.toContain("Refund window has expired");
+    const lastFunction = body.lastIndexOf("CREATE OR REPLACE FUNCTION guard_wallet_transaction_semantics");
+    expect(lastFunction).toBeGreaterThan(-1);
+    expect(body.indexOf('DROP COLUMN "paymentWalletRefundWindowSeconds"')).toBeGreaterThan(lastFunction);
+    expect(body).toContain("OR (account_type = 'VENDOR' AND transaction_type IN ('REFUND', 'PAYOUT'))");
   });
 });

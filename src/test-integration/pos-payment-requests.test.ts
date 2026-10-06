@@ -83,7 +83,7 @@ describe("Reliable checkout outbox and payer recovery in PostgreSQL", () => {
   });
   it("leases each delivery to only one dispatcher and fences an interrupted worker", async () => {
     // Park other fixtures so this scenario controls the claim set.
-    await prisma.paymentWebhookDelivery.updateMany({ where: { status: "READY" }, data: { status: "PARKED" } });
+    await prisma.paymentWebhookDelivery.updateMany({ where: { status: { in: ["READY", "IN_FLIGHT"] } }, data: { status: "PARKED" } });
     const f = await callbackFixture(); await cancelPaymentRequest(f.access, f.sale.id);
     const claims = (await Promise.all([claimPaymentWebhookDeliveries(), claimPaymentWebhookDeliveries()])).flat();
     expect(claims).toHaveLength(1);
@@ -103,7 +103,7 @@ describe("Reliable checkout outbox and payer recovery in PostgreSQL", () => {
     expect(history.lastSuccess).not.toBeNull(); expect(history.items[0].delivery?.attempts.some((a) => a.outcome === "INTERRUPTED")).toBe(true);
   });
   it("records timeouts without response bodies, exhausts six attempts and allows explicit retry", async () => {
-    await prisma.paymentWebhookDelivery.updateMany({ where: { status: "READY" }, data: { status: "PARKED" } });
+    await prisma.paymentWebhookDelivery.updateMany({ where: { status: { in: ["READY", "IN_FLIGHT"] } }, data: { status: "PARKED" } });
     const f = await callbackFixture(); await cancelPaymentRequest(f.access, f.sale.id);
     const event = await prisma.paymentWebhookEvent.findUniqueOrThrow({ where: { requestId: f.sale.id } });
     for (let attempt = 0; attempt < 6; attempt++) {

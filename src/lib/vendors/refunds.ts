@@ -130,9 +130,6 @@ export async function createVendorPaymentRefund(input: {
   const refundedMinor = completedRefundTotal(original.linkedTransactions);
   const remainingRefundableMinor = original.amountMinor - refundedMinor;
   const now = new Date();
-  if (!original.refundableUntil || now > original.refundableUntil) {
-    throw new WalletDomainError("INVALID_POSTING", "This payment is outside the refund window.");
-  }
   if (remainingRefundableMinor <= ZERO_MINOR) {
     throw new WalletDomainError("INVALID_POSTING", "This payment has already been fully refunded.");
   }

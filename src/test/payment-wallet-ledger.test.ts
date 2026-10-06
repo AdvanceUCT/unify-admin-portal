@@ -29,9 +29,10 @@ const database = vi.hoisted(() => {
   const transaction = {
     $queryRaw: vi.fn(),
     universityProfile: { findMany: vi.fn() },
-    vendorBranch: { findUnique: vi.fn() },
+    vendorBranch: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn() },
     walletAccount: { findMany: vi.fn(), findUnique: vi.fn(), upsert: vi.fn() },
     walletTransaction: {
+      aggregate: vi.fn(),
       create: vi.fn(),
       findFirst: vi.fn(),
       findUnique: vi.fn(),
@@ -107,6 +108,7 @@ function completedSpend() {
     id: "original-spend",
     type: WalletTransactionType.SPEND,
     status: WalletTransactionStatus.COMPLETED,
+    amountMinor: BigInt(2_500),
     vendorBranchId: "branch-1",
     entries: [
       {
@@ -131,11 +133,9 @@ beforeEach(() => {
     {
       id: "university-1",
       paymentWalletEnabled: true,
-      paymentWalletRefundWindowSeconds: 600,
-      paymentWalletSettlementDelaySeconds: 900,
     },
   ]);
-  database.transaction.vendorBranch.findUnique.mockResolvedValue({
+  const eligibleBranch = {
     active: true,
     status: VendorBranchStatus.ACTIVE,
     paymentAcceptance: { status: BranchPaymentAcceptanceStatus.ACTIVE },
@@ -144,7 +144,10 @@ beforeEach(() => {
       paymentProfile: { status: VendorPaymentProfileStatus.APPROVED },
       walletAccount: { id: vendorAccount.id },
     },
-  });
+  };
+  database.transaction.vendorBranch.findUnique.mockResolvedValue(eligibleBranch);
+  database.transaction.vendorBranch.findUniqueOrThrow.mockResolvedValue(eligibleBranch);
+  database.transaction.walletTransaction.aggregate.mockResolvedValue({ _sum: { amountMinor: null } });
   database.transaction.walletAccount.findUnique.mockResolvedValue({ id: gatewayAccount.id });
   database.transaction.walletAccount.findMany.mockResolvedValue([studentAccount, vendorAccount]);
   database.transaction.walletTransaction.findFirst.mockResolvedValue(null);
@@ -229,7 +232,7 @@ describe("typed wallet posting", () => {
     expect(database.transaction.walletTransaction.create).not.toHaveBeenCalled();
   });
 
-  it("derives spend accounts and policy timestamps", async () => {
+  it("derives spend accounts without refund or settlement timestamps", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-04T10:00:00.000Z"));
     try {
@@ -240,12 +243,9 @@ describe("typed wallet posting", () => {
           expect.objectContaining({ accountId: vendorAccount.id, direction: LedgerDirection.CREDIT }),
         ],
       });
-      expect(database.transaction.walletTransaction.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          refundableUntil: new Date("2026-09-04T10:10:00.000Z"),
-          availableForPayoutAt: new Date("2026-09-04T10:15:00.000Z"),
-        }),
-      });
+      const created = database.transaction.walletTransaction.create.mock.calls[0][0].data;
+      expect(created).not.toHaveProperty("refundableUntil");
+      expect(created).not.toHaveProperty("availableForPayoutAt");
       expect(database.transaction.walletTransaction.update).toHaveBeenCalledWith({
         where: { id: "wallet-transaction-1" },
         data: { status: WalletTransactionStatus.COMPLETED, completedAt: new Date("2026-09-04T10:00:00.000Z") },
@@ -292,6 +292,47 @@ describe("typed wallet posting", () => {
         expect.objectContaining({ accountId: studentAccount.id, direction: LedgerDirection.CREDIT }),
       ],
     });
+  });
+
+  it("lets refunds overdraw the vendor but enforces eligibility and the remaining amount", async () => {
+    database.transaction.walletAccount.findMany.mockResolvedValue([
+      studentAccount,
+      { ...vendorAccount, balance: { ...vendorAccount.balance, postedBalanceMinor: BigInt(100) } },
+    ]);
+    const refund = { originalTransactionId: "original-spend", amountMinor: BigInt(2_000), idempotencyKey: "refund-1" };
+    await postRefund(refund);
+    expect(database.transaction.ledgerEntry.createMany).toHaveBeenCalledTimes(1);
+
+    database.transaction.walletTransaction.aggregate.mockResolvedValueOnce({ _sum: { amountMinor: BigInt(1_000) } });
+    await expect(postRefund(refund)).rejects.toMatchObject({ code: "REFUND_AMOUNT_EXCEEDED" });
+
+    database.transaction.walletTransaction.aggregate.mockResolvedValueOnce({ _sum: { amountMinor: BigInt(2_500) } });
+    await expect(postRefund(refund)).rejects.toMatchObject({ code: "PAYMENT_FULLY_REFUNDED" });
+
+    database.transaction.vendorBranch.findUniqueOrThrow.mockResolvedValueOnce({
+      active: true,
+      status: VendorBranchStatus.ACTIVE,
+      paymentAcceptance: { status: BranchPaymentAcceptanceStatus.ACTIVE },
+      vendorProfile: {
+        applications: [{ id: "application-1" }],
+        paymentProfile: { status: VendorPaymentProfileStatus.SUSPENDED },
+        walletAccount: { id: vendorAccount.id },
+      },
+    });
+    await expect(postRefund(refund)).rejects.toMatchObject({ code: "VENDOR_PAYMENT_SUSPENDED" });
+
+    database.transaction.vendorBranch.findUniqueOrThrow.mockResolvedValueOnce({
+      active: true,
+      status: VendorBranchStatus.ACTIVE,
+      paymentAcceptance: { status: BranchPaymentAcceptanceStatus.CLOSED },
+      vendorProfile: {
+        applications: [{ id: "application-1" }],
+        paymentProfile: { status: VendorPaymentProfileStatus.APPROVED },
+        walletAccount: { id: vendorAccount.id },
+      },
+    });
+    await expect(postRefund(refund)).rejects.toMatchObject({ code: "BRANCH_NOT_PAYMENT_ENABLED" });
+    expect(database.transaction.ledgerEntry.createMany).toHaveBeenCalledTimes(1);
   });
 
   it("constructs Payfast sandbox top-ups", async () => {

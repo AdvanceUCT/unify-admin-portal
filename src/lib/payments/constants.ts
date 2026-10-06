@@ -7,6 +7,7 @@ export const WALLET_CURRENCY = "ZAR" as const;
 export const PAYFAST_SANDBOX_PROVIDER = "PAYFAST_SANDBOX" as const;
 export const PAYSTACK_WALLET_PROVIDER = "PAYSTACK" as const;
 export const WALLET_TOPUP_REFERENCE_PREFIX = "unify-wlt-" as const;
+export const VENDOR_WALLET_TOPUP_REFERENCE_PREFIX = "unify-vtu-" as const;
 
 export const WALLET_SYSTEM_ACCOUNTS = [
   "GATEWAY_CLEARING",

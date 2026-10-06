@@ -644,7 +644,7 @@ describe("payment wallet PostgreSQL invariants", () => {
     }
   });
 
-  it("enforces refund windows and aggregate refund limits", async () => {
+  it("enforces aggregate refund limits", async () => {
     const client = await getClient();
     try {
       const fixture = await createFixture(client, "refunds");
@@ -656,11 +656,6 @@ describe("payment wallet PostgreSQL invariants", () => {
       await expect(
         postRefund(client, fixture, originalSpendId, 500, "excess-partial"),
       ).rejects.toThrow(/refund total exceeds/i);
-
-      const expiredSpendId = await postSpend(client, fixture, 500, "expired", true);
-      await expect(
-        postRefund(client, fixture, expiredSpendId, 100, "expired"),
-      ).rejects.toThrow(/refund window has expired/i);
 
       const refundTotal = await client.query<{ total: string }>(
         `SELECT COALESCE(SUM("amountMinor"), 0)::text AS total
