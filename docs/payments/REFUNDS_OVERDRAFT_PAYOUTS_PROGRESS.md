@@ -305,6 +305,29 @@ UNIFY is called; 409 passed through, transport failure → 502).
 **Rollout (spec §14)**: deploy the portal first, then this branch immediately after; reissue the POS key with
 `refunds:create` and update `UNIFY_VENDOR_API_KEY` in Vercel.
 
+## Post-phase fixes from local testing
+
+**Sales into an overdrawn vendor wallet failed** ("unexpected wallet API error" in the student wallet).
+
+- **Cause:** the Phase 1 `apply_ledger_entry_to_balance` only let a non-system balance *end* below zero for vendor REFUND/PAYOUT. A SPEND credit that reduced but did not clear a deficit therefore matched no row and raised "Insufficient wallet balance". A partial `VENDOR_TOPUP` would have failed the same way. The Phase 1/4 tests only covered credits that brought the balance back to ≥ 0.
+- **Fix:** new forward migration **`20261007090000_allow_credits_to_overdrawn_vendor_wallets`**. It is a `CREATE OR REPLACE` of the function with one added condition, `signed_amount >= 0`, so a credit always posts.
+  - Debits keep the existing rules: only vendor REFUND/PAYOUT may overdraw.
+  - `negativeSince` is unchanged while the balance stays negative, so a partial pay-down doesn't reset the overdraft clock.
+- **Deployment impact:** function replacement only, no data change. It runs automatically on the production build after the Phase 1 migration.
+- **Tests:**
+  - New Postgres test: a sale smaller than the deficit and a partial vendor top-up both post, and `negativeSince` is preserved.
+  - Migration-text assertion in `payment-wallet-migration.test.ts`.
+- **Evidence:**
+  - `test:payments:db`: 9 files / 95 tests passed.
+  - `npm test`: 146 files / 997 tests passed.
+  - lint 0 errors; typecheck and build pass.
+
+**Overdraft card was too large.**
+
+- `VendorWalletStatusBanner` is now a compact one-row alert. The deficit is the title, with one line of detail (payouts paused, sales reduce the deficit, the suspension date without a time) and a smaller **Top up** button. The suspension variant uses the same layout in the danger tone.
+- "Negative since" stays on the top-up page and the admin vendor card.
+- The balance card no longer repeats the "payouts are paused" line while the alert is showing.
+
 ## Drift log
 
 | # | Phase | Drift from plan/spec | Reason |

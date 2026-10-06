@@ -99,6 +99,28 @@ describe("Refund and overdraft ledger invariants in PostgreSQL", () => {
     await expect(prisma.$transaction((tx) => rawPosting(tx, { type: "SPEND", amount: 999999, initiator: f.studentAccountId, debit: f.studentAccountId, credit: f.vendorAccountId, branchId: f.branch.id }))).rejects.toThrow(/insufficient wallet balance/i);
   });
 
+  it("lets sales and partial top-ups pay down an overdraft without resetting negativeSince", async () => {
+    const f = await fixture();
+    const sale = await spend(f, 1000);
+    await refund(sale.id, 1000);
+    await postPayout({ vendorAccountId: f.vendorAccountId, amountMinor: BigInt(1000), idempotencyKey: randomUUID(), providerPaymentId: randomUUID(), payoutDestinationReference: "RCP_test" });
+    const overdrawn = await balance(f.vendorAccountId);
+    expect(overdrawn.postedBalanceMinor).toBe(BigInt(-1000));
+
+    // A sale smaller than the deficit still posts and reduces it (O5).
+    await spend(f, 400);
+    const afterSale = await balance(f.vendorAccountId);
+    expect(afterSale.postedBalanceMinor).toBe(BigInt(-600));
+    expect(afterSale.negativeSince).toEqual(overdrawn.negativeSince);
+
+    // A partial vendor top-up still posts (T2 allows amounts below the deficit).
+    const partial = await prisma.walletTransaction.create({ data: { type: "VENDOR_TOPUP", amountMinor: BigInt(250), initiatorAccountId: f.vendorAccountId, idempotencyKey: randomUUID(), paymentProvider: "PAYSTACK", providerPaymentId: randomUUID() } });
+    await completePendingVendorTopup({ walletTransactionId: partial.id, vendorAccountId: f.vendorAccountId });
+    const afterTopup = await balance(f.vendorAccountId);
+    expect(afterTopup.postedBalanceMinor).toBe(BigInt(-350));
+    expect(afterTopup.negativeSince).toEqual(overdrawn.negativeSince);
+  });
+
   it("rejects refunds at the database level for suspended, unapproved or inactive vendors", async () => {
     for (const block of ["suspended", "application", "acceptance"] as const) {
       const f = await fixture();

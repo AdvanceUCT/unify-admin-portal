@@ -49,15 +49,14 @@ export function VendorWalletBalanceCard({
           <p className="mt-4 max-w-xl text-sm text-fg-subtle">
             Student wallet payments collected by your approved branches.
           </p>
-          <p className={`mt-2 max-w-xl text-sm ${isNegative || overview.suspension ? "text-danger-fg" : "text-fg-muted"}`}>
-            {isNegative
-              ? "Payouts are paused while your balance is negative."
-              : overview.suspension
-                ? "Payouts are paused while payments are suspended."
-                : overview.amountToThresholdMinor > 0
+          {/* While negative or suspended, the status alert above the card explains the pause. */}
+          {isNegative || overview.suspension ? null : (
+            <p className="mt-2 max-w-xl text-sm text-fg-muted">
+              {overview.amountToThresholdMinor > 0
                 ? `Payouts run automatically each night once your available balance reaches ${threshold}. ${formatMoneyMinor(overview.amountToThresholdMinor, overview.walletCurrency)} to go.`
                 : `Your available balance of ${formatMoneyMinor(overview.availableMinor, overview.walletCurrency)} will be paid out in tonight's payout run.`}
-          </p>
+            </p>
+          )}
           {overview.reservedPayoutMinor > 0 ? (
             <p className="mt-1 max-w-xl text-xs text-fg-subtle">
               {formatMoneyMinor(overview.reservedPayoutMinor, overview.walletCurrency)} in payouts already in progress.

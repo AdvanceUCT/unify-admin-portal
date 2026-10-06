@@ -159,4 +159,14 @@ describe("payment wallet foundation migration", () => {
     expect(body.indexOf('DROP COLUMN "paymentWalletRefundWindowSeconds"')).toBeGreaterThan(lastFunction);
     expect(body).toContain("OR (account_type = 'VENDOR' AND transaction_type IN ('REFUND', 'PAYOUT'))");
   });
+
+  it("always lets credits post to an overdrawn vendor wallet while debits keep the overdraft rule", () => {
+    const body = readFileSync(
+      resolve(process.cwd(), "prisma/migrations/20261007090000_allow_credits_to_overdrawn_vendor_wallets/migration.sql"),
+      "utf8",
+    );
+    expect(body).toContain("CREATE OR REPLACE FUNCTION apply_ledger_entry_to_balance()");
+    expect(body).toContain("OR signed_amount >= 0");
+    expect(body).toContain("OR (account_type = 'VENDOR' AND transaction_type IN ('REFUND', 'PAYOUT'))");
+  });
 });
