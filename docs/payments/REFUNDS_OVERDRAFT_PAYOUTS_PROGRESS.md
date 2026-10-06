@@ -261,7 +261,49 @@ superseded-in-part notes on `payment-wallet-implementation-handoff.md` and `paym
   `build` pass (`/vendor/payments/top-up`, `/vendor/payments/top-up/return` listed);
   `test:payments:db` 9 files / 94 tests passed (run because service modules were touched).
 
-## Phase 6 — POS simulator — ⬜
+## Phase 6 — POS simulator — ✅ Gate 6 passed
+
+Repository `unify-pos-demo/unify-pos-simulator`, branch `feat/pos-refunds` (from `main`), commit `a74957f`. Not
+pushed. No database.
+
+**Code**
+
+- `src/lib/contracts.ts`: request read model gains `refundedMinor`, `refundableMinor`, `refundStatus`, `refunds[]`
+  with `.default()` values (older portals still parse); strict `refundInputSchema`; `refundResultSchema`
+  (`{refund, paymentRequest}`).
+- `src/lib/upstream.ts`: `UpstreamError` carries the UNIFY HTTP status and code; `refundRequest(id, body)` validates
+  the ID, posts to `/{id}/refunds`, parses the result and checks the returned request is on `UNIFY_BRANCH_ID`.
+- New `POST /api/sales/[id]/refunds`: operator session (401), `assertOrigin` (403), strict body (400). UNIFY
+  400/403/404/409 are passed through with message and code; anything else (timeouts, 5xx, unparseable success)
+  is a 502 "outcome unknown", so the terminal keeps the intent and retries with the same key.
+- `src/lib/paymentEvents.ts`: `paymentEventSchema` is a union of the existing terminal schema and a strict
+  `refundEventSchema` (§8.3; `refundedMinor + refundableMinor = amountMinor`, refund ≤ refunded);
+  `refundEventMatchesRequest` checks branch, request ID, order reference, currency, sale total, transaction,
+  `PAID`, the refund ID with an equal amount in `refunds[]`, and authoritative `refundedMinor ≥` the event's.
+  The receiver branches on event type and adds `refundId` to the acknowledgement.
+- `src/components/Terminal.tsx`: "Refunded R x of R y" on the receipt summary, the printed payment receipt and
+  history rows; **Refund…** on a paid sale (and **Refund** on paid history rows) with "Full remaining" or a custom
+  amount (`parsePrice`, ≤ remaining). The intent (`requestId`, order reference, amount, `crypto.randomUUID()` key)
+  is saved in localStorage before the call; an unknown outcome shows **Check refund**, which retries with the same
+  key; it is cleared on success or a definitive rejection. Success refreshes the request and history. **Print
+  refund slip** prints order, refund ID, amount, original transaction and the cumulative refunded total.
+  `accept()` now lets a later read of a PAID sale replace the earlier one (refund totals change), while still
+  never regressing a terminal state to PENDING.
+- Docs: `README.md` (key scopes and reissue, refund endpoint, demo steps 8–10, removed "no refund control" notes),
+  `docs/payment-callbacks.md` (refund event and verification rules, rollout note, demo step),
+  `.env.example` (scope note).
+
+**Tests**: `paymentEvents.test.ts` (valid refund event incl. a later higher total; mismatched amount, unknown
+refund ID, wrong branch and lower authoritative total rejected; strictness; signed refund event acknowledged with
+`refundId` and unconfirmed one 409; terminal events still pass); `contracts.test.ts` (refund input schema;
+requests without refund fields default); new `refundRoute.test.ts` (operator, origin and strict-body checks before
+UNIFY is called; 409 passed through, transport failure → 502).
+
+**Evidence**: `typecheck` pass; `lint` clean; `test` 4 files / 20 tests passed; `build` pass
+(`/api/sales/[id]/refunds` listed).
+
+**Rollout (spec §14)**: deploy the portal first, then this branch immediately after; reissue the POS key with
+`refunds:create` and update `UNIFY_VENDOR_API_KEY` in Vercel.
 
 ## Drift log
 
@@ -291,6 +333,10 @@ superseded-in-part notes on `payment-wallet-implementation-handoff.md` and `paym
 | 22 | 5 | "Payments restored" on the return page is derived from a `VENDOR_PAYMENT_REINSTATED` audit entry after the attempt started. | The webhook may confirm before the browser returns, so the page cannot rely on the status it saw on load. |
 | 23 | 5 | Payment-wallet settings are a card on the main `/settings` page, not the planned separate `settings/payment-wallet/` page (spec §7.9 allows either). The action returns `{status}` for inline validation errors rather than throwing. | Requested in review: admin settings stay on one page. Inline errors match `RenewalSettingsForm`; `requireRole` still throws for non-SUPER_ADMIN; ADMIN sees the values read only. |
 | 24 | 5 | Payout/overdraft defaults moved to `constants.ts`; extra copy fixes in `PayoutDestinationCard` and the about page's payout bullet. | Removed three duplicated defaults; leftover "settled" wording contradicted P4. |
+| 25 | 6 | The POS refund route uses relative imports (not `@/`), and its test lives in `src/lib/refundRoute.test.ts`. | The simulator has no Vitest alias config; the existing callback route and test use the same approach. |
+| 26 | 6 | The refund control lives on the receipt summary; a paid history row's **Refund** opens that sale with the control open, rather than a full inline control per row. | Keeps one refund form and one pending-intent flow; history rows still show "Refunded R x of R y". |
+| 27 | 6 | The POS route maps any non-definitive failure (including an unparseable success body) to 502 "outcome unknown"; only UNIFY 400/403/404/409 clear the stored intent. | A refund UNIFY completed must never look rejected; retrying with the same key is always safe. |
+| 28 | 6 | The terminal's `accept()` now replaces a PAID request with a newer read of it. | Previously the first terminal read was kept forever, so refund totals never refreshed. |
 
 ## Open follow-ups
 
