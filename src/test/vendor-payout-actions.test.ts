@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("@/lib/vendors/context", () => ({ requireVendorOwnerContext: vi.fn() }));
+vi.mock("@/lib/vendors/walletTopups", () => ({ createVendorWalletTopup: vi.fn() }));
 vi.mock("@/lib/vendors/payouts", () => ({
   runVendorWalletPayoutForVendor: vi.fn(),
   saveVendorPayoutDestination: vi.fn(),

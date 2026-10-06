@@ -12,6 +12,7 @@ import { formatMoneyMinor } from "@/lib/formatters";
 import { PaystackProviderError } from "@/lib/paymentProviders/paystack/errors";
 import { requireVendorOwnerContext } from "@/lib/vendors/context";
 import { runVendorWalletPayoutForVendor, saveVendorPayoutDestination } from "@/lib/vendors/payouts";
+import { createVendorWalletTopup } from "@/lib/vendors/walletTopups";
 
 export type RunOwnPayoutResult = {
   status: "completed" | "processing" | "failed" | "requires_reconciliation" | "skipped";
@@ -50,6 +51,25 @@ export async function savePayoutDestinationAction(formData: FormData) {
   revalidatePath("/vendor/payments");
   revalidatePath("/vendor/payments/payouts");
   redirect(`${returnTo}?payout=updated`);
+}
+
+/** Owner-only: starts a wallet top-up (only while overdrawn) and redirects to Paystack checkout. */
+export async function startVendorTopupAction(formData: FormData) {
+  const { context } = await requireVendorOwnerContext();
+  let destination: string;
+  try {
+    const topUp = await createVendorWalletTopup({
+      context,
+      amountMinor: Number(readString(formData, "amountMinor")),
+      idempotencyKey: readString(formData, "idempotencyKey"),
+    });
+    destination = topUp.authorizationUrl
+      ?? `/vendor/payments/top-up/return?topUpId=${encodeURIComponent(topUp.topUpId)}&reference=${encodeURIComponent(topUp.reference)}`;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to start the top-up.";
+    redirect(`/vendor/payments/top-up?topUpError=${encodeURIComponent(message)}`);
+  }
+  redirect(destination);
 }
 
 export async function runOwnPayoutAction(): Promise<RunOwnPayoutResult> {

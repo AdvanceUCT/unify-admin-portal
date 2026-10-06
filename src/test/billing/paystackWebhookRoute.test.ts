@@ -16,6 +16,7 @@ vi.mock("@/lib/billing/paymentConfirmation", () => ({ confirmInvoicePayment: vi.
 vi.mock("@/lib/billing/exceptions", () => ({ recordBillingException: vi.fn() }));
 vi.mock("@/lib/payments/topups", () => ({ reconcileWalletTopupByReference: vi.fn() }));
 vi.mock("@/lib/vendors/payouts", () => ({ handlePaystackTransferWebhook: vi.fn() }));
+vi.mock("@/lib/vendors/walletTopups", () => ({ reconcileVendorWalletTopupByReference: vi.fn() }));
 
 import { POST } from "@/app/api/webhooks/paystack/route";
 import { resolvePaystackProviderConfig, resolvePaystackWalletTopupConfig } from "@/lib/paymentProviders/paystack/config";
@@ -24,6 +25,7 @@ import { confirmInvoicePayment } from "@/lib/billing/paymentConfirmation";
 import { recordBillingException } from "@/lib/billing/exceptions";
 import { reconcileWalletTopupByReference } from "@/lib/payments/topups";
 import { handlePaystackTransferWebhook } from "@/lib/vendors/payouts";
+import { reconcileVendorWalletTopupByReference } from "@/lib/vendors/walletTopups";
 
 const SECRET_KEY = "sk_test_fixture";
 const CONFIG = {
@@ -157,6 +159,27 @@ describe("POST /api/webhooks/paystack", () => {
 
     expect(response.status).toBe(200);
     expect(reconcileWalletTopupByReference).toHaveBeenCalledWith({ reference: "unify-wlt-abc", config: CONFIG });
+    expect(confirmInvoicePayment).not.toHaveBeenCalled();
+    expect(markGatewayEventProcessed).toHaveBeenCalledWith({}, "event-1");
+  });
+
+  it("routes vendor top-up charge.success events through vendor top-up reconciliation", async () => {
+    const body = JSON.stringify({ event: "charge.success", data: { reference: "unify-vtu-abc" } });
+    vi.mocked(recordGatewayEvent).mockResolvedValue({ id: "event-1", duplicate: false });
+    vi.mocked(reconcileVendorWalletTopupByReference).mockResolvedValue({
+      topUpId: "topup-1",
+      reference: "unify-vtu-abc",
+      status: "SUCCEEDED",
+      amountMinor: 1000,
+      deficitAtStartMinor: 1000,
+      currency: "ZAR",
+    });
+
+    const response = await POST(webhookRequest(body));
+
+    expect(response.status).toBe(200);
+    expect(reconcileVendorWalletTopupByReference).toHaveBeenCalledWith({ reference: "unify-vtu-abc", config: CONFIG });
+    expect(reconcileWalletTopupByReference).not.toHaveBeenCalled();
     expect(confirmInvoicePayment).not.toHaveBeenCalled();
     expect(markGatewayEventProcessed).toHaveBeenCalledWith({}, "event-1");
   });

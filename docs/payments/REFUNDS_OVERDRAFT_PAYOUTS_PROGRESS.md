@@ -162,7 +162,49 @@ No migrations. `vercel.json` unchanged (the existing 00:35 SAST cron now runs bo
 - `lint` 0 errors (same 12 pre-existing warnings); `typecheck` pass; `npm test` 145 files / 988 tests passed;
   `build` pass; `test:payments:db` 8 files / 89 tests passed.
 
-## Phase 4 — Vendor top-ups (backend) — ⬜
+## Phase 4 — Vendor top-ups (backend) — ✅ Gate 4 passed
+
+No migrations (table, enum value and constraints shipped in Phase 1).
+
+**Code**
+
+- New `src/lib/vendors/walletTopups.ts`, mirroring `src/lib/payments/topups.ts`:
+  - `createVendorWalletTopup` (T1 owner only; `PAYMENT_WALLET_TOPUPS_ENABLED`). Phase A in one serializable
+    transaction: wallet enabled; idempotent reuse per `(vendorProfileId, idempotencyKey)`; T4 profile `APPROVED` or
+    `SUSPENDED/OVERDRAFT` (`TOPUP_NOT_ALLOWED`); vendor balance locked `FOR UPDATE` and must be negative
+    (`TOPUP_NOT_ALLOWED`); T2 `min(PAYMENT_TOPUP_MIN_MINOR, deficit) ≤ amount ≤ deficit`
+    (`TOPUP_AMOUNT_OUT_OF_RANGE` / `TOPUP_AMOUNT_EXCEEDS_DEFICIT`); T3 one unresolved attempt
+    (`TOPUP_ALREADY_IN_PROGRESS`, also mapped from the partial unique index); creates the PENDING `VENDOR_TOPUP`
+    transaction and the attempt (`unify-vtu-…`, `deficitAtStartMinor`). Phase B initialises Paystack with the
+    owner's email, `vendor_wallet_topup` metadata and the `/vendor/payments/top-up/return` callback.
+  - `reconcileVendorWalletTopup` / `…ByReference` / `reconcileStaleVendorWalletTopups` with the student
+    verification rules (reference, amount, currency, mode; duplicate provider id or mismatch → `UNKNOWN`; terminal
+    failures → `FAILED`). Success posts via `completePendingVendorTopup` (T5: always credits), marks the attempt
+    `SUCCEEDED`, writes `VENDOR_WALLET_TOPUP_COMPLETED`, then calls `reinstateIfRecovered` (E3).
+  - `getVendorWalletTopup` for the return page.
+- Paystack webhook routes the `unify-vtu-` prefix to vendor reconciliation (same signature check and dedupe).
+- `api/cron/wallet-topups-reconcile` also sweeps stale vendor attempts; response is the student summary plus
+  `vendor`.
+- New owner-only routes: `GET /api/vendor/wallet/topups/[id]`, `POST /api/vendor/wallet/topups/[id]/reconcile`
+  (same-origin and rate-limited, like the invoice reconcile route).
+- `startVendorTopupAction` server action (owner) in `payments/actions.ts`: takes `amountMinor` and
+  `idempotencyKey`, redirects to the Paystack `authorizationUrl` or back to `/vendor/payments/top-up?topUpError=…`.
+  The pages that use it come in Phase 5.
+
+**Tests**
+
+- New `src/test-integration/vendor-wallet-topups-postgres.test.ts` (real DB, Paystack client mocked): not
+  allowed when solvent, staff forbidden, range per T2 (including a deficit below the configured minimum),
+  idempotent replay, T3 in the service and in the DB index, verified success credits and reinstates an
+  overdraft suspension (idempotent), T5 credit after the deficit already cleared, failure and amount mismatch
+  stay uncredited, a failed attempt frees the slot.
+- `paystackWebhookRoute.test.ts`: `unify-vtu-` routing case. `vendor-payout-actions.test.ts`: mocks the new
+  module import.
+
+**Evidence**
+
+- `lint` 0 errors (same 12 pre-existing warnings); `typecheck` pass; `npm test` 145 files / 989 tests passed;
+  `build` pass (both new routes listed); `test:payments:db` 9 files / 94 tests passed.
 
 ## Phase 5 — Portal UI, admin settings, copy, portal docs — ⬜
 
@@ -186,3 +228,12 @@ No migrations. `vercel.json` unchanged (the existing 00:35 SAST cron now runs bo
 | 12 | 3 | Overdraft-monitor and payout-concurrency tests live in the Postgres suite instead of a mocked `vendor-overdraft.test.ts`. | Day-boundary filters and the row lock are only meaningful against real queries; the "more than 25 vendors" case stays a unit test. |
 | 13 | 3 | Payout run summary drops `skippedNoFunds` (replaced by `skippedBelowThreshold` / `skippedNegative`) and adds `thresholdMinor`; the cron response is now `{ overdraft, payouts }`. | Spec §7.6/§7.7; only internal consumers. |
 | 14 | 3 | `getVendorPayoutOverview` is still only loaded for owners on the payments page. | Staff seeing the overdraft panel (§9.2) is UI work for Phase 5. |
+| 15 | 4 | Vendor top-up service tests live in a new Postgres suite (`vendor-wallet-topups-postgres.test.ts`) instead of a mocked unit file. | The overdraft lock, T2/T3 rules, partial unique index and reinstatement are database behaviour; only Paystack is mocked. |
+| 16 | 4 | Reconcile repairs an attempt whose wallet transaction is already COMPLETED/FAILED (marks it SUCCEEDED/FAILED). | Otherwise a crash between posting and the attempt update would leave an unresolved attempt that blocks every future top-up (T3). |
+| 17 | 4 | The VENDOR_TOPUP wallet transaction records `initiatedByUserId` (the owner). | Audit trail; not specified either way. |
+
+## Open follow-ups
+
+- An attempt left `UNKNOWN` by a verification mismatch or duplicate provider id stays unresolved and blocks new
+  vendor top-ups (T3) until someone resolves it; there is no admin tool for that yet (same behaviour as student
+  top-ups, which have no such block).
