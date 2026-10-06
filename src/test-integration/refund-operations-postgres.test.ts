@@ -126,7 +126,7 @@ describe("Durable refund instructions", () => {
   });
   it("staff recover an inactive assigned branch, but not after assignment or application revocation", async () => {
     const f = await fixture(); const sale = await paid(f);
-    const user = await prisma.user.create({ data: { email: `${randomUUID()}@example.invalid`, name: "Refund staff", userType: "VENDOR" } });
+    const user = await prisma.user.create({ data: { id: randomUUID(), email: `${randomUUID()}@example.invalid`, name: "Refund staff", userType: "VENDOR" } });
     const membership = await prisma.vendorMembership.create({ data: { userId: user.id, vendorProfileId: f.vendor.id, role: "STAFF", branches: { create: { vendorBranchId: f.branch.id } } } });
     const access = { vendorProfileId: f.vendor.id, actor: { userId: user.id } };
     const op = await registerRefundOperation(access, { target: { transactionId: sale.id }, amountMinor: 1000, idempotencyKey: randomUUID() });
