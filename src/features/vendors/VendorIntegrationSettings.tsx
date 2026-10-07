@@ -1,303 +1,87 @@
-/**
- * @fileoverview Manages vendor API credentials and webhook delivery settings.
- * @module features/vendors/VendorIntegrationSettings
- */
-
 "use client";
-
-import {
-  Check,
-  Copy,
-  KeyRound,
-  Power,
-  RotateCw,
-  Trash2,
-  Webhook,
-} from "lucide-react";
-import { useState } from "react";
-
-import { VENDOR_API_SCOPES, type VendorApiScope } from "@/lib/vendors/apiScopes";
+import { useRef, useState } from "react";
+import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
-import { IconButton } from "@/components/ui/IconButton";
+import { VENDOR_API_SCOPES, type VendorApiScope } from "@/lib/vendors/apiScopes";
+import { keyPresets, scopeLabels, type IntegrationBranch } from "@/lib/vendors/integrationGuide";
+import { button, input, primary, Secret, localDate, CopyButton } from "./integrations/IntegrationUi";
 
-type ApiKeySummary = {
-  id: string;
-  name: string;
-  keyPrefix: string;
-  createdAt: string;
-  lastUsedAt: string | null;
-  revokedAt: string | null;
-  scopes: string[];
-  branchIds: string[];
-};
-
-const inputClassName =
-  "h-9 min-w-0 rounded-md border border-border bg-surface px-3 text-sm text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20";
-const primaryButtonClassName =
-  "h-9 rounded-md bg-brand-600 px-3 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-fg-subtle";
-
-export function VendorIntegrationSettings({
-  initialApiKeys,
-  initialWebhook,
-  branches = [],
-}: {
-  branches?: { id: string; name: string }[];
-  initialApiKeys: ApiKeySummary[];
-  initialWebhook: { url: string; enabled: boolean } | null;
-}) {
-  const [apiKeys, setApiKeys] = useState(initialApiKeys);
-  const [scopes, setScopes] = useState<VendorApiScope[]>(["verification:create", "verification:read"]);
+export type IntegrationKey = { id: string; name: string; keyPrefix: string; createdAt: string; lastUsedAt: string | null; revokedAt: string | null; scopes: string[]; branchIds: string[] };
+export function VendorIntegrationSettings({ branches, initialApiKeys, initialPreset = "verification" }: { branches: IntegrationBranch[]; initialApiKeys: IntegrationKey[]; initialPreset?: "verification" | "payments" }) {
+  const [keys, setKeys] = useState(initialApiKeys);
+  const [preset, setPreset] = useState<"verification" | "payments" | "custom">(initialPreset);
+  const [scopes, setScopes] = useState<VendorApiScope[]>([...keyPresets[initialPreset]]);
   const [branchIds, setBranchIds] = useState<string[]>([]);
-  const [keyName, setKeyName] = useState("");
-  const [newToken, setNewToken] = useState<string | null>(null);
-  const [webhookUrl, setWebhookUrl] = useState(initialWebhook?.url ?? "");
-  const [webhookEnabled, setWebhookEnabled] = useState(
-    initialWebhook?.enabled ?? false,
-  );
-  const [newWebhookSecret, setNewWebhookSecret] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [token, setToken] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const locked = useRef(false);
+  const needsBranches = scopes.some(s => s.startsWith("payments:") || s === "refunds:create");
+  const defaultBranch = branches.find(b => b.isDefault);
+  const validation = !name.trim() ? "Enter a key name." : !scopes.length ? "Select at least one permission." : needsBranches && !branchIds.length ? "Select the branches this key can access." : scopes.includes("verification:create") && branchIds.length > 0 && !branchIds.includes(defaultBranch?.id ?? "") ? "Include the default branch to start checkout verification." : "";
+  const base = "/api/vendor/integrations/api-keys";
 
-  async function createKey() {
-    setMessage(null);
-    const response = await fetch("/api/vendor/integrations/api-keys", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: keyName, scopes, branchIds }),
-    });
-    const body = await response.json();
-    if (!response.ok) {
-      return setMessage(body.error?.message ?? "Unable to create API key.");
-    }
-    setNewToken(body.token);
-    setApiKeys((current) => [
-      {
-        id: body.id,
-        name: body.name,
-        keyPrefix: body.prefix,
-        createdAt: body.createdAt,
-        lastUsedAt: null,
-        revokedAt: null,
-        scopes: body.scopes,
-        branchIds: body.branchIds,
-      },
-      ...current,
-    ]);
-    setKeyName("");
+  function choosePreset(value: typeof preset) {
+    setPreset(value);
+    if (value !== "custom") { setScopes([...keyPresets[value]]); setBranchIds([]); }
   }
-
-  async function revokeKey(id: string) {
-    const response = await fetch(
-      `/api/vendor/integrations/api-keys/${encodeURIComponent(id)}`,
-      { method: "DELETE" },
-    );
-    if (!response.ok) return setMessage("Unable to revoke API key.");
-    setApiKeys((current) =>
-      current.map((key) =>
-        key.id === id ? { ...key, revokedAt: new Date().toISOString() } : key,
-      ),
-    );
+  async function refresh() {
+    const response = await fetch(base, { cache: "no-store" });
+    if (!response.ok) throw new Error("Unable to refresh key history.");
+    setKeys(await response.json() as IntegrationKey[]);
   }
-
-  async function saveWebhook() {
-    setMessage(null);
-    const response = await fetch("/api/vendor/integrations/webhook", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: webhookUrl }),
-    });
-    const body = await response.json();
-    if (!response.ok) {
-      return setMessage(body.error?.message ?? "Unable to save webhook.");
-    }
-    setWebhookEnabled(true);
-    setNewWebhookSecret(body.signingSecret);
+  async function create() {
+    if (locked.current) return;
+    if (validation) { setMessage(validation); return; }
+    if (token && !window.confirm("The previous key will be hidden. Have you saved it on your server?")) return;
+    locked.current = true; setBusy(true); setMessage(""); setToken(null);
+    let rejected = false;
+    try {
+      const response = await fetch(base, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, scopes, branchIds }) });
+      const result = await response.json();
+      if (!response.ok) { rejected = true; throw new Error(result.error?.message ?? "Unable to create key."); }
+      if (typeof result.token !== "string" || typeof result.id !== "string" || typeof result.prefix !== "string") throw new Error("Invalid key response.");
+      setToken(result.token);
+      setKeys(current => [{ id: result.id, name: result.name, keyPrefix: result.prefix, createdAt: result.createdAt, lastUsedAt: null, revokedAt: null, scopes: result.scopes, branchIds: result.branchIds }, ...current]);
+      setName(""); setMessage("Key created. Copy it before leaving this page.");
+    } catch (error) {
+      setMessage(rejected ? (error instanceof Error ? error.message : "Unable to create key.") : "The result could not be confirmed. A key may have been created. Review the refreshed key list before creating another; a lost secret requires revocation and replacement.");
+      if (!rejected) await refresh().catch(() => setMessage("Unable to confirm creation or refresh keys. Reload key history before creating another key."));
+    } finally { locked.current = false; setBusy(false); }
   }
-
-  async function disableWebhook() {
-    const response = await fetch("/api/vendor/integrations/webhook", {
-      method: "DELETE",
-    });
-    if (!response.ok) return setMessage("Unable to disable webhook.");
-    setWebhookEnabled(false);
-    setNewWebhookSecret(null);
+  async function revoke(key: IntegrationKey) {
+    if (locked.current || !window.confirm(`Revoke ${key.name}? Requests using this key will stop working. Existing sales and callback settings remain intact. Pending refunds remain bound to their original operator.`)) return;
+    locked.current = true; setBusy(true); setMessage("");
+    try {
+      const response = await fetch(`${base}/${encodeURIComponent(key.id)}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Unable to confirm revocation. Refresh the key list before retrying.");
+      setKeys(current => current.map(k => k.id === key.id ? { ...k, revokedAt: new Date().toISOString() } : k));
+      if (token?.startsWith(`unify_vk_${key.keyPrefix}_`)) setToken(null);
+      setMessage("Key revoked.");
+    } catch { setMessage("Unable to confirm revocation. Refresh the key list before retrying."); }
+    finally { locked.current = false; setBusy(false); }
   }
-
-  async function copy(value: string) {
-    await navigator.clipboard.writeText(value);
-    setMessage("Copied.");
-  }
-
-  return (
-    <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface shadow-md">
-      <section className="p-5">
-        <div className="flex items-start gap-3">
-          <span className="grid size-9 shrink-0 place-items-center rounded-md bg-brand-50 text-brand-700">
-            <KeyRound size={18} aria-hidden="true" />
-          </span>
-          <div>
-            <h2 className="text-section-title text-fg">Checkout API keys</h2>
-            <p className="mt-1 text-sm text-fg-muted">
-              Use a separate key for each checkout environment.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-4 flex max-w-xl gap-2">
-          <input
-            className={`${inputClassName} flex-1`}
-            onChange={(event) => setKeyName(event.target.value)}
-            placeholder="Production checkout"
-            value={keyName}
-          />
-          <button
-            className={primaryButtonClassName}
-            disabled={!keyName.trim()}
-            onClick={createKey}
-            type="button"
-          >
-            Create key
-          </button>
-        </div>
-
-        <fieldset className="mt-4 space-y-2">
-          <legend className="text-sm font-medium">Key permissions</legend>
-          <div className="flex flex-wrap gap-4">{VENDOR_API_SCOPES.map((scope) => <label key={scope} className="text-sm"><input type="checkbox" checked={scopes.includes(scope)} onChange={(event) => setScopes((current) => event.target.checked ? [...current, scope] : current.filter((value) => value !== scope))} /> {scope}</label>)}</div>
-          <p className="text-xs text-fg-subtle">Refund scope lets your POS refund its own paid sales.</p>
-        </fieldset>
-        <fieldset className="mt-4 space-y-2">
-          <legend className="text-sm font-medium">Permitted branches</legend>
-          <div className="flex flex-wrap gap-4">{branches.map((branch) => <label key={branch.id} className="text-sm"><input type="checkbox" checked={branchIds.includes(branch.id)} onChange={(event) => setBranchIds((current) => event.target.checked ? [...current, branch.id] : current.filter((value) => value !== branch.id))} /> {branch.name}</label>)}</div>
-          <p className="text-xs text-fg-subtle">Payment/refund keys require at least one branch. Replace a key to change its permissions.</p>
-        </fieldset>
-        {newToken ? (
-          <div className="mt-4 rounded-lg border border-warning-border bg-warning-bg px-4 py-3">
-            <p className="text-sm font-medium text-warning-fg">
-              Store this key now. It will not be shown again.
-            </p>
-            <div className="mt-2 flex items-center gap-2">
-              <code className="min-w-0 flex-1 break-all text-xs text-warning-fg">
-                {newToken}
-              </code>
-              <IconButton
-                aria-label="Copy API key"
-                onClick={() => copy(newToken)}
-                title="Copy API key"
-                tone="ghost"
-                type="button"
-              >
-                <Copy size={16} />
-              </IconButton>
-            </div>
-          </div>
-        ) : null}
-
-        <div className="mt-4 divide-y divide-border border-y border-border">
-          {apiKeys.map((key) => (
-            <div
-              className="flex items-center justify-between gap-3 py-3"
-              key={key.id}
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-fg">
-                  {key.name}
-                </p>
-                <p className="text-xs text-fg-subtle">{key.scopes?.join(", ")} / {key.branchIds?.map((id) => branches.find((branch) => branch.id === id)?.name ?? id).join(", ") || "Verification only"}</p>
-                <p className="text-xs text-fg-subtle">
-                  unify_vk_{key.keyPrefix}_...
-                  {key.lastUsedAt ? ` / Last used ${new Date(key.lastUsedAt).toLocaleString()}` : " / Never used"}
-                </p>
-              </div>
-              {key.revokedAt ? (
-                <Badge tone="danger">Revoked</Badge>
-              ) : (
-                <IconButton
-                  aria-label={`Revoke ${key.name}`}
-                  onClick={() => revokeKey(key.id)}
-                  title="Revoke API key"
-                  tone="ghost"
-                  type="button"
-                >
-                  <Trash2 className="text-danger-fg" size={16} />
-                </IconButton>
-              )}
-            </div>
-          ))}
-          {apiKeys.length === 0 ? (
-            <p className="py-4 text-sm text-fg-subtle">No API keys created.</p>
-          ) : null}
-        </div>
-      </section>
-
-      <section className="p-5">
-        <div className="flex items-start gap-3">
-          <span className="grid size-9 shrink-0 place-items-center rounded-md bg-brand-50 text-brand-700">
-            <Webhook size={18} aria-hidden="true" />
-          </span>
-          <div>
-            <h2 className="text-section-title text-fg">Result webhook</h2>
-            <p className="mt-1 text-sm text-fg-muted">
-              Receive one signed callback when verification reaches a final
-              result.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-4 flex max-w-2xl gap-2">
-          <input
-            className={`${inputClassName} flex-1`}
-            onChange={(event) => setWebhookUrl(event.target.value)}
-            placeholder="https://checkout.example.com/webhooks/unify"
-            type="url"
-            value={webhookUrl}
-          />
-          <button
-            className={`${primaryButtonClassName} inline-flex items-center gap-2`}
-            disabled={!webhookUrl.trim()}
-            onClick={saveWebhook}
-            type="button"
-          >
-            {webhookEnabled ? <RotateCw size={15} /> : <Check size={15} />}
-            {webhookEnabled ? "Rotate secret" : "Save"}
-          </button>
-          {webhookEnabled ? (
-            <IconButton
-              aria-label="Disable webhook"
-              onClick={disableWebhook}
-              title="Disable webhook"
-              tone="ghost"
-              type="button"
-            >
-              <Power className="text-danger-fg" size={17} />
-            </IconButton>
-          ) : null}
-        </div>
-
-        {newWebhookSecret ? (
-          <div className="mt-4 rounded-lg border border-warning-border bg-warning-bg px-4 py-3">
-            <p className="text-sm font-medium text-warning-fg">
-              Signing secret
-            </p>
-            <div className="mt-2 flex items-center gap-2">
-              <code className="min-w-0 flex-1 break-all text-xs text-warning-fg">
-                {newWebhookSecret}
-              </code>
-              <IconButton
-                aria-label="Copy signing secret"
-                onClick={() => copy(newWebhookSecret)}
-                title="Copy signing secret"
-                tone="ghost"
-                type="button"
-              >
-                <Copy size={16} />
-              </IconButton>
-            </div>
-          </div>
-        ) : null}
-      </section>
-
-      {message ? (
-        <p className="px-5 py-3 text-sm text-fg-muted">{message}</p>
-      ) : null}
-    </div>
-  );
+  return <div className="space-y-8">
+    <section className="space-y-4"><h2 className="text-section-title">Create API key</h2><p className="text-sm text-fg-muted">Keep this key on your server. A callback signing secret is a separate credential.</p>
+      <fieldset disabled={busy} className="max-w-2xl space-y-4">
+        <label className="block text-sm">Key name<input className={input} value={name} onChange={e => setName(e.target.value)} placeholder="Website checkout or campus till" /></label>
+        <label className="block text-sm">Use this key for<select className={input} value={preset} onChange={e => choosePreset(e.target.value as typeof preset)}><option value="verification">Student verification</option><option value="payments">Wallet payments</option><option value="custom">Custom permissions</option></select></label>
+        {preset === "payments" && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={scopes.includes("refunds:create")} onChange={e => setScopes(e.target.checked ? [...scopes, "refunds:create"] : scopes.filter(s => s !== "refunds:create"))} />Allow refunds and refund recovery</label>}
+        {preset === "custom" ? <fieldset className="space-y-2"><legend className="mb-2 text-sm font-medium">Permissions</legend>{VENDOR_API_SCOPES.map(s => <label key={s} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={scopes.includes(s)} onChange={e => setScopes(e.target.checked ? [...scopes, s] : scopes.filter(v => v !== s))} />{scopeLabels[s]}</label>)}</fieldset> : <ul className="space-y-1 text-sm text-fg-muted">{scopes.map(s => <li key={s}>{scopeLabels[s]}</li>)}</ul>}
+        <details className="text-sm text-fg-muted"><summary className="cursor-pointer">Technical scopes</summary><code className="mt-2 block break-all">{scopes.join(", ") || "None selected"}</code></details>
+        <fieldset className="space-y-2"><legend className="mb-1 text-sm font-medium">Branch access {needsBranches ? "(required)" : "(optional)"}</legend><p className="text-sm text-fg-muted">{needsBranches ? "Choose explicit branches. Inactive branches may be retained for authorized recovery; new financial operations still require eligibility." : "With no branch restriction, verification uses the default branch."}</p>{branches.map(b => <label key={b.id} className="flex items-start gap-2 py-1 text-sm"><input className="mt-1" type="checkbox" checked={branchIds.includes(b.id)} onChange={e => setBranchIds(e.target.checked ? [...branchIds, b.id] : branchIds.filter(id => id !== b.id))} /><span>{b.name}{b.isDefault ? " · Default verification branch" : ""}<span className="block text-xs text-fg-muted">{b.active ? b.status : "Inactive"} · Payments: {b.paymentStatus ?? "Not enabled"}</span></span></label>)}{!branches.length && <p className="text-sm text-fg-muted">No branches yet. <Link className="underline" href="/vendor/branches">Review branches</Link></p>}</fieldset>
+        <p className="text-sm text-fg-muted">A restricted verification key must include the default branch. Permissions are fixed; create a replacement key to change them.</p>
+      </fieldset>
+      <button className={primary} type="button" disabled={busy || Boolean(validation)} onClick={() => void create()}>{busy ? "Updating…" : "Create API key"}</button>
+      {validation && <p className="text-xs text-fg-muted">{validation}</p>}
+      {token && <Secret value={token} label="API key" onHide={() => setToken(null)} />}
+      <p role="status" className="text-sm text-fg-muted">{message}</p>
+    </section>
+    <section className="space-y-4 border-t border-border pt-5"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-section-title">Your API keys</h2><button type="button" className={button} disabled={busy} onClick={() => void refresh().then(() => setMessage("Key history refreshed.")).catch(() => setMessage("Unable to refresh keys. Try again."))}>Refresh keys</button></div>
+      {keys.length === 0 && <p className="text-sm text-fg-muted">No API keys created.</p>}
+      <ul className="divide-y divide-border">{keys.map(key => <li key={key.id} className="space-y-2 py-4"><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-medium text-fg">{key.name}</h3>{key.revokedAt ? <Badge tone="danger">Revoked</Badge> : <button className={button} disabled={busy} type="button" onClick={() => void revoke(key)}>Revoke {key.name}</button>}</div><code className="text-xs text-fg-muted">unify_vk_{key.keyPrefix}_…</code><p className="text-sm">{key.scopes.map(s => scopeLabels[s as VendorApiScope] ?? s).join(" · ")}</p><p className="text-sm text-fg-muted">Branches: {key.branchIds.map(id => branches.find(b => b.id === id)?.name ?? `Unavailable branch (${id})`).join(", ") || "Default verification branch"}</p><p className="text-xs text-fg-muted">Created {localDate(key.createdAt)} · Last used {localDate(key.lastUsedAt)}{key.revokedAt ? ` · Revoked ${localDate(key.revokedAt)}` : ""}</p></li>)}</ul>
+    </section>
+    <section className="space-y-3 border-t border-border pt-5"><h2 className="text-section-title">Branch IDs for your developer</h2>{branches.map(b => <div key={b.id} className="flex flex-wrap items-center gap-3 text-sm"><span>{b.name}</span><code className="break-all">{b.id}</code><CopyButton value={b.id} label={`Copy ${b.name} branch ID`} /></div>)}</section>
+  </div>;
 }

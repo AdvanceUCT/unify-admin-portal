@@ -8,7 +8,7 @@ Scopes: `verification:create`, `verification:read`, `payments:create`, `payments
 
 `refunds:create` lets the POS refund its own PAID sales (see [Refunds](#refunds)); the refund, overdraft and payout policy is in [REFUNDS_OVERDRAFT_PAYOUTS.md](REFUNDS_OVERDRAFT_PAYOUTS.md). Existing keys keep their scopes; reissue a key to add `refunds:create`. Verification callbacks remain separate; payment callbacks/delivery history belong to AD-220.
 
-While the vendor's payment profile is suspended, `payments:read` keeps working so the POS can read sale and refund history; `payments:create`, `payments:cancel` and `refunds:create` return 403 `VENDOR_PAYMENT_SUSPENDED`.
+While the vendor's payment profile is suspended, `payments:read` keeps working so the POS can read sale and refund history; `payments:create` and `payments:cancel` return 403 `VENDOR_PAYMENT_SUSPENDED`. Refund-operation registration, lookup and cancellation remain available to authorized operators. New execution checks eligibility; an already completed refund replays its stable outcome.
 
 ## Merchant contract
 
@@ -16,11 +16,11 @@ Send `Authorization: Bearer unify_vk_...` from your server only.
 
 | Method / path | Scope | Input / result |
 |---|---|---|
-| POST `/api/vendor/v1/payment-requests` | payments:create | `{branchId, orderReference, amountMinor, currency:"ZAR", idempotencyKey}` → request |
-| GET `/api/vendor/v1/payment-requests` | payments:read | `limit` 1–50, optional `cursor`, exact `orderReference` → `{items,nextCursor}` |
+| POST `/api/vendor/v1/payment-requests` | payments:create | `{branchId, orderReference, amountMinor, currency:"ZAR", idempotencyKey}` â†’ request |
+| GET `/api/vendor/v1/payment-requests` | payments:read | `limit` 1â€“50, optional `cursor`, exact `orderReference` â†’ `{items,nextCursor}` |
 | GET `/api/vendor/v1/payment-requests/{id}` | payments:read | request and authoritative merchant receipt identifiers |
 | POST `/api/vendor/v1/payment-requests/{id}/cancel` | payments:cancel | cancel unpaid request; repeated cancellation is safe |
-| POST `/api/vendor/v1/payment-requests/{id}/refunds` | refunds:create | `{amountMinor, idempotencyKey}` → `{refund, paymentRequest}`; 201 new, 200 replay |
+| POST `/api/vendor/v1/payment-requests/{id}/refunds` | refunds:create | `{amountMinor, idempotencyKey}` â†’ `{refund, paymentRequest}`; 201 new, 200 replay |
 
 Request fields: `id`, `branchId`, `vendorName`, `branchName`, `orderReference`, `amountMinor`, `currency`, `status`, `createdAt`, `expiresAt`, `completedAt`, `transactionId`, `qrPayload`, plus refund fields `refundedMinor`, `refundableMinor`, `refundStatus` (`NONE | PARTIALLY_REFUNDED | FULLY_REFUNDED`) and `refunds[]` (`{id, amountMinor, currency, source: PORTAL | API, createdAt}`). Non-PAID requests report zero refunded/refundable and an empty list. Receipt identifiers are populated only after a completed spend. Merchant responses disclose no student identity/credential attributes. The student QR resolve endpoint never includes refund data.
 
@@ -28,30 +28,23 @@ Creation keys and order references are vendor-scoped. Identical creation retries
 
 ## Refunds
 
-A refund must reference one of the vendor's own PAID requests on a branch in the key's allowlist that still accepts payments. Partial and repeated refunds are allowed until the cumulative total reaches the original amount; there is no time limit. Refunds are synchronous: the call either completes against the internal ledger or is rejected, and a completed refund is final.
+Use durable refund operations for new integrations. The Integrations hub at `/vendor/integrations/guides/refunds` provides cURL and Node.js examples. Add `refunds:create` explicitly; a payment preset does not include it.
 
-```json
-POST /api/vendor/v1/payment-requests/{id}/refunds
-{"amountMinor": 3500, "idempotencyKey": "pos-refund-6f1c..."}
-```
+1. Persist `{paymentRequestId, amountMinor, idempotencyKey}` and the original operator identity before sending.
+2. Register with `POST /api/vendor/v1/refund-operations`. Registration freezes the instruction and does not move money. Replay the same terms after a lost acknowledgment.
+3. After acknowledged registration, explicitly call `POST /api/vendor/v1/refund-operations/{id}/execute` with `{}`.
+4. Check `GET /api/vendor/v1/refund-operations/{id}` after interruption. `GET /api/vendor/v1/refund-operations` discovers this operator's pending operation; discovery does not execute it.
+5. Cancel a pending instruction with `POST /api/vendor/v1/refund-operations/{id}/cancel` and `{}`. A competing execution may return `COMPLETED`.
 
-The body is strict. Idempotency keys share one namespace with portal refunds for the vendor wallet: repeating the same key and terms returns the original refund (200, identical body); a reused key with different terms returns `IDEMPOTENCY_CONFLICT`. Persist the key before calling so an unknown outcome can be retried safely.
+One pending operation blocks additional instructions for the same vendor wallet/operator across browsers. Other operators remain independent. An API credential identifies an API operator. Never change terms, replace the key or reassign an unresolved instruction to another operator. Terms and terminal results are immutable, and operations have no automatic expiry.
 
-| HTTP | code | When |
-|---|---|---|
-| 400 | `INVALID_REQUEST` | Body or params invalid |
-| 401 | `INVALID_API_KEY` | Bad or revoked key |
-| 403 | `MISSING_SCOPE` | Key lacks `refunds:create` |
-| 403 | `VENDOR_NOT_PAYMENT_ENABLED` / `VENDOR_PAYMENT_SUSPENDED` | Payment profile not approved |
-| 403 | `BRANCH_NOT_ALLOWED` | Branch not in key scope or not active |
-| 404 | `REQUEST_NOT_FOUND` | Unknown or another vendor's request |
-| 409 | `REQUEST_NOT_PAID` | Request is not PAID |
-| 409 | `PAYMENT_FULLY_REFUNDED` | Nothing left to refund |
-| 409 | `REFUND_AMOUNT_EXCEEDED` | Amount exceeds the remaining refundable amount |
-| 409 | `IDEMPOTENCY_CONFLICT` | Key reused with different terms |
-| 503 | `PAYMENT_WALLET_DISABLED` | Wallet disabled |
+Only an authoritative `COMPLETED`, `REJECTED` or `CANCELLED` snapshot clears recovery state. Timeouts, 401/403, 5xx, missing records and malformed responses do not prove rejection. Valid identity, refund permission, approved vendor application and branch authorization remain required. Registration, lookup and cancellation survive payment suspension and inactive branch acceptance. New execution checks current eligibility; matching completed refunds replay before those checks.
 
-A refund never fails for lack of vendor balance: it may take the vendor wallet below zero, which pauses payouts until sales or a top-up recover it. Every completed refund on a payment request, from the POS or the portal, emits a `payment_request.refunded` callback (see [checkout reliability](../checkout-reliability.md)).
+Partial and repeated refunds are allowed without a time limit until their cumulative amount reaches the original spend. Refresh the authoritative sale and refund totals after completion. `payment_request.refunded` events are created with the refund posting in the same transaction; callbacks do not decide financial success.
+
+`POST /api/vendor/v1/payment-requests/{id}/refunds` remains a compatibility registration/execution wrapper with its existing success body and additive `operation` metadata. Its frozen body is `{amountMinor, idempotencyKey}`. New integrations should use the separate operation protocol to make registration, execution and cancellation explicit. Reusing a key with different terms returns `IDEMPOTENCY_CONFLICT`; another unresolved operation returns `REFUND_OPERATION_PENDING`.
+
+See [P1 recovery contract](P1_REFUND_PAYOUT_RECOVERY.md) for complete authorization, legacy recovery and immutable-outcome rules.
 
 ## Student contract
 
@@ -65,7 +58,7 @@ All routes require the existing wallet payment session:
 
 ## State and integrity
 
-PENDING → PAID / CANCELLED / EXPIRED. Ten-minute expiry is enforced on server reads and mutations, independent of cron. Insufficient funds leaves PENDING. Unknown network outcomes require reading state/receipt before retrying with the same key.
+PENDING â†’ PAID / CANCELLED / EXPIRED. Ten-minute expiry is enforced on server reads and mutations, independent of cron. Insufficient funds leaves PENDING. Unknown network outcomes require reading state/receipt before retrying with the same key.
 
 Payment locks the request row, then posts through `postSpendInTransaction` using the same serializable transaction and ordered balance locks as existing postings. Request completion and balanced ledger entries commit together. SQL guards enforce immutable terms, durable history, final outcomes and a matching completed spend/payer/amount/branch/reference. No provider call occurs in that transaction.
 
@@ -111,4 +104,4 @@ Payment activation uses student number and a device-bound emailed OTP through `/
 
 After interruption, the wallet uses its saved original payment key to read `/api/wallet/v1/payments/by-reference/{idempotencyKey}` or the request's payer receipt. `NOT_RECORDED` is not proof that an earlier submission failed. Only an explicit retry with the original key can resubmit; focus, reconnect and login recovery never automatically pay. Receipts are private to the original payer. Merchant integrations use their own request read endpoint rather than student bearer tokens.
 
-The integration example script does not execute refunds; use the refund endpoint above. Static payment QR retirement does not retire verification QR codes.
+The integration example script does not execute refunds; use the durable operation protocol above. Static payment QR retirement does not retire verification QR codes.
