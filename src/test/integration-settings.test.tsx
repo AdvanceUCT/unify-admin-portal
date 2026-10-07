@@ -17,7 +17,7 @@ describe("API key settings", () => {
     fireEvent.change(screen.getByLabelText("Key name"), { target: { value: "Till" } });
     expect(screen.getByRole("button", { name: "Create API key" })).toBeDisabled();
     expect(screen.getByLabelText("Allow refunds and refund recovery")).not.toBeChecked();
-    fireEvent.click(screen.getByLabelText(/Campus till/));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Campus till/ }));
     fireEvent.click(screen.getByRole("button", { name: "Create API key" }));
     await screen.findByText("unify_vk_abcdef_secret");
     expect(JSON.parse(fetcher.mock.calls[0][1]!.body as string)).toEqual({ name: "Till", scopes: ["payments:create", "payments:read", "payments:cancel"], branchIds: ["branch"] });
@@ -47,7 +47,7 @@ describe("API key settings", () => {
   it("requires the default verification branch when a custom key is restricted", () => {
     render(<VendorIntegrationSettings branches={branches} initialApiKeys={[]} />);
     fireEvent.change(screen.getByLabelText("Key name"), { target: { value: "Restricted" } });
-    fireEvent.click(screen.getByLabelText(/Old till/));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Old till/ }));
     expect(screen.getByText("Include the default branch to start checkout verification.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create API key" })).toBeDisabled();
   });

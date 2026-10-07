@@ -18,7 +18,7 @@ describe("shared integration examples", () => {
     const endpoint = endpoints.find(e => e.id === "payment-create")!;
     let request: { url: string; options: RequestInit } | undefined;
     const script = exampleRequest(endpoint, "https://portal.example/", "branch-123", "node");
-    const run = new Function("fetch", "process", `return (async () => { ${script} })();`);
+    const run = new Function("fetch", "process", `return (async () => { ${script}\n})();`);
     await run(async (url: string, options: RequestInit) => { request = { url, options }; return { ok: true, status: 201, json: async () => ({ status: "PENDING" }) }; }, { env: { UNIFY_VENDOR_API_KEY: "server-secret" } });
     expect(request!.url).toBe("https://portal.example/api/vendor/v1/payment-requests");
     expect(JSON.parse(request!.options.body as string)).toMatchObject({ branchId: "branch-123", amountMinor: 3500, currency: "ZAR", idempotencyKey: "example-sale-key-001" });
