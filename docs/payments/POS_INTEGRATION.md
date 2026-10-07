@@ -16,11 +16,11 @@ Send `Authorization: Bearer unify_vk_...` from your server only.
 
 | Method / path | Scope | Input / result |
 |---|---|---|
-| POST `/api/vendor/v1/payment-requests` | payments:create | `{branchId, orderReference, amountMinor, currency:"ZAR", idempotencyKey}` â†’ request |
-| GET `/api/vendor/v1/payment-requests` | payments:read | `limit` 1â€“50, optional `cursor`, exact `orderReference` â†’ `{items,nextCursor}` |
+| POST `/api/vendor/v1/payment-requests` | payments:create | `{branchId, orderReference, amountMinor, currency:"ZAR", idempotencyKey}` → request |
+| GET `/api/vendor/v1/payment-requests` | payments:read | `limit` 1–50, optional `cursor`, exact `orderReference` → `{items,nextCursor}` |
 | GET `/api/vendor/v1/payment-requests/{id}` | payments:read | request and authoritative merchant receipt identifiers |
 | POST `/api/vendor/v1/payment-requests/{id}/cancel` | payments:cancel | cancel unpaid request; repeated cancellation is safe |
-| POST `/api/vendor/v1/payment-requests/{id}/refunds` | refunds:create | `{amountMinor, idempotencyKey}` â†’ `{refund, paymentRequest}`; 201 new, 200 replay |
+| POST `/api/vendor/v1/payment-requests/{id}/refunds` | refunds:create | `{amountMinor, idempotencyKey}` → `{refund, paymentRequest}`; 201 new, 200 replay |
 
 Request fields: `id`, `branchId`, `vendorName`, `branchName`, `orderReference`, `amountMinor`, `currency`, `status`, `createdAt`, `expiresAt`, `completedAt`, `transactionId`, `qrPayload`, plus refund fields `refundedMinor`, `refundableMinor`, `refundStatus` (`NONE | PARTIALLY_REFUNDED | FULLY_REFUNDED`) and `refunds[]` (`{id, amountMinor, currency, source: PORTAL | API, createdAt}`). Non-PAID requests report zero refunded/refundable and an empty list. Receipt identifiers are populated only after a completed spend. Merchant responses disclose no student identity/credential attributes. The student QR resolve endpoint never includes refund data.
 
@@ -58,7 +58,7 @@ All routes require the existing wallet payment session:
 
 ## State and integrity
 
-PENDING â†’ PAID / CANCELLED / EXPIRED. Ten-minute expiry is enforced on server reads and mutations, independent of cron. Insufficient funds leaves PENDING. Unknown network outcomes require reading state/receipt before retrying with the same key.
+PENDING → PAID / CANCELLED / EXPIRED. Ten-minute expiry is enforced on server reads and mutations, independent of cron. Insufficient funds leaves PENDING. Unknown network outcomes require reading state/receipt before retrying with the same key.
 
 Payment locks the request row, then posts through `postSpendInTransaction` using the same serializable transaction and ordered balance locks as existing postings. Request completion and balanced ledger entries commit together. SQL guards enforce immutable terms, durable history, final outcomes and a matching completed spend/payer/amount/branch/reference. No provider call occurs in that transaction.
 

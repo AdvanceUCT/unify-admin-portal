@@ -9,7 +9,7 @@ import Loading from "../../src/app/vendor/(portal)/integrations/loading";
 import ErrorBoundary from "../../src/app/vendor/(portal)/integrations/error";
 
 // Synthetic visual fixtures reuse production components, never real API keys or network endpoints.
-const branches = [{ id: "synthetic-campus-branch", name: "Campus café", active: true, status: "ACTIVE", paymentStatus: "ACTIVE", isDefault: true }, { id: "synthetic-library-branch", name: "Library counter", active: false, status: "DISABLED", paymentStatus: "DISABLED", isDefault: false }];
+const branches = [{ id: "synthetic-campus-branch", name: "Campus café", active: true, status: "ACTIVE" as const, paymentStatus: "ACTIVE" as const, isDefault: true }, { id: "synthetic-library-branch", name: "Library counter", active: false, status: "DISABLED" as const, paymentStatus: "CLOSED" as const, isDefault: false }];
 const url = new URL(window.location.href);
 const screen = url.searchParams.get("screen") ?? (url.pathname.split("/").at(-1) === "integrations" ? "overview" : url.pathname.split("/").at(-1)) ?? "overview";
 const overview = { branches, verification: { ready: true, key: true, callback: true, lastSuccess: null }, payments: { ready: true, key: true, callback: false, lastSuccess: null, reason: null } };
