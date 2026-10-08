@@ -1,33 +1,158 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import Page from "@/app/vendor/(portal)/integrations/page";
-import Layout from "@/app/vendor/(portal)/integrations/layout";
-const mocks = vi.hoisted(() => ({ owner: vi.fn(), overview: vi.fn() }));
-vi.mock("@/lib/vendors/context", () => ({ requireVendorOwnerContextForRender: mocks.owner }));
-vi.mock("@/lib/vendors/integrationOverview", () => ({ integrationOverview: mocks.overview }));
-vi.mock("next/navigation", () => ({ usePathname: () => "/vendor/integrations/guides/payments" }));
+import VendorIntegrationsPage from "@/app/vendor/(portal)/integrations/page";
+
+const mocks = vi.hoisted(() => ({
+  owner: vi.fn(),
+  keys: vi.fn(),
+  webhook: vi.fn(),
+  branches: vi.fn(),
+}));
+vi.mock("@/lib/db/prisma", () => ({
+  prisma: { vendorBranch: { findMany: mocks.branches } },
+}));
+vi.mock("@/lib/vendors/context", () => ({
+  requireVendorOwnerContextForRender: mocks.owner,
+}));
+vi.mock("@/lib/vendors/integrations", () => ({
+  listVendorApiCredentials: mocks.keys,
+  getVendorWebhookConfig: mocks.webhook,
+}));
+
 beforeEach(() => {
-  mocks.owner.mockResolvedValue({ context: { vendorProfileId: "vendor" } });
-  mocks.overview.mockResolvedValue({ branches: [], verification: { ready: true, key: false, callback: false, lastSuccess: null }, payments: { ready: false, key: true, callback: true, lastSuccess: null, reason: "Payments are suspended. Existing sale and refund recovery remains available." } });
+  vi.clearAllMocks();
+  mocks.owner.mockResolvedValue({
+    context: { vendorProfileId: "vendor-profile-1" },
+  });
+  mocks.keys.mockResolvedValue([]);
+  mocks.webhook.mockResolvedValue(null);
+  mocks.branches.mockResolvedValue([
+    {
+      id: "eligible",
+      name: "Main branch",
+      active: true,
+      status: "ACTIVE",
+      paymentAcceptance: { status: "ACTIVE" },
+    },
+    {
+      id: "inactive",
+      name: "Inactive branch",
+      active: false,
+      status: "ACTIVE",
+      paymentAcceptance: { status: "ACTIVE" },
+    },
+    {
+      id: "provisioning",
+      name: "Provisioning branch",
+      active: true,
+      status: "PROVISIONING",
+      paymentAcceptance: { status: "ACTIVE" },
+    },
+    {
+      id: "suspended",
+      name: "Suspended branch",
+      active: true,
+      status: "ACTIVE",
+      paymentAcceptance: { status: "SUSPENDED" },
+    },
+    {
+      id: "verification",
+      name: "Verification branch",
+      active: true,
+      status: "ACTIVE",
+      paymentAcceptance: null,
+    },
+  ]);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) =>
+      Response.json(
+        url.endsWith("/history")
+          ? {
+              items: [],
+              nextCursor: null,
+              lastSuccess: null,
+              oldestOutstanding: null,
+            }
+          : null,
+      ),
+    ),
+  );
 });
-afterEach(cleanup);
-describe("integration hub", () => {
-  it("shows next actions without treating configuration as successful testing", async () => {
-    render(await Page());
-    expect(screen.getByRole("heading", { name: "Verify students" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Accept wallet payments" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Create API key" })).toHaveAttribute("href", "/vendor/integrations/keys?preset=verification");
-    expect(screen.getAllByText("No successful delivery recorded")).toHaveLength(2);
-    expect(screen.getByText(/Existing sale and refund recovery/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "View wallet" })).toHaveAttribute("href", "/vendor/payments");
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+describe("VendorIntegrationsPage", () => {
+  it("renders the light design and separates guidance and settings into tabs", async () => {
+    render(await VendorIntegrationsPage());
+    expect(
+      screen.getByRole("heading", { name: "Integrations" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Website verification" }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText(/TechNest demo integration/)).toBeInTheDocument();
+    expect(
+      screen.getByText("POST /api/vendor/v1/verification-sessions", {
+        exact: false,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Raw credential attributes are not returned/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/student summary with id, name, and university/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Verification webhook" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Payment callbacks" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "POS payments" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Refresh history" }),
+      ).toBeEnabled(),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Payment callbacks" }),
+    ).toBeVisible();
+    expect(screen.getByRole("checkbox", { name: "Main branch" })).toBeEnabled();
+    for (const name of [
+      "Inactive branch",
+      "Provisioning branch",
+      "Suspended branch",
+      "Verification branch",
+    ])
+      expect(screen.queryByRole("checkbox", { name })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "API keys" }));
+    expect(
+      screen.getByRole("heading", { name: "Checkout API keys" }),
+    ).toBeVisible();
+    expect(screen.getByText("No API keys created.")).toBeVisible();
+    expect(
+      screen.getByRole("checkbox", { name: "Verification branch" }),
+    ).toBeEnabled();
+    expect(mocks.branches).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { vendorProfileId: "vendor-profile-1" },
+      }),
+    );
   });
-  it("marks the parent guide section active on deep links", async () => {
-    render(await Layout({ children: <p>Guide</p> }));
-    expect(screen.getByRole("navigation", { name: "Integration sections" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Setup guides" })).toHaveAttribute("aria-current", "page");
-  });
-  it("protects the entire hub before rendering owner content", async () => {
-    mocks.owner.mockRejectedValueOnce(new Error("Forbidden"));
-    await expect(Layout({ children: <p>Secret</p> })).rejects.toThrow("Forbidden");
+  it("does not load integration data when owner authorization rejects access", async () => {
+    mocks.owner.mockRejectedValue(new Error("Owner required"));
+    await expect(VendorIntegrationsPage()).rejects.toThrow("Owner required");
+    expect(mocks.keys).not.toHaveBeenCalled();
+    expect(mocks.webhook).not.toHaveBeenCalled();
+    expect(mocks.branches).not.toHaveBeenCalled();
   });
 });

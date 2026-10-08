@@ -4,11 +4,11 @@ AD-217, AD-218 and AD-220 share an owner-only hub at `/vendor/integrations`. Exi
 
 ## Page structure
 
-The visual direction uses the current portal's typography, vendor accent and calm surfaces. Two operational choices lead the overview. Dividers and numbered steps organize guidance; technical examples expand on demand. Existing navigation hover states, disclosure controls and loading indicators provide restrained interaction feedback, with reduced-motion support.
+The landing page uses the approved light design: white surfaces, navy accents, underlined Website verification / POS payments / API keys tabs, 32px page title, 24px section headings and 16px body text. Website and POS instructions sit beside their callback settings on desktop and stack on mobile. Technical examples expand on demand. Keyboard tabs support arrows, Home and End. Form values survive tab changes, while newly revealed secrets are cleared, including late responses from an abandoned tab. Existing deep links retain their separate navigation, guides, preset key creation and callback history.
 
 | URL | Purpose |
 | --- | --- |
-| `/vendor/integrations` | Read prerequisites, key configuration and recorded delivery evidence separately. |
+| `/vendor/integrations` | Configure website verification, POS payments and shared keys in three focused tabs. |
 | `/vendor/integrations/guides` | Select verification, payments or refunds. |
 | `/vendor/integrations/guides/verification` | Start a checkout verification and read the decision. |
 | `/vendor/integrations/guides/payments` | Create a fixed sale, display its QR, read receipt or cancel. |
@@ -36,7 +36,7 @@ Existing verification callbacks and external checkout responses may include a sa
 
 ## Testing and release
 
-All automated checks run in GitHub Actions. Existing CI covers lint, types, unit tests, isolated PostgreSQL regressions and the Next build. Added history regressions cover tied timestamps, foreign cursors, safe projection and suspended-vendor access. Existing refund, callback and credential regressions remain part of CI.
+Local validation covers unit/component tests, TypeScript and lint; the tabbed presentation was also checked with synthetic data at desktop/mobile sizes and 200% zoom-equivalent sizing. GitHub Actions CI covers lint, types, unit tests, isolated PostgreSQL regressions and the Next build. Added history regressions cover tied timestamps, foreign cursors, safe projection and suspended-vendor access. Existing refund, callback and credential regressions remain part of CI.
 
 The Integration browser review workflow uses Chromium at desktop and mobile sizes. Synthetic fixtures import the production presentation components and portal CSS, while replacing only navigation adapters and API responses. The fixture server refuses to run outside GitHub Actions. It never connects to live records. Screenshots, browser errors, horizontal overflow, deep links, endpoint search, language selection and keyboard navigation are checked. Reports and screenshots are uploaded as `integration-browser-review` artifacts for visual inspection.
 
