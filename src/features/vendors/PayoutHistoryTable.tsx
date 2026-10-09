@@ -23,7 +23,6 @@ type PayoutHistoryResult = Awaited<ReturnType<typeof import("@/lib/vendors/payou
 function pageHref(basePath: string, filters: VendorPayoutHistoryFilters, page: number) {
   const params = new URLSearchParams();
   if (filters.status) params.set("status", filters.status);
-  if (filters.initiationSource) params.set("source", filters.initiationSource);
   if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
   if (filters.dateTo) params.set("dateTo", filters.dateTo);
   params.set("page", String(page));
@@ -57,13 +56,12 @@ export function PayoutHistoryTable({
         </p>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[64rem] text-left text-body">
+        <table className="w-full min-w-[64rem] text-center text-body">
           <thead className="border-b border-border bg-surface-muted/60">
             <tr className="whitespace-nowrap text-caption uppercase tracking-wide text-fg-subtle">
               <th className="px-4 py-3 font-medium">Created</th>
               <th className="px-4 py-3 font-medium">Amount</th>
               <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Source</th>
               <th className="px-4 py-3 font-medium">Cutoff</th>
               <th className="px-4 py-3 font-medium">Completed</th>
               <th className="px-4 py-3 font-medium">Reference</th>
@@ -83,15 +81,14 @@ export function PayoutHistoryTable({
                     <p className="mt-1 text-xs text-danger-fg">{payout.failureCode}</p>
                   ) : null}
                 </td>
-                <td className="whitespace-nowrap px-4 py-3 text-fg-muted">{titleCaseStatus(payout.initiationSource)}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-fg-muted">{formatDateTime(payout.cutoffAt)}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-fg-muted">
                   {payout.completedAt ? formatDateTime(payout.completedAt) : "-"}
                 </td>
                 <td className="px-4 py-3">
-                  <p className="max-w-[16rem] truncate font-mono text-xs text-fg-muted">{payout.reference}</p>
+                  <p className="mx-auto max-w-[16rem] truncate font-mono text-xs text-fg-muted">{payout.reference}</p>
                   {payout.providerPayoutId ? (
-                    <p className="mt-1 max-w-[16rem] truncate text-xs text-fg-subtle">{payout.providerPayoutId}</p>
+                    <p className="mx-auto mt-1 max-w-[16rem] truncate text-xs text-fg-subtle">{payout.providerPayoutId}</p>
                   ) : null}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-fg-muted">
@@ -118,7 +115,11 @@ export function PayoutHistoryTable({
         >
           Previous
         </Link>
-        <p className="text-sm text-fg-muted">Page {result.page} of {result.totalPages}</p>
+        <p className="text-sm text-fg-muted">
+          {result.total === 0
+            ? "0 of 0"
+            : `${(result.page - 1) * result.pageSize + 1}–${Math.min(result.total, result.page * result.pageSize)} of ${result.total}`}
+        </p>
         <Link
           aria-disabled={result.page >= result.totalPages}
           className={`text-sm font-medium ${result.page >= result.totalPages ? "pointer-events-none text-fg-subtle/60" : "text-fg-muted hover:text-fg"}`}
