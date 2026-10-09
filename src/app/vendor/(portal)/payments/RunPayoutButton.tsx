@@ -80,6 +80,7 @@ export function RunPayoutButton({
           className={`inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-medium text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-fg-subtle ${compact ? "w-full" : ""}`}
           disabled={!canRun}
           onClick={handleRunPayout}
+          title={disabledReason ?? undefined}
           type="button"
         >
           {isPending ? (
@@ -100,14 +101,6 @@ export function RunPayoutButton({
           )}
         </button>
       </div>
-
-      {disabledReason ? (
-        <p className="text-xs text-fg-subtle">{disabledReason}</p>
-      ) : (
-        <p className="text-xs text-fg-subtle">
-          Ready to pay out {formatMoney(availableMinor)}, your full available balance.
-        </p>
-      )}
 
       {isPending ? (
         <div className="overflow-hidden rounded-full bg-surface-muted">
