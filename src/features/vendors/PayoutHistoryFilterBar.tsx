@@ -49,13 +49,13 @@ export function PayoutHistoryFilterBar({
     navigate(new URLSearchParams());
   }
 
-  const filterKey = [filters.status, filters.initiationSource, filters.dateFrom, filters.dateTo]
+  const filterKey = [filters.status, filters.dateFrom, filters.dateTo]
     .map((value) => value ?? "")
     .join("|");
 
   return (
     <section className="rounded-xl border border-border bg-surface p-4 shadow-md">
-      <form className="grid gap-3 lg:grid-cols-[repeat(4,minmax(10rem,1fr))_auto]" key={filterKey} onSubmit={handleSubmit}>
+      <form className="grid gap-3 lg:grid-cols-[repeat(3,minmax(10rem,1fr))_auto]" key={filterKey} onSubmit={handleSubmit}>
         <label className={labelClassName}>
           Status
           <select className={inputClassName} defaultValue={filters.status ?? ""} disabled={isPending} name="status">
@@ -65,14 +65,6 @@ export function PayoutHistoryFilterBar({
             <option value="COMPLETED">Completed</option>
             <option value="FAILED">Failed</option>
             <option value="REQUIRES_RECONCILIATION">Needs reconciliation</option>
-          </select>
-        </label>
-        <label className={labelClassName}>
-          Source
-          <select className={inputClassName} defaultValue={filters.initiationSource ?? ""} disabled={isPending} name="source">
-            <option value="">All sources</option>
-            <option value="SCHEDULED">Scheduled</option>
-            <option value="MANUAL">Manual</option>
           </select>
         </label>
         <label className={labelClassName}>
