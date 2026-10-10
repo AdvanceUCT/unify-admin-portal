@@ -261,17 +261,17 @@ describe("admin vendor verification history", () => {
     render(
       await AdminVendorPayoutHistoryPage({
         params: Promise.resolve({ applicationId: "application-1" }),
-        searchParams: Promise.resolve({ source: "MANUAL", status: "COMPLETED" }),
+        searchParams: Promise.resolve({ status: "COMPLETED" }),
       }),
     );
 
     expect(auth.requireRoleForRender).toHaveBeenCalledWith(["SUPER_ADMIN", "ADMIN"]);
     expect(payoutHistory.listVendorPayoutHistoryForVendorProfile).toHaveBeenCalledWith(
       "vendor-profile-1",
-      expect.objectContaining({ initiationSource: "MANUAL", status: "COMPLETED" }),
+      expect.objectContaining({ status: "COMPLETED" }),
     );
     expect(screen.getByRole("heading", { name: "Payout history" })).toBeInTheDocument();
-    expect(screen.getByText(/Admin view of scheduled and manual payout batches for this vendor wallet/i)).toBeInTheDocument();
+    expect(screen.getByText(/Nightly payouts for this vendor/i)).toBeInTheDocument();
     expect(screen.getByText(/R\s*12,50/)).toBeInTheDocument();
     expect(screen.getByText("unify-payout-demo")).toBeInTheDocument();
   });

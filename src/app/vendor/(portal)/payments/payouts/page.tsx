@@ -3,10 +3,12 @@
  * @module app/vendor/(portal)/payments/payouts/page
  */
 
+import { Clock, PauseCircle, WalletCards } from "lucide-react";
+
 import { BackButton } from "@/components/ui/BackButton";
 import { PayoutHistoryFilterBar } from "@/features/vendors/PayoutHistoryFilterBar";
 import { PayoutHistoryTable } from "@/features/vendors/PayoutHistoryTable";
-import type { PayoutBatchStatus, PayoutInitiationSource } from "@/generated/prisma/enums";
+import type { PayoutBatchStatus } from "@/generated/prisma/enums";
 import { formatMoneyMinor } from "@/lib/formatters";
 import { getUniversityPaymentWalletSettings } from "@/lib/payments/config";
 import { DEFAULT_PAYOUT_THRESHOLD_MINOR } from "@/lib/payments/constants";
@@ -35,11 +37,6 @@ function statusParam(value: string | string[] | undefined): PayoutBatchStatus | 
     : undefined;
 }
 
-function sourceParam(value: string | string[] | undefined): PayoutInitiationSource | undefined {
-  const source = firstParam(value);
-  return source === "SCHEDULED" || source === "MANUAL" ? source : undefined;
-}
-
 export default async function VendorPayoutHistoryPage({
   searchParams,
 }: {
@@ -47,7 +44,6 @@ export default async function VendorPayoutHistoryPage({
     dateFrom?: string | string[];
     dateTo?: string | string[];
     page?: string | string[];
-    source?: string | string[];
     status?: string | string[];
   }>;
 }) {
@@ -56,7 +52,6 @@ export default async function VendorPayoutHistoryPage({
   const filters: VendorPayoutHistoryFilters = {
     dateFrom: firstParam(params.dateFrom),
     dateTo: firstParam(params.dateTo),
-    initiationSource: sourceParam(params.source),
     page: pageParam(params.page),
     status: statusParam(params.status),
   };
@@ -65,27 +60,28 @@ export default async function VendorPayoutHistoryPage({
     getUniversityPaymentWalletSettings(),
   ]);
   const thresholdMinor = walletSettings?.paymentWalletPayoutThresholdMinor ?? BigInt(DEFAULT_PAYOUT_THRESHOLD_MINOR);
-  const showingStart = result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1;
-  const showingEnd = Math.min(result.total, result.page * result.pageSize);
 
   return (
     <div className="space-y-6">
       <BackButton href="/vendor/payments" label="Back to payments" />
 
       <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-page-title text-fg">Payout history</h1>
-            <p className="mt-1 text-sm text-fg-subtle">
-              Review scheduled and manual payout batches from your vendor wallet.
-            </p>
-            <p className="mt-1 text-sm text-fg-subtle">
-              Payouts run automatically each night at about 00:35 SAST and pay your full available balance once it
-              reaches {formatMoneyMinor(Number(thresholdMinor))}. Payouts pause while your balance is negative.
-            </p>
-          </div>
-          <p className="text-sm text-fg-muted">Showing {showingStart}-{showingEnd} of {result.total}</p>
-        </div>
+        <h1 className="text-page-title text-fg">Payout history</h1>
+        <p className="mt-1 text-sm text-fg-subtle">Every payout from your wallet.</p>
+        <ul className="mt-4 flex flex-wrap gap-2 text-xs text-fg-muted">
+          <li className="inline-flex items-center gap-1.5 rounded-full bg-surface-muted px-2.5 py-1">
+            <Clock aria-hidden="true" size={13} />
+            Nightly at 00:35
+          </li>
+          <li className="inline-flex items-center gap-1.5 rounded-full bg-surface-muted px-2.5 py-1">
+            <WalletCards aria-hidden="true" size={13} />
+            Pays out from {formatMoneyMinor(Number(thresholdMinor))}
+          </li>
+          <li className="inline-flex items-center gap-1.5 rounded-full bg-surface-muted px-2.5 py-1">
+            <PauseCircle aria-hidden="true" size={13} />
+            Paused if balance is negative
+          </li>
+        </ul>
       </section>
 
       <PayoutHistoryFilterBar basePath={BASE_PATH} filters={filters} />
