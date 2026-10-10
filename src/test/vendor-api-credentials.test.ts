@@ -78,6 +78,14 @@ describe("vendor API credentials", () => {
     });
   });
 
+  it("rejects missing payment branches, invalid scopes and foreign branch ownership", async () => {
+    await expect(createVendorApiCredential("vendor-001", "Till", ["payments:create"], [])).rejects.toThrow("explicit branch selection");
+    await expect(createVendorApiCredential("vendor-001", "Till", ["unknown:permission"], [])).rejects.toThrow("valid API scope");
+    database.vendorBranch.count.mockResolvedValueOnce(0);
+    await expect(createVendorApiCredential("vendor-001", "Till", ["payments:create", "refunds:create"], ["foreign-branch"])).rejects.toThrow("does not belong");
+    expect(database.vendorApiCredential.create).not.toHaveBeenCalled();
+  });
+
   it("rejects malformed and revoked credentials", async () => {
     await expect(authenticateVendorApiKey("Bearer not-a-vendor-key")).resolves.toBeNull();
     expect(database.vendorApiCredential.findUnique).not.toHaveBeenCalled();

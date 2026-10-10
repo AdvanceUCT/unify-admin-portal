@@ -1,0 +1,4 @@
+import Link from "next/link";
+export default function GuidesPage() {
+  return <section className="space-y-5"><h2 className="text-section-title">Setup guides</h2><div className="divide-y divide-border">{[["verification", "Verify students", "Connect your checkout to a student verification decision."], ["payments", "Accept wallet payments", "Create a sale, display its QR and confirm payment."], ["refunds", "Refunds and recovery", "Register a refund and recover safely after an interruption."]].map(([id, title, text]) => <div key={id} className="flex flex-wrap items-center justify-between gap-4 py-5"><div><h3 className="font-medium">{title}</h3><p className="mt-1 text-sm text-fg-muted">{text}</p></div><Link className="text-sm font-medium text-brand-600 underline" href={`/vendor/integrations/guides/${id}`}>Open {title.toLowerCase()} guide</Link></div>)}</div></section>;
+}

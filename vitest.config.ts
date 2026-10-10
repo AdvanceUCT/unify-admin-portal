@@ -10,7 +10,7 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
-    exclude: [...configDefaults.exclude, "src/test-integration/**", "src/test-billing-integration/**"],
+    exclude: [...configDefaults.exclude, "src/test-integration/**", "src/test-billing-integration/**", "browser-tests/**"],
     setupFiles: "./src/test/setup.ts",
   },
 });

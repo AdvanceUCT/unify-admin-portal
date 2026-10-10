@@ -12,6 +12,8 @@ import { createVendorApiCredential, authenticateVendorApiKey, revokeVendorApiCre
 import { hashVendorApiKey } from "@/lib/vendors/integrationCrypto";
 import { configurePaymentWebhook, disablePaymentWebhook, retryPaymentWebhook, claimPaymentWebhookDeliveries, deliverClaimedPaymentWebhook, paymentWebhookHistory } from "@/lib/vendors/paymentWebhooks";
 import { getPayerPaymentReceipt } from "@/lib/payments/paymentReceipts";
+import { verificationWebhookHistory } from "@/lib/vendors/verificationWebhookHistory";
+import { endpoints } from "@/lib/vendors/integrationGuide";
 const url = new URL(process.env.DATABASE_URL ?? "http://invalid");
 beforeAll(async () => {
   if (!["/pos_test", "/unify_wallet_test"].includes(url.pathname) || process.env.NODE_ENV === "production") throw new Error("POS service tests require an isolated payment test database.");
@@ -138,6 +140,35 @@ async function fixture(amount = BigInt(10000)) {
   return { access, input, students, credential, branch };
 }
 describe("POS requests using the real PostgreSQL services", () => {
+  it("uses the published sale instructions against real services", async () => {
+    const f = await fixture(BigInt(0));
+    const example = endpoints.find(e => e.id === "payment-create")!.body!;
+    const instruction = { ...example, branchId: f.branch.id };
+    const sale = await createPaymentRequest(f.access, instruction);
+    const replay = await createPaymentRequest(f.access, instruction);
+    expect(sale.id).toBe(replay.id);
+    expect(sale).toMatchObject({ amountMinor: 3500, currency: "ZAR", status: "PENDING", refundStatus: "NONE", refunds: [] });
+  });
+  it("pages tied verification attempts and isolates vendors while omitting private data", async () => {
+    const f = await fixture(BigInt(0)); const other = await fixture(BigInt(0));
+    const verification = await prisma.vendorVerification.create({ data: { vendorProfileId: f.access.id, branchId: f.branch.id, checkoutId: randomUUID(), verificationRequestId: randomUUID(), attributes: { fullName: "Synthetic confidential student" } } });
+    const foreign = await prisma.vendorVerification.create({ data: { vendorProfileId: other.access.id, checkoutId: randomUUID(), verificationRequestId: randomUUID() } });
+    const attemptedAt = new Date("2026-10-07T10:00:00Z");
+    await prisma.vendorWebhookDelivery.createMany({ data: [
+      { id: `b-${randomUUID()}`, vendorVerificationId: verification.id, attemptNumber: 1, status: "FAILED", errorMessage: "Synthetic private receiver response", attemptedAt },
+      { id: `a-${randomUUID()}`, vendorVerificationId: verification.id, attemptNumber: 2, status: "DELIVERED", responseStatus: 204, attemptedAt },
+    ] });
+    const foreignAttempt = await prisma.vendorWebhookDelivery.create({ data: { vendorVerificationId: foreign.id, attemptNumber: 1, status: "FAILED" } });
+    const first = await verificationWebhookHistory(f.access.id, new URLSearchParams("limit=1"));
+    const second = await verificationWebhookHistory(f.access.id, new URLSearchParams(`limit=1&cursor=${first.nextCursor}`));
+    expect(first.items).toHaveLength(1); expect(second.items).toHaveLength(1);
+    expect(first.items[0].id).not.toBe(second.items[0].id); expect(second.nextCursor).toBeNull();
+    expect(first.lastSuccess).toBe(attemptedAt.toISOString());
+    expect(JSON.stringify([first, second])).not.toMatch(/Synthetic confidential|Synthetic private|attributes|errorMessage/);
+    await expect(verificationWebhookHistory(f.access.id, new URLSearchParams(`cursor=${foreignAttempt.id}`))).rejects.toMatchObject({ code: "INVALID_CURSOR" });
+    await prisma.vendorPaymentProfile.update({ where: { vendorProfileId: f.access.id }, data: { status: "SUSPENDED", suspendedAt: new Date(), suspensionCode: null } });
+    expect((await verificationWebhookHistory(f.access.id, new URLSearchParams())).items).toHaveLength(2);
+  });
   it("creates one request on simultaneous merchant retries and rejects changed terms", async () => {
     const f = await fixture(); const results = await Promise.all([createPaymentRequest(f.access, f.input), createPaymentRequest(f.access, f.input)]);
     expect(results[0].id).toBe(results[1].id);

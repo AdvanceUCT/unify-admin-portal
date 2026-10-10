@@ -1,201 +1,340 @@
-/**
- * @fileoverview Renders the approved vendor page at `/vendor/integrations`.
- * @module app/vendor/(portal)/integrations/page
- */
-
-import { Code2, KeyRound, MousePointerClick, ShieldCheck, Webhook } from "lucide-react";
-
+/** Approved vendor owners manage website verification, POS callbacks and API keys. */
 import Link from "next/link";
+import { Code2, KeyRound, QrCode, ShieldCheck } from "lucide-react";
 import { prisma } from "@/lib/db/prisma";
-import { VendorIntegrationSettings } from "@/features/vendors/VendorIntegrationSettings";
-import { PaymentWebhookSettings } from "@/features/vendors/PaymentWebhookSettings";
 import { requireVendorOwnerContextForRender } from "@/lib/vendors/context";
-import { getVendorWebhookConfig, listVendorApiCredentials } from "@/lib/vendors/integrations";
+import {
+  getVendorWebhookConfig,
+  listVendorApiCredentials,
+} from "@/lib/vendors/integrations";
+import {
+  VendorApiKeySettings,
+  VerificationWebhookSettings,
+} from "@/features/vendors/VendorIntegrationSettings";
+import { PaymentWebhookSettings } from "@/features/vendors/PaymentWebhookSettings";
+import { IntegrationsTabs } from "@/features/vendors/IntegrationsTabs";
+import {
+  IntegrationCodeBlock,
+  IntegrationDetails,
+  IntegrationNotice,
+} from "@/features/vendors/IntegrationUi";
+import {
+  integrationHeading,
+  integrationSubheading,
+} from "@/features/vendors/integrationStyles";
 
-const codeBlockClassName =
-  "overflow-x-auto rounded-lg border border-border bg-surface-muted p-4 font-mono text-xs leading-relaxed text-fg";
-
-export default async function VendorIntegrationsPage() {
-  const { context } = await requireVendorOwnerContextForRender();
-
-  const [apiKeys, webhook, branches] = await Promise.all([
-    listVendorApiCredentials(context.vendorProfileId),
-    getVendorWebhookConfig(context.vendorProfileId),
-    prisma.vendorBranch.findMany({ where: { vendorProfileId: context.vendorProfileId }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-  ]);
-
+function Steps({ payment = false }: { payment?: boolean }) {
+  const steps = payment
+    ? [
+        {
+          title: "Create a request",
+          description: "Send the sale amount from your backend.",
+          icon: Code2,
+        },
+        {
+          title: "Display the QR",
+          description: "Let the student open the request in UNIFY.",
+          icon: QrCode,
+        },
+        {
+          title: "Confirm PAID",
+          description: "Check the payment result on your server.",
+          icon: ShieldCheck,
+        },
+      ]
+    : [
+        {
+          title: "Create a key",
+          description: "Generate a verification key for your backend.",
+          icon: KeyRound,
+        },
+        {
+          title: "Start verification",
+          description: "Create a session and open its verification URL.",
+          icon: Code2,
+        },
+        {
+          title: "Confirm the result",
+          description: "Check the session result on your server.",
+          icon: ShieldCheck,
+        },
+      ];
   return (
-    <div className="space-y-6">
-      <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <h1 className="text-page-title text-fg">Website integration</h1>
-            <p className="mt-2 max-w-3xl text-sm text-fg-subtle">
-              Use these tools to add UNIFY student verification to your own checkout or access-control flow.
-              Your website creates a verification session, sends the student to UNIFY, and receives a
-              minimal approved/declined result.
-            </p>
-          </div>
-          <span className="inline-flex w-fit items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700">
-            <ShieldCheck aria-hidden className="size-3.5" />
-            Credentials stay privacy-minimal
+    <ol className="grid gap-5 lg:grid-cols-3">
+      {steps.map(({ title, description, icon: Icon }, index) => (
+        <li key={title} className="flex items-start gap-3">
+          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-brand-50 font-semibold text-brand-700">
+            {index + 1}
           </span>
-        </div>
-      </section>
+          <div>
+            <div className="flex items-center gap-2">
+              <Icon aria-hidden className="size-5 shrink-0 text-brand-700" />
+              <h3 className="text-base font-semibold">{title}</h3>
+            </div>
+            <p className="mt-1 text-base text-fg-muted">{description}</p>
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
 
-      <section className="grid gap-4 lg:grid-cols-4">
-        {[
-          {
-            title: "Create an API key",
-            description: "Generate a key below and store it only on your server.",
-            icon: KeyRound,
-          },
-          {
-            title: "Start a session",
-            description: "Your backend calls UNIFY with your checkout or order id.",
-            icon: Code2,
-          },
-          {
-            title: "Open verification",
-            description: "Redirect or show the returned verification URL to the student.",
-            icon: MousePointerClick,
-          },
-          {
-            title: "Read the result",
-            description: "Poll the result endpoint or receive a signed webhook.",
-            icon: Webhook,
-          },
-        ].map((step, index) => {
-          const Icon = step.icon;
-          return (
-            <article className="rounded-xl border border-border bg-surface p-4 shadow-sm" key={step.title}>
-              <div className="flex items-center gap-2">
-                <span className="grid size-8 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white">
-                  {index + 1}
-                </span>
-                <Icon aria-hidden className="size-4 text-fg-subtle" />
-              </div>
-              <h2 className="mt-3 text-sm font-semibold text-fg">{step.title}</h2>
-              <p className="mt-1 text-sm text-fg-subtle">{step.description}</p>
-            </article>
-          );
-        })}
-      </section>
-
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.75fr)]">
-        <article className="rounded-xl border border-border bg-surface p-5 shadow-md">
-          <h2 className="text-section-title text-fg">API quick start</h2>
-          <p className="mt-1 text-sm text-fg-subtle">
-            This is the same website-style flow used by the TechNest demo integration.
-          </p>
-          <div className="mt-4 space-y-4">
-            <div>
-              <h3 className="text-sm font-semibold text-fg">1. Create a verification session</h3>
-              <pre className={codeBlockClassName}>{`POST /api/vendor/v1/verification-sessions
+function WebsiteGuide() {
+  return (
+    <section
+      className="min-w-0 space-y-5"
+      aria-labelledby="website-quick-start"
+    >
+      <div>
+        <h2 id="website-quick-start" className={integrationHeading}>
+          Quick start
+        </h2>
+        <p className="mt-1 text-fg-muted">
+          Call UNIFY from your backend, as in the TechNest demo integration.
+        </p>
+      </div>
+      <IntegrationCodeBlock>{`POST /api/vendor/v1/verification-sessions
 Authorization: Bearer unify_vk_...
 Content-Type: application/json
 
-{
-  "checkoutId": "order_12345"
-}`}</pre>
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-fg">2. Send the student to the returned URL</h3>
-              <pre className={codeBlockClassName}>{`{
+{ "checkoutId": "order_12345" }`}</IntegrationCodeBlock>
+      <IntegrationDetails title="Response and polling example">
+        <p>
+          Redirect the student to the returned <code>verificationUrl</code> and
+          save <code>verificationRequestId</code> against your order. This
+          abbreviated response shows the fields needed to start verification.
+        </p>
+        <IntegrationCodeBlock>{`{
   "verificationRequestId": "vr_...",
   "checkoutId": "order_12345",
   "status": "PENDING",
   "verificationUrl": "https://.../verify/..."
-}`}</pre>
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-fg">3. Confirm the outcome from your server</h3>
-              <pre className={codeBlockClassName}>{`GET /api/vendor/v1/verification-sessions/{verificationRequestId}
-Authorization: Bearer unify_vk_...`}</pre>
-            </div>
-          </div>
-        </article>
-
-        <article className="rounded-xl border border-border bg-surface p-5 shadow-md">
-          <h2 className="text-section-title text-fg">Security rules</h2>
-          <ul className="mt-3 space-y-3 text-sm text-fg-subtle">
-            <li>
-              Keep API keys server-side. Never put a `unify_vk_...` key in browser JavaScript or a mobile app.
-            </li>
-            <li>
-              Use a stable `checkoutId` from your own order/cart system. Retrying with the same id resumes the same
-              verification instead of creating duplicates.
-            </li>
-            <li>
-              Treat the external result as a minimal decision only: status, failure reason, expiry, and completion time.
-              Disclosed credential attributes stay inside the authenticated vendor portal.
-            </li>
-            <li>
-              If you configure a webhook, verify `X-Unify-Signature` against the exact raw JSON body with your webhook
-              secret before trusting the event.
-            </li>
-            <li>
-              Use `X-Unify-Event-Id` and your own `checkoutId` to make webhook handling idempotent if UNIFY retries an
-              event or your endpoint times out.
-            </li>
-          </ul>
-        </article>
-      </section>
-
-      <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
-        <h2 className="text-section-title text-fg">TechNest-style website checklist</h2>
-        <p className="mt-1 text-sm text-fg-subtle">
-          Use this pattern when adding UNIFY to a public website, checkout page, ticket gate, or vendor ordering flow.
+}`}</IntegrationCodeBlock>
+        <IntegrationCodeBlock>{`GET /api/vendor/v1/verification-sessions/{verificationRequestId}
+Authorization: Bearer unify_vk_...`}</IntegrationCodeBlock>
+        <p>
+          Wait for <code>APPROVED</code> before completing your student-only
+          checkout. Handle <code>DECLINED</code>, <code>EXPIRED</code>, and{" "}
+          <code>FAILED</code> explicitly.
         </p>
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {[
-            "Add a Verify with UNIFY button at the step where student status matters.",
-            "Call UNIFY from your backend route, then redirect the browser to verificationUrl.",
-            "Store verificationRequestId against your order so the return page can poll the result.",
-            "Keep the customer-facing page in a pending state until polling or webhook says APPROVED.",
-            "Show declined, expired, and failed states without exposing credential details.",
-            "Review completed website verifications in the vendor portal verification history.",
-          ].map((item) => (
-            <div className="rounded-lg border border-border bg-surface-muted/60 p-3 text-sm text-fg-muted" key={item}>
-              {item}
-            </div>
-          ))}
-        </div>
-      </section>
+        <p>
+          The result includes the decision, failure details, timestamps, and a
+          student summary with id, name, and university when available. Raw
+          credential attributes are not returned.
+        </p>
+      </IntegrationDetails>
+      <IntegrationDetails title="Website integration checklist">
+        <p>
+          Use this guidance when connecting a public website, ticket gate, or
+          ordering flow. These items are not automatically checked by UNIFY.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>Add a Verify with UNIFY button where student status matters.</li>
+          <li>
+            Create sessions from your backend and redirect to the returned URL.
+          </li>
+          <li>
+            Save the request id against your order and keep checkout pending
+            until approval.
+          </li>
+          <li>
+            Show declined, expired, and failed states without exposing
+            credential details.
+          </li>
+          <li>
+            Review completed sessions in the vendor portal verification history.
+          </li>
+        </ul>
+      </IntegrationDetails>
+    </section>
+  );
+}
 
-      <section className="rounded-xl border border-border bg-surface p-5">
-        <h2 className="text-section-title">POS payment integration</h2>
-        <p className="mt-2 text-sm">Create a fixed-amount request, display its QR, then poll the result. A timeout must be recovered using the same reference.</p>
-        <pre className={codeBlockClassName}>{`POST /api/vendor/v1/payment-requests
+function PaymentGuide() {
+  return (
+    <section
+      className="min-w-0 space-y-5"
+      aria-labelledby="payment-quick-start"
+    >
+      <h2 id="payment-quick-start" className={integrationHeading}>
+        Payment quick start
+      </h2>
+      <IntegrationCodeBlock>{`POST /api/vendor/v1/payment-requests
 Authorization: Bearer unify_vk_...
-{"branchId":"your-branch","orderReference":"sale-001","amountMinor":3500,"currency":"ZAR","idempotencyKey":"unique-sale-key"}
+Content-Type: application/json
 
-GET /api/vendor/v1/payment-requests/{id}
+{
+  "branchId": "your-branch",
+  "orderReference": "sale-001",
+  "amountMinor": 3500,
+  "currency": "ZAR",
+  "idempotencyKey": "unique-sale-key"
+}`}</IntegrationCodeBlock>
+      <p className="text-fg-muted">
+        Amounts use minor units: 3500 is R35.00. Your key needs payment
+        permissions and an explicit permitted branch.
+      </p>
+      <IntegrationDetails title="Polling and cancellation">
+        <IntegrationCodeBlock>{`GET /api/vendor/v1/payment-requests/{id}
 POST /api/vendor/v1/payment-requests/{id}/cancel
-
-POST /api/vendor/v1/payment-requests/{id}/refunds
-{"amountMinor":1500,"idempotencyKey":"unique-refund-key"}`}</pre>
-        <p className="mt-2 text-sm">Requests expire after ten minutes. PAID is authoritative; pending, cancelled and expired requests are not receipts. Configure separate signed payment callbacks below.</p>
-        <p className="mt-2 text-sm">
-          Refunds need a key with the <code className="font-mono">refunds:create</code> scope and can only reference a PAID request from the
-          key&apos;s branches. Partial and repeated refunds are allowed up to the original amount, with no time limit; reuse the same
-          idempotency key to retry safely. Each completed refund, including those made in this portal, sends a signed{" "}
-          <code className="font-mono">payment_request.refunded</code> callback, and the request&apos;s <code className="font-mono">refunds</code>{" "}
-          list is the authoritative record.
+Authorization: Bearer unify_vk_...`}</IntegrationCodeBlock>
+        <p>
+          Requests expire after ten minutes. Only <code>PAID</code> confirms
+          payment; pending, cancelled, and expired requests are not receipts.
         </p>
-        <Link href="/vendor/payment-requests" className="text-brand-600">View payment requests →</Link>
-      </section>
-      <PaymentWebhookSettings branches={branches} />
-      <VendorIntegrationSettings
-        branches={branches}
-        initialApiKeys={apiKeys.map((key) => ({
-          ...key,
-          createdAt: key.createdAt.toISOString(),
-          lastUsedAt: key.lastUsedAt?.toISOString() ?? null,
-          revokedAt: key.revokedAt?.toISOString() ?? null,
-        }))}
-        initialWebhook={webhook ? { url: webhook.url, enabled: webhook.enabled } : null}
-      />
-    </div>
+        <p>
+          If a request times out, recover using the original order reference and
+          idempotency key. Continue polling when callback delivery is
+          unavailable.
+        </p>
+      </IntegrationDetails>
+      <IntegrationDetails title="Refunds">
+        <IntegrationCodeBlock>{`POST /api/vendor/v1/payment-requests/{id}/refunds
+Authorization: Bearer unify_vk_...
+Content-Type: application/json
+
+{ "amountMinor": 1500, "idempotencyKey": "unique-refund-key" }`}</IntegrationCodeBlock>
+        <p>
+          Use a key with <code>refunds:create</code>. Refunds can only reference
+          a PAID request from the key&apos;s branches. Partial and repeated
+          refunds are allowed up to the original amount, with no time limit.
+        </p>
+        <p>
+          Reuse the same idempotency key when retrying. Completed refunds,
+          including portal refunds, send a signed{" "}
+          <code>payment_request.refunded</code> callback. The payment
+          request&apos;s <code>refunds</code> list is authoritative.
+        </p>
+      </IntegrationDetails>
+      <IntegrationNotice title="Confirm payment on your server">
+        <p>
+          Only <strong>PAID</strong> confirms payment. Requests expire after ten
+          minutes. Reuse the original reference and idempotency key after a
+          timeout.
+        </p>
+      </IntegrationNotice>
+      <Link
+        href="/vendor/payment-requests"
+        className="inline-block font-medium text-brand-700 underline underline-offset-4"
+      >
+        View payment requests
+      </Link>
+    </section>
+  );
+}
+
+export default async function VendorIntegrationsPage() {
+  const { context } = await requireVendorOwnerContextForRender();
+  const [apiKeys, webhook, branchRecords] = await Promise.all([
+    listVendorApiCredentials(context.vendorProfileId),
+    getVendorWebhookConfig(context.vendorProfileId),
+    prisma.vendorBranch.findMany({
+      where: { vendorProfileId: context.vendorProfileId },
+      select: {
+        id: true,
+        name: true,
+        active: true,
+        status: true,
+        paymentAcceptance: { select: { status: true } },
+        vendorProfile: { select: { defaultBranchId: true } },
+      },
+      orderBy: { name: "asc" },
+    }),
+  ]);
+  const branches = branchRecords.map((branch) => ({
+    id: branch.id,
+    name: branch.name,
+    isDefault: branch.vendorProfile?.defaultBranchId === branch.id,
+    paymentEligible:
+      branch.active &&
+      branch.status === "ACTIVE" &&
+      branch.paymentAcceptance?.status === "ACTIVE",
+  }));
+  return (
+    <IntegrationsTabs
+      website={
+        <div className="space-y-8">
+          <div>
+            <h2 className={integrationHeading}>Verify student status</h2>
+            <p className="mt-2 text-fg-muted">
+              Let students verify with UNIFY during your checkout.
+            </p>
+          </div>
+          <Steps />
+          <div className="grid min-w-0 gap-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+            <WebsiteGuide />
+            <VerificationWebhookSettings
+              initialWebhook={
+                webhook ? { url: webhook.url, enabled: webhook.enabled } : null
+              }
+            />
+          </div>
+          <section className="space-y-4 border-t border-border pt-6">
+            <h2 className={integrationHeading}>Before you go live</h2>
+            <h3 className={integrationSubheading}>Check your integration</h3>
+            <ul className="list-disc space-y-2 pl-5">
+              <li>
+                Confirm results on your server and keep checkout pending until
+                approval.
+              </li>
+              <li>
+                Verify webhook signatures and handle repeated events safely.
+              </li>
+              <li>Handle declined, expired, and failed sessions.</li>
+            </ul>
+            <p className="text-sm text-fg-muted">
+              This is a setup checklist for your team, not a record of completed
+              checks.
+            </p>
+            <div className="flex flex-wrap gap-5 text-base font-medium text-brand-700">
+              <Link
+                href="/vendor/integrations/guides"
+                className="underline underline-offset-4"
+              >
+                Setup guides
+              </Link>
+              <Link
+                href="/vendor/integrations/reference"
+                className="underline underline-offset-4"
+              >
+                API reference
+              </Link>
+              <Link
+                href="/vendor/integrations/callbacks"
+                className="underline underline-offset-4"
+              >
+                Verification delivery history
+              </Link>
+            </div>
+          </section>
+        </div>
+      }
+      payments={
+        <div className="space-y-8">
+          <div>
+            <h2 className={integrationHeading}>Accept POS payments</h2>
+            <p className="mt-2 text-fg-muted">
+              Create a fixed-amount request, show its QR, then confirm payment.
+            </p>
+          </div>
+          <Steps payment />
+          <PaymentWebhookSettings
+            branches={branches}
+            guide={<PaymentGuide />}
+          />
+        </div>
+      }
+      keys={
+        <VendorApiKeySettings
+          branches={branches}
+          initialApiKeys={apiKeys.map((key) => ({
+            ...key,
+            createdAt: key.createdAt.toISOString(),
+            lastUsedAt: key.lastUsedAt?.toISOString() ?? null,
+            revokedAt: key.revokedAt?.toISOString() ?? null,
+          }))}
+        />
+      }
+    />
   );
 }
