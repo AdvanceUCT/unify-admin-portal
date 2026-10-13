@@ -92,6 +92,12 @@ export function formatMoneyMinor(amountMinor: number, currency = "ZAR") {
   }).format(amountMinor / 100);
 }
 
+/** Parses a rand amount typed into a form ("50" or "50.25"); anything else is NaN. */
+export function randToMinor(value: string) {
+  const trimmed = value.trim();
+  return /^\d+(?:\.\d{1,2})?$/.test(trimmed) ? Math.round(Number(trimmed) * 100) : Number.NaN;
+}
+
 export function formatCredentialStatus(value: CredentialLifecycleState) {
   return credentialStatusLabels[value];
 }

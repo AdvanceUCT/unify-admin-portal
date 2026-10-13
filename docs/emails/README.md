@@ -1,8 +1,8 @@
 # Wallet Signature emails
 
-All ten application emails share a green UNIFY header, readable body, accessible action, and contextual footer. HTML and plain text come from the same typed message content. No image download is required to read a code or use an action.
+All application emails share a green UNIFY header, readable body, accessible action, and contextual footer. HTML and plain text come from the same typed message content. No image download is required to read a code or use an action.
 
-Open `index.html` locally to review each email at desktop and mobile widths. The optional dark preview illustrates our CSS; it does not establish Gmail or Outlook compatibility. The HTML and plain-text files under `email-previews/` contain fictional people, a fictional OTP, and inactive example.invalid links. They are presentation samples, not valid account invitations or credentials.
+Open `index.html` locally to review eleven emails at desktop and mobile widths. The three vendor wallet emails (overdraft started, payments suspended, payments restored) do not have previews yet. The optional dark preview illustrates our CSS; it does not establish Gmail or Outlook compatibility. The HTML and plain-text files under `email-previews/` contain fictional people, a fictional OTP, and inactive example.invalid links. They are presentation samples, not valid account invitations or credentials.
 
 ## What changed
 
@@ -11,6 +11,10 @@ Open `index.html` locally to review each email at desktop and mobile widths. The
 - The existing nine email senders use these renderers. Payment OTP email delivery moved into its own email module; OTP generation, cooldown, attempts, verification and session behavior did not change.
 - Application approval explicitly means credential-verifier approval. It does not represent approval to accept payments.
 - Existing recipients, configured senders, Reply-To, console/email modes, provider results and delivery failures remain unchanged. Supplied URLs remain unchanged in the button and fallback link. No tracking redirect was introduced.
+
+## Later additions
+
+- **Funds received** (`funder-topup-received`): sent best-effort to a student when an external funder's payment from the public `/fund` page lands in their wallet. The funder-typed name is plain text and escaped like every other value. It has no balance and no links, because the student may not have activated payments yet.
 
 ## Automated evidence
 
