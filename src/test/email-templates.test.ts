@@ -19,6 +19,7 @@ const messages = [
   templates.renderVendorOverdraftStartedEmail({ ...base, deficit: "R 20.00", suspendAt: expiresAt, topUpUrl: url }),
   templates.renderVendorPaymentsSuspendedEmail({ ...base, deficit: "R 20.00", days: 14, topUpUrl: url }),
   templates.renderVendorPaymentsRestoredEmail(base),
+  templates.renderFunderTopupReceivedEmail({ studentName: base.name, funderName: "Sam <Sponsor> & Co", amount: "R 500,00" }),
 ];
 
 describe("Wallet Signature email templates", () => {
@@ -78,6 +79,18 @@ describe("Wallet Signature email templates", () => {
     const longName = "Student ".repeat(40);
     const rendered = templates.renderCredentialActivationEmail({ studentName: longName, activationUrl: longUrl, expiresAt: expiresAt.toISOString() });
     expect(rendered.text).toContain(longName); expect(rendered.text).toContain(longUrl); expect(rendered.html).toContain("word-break:break-all");
+  });
+  it("tells a student about funder money with the escaped funder name, no balance and no links", () => {
+    const funded = messages[13];
+    expect(funded.subject).toBe("You've received funds in your UNIFY wallet");
+    expect(funded.html).toContain("Funds received");
+    expect(funded.html).toContain("Sam &lt;Sponsor&gt; &amp; Co sent R 500,00 to your UNIFY wallet.");
+    expect(funded.text).toContain("Hi Alex <Admin>,");
+    expect(funded.text).toContain("Sam <Sponsor> & Co sent R 500,00 to your UNIFY wallet. You can spend it at approved campus vendors using the Student Wallet.");
+    expect(funded.text).toContain("Student Wallet · Identity and payment access");
+    expect(funded.html).not.toContain('href="');
+    expect(funded.text).not.toMatch(/balance/i);
+    expect(funded.html.match(/mso-hide:all;">([^<]*)<\/div>/)![1]).not.toContain("Sponsor");
   });
   it("escapes quotes in URL attributes and provides equivalent action copy in plain text", () => {
     const rendered = renderEmail({ subject: "Sample", category: "TEST", heading: "Sample", preview: "A fictional sample", footer: "Test only", blocks: [{ kind: "action", label: "Open", url: 'https://example.invalid/?value="quoted"&x=1' }] });

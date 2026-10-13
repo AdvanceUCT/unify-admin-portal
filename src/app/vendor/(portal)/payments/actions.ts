@@ -8,7 +8,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { formatMoneyMinor } from "@/lib/formatters";
+import { formatMoneyMinor, randToMinor } from "@/lib/formatters";
 import { PaystackProviderError } from "@/lib/paymentProviders/paystack/errors";
 import { requireVendorOwnerContext } from "@/lib/vendors/context";
 import { runVendorWalletPayoutForVendor, saveVendorPayoutDestination } from "@/lib/vendors/payouts";
@@ -51,11 +51,6 @@ export async function savePayoutDestinationAction(formData: FormData) {
   revalidatePath("/vendor/payments");
   revalidatePath("/vendor/payments/payouts");
   redirect(`${returnTo}?payout=updated`);
-}
-
-function randToMinor(value: string) {
-  const trimmed = value.trim();
-  return /^\d+(?:\.\d{1,2})?$/.test(trimmed) ? Math.round(Number(trimmed) * 100) : Number.NaN;
 }
 
 /** Owner-only: starts a wallet top-up (only while overdrawn) and redirects to Paystack checkout. */

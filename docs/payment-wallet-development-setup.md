@@ -52,13 +52,19 @@ Enabling the flag does not expose a payment feature by itself. Student sessions,
 
 ## What is intentionally not seeded
 
-- Student wallet accounts are created only after payment-wallet activation.
+- Student wallet accounts are created only after payment-wallet activation, or when an external funder pays into a student's wallet through `/fund`.
 - Vendor wallet accounts are created only after approved payment onboarding.
 - Wallet balances are never seeded or edited directly.
 - Payfast sandbox top-ups must carry an immutable provider payment ID.
 - Payouts must carry their payout batch and destination attribution.
 
 Unit tests can use mocked accounts. Database-backed integration fixtures should create student/vendor records and zero-balance wallet accounts for the duration of a test, then post balanced transactions through the server-only posting boundary.
+
+## Public funder top-ups (`/fund`)
+
+The public funding page needs `PAYMENT_WALLET_TOPUPS_ENABLED="true"`, a university with the payment wallet enabled, the Paystack test keys and webhook, and `PAYMENT_OTP_PEPPER`. The pepper is used to hash funder IP addresses for rate limiting. `PAYMENT_OTP_BYPASS_ENABLED` lets the portal start without a pepper, but `/fund` then fails closed and shows "Funding is currently unavailable." Set a pepper of at least 32 characters even when the OTP bypass is on.
+
+Outside production the student's "Funds received" email goes to the dev console rather than Resend.
 
 ## Run the PostgreSQL invariant suite
 

@@ -38,6 +38,28 @@ describe("proxy", () => {
     }
   });
 
+  it("serves the funder pages publicly, signed in or not", () => {
+    for (const cookie of [null, "session-token"]) {
+      getSessionCookieMock.mockReturnValue(cookie);
+      for (const pathname of ["/fund", "/fund/return"]) {
+        const response = proxy(request(pathname));
+        expect(response.headers.get("location")).toBeNull();
+        expect(response.headers.get("x-middleware-next")).toBe("1");
+      }
+    }
+  });
+
+  it("lets the public funder status and reconcile routes reach their own guards", () => {
+    getSessionCookieMock.mockReturnValue(null);
+
+    for (const pathname of ["/api/fund/topups/status", "/api/fund/topups/reconcile"]) {
+      const response = proxy(request(pathname));
+      expect(response.headers.get("location")).toBeNull();
+      expect(response.headers.get("x-middleware-next")).toBe("1");
+    }
+    expect(getSessionCookieMock).not.toHaveBeenCalled();
+  });
+
   it("redirects signed-in users away from sign in", () => {
     getSessionCookieMock.mockReturnValue("session-cookie");
 

@@ -92,6 +92,17 @@ Operations:
 
 A real deployment would need a bank-debit or collections arrangement, and a multi-vendor stored-value wallet would likely need a bank partner or licensed payment-provider structure.
 
+#### External funder top-ups are public and unauthenticated
+
+Anyone can pay into a student's closed-loop wallet from `/fund` by entering the student number and surname ([EXTERNAL_FUNDER_TOPUPS_HANDOFF.md](../payments/EXTERNAL_FUNDER_TOPUPS_HANDOFF.md)). Known limitations of the PoC:
+
+- **Surname guessing is not rate limited.** Someone who already knows a student number can try surnames without limit. The DB-backed rate limits count only attempts that were actually created (10 per hashed IP and 5 open funder attempts per student, each per 10 minutes), and a failed lookup creates nothing. Every failure shows the same generic message, so a guess only confirms that the student exists and the surname is right; it reveals no other student data.
+- **The per-IP limit trusts the first `x-forwarded-for` hop**, as the student activation route already does. This only holds behind a proxy that overwrites the header (Vercel does).
+- **The public status/reconcile routes use the in-memory, per-process limiter**, as the vendor payment routes do. It resets on cold start and isn't shared across instances.
+- **The student's "Funds received" email can be skipped.** It is best-effort. If the process crashes after the wallet is credited but before the attempt is marked `SUCCEEDED`, later reconciles see the completed transaction and return early, so no email is sent. The credit and the Activity entry are unaffected.
+- **Third-party funding of stored value (documentation only).** Accepting money from unidentified third parties into a stored-value wallet raises FICA (customer due diligence on the payer) and SARB e-money questions, on top of the existing note in [REFUNDS_OVERDRAFT_PAYOUTS.md](../payments/REFUNDS_OVERDRAFT_PAYOUTS.md). The PoC collects only a typed funder name and email and relies on Paystack's own checks; a real deployment would need a compliance review of payer identification, limits and reporting.
+- **Future work:** bulk funding by funding bodies (one payment across many students, e.g. CSV), funder receipts or history from UNIFY, and refunds back to the funder's card are out of scope.
+
 #### Vendor repository ambiguity
 
 The active vendor portal is inside the admin repository; the standalone portal still receives Dependabot alerts and looks active. Archive it or add a conspicuous deprecation notice and disable unnecessary automation. This reduces false ownership signals and dependency noise.

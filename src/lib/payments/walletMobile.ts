@@ -131,6 +131,9 @@ export async function listMobileWalletActivity(studentId: string, limit = DEFAUL
     prisma.walletTopupAttempt.findMany({
       where: {
         studentId,
+        // Funder attempts only appear once completed (as ledger entries), so
+        // nobody can fill a student's Activity with pending items.
+        funderEmail: null,
         walletTransaction: { status: { not: WalletTransactionStatus.COMPLETED } },
       },
       orderBy: { createdAt: "desc" },
@@ -145,7 +148,8 @@ export async function listMobileWalletActivity(studentId: string, limit = DEFAUL
     const direction = entry.direction === "CREDIT" ? "CREDIT" : "DEBIT";
     const type = transaction.type;
     const title =
-      type === WalletTransactionType.TOPUP ? "Wallet top-up" :
+      type === WalletTransactionType.TOPUP
+        ? transaction.topupAttempt?.funderName ? `From ${transaction.topupAttempt.funderName}` : "Wallet top-up" :
       type === WalletTransactionType.SPEND ? branch?.vendorProfile.companyName ?? "Wallet payment" :
       type === WalletTransactionType.REFUND ? branch?.vendorProfile.companyName ?? "Wallet refund" :
       "Wallet activity";
@@ -164,6 +168,8 @@ export async function listMobileWalletActivity(studentId: string, limit = DEFAUL
       title,
       ...(subtitle ? { subtitle } : {}),
       ...(transaction.reference ? { reference: transaction.reference } : {}),
+      // Lets the app label money sent by an external funder; older builds ignore it.
+      ...(type === WalletTransactionType.TOPUP && transaction.topupAttempt?.funderName ? { funderName: transaction.topupAttempt.funderName } : {}),
       ...(transaction.completedAt ? { completedAt: transaction.completedAt.toISOString() } : {}),
       createdAt: entry.createdAt.toISOString(),
     };

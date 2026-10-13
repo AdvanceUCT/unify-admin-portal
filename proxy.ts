@@ -6,7 +6,7 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_ROUTES = ["/sign-in", "/accept-invite", "/forgot-password", "/reset-password", "/activate", "/verify", "/wallet/topups/return"];
+const PUBLIC_ROUTES = ["/sign-in", "/accept-invite", "/forgot-password", "/reset-password", "/activate", "/verify", "/wallet/topups/return", "/fund"];
 const VENDOR_PUBLIC_ROUTES = ["/vendor/sign-in", "/vendor/sign-up", "/vendor/accept-invite"];
 const PUBLIC_FILE = /\.(.*)$/;
 
@@ -37,6 +37,9 @@ function shouldSkipProxy(pathname: string) {
     // rather than exempting all of `/api`, per the vendor invoicing handoff.
     pathname.startsWith("/api/vendor") ||
     pathname.startsWith("/api/wallet") ||
+    // Public funder routes: bound to a topUpId + reference capability,
+    // same-origin checked and rate limited inside each route.
+    pathname.startsWith("/api/fund") ||
     pathname.startsWith("/api/webhooks") ||
     pathname.startsWith("/api/cron") ||
     pathname === "/api/jobs/payment-webhooks" ||

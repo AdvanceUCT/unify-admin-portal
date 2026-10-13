@@ -14,6 +14,14 @@ export function renderPaymentOtpEmail(input: { studentName: string; otp: string 
   ] });
 }
 
+/** `funderName` is untrusted funder input; the shared renderer escapes it like every other text block. */
+export function renderFunderTopupReceivedEmail(input: { studentName: string; funderName: string; amount: string }) {
+  return renderEmail({ subject: "You've received funds in your UNIFY wallet", preview: "Someone sent funds to your UNIFY wallet for campus spending.", category: "WALLET FUNDING", heading: "Funds received", footer: studentFooter, blocks: [
+    { kind: "paragraph", text: `Hi ${input.studentName},` },
+    { kind: "paragraph", text: `${input.funderName} sent ${input.amount} to your UNIFY wallet. You can spend it at approved campus vendors using the Student Wallet.` },
+  ] });
+}
+
 export function renderCredentialActivationEmail(input: { studentName: string; activationUrl: string; expiresAt: string }) {
   return renderEmail({ subject: "Your UNIFY student credential is ready", preview: "Open the Student Wallet to review and accept your credential.", category: "STUDENT CREDENTIAL", heading: "Your credential is ready", footer: studentFooter, blocks: [
     { kind: "paragraph", text: `Hi ${input.studentName},` },

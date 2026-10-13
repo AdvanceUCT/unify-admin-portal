@@ -5,7 +5,7 @@
 
 import "server-only";
 
-import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
@@ -14,6 +14,7 @@ import { env } from "@/lib/config/env";
 import { ensureStudentWalletAccount } from "@/lib/payments/accounts";
 import { credentialValidityFailure } from "@/lib/credentials/validity";
 import { WalletDomainError } from "@/lib/payments/errors";
+import { paymentHmac } from "@/lib/payments/hashing";
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
@@ -60,12 +61,6 @@ type SessionTokenBundle = {
 
 function sha256(value: string) {
   return createHash("sha256").update(value, "utf8").digest("hex");
-}
-
-function hmac(value: string) {
-  const pepper = env.PAYMENT_OTP_PEPPER;
-  if (!pepper) throw new WalletDomainError("PAYMENT_WALLET_DISABLED", "Payment OTP configuration is missing.");
-  return createHmac("sha256", pepper).update(value, "utf8").digest("hex");
 }
 
 function safeEqualHex(left: string, right: string) {
@@ -208,8 +203,8 @@ export async function requestStudentPaymentActivation(input: {
 
   // Persist only HMACed lookup keys for student number/IP and a one-way device
   // hash. The OTP itself is also HMACed with its challenge id before storage.
-  const studentNumberHash = hmac(`student:${studentNumber}`);
-  const requestedIpHash = input.ipAddress ? hmac(`ip:${input.ipAddress}`) : null;
+  const studentNumberHash = paymentHmac(`student:${studentNumber}`);
+  const requestedIpHash = input.ipAddress ? paymentHmac(`ip:${input.ipAddress}`) : null;
   const keys = [`student:${studentNumberHash}`, `device:${deviceIdHash}`, ...(requestedIpHash ? [`ip:${requestedIpHash}`] : [])];
   const { challenge, student, otp, challengeId } = await withOtpLocks(keys, input.now, async (tx, now) => {
   const windowStart = addMs(now, -ACTIVATION_RATE_WINDOW_MS);
@@ -272,7 +267,7 @@ export async function requestStudentPaymentActivation(input: {
       studentId: student?.id,
       studentNumberHash,
       deviceIdHash,
-      otpHash: hmac(`${challengeId}:${otp}`),
+      otpHash: paymentHmac(`${challengeId}:${otp}`),
       destinationHint: "university email on record",
       expiresAt: addMs(now, OTP_TTL_MS),
       resendAvailableAt: addMs(now, OTP_RESEND_COOLDOWN_MS),
@@ -358,7 +353,7 @@ export async function verifyStudentPaymentActivation(input: {
     const challenge = await tx.studentPaymentActivationChallenge.findUnique({ where: { id: challengeId } });
     const invalid = !challenge || !challenge.studentId || challenge.consumedAt || challenge.verifiedAt ||
       challenge.expiresAt <= time || challenge.deviceIdHash !== deviceIdHash ||
-      challenge.attemptCount >= challenge.maxAttempts || !safeEqualHex(challenge.otpHash, hmac(`${challengeId}:${otp}`));
+      challenge.attemptCount >= challenge.maxAttempts || !safeEqualHex(challenge.otpHash, paymentHmac(`${challengeId}:${otp}`));
     if (invalid) {
       if (challenge && !challenge.consumedAt && !challenge.verifiedAt) {
         await tx.studentPaymentActivationChallenge.updateMany({

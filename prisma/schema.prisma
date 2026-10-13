@@ -617,6 +617,9 @@ model WalletTopupAttempt {
   failureCode                String?
   lastCheckedAt              DateTime?
   completedAt                DateTime?
+  funderName                 String?
+  funderEmail                String?
+  funderIpHash               String?
   createdAt                  DateTime                 @default(now())
   updatedAt                  DateTime                 @updatedAt
 
@@ -624,6 +627,7 @@ model WalletTopupAttempt {
   @@unique([provider, providerAccountRef, providerMode, providerTransactionId], map: "wallet_topup_provider_transaction_key", where: raw("\"providerTransactionId\" IS NOT NULL"))
   @@index([studentId, status, createdAt])
   @@index([status, updatedAt])
+  @@index([funderIpHash, createdAt])
   @@map("wallet_topup_attempt")
 }
 
