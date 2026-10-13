@@ -28,10 +28,12 @@ beforeEach(() => {
 describe("External funder top-ups in PostgreSQL", () => {
   it("funds a student with no wallet yet, credits once via the webhook path and shows the funder in Activity", async () => {
     const suffix = randomUUID();
-    const student = await prisma.student.create({ data: { studentNumber: `fund-${suffix}`, email: `fund-${suffix}@example.invalid`, firstName: "Alex", lastName: "Example" } });
+    // Student numbers are stored in capitals (activation upper-cases them too);
+    // the funder types it in lowercase to cover the upper-cased lookup.
+    const student = await prisma.student.create({ data: { studentNumber: `FUND-${suffix}`.toUpperCase(), email: `fund-${suffix}@example.invalid`, firstName: "Alex", lastName: "Example" } });
 
     const started = await createFunderTopup({
-      studentNumber: student.studentNumber,
+      studentNumber: ` ${student.studentNumber.toLowerCase()} `,
       studentSurname: " EXAMPLE ",
       funderName: "Jane Doe",
       funderEmail: "Jane.Doe@Example.invalid",
