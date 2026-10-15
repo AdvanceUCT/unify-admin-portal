@@ -226,6 +226,44 @@ function expectedStatusFor(action: CredentialLifecycleAction) {
   return action === "reactivate" ? "ACTIVE" : action === "suspend" ? "SUSPENDED" : "REVOKED";
 }
 
+type LifecycleBinding = {
+  credentialExchangeId: string;
+  credentialRevocationId: string | null;
+  lifecycleRevision?: number | null;
+  revocationRegistryDefinitionId: string | null;
+};
+
+function assertLifecycleSnapshot(
+  result: AgentCredentialLifecycleResult,
+  issuance: LifecycleBinding,
+): asserts result is AgentCredentialLifecycleResult & { revision: number; eventId: string } {
+  if (
+    !Number.isSafeInteger(result.revision) || result.revision! < 0 || result.revision! > 2147483647 ||
+    typeof result.eventId !== "string" || !result.eventId.trim()
+  ) {
+    throw new CredentialLifecycleActionError(
+      "The agent deployment does not support revisioned credential lifecycle changes. Update the agent service before retrying.",
+      503,
+    );
+  }
+  if (
+    result.credentialExchangeId !== issuance.credentialExchangeId ||
+    result.credentialRevocationId !== issuance.credentialRevocationId ||
+    result.revocationRegistryDefinitionId !== issuance.revocationRegistryDefinitionId
+  ) {
+    throw new CredentialLifecycleActionError("Agent revocation metadata does not match the stored issuance.", 409);
+  }
+  if (issuance.lifecycleRevision != null && result.revision! < issuance.lifecycleRevision) {
+    throw new CredentialLifecycleActionError("The agent lifecycle revision is behind the portal. Reconcile the agent deployment before retrying.", 409);
+  }
+  if (
+    !["ACTIVE", "SUSPENDED", "REVOKED"].includes(result.status) ||
+    !Number.isFinite(Date.parse(result.updatedAt))
+  ) {
+    throw new CredentialLifecycleActionError("Agent returned an invalid lifecycle snapshot.", 502);
+  }
+}
+
 function hasRevocationHandle(issuance: {
   credentialRevocationId?: string | null;
   revocationRegistryDefinitionId?: string | null;
@@ -294,14 +332,39 @@ export async function requestCredentialLifecycleChange(params: {
     );
   }
 
-  // The agent owns the revocation registry, so it must commit the authoritative
-  // transition before the portal mirrors that state in PostgreSQL.
+  // Check the deployed contract before making a ledger write. Older agents can
+  // revoke successfully but omit the revision needed to record that success here.
+  const snapshot = await getCredentialLifecycle(issuance.credentialExchangeId);
+  assertLifecycleSnapshot(snapshot, { ...issuance, credentialExchangeId: issuance.credentialExchangeId });
+  if (params.expectedLifecycleRevision !== undefined && params.expectedLifecycleRevision !== snapshot.revision) {
+    throw new CredentialLifecycleActionError("Credential lifecycle changed before the scheduled operation.", 409);
+  }
+
+  // Recover a completed revocation after a lost response or a previously rejected
+  // legacy response. Preserve the agent's original time and reason in the audit.
+  if (snapshot.status === "REVOKED") {
+    const recovered = await persistLifecycleChange({
+      ...snapshot,
+      eventId: snapshot.eventId,
+      revision: snapshot.revision,
+      previousStatus: snapshot.previousStatus ?? (currentStatus === "SUSPENDED" ? "SUSPENDED" : "ACTIVE"),
+      timestamp: snapshot.updatedAt,
+    });
+    if (params.action !== "revoke") {
+      throw new CredentialLifecycleActionError("The agent has already permanently revoked this credential. The portal status has been reconciled.", 409);
+    }
+    return recovered;
+  }
+
+  // Bind the write to the state we just read, including manual requests. The
+  // agent rejects a concurrent lifecycle change instead of applying stale intent.
   const result: AgentCredentialLifecycleResult = await changeCredentialLifecycle(
     issuance.credentialExchangeId,
     params.action,
     reason,
-    ...(params.expectedLifecycleRevision !== undefined ? [params.expectedLifecycleRevision] as [number] : []),
+    snapshot.revision,
   );
+  assertLifecycleSnapshot(result, { ...issuance, credentialExchangeId: issuance.credentialExchangeId });
   const expectedStatus = expectedStatusFor(params.action);
   if (result.status !== expectedStatus) {
     throw new CredentialLifecycleActionError(

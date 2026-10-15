@@ -37,6 +37,7 @@ it("keeps revocation terminal, including stale issuance writes", async () => {
 it("enriches a webhook-first suspension without replaying state or scheduling stale work", async () => {
   const { id, row, event } = await fixture();
   const suspension = event(1, "SUSPENDED");
+  vi.mocked(getCredentialLifecycle).mockResolvedValueOnce({ ...event(0, "ACTIVE"), updatedAt: timestamp });
   vi.mocked(changeCredentialLifecycle).mockImplementationOnce(async () => {
     await recordCredentialLifecycleChangedEvent(suspension);
     return { ...suspension, updatedAt: timestamp };
@@ -56,4 +57,38 @@ it("reconciles revisionless payloads from a current snapshot and fails closed wi
   expect(await prisma.credentialIssuance.findUniqueOrThrow({ where: { credentialExchangeId: id } })).toMatchObject({ lifecycleStatus: "ACTIVE", lifecycleRevision: 4 });
   vi.mocked(getCredentialLifecycle).mockRejectedValueOnce(new Error("offline"));
   await expect(recordCredentialLifecycleChangedEvent(legacy)).rejects.toMatchObject({ status: 503 });
+});
+
+it("recovers a historical revocation from the upgraded agent without another ledger mutation", async () => {
+  const { id, row, event } = await fixture();
+  vi.mocked(changeCredentialLifecycle).mockClear();
+  vi.mocked(getCredentialLifecycle).mockResolvedValueOnce({
+    ...event(0, "REVOKED"), eventId: `lifecycle-baseline:${id}`, reason: "Original action", updatedAt: timestamp,
+  });
+  await expect(requestCredentialLifecycleChange({
+    action: "revoke", actorId: "retry-admin", studentId: id, credentialIssuanceId: row.id, reason: "Retry",
+  })).resolves.toMatchObject({ lifecycleState: "REVOKED" });
+  expect(changeCredentialLifecycle).not.toHaveBeenCalled();
+  expect(await prisma.credentialIssuance.findUniqueOrThrow({ where: { id: row.id } })).toMatchObject({
+    status: "REVOKED", lifecycleStatus: "REVOKED", lifecycleRevision: 0, lifecycleReason: "Original action",
+  });
+  expect(await prisma.credentialAuditLog.findUnique({ where: { eventId: `lifecycle-baseline:${id}` } })).toMatchObject({
+    actorId: null, action: "CREDENTIAL_REVOKED", occurredAt: new Date(timestamp),
+  });
+});
+
+it("blocks an outdated agent before changing either the ledger or portal state", async () => {
+  const { id, row, event } = await fixture();
+  vi.mocked(changeCredentialLifecycle).mockClear();
+  vi.mocked(getCredentialLifecycle).mockResolvedValueOnce({
+    ...event(0, "ACTIVE"), revision: undefined, updatedAt: timestamp,
+  });
+  await expect(requestCredentialLifecycleChange({
+    action: "revoke", studentId: id, credentialIssuanceId: row.id, reason: "Review",
+  })).rejects.toMatchObject({ status: 503 });
+  expect(changeCredentialLifecycle).not.toHaveBeenCalled();
+  expect(await prisma.credentialIssuance.findUniqueOrThrow({ where: { id: row.id } })).toMatchObject({
+    status: "ISSUED", lifecycleStatus: "ACTIVE", lifecycleRevision: null,
+  });
+  expect(await prisma.credentialAuditLog.count({ where: { credentialIssuanceId: row.id } })).toBe(0);
 });
