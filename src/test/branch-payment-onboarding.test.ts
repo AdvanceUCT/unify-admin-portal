@@ -14,6 +14,7 @@ vi.mock("@/lib/email/payment-access", () => ({ sendPaymentAccessDecisionEmail: v
 
 const database = vi.hoisted(() => {
   const transaction = {
+    $queryRaw: vi.fn().mockResolvedValue([]),
     universityProfile: { findMany: vi.fn() },
     vendorBranch: { findFirst: vi.fn(), update: vi.fn() },
     vendorBranchPaymentApplication: {

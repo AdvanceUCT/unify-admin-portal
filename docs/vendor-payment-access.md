@@ -20,7 +20,7 @@ The Payment Access tab under Vendors provides vendor/branch search, status filte
 
 If the shared payout reference changes, a pending request needs owner reconfirmation. The owner reviews the current account and acknowledges it again. The pending application retains its original submission time. An audit entry preserves the previous safe snapshot and the new snapshot. Historical requests without complete details follow the same confirmation path. A stale admin page cannot approve using an older displayed payout reference, even after the owner reconfirms.
 
-Server-side submission, reconfirmation and review run in serializable transactions with at most three attempts. Concurrent submissions converge on one active application. Approval and rejection compete for the pending state. Replays of an existing decision do not write another decision or send another email.
+Server-side submission, reconfirmation and review run in serializable transactions with at most three attempts. A payout-profile row lock orders confirmation/approval against account replacement, including when approval preserves a suspended profile. Concurrent submissions converge on one active application. Approval and rejection compete for the pending state. Replays of an existing decision do not write another decision or send another email.
 
 Branch approval is distinct from payment readiness. The university wallet setting, vendor approval, branch activity, vendor payment profile, wallet status/currency and branch acceptance determine whether payments can proceed. Approving a branch preserves a suspended vendor's status, reason, timestamp and suspension code. Existing recovery remains available. Already approved branches keep the existing payout-account replacement policy.
 

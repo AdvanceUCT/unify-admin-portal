@@ -107,18 +107,20 @@ describe("branch payment-access transactions", () => {
     const data = await loadPaymentAccess(f.vendor.id); expect(data.context.paymentStatus).toBe("PENDING"); expect(data.context.payoutAccount?.accountMask).toBe("•••• 7890"); expect(JSON.stringify(data)).not.toContain("1234567890");
     await expect(saveVendorPayoutDestination({ userId: f.user.id, vendorProfileId: f.vendor.id, companyName: "Synthetic", role: "STAFF", branchIds: [f.branch.id] }, f.user.id, { accountHolderName: "Synthetic", accountNumber: "1234567890", bankCode: "001" })).rejects.toThrow("Only the vendor owner");
   });
-  it("rechecks a bank change that commits while approval is waiting for the application row", async () => {
+  it("rechecks a bank change committed while approval waits for the shared profile", async () => {
     const f = await fixture(); const app = await submit(f);
+    await prisma.vendorPaymentProfile.update({ where: { vendorProfileId: f.vendor.id }, data: { status: "SUSPENDED", suspensionCode: "OVERDRAFT", suspensionReason: "Synthetic suspension", suspendedAt: new Date() } });
     let release!: () => void; let acquired!: () => void;
     const ready = new Promise<void>(resolve => { acquired = resolve; }); const gate = new Promise<void>(resolve => { release = resolve; });
-    const holder = prisma.$transaction(async tx => { await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "vendor_branch_payment_application" WHERE "id" = ${app.id} FOR UPDATE`); acquired(); await gate; }, { timeout: 15000 });
+    const replacing = prisma.$transaction(async tx => { await tx.vendorPaymentProfile.update({ where: { vendorProfileId: f.vendor.id }, data: snapshot(randomUUID()) }); acquired(); await gate; }, { timeout: 15000 });
     await ready; const approving = approve(f, app.id).then(() => null, error => error as Error);
     try {
       let waiting = false;
-      for (let i = 0; i < 200; i++) { const rows = await prisma.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query LIKE '%vendor_branch_payment_application%'`); if (Number(rows[0].count) > 0) { waiting = true; break; } await new Promise(resolve => setTimeout(resolve, 5)); }
-      expect(waiting).toBe(true); await changeAccount(f);
-    } finally { release(); await holder; }
+      for (let i = 0; i < 200; i++) { const rows = await prisma.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query LIKE '%vendor_payment_profile%'`); if (Number(rows[0].count) > 0) { waiting = true; break; } await new Promise(resolve => setTimeout(resolve, 5)); }
+      expect(waiting).toBe(true);
+    } finally { release(); await replacing; }
     expect(await approving).toBeInstanceOf(Error);
     expect((await prisma.vendorBranchPaymentApplication.findUniqueOrThrow({ where: { id: app.id } })).status).toBe("PENDING");
+    expect((await prisma.vendorPaymentProfile.findUniqueOrThrow({ where: { vendorProfileId: f.vendor.id } })).status).toBe("SUSPENDED");
   });
 });

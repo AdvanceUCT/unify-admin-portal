@@ -7,7 +7,7 @@ import "server-only";
 
 import { z } from "zod";
 
-import type { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import {
   AuditAction,
   BranchPaymentAcceptanceStatus,
@@ -155,6 +155,9 @@ async function currentPayoutSnapshot(
   transaction: Prisma.TransactionClient,
   vendorProfileId: string,
 ) {
+  // Approval and payout-account replacement must have a defined order even when
+  // approval preserves a SUSPENDED profile and would otherwise perform no update.
+  await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "vendor_payment_profile" WHERE "vendorProfileId" = ${vendorProfileId} FOR UPDATE`);
   const profile = await transaction.vendorPaymentProfile.findUnique({
     where: { vendorProfileId },
     select: {
