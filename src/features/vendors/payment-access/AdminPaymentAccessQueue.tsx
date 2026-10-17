@@ -1,8 +1,8 @@
-import { prisma } from "@/lib/db/prisma";
-import { loadPaymentAccess } from "@/lib/payments/paymentAccess";
 import { paymentAccessSummary } from "@/lib/payments/paymentAccessSummary";
 import { PaymentAccessQueue, type AccessQueueItem } from "./PaymentAccessQueue";
 export async function AdminPaymentAccessQueue() {
+  const { prisma } = await import("@/lib/db/prisma");
+  const { loadPaymentAccess } = await import("@/lib/payments/paymentAccess");
   const vendors = await prisma.vendorProfile.findMany({ where: { branches: { some: { paymentApplications: { some: {} } } } }, select: { id: true } });
   const data = await Promise.all(vendors.map(vendor => loadPaymentAccess(vendor.id)));
   const items: AccessQueueItem[] = data.flatMap(vendor => vendor.branches.filter(branch => branch.applications.length).map(branch => {

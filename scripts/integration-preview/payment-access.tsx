@@ -1,3 +1,5 @@
+import LoadingPaymentAccess from "../../src/app/vendor/(portal)/payments/access/loading";
+import PaymentAccessError from "../../src/app/vendor/(portal)/payments/access/error";
 import { PaymentAccessPage } from "../../src/features/vendors/payment-access/PaymentAccessPage";
 import { PaymentAccessOverview } from "../../src/features/vendors/payment-access/PaymentAccessOverview";
 import { PaymentAccessReview } from "../../src/features/vendors/payment-access/PaymentAccessReview";
@@ -18,5 +20,9 @@ export function PaymentAccessFixture({ screen }: { screen: string }) {
   const item = { ...branch, applications: screen === "access-setup" || screen === "access-saved" ? [] : [{ ...application, status: screen === "access-rejected" ? "REJECTED" : screen === "access-approved" || screen === "access-paused" ? "APPROVED" : "PENDING", reviewNotes: screen === "access-rejected" ? "Please update the branch location before resubmitting." : null }] };
   if (screen === "access-approved" || screen === "access-paused") item.acceptanceStatus = "ACTIVE";
   if (screen === "access-paused") { state.paymentStatus = "SUSPENDED"; state.suspensionCode = "OVERDRAFT"; state.suspensionReason = "Restore the negative wallet balance to accept payments again."; }
+  if (screen === "access-loading") return <LoadingPaymentAccess />;
+  if (screen === "access-error") return <PaymentAccessError reset={() => window.location.reload()} />;
+  if (screen === "access-inactive") item.active = false;
+  if (screen === "access-empty") return <PaymentAccessOverview data={{ companyName: "Campus Cafe", context, branches: [] }} />;
   return screen === "access-overview" ? <PaymentAccessOverview data={{ companyName: "Campus Cafe", context, branches: [branch, { ...item, id: "library", name: "Library kiosk", applications: [application] }, { ...branch, id: "inactive", name: "Sports counter", active: false }] }} /> : screen === "access-admin-queue" ? <PaymentAccessQueue now="2026-10-17T10:00:00Z" items={[{ branchId: branch.id, branchName: branch.name, companyName: "Campus Cafe", status: "PENDING", requestLabel: "In review", submittedAt: application.submittedAt, needsReconfirmation: false, paused: false }, { branchId: "library", branchName: "Library kiosk", companyName: "Library Eats", status: "REJECTED", requestLabel: "Not approved", submittedAt: application.submittedAt, needsReconfirmation: false, paused: false }]} /> : screen.includes("admin") ? <PaymentAccessReview companyName="Campus Cafe" branch={item} context={state} history={[]} approve={approve} reject={reject} /> : <PaymentAccessPage branch={item} context={state} saveAccount={saveAccount} loadBanks={loadBanks} submitRequest={submitRequest} />;
 }

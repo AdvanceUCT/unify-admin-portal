@@ -17,7 +17,7 @@ export function PaymentAccessReview({ companyName, branch, context, history, app
   useEffect(() => { if (result.error || result.message) feedback.current?.focus(); }, [result]);
   const application = summary.application;
   return <div className="mx-auto max-w-4xl space-y-6"><Link className="text-sm underline" href="/vendors?tab=payments">Back to payment access</Link>
-    <header className="flex flex-wrap justify-between gap-4"><div><h1 className="text-page-title">{companyName}</h1><p className="text-fg-muted">{branch.name} · {branch.address || "No location supplied"}</p></div><Badge tone={summary.approved ? "success" : "warning"}>{summary.requestLabel}</Badge></header>
+    <header className="flex flex-wrap items-start justify-between gap-4"><div><h1 className="text-page-title">{companyName}</h1><p className="text-fg-muted">{branch.name} · {branch.address || "No location supplied"}</p></div><Badge tone={summary.approved ? "success" : "warning"}>{summary.requestLabel}</Badge></header>
     {summary.blockers.map(text => <p className="text-sm text-warning-fg" key={text}>{text}</p>)}
     {context.paymentStatus === "SUSPENDED" && <div className="border-l-2 border-warning-border bg-warning-bg p-4 text-sm"><p className="font-semibold">Vendor payments are suspended</p><p>{context.suspensionReason || "Existing vendor restrictions remain in effect."}</p><p className="mt-2">Approving this branch will not restore vendor payments.</p></div>}
     <section className="space-y-4 border-t border-border pt-5"><h2 className="text-section-title">Submitted payout account</h2><AccountSummary account={application?.payoutAccount ?? null} />

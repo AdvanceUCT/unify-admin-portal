@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-for (const screen of ["overview", "setup", "saved", "pending", "rejected", "reconfirm", "approved", "paused", "admin", "admin-reconfirm", "admin-queue"]) {
+for (const screen of ["overview", "empty", "loading", "error", "inactive", "setup", "saved", "pending", "rejected", "reconfirm", "approved", "paused", "admin", "admin-reconfirm", "admin-queue"]) {
   test(`payment access ${screen} is readable`, async ({ page }, info) => {
     const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
     await page.goto(`/vendor/payments/access?screen=access-${screen}`);
@@ -13,7 +13,7 @@ test("owner can select a bank, save, acknowledge and submit on one page", async 
   await page.goto("/vendor/payments/access?screen=access-setup");
   await page.getByLabel("Account holder name").fill("Campus Cafe");
   await page.getByLabel("Search banks").fill("Synthetic");
-  await page.getByLabel("Bank", { exact: true }).selectOption("001");
+  await page.getByRole("combobox", { name: "Bank", exact: true }).selectOption("001");
   await page.getByLabel("Account number").fill("1234567890");
   await page.getByRole("button", { name: "Save account", exact: true }).click();
   await expect(page.getByRole("button", { name: "Saving account…" })).toBeDisabled();
@@ -54,4 +54,22 @@ test("admin queue filters vendor, branch and review status", async ({ page }) =>
   await expect(page.getByText("Campus Cafe", { exact: true })).toHaveCount(0);
   await page.getByLabel("Request status").selectOption("PENDING");
   await expect(page.getByText("No matching payment-access requests.")).toBeVisible();
+});
+
+test("unknown bank save blocks final submission until authoritative reload", async ({ page }) => {
+  await page.goto("/vendor/payments/access?screen=access-saved&unknown-save=1");
+  await page.getByRole("button", { name: "Change payout account" }).click();
+  await page.getByLabel("Account number").fill("1234567890");
+  await page.getByRole("button", { name: "Save account", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Reload saved account" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Submit for review" })).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+});
+test("admin can review and reject with feedback", async ({ page }) => {
+  await page.goto("/vendor/payments/access?screen=access-admin");
+  await page.getByText("Reject request", { exact: true }).click();
+  await page.getByLabel("Reason shown to vendor").fill("Update the branch location.");
+  await page.getByRole("button", { name: "Confirm rejection" }).click();
+  await expect(page.getByText("Request rejected. The vendor can review your feedback.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve branch" })).toHaveCount(0);
 });

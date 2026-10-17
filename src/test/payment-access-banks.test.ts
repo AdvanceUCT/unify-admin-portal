@@ -12,7 +12,7 @@ describe("South African payout bank catalogue", () => {
     for (const body of [{ status: true, data: [] }, { status: true, data: {} }, { status: false }]) { vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(body))); await expect(listSouthAfricanBanks("key", "https://provider.example")).rejects.toThrow(); }
   });
   it("stops repeated cursors and does not retry failed requests", async () => {
-    const fetch = vi.fn().mockResolvedValue(Response.json({ status: true, data: [bank], meta: { next: "same" } })); vi.stubGlobal("fetch", fetch);
+    const fetch = vi.fn().mockImplementation(async () => Response.json({ status: true, data: [bank], meta: { next: "same" } })); vi.stubGlobal("fetch", fetch);
     await expect(listSouthAfricanBanks("key", "https://provider.example")).rejects.toThrow("pagination"); expect(fetch).toHaveBeenCalledTimes(2);
     fetch.mockReset().mockRejectedValue(new Error("offline")); await expect(listSouthAfricanBanks("key", "https://provider.example")).rejects.toThrow(); expect(fetch).toHaveBeenCalledTimes(1);
   });
