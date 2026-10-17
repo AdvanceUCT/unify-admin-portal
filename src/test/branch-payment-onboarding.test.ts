@@ -88,6 +88,15 @@ describe("branch payment onboarding", () => {
     });
   });
 
+  it("bounds database retries and does not retry business errors", async () => {
+    database.runTransaction.mockRejectedValue({ code: "P2034" });
+    await expect(submitBranchPaymentApplication({ vendorProfileId: "vendor-1", branchId: "branch-1", actorId: "owner", acknowledgementAccepted: true, expectedPayoutReference: "recipient" })).rejects.toMatchObject({ code: "P2034" });
+    expect(database.runTransaction).toHaveBeenCalledTimes(3);
+    database.runTransaction.mockClear().mockRejectedValue(new Error("validation"));
+    await expect(submitBranchPaymentApplication({ vendorProfileId: "vendor-1", branchId: "branch-1", actorId: "owner", acknowledgementAccepted: true, expectedPayoutReference: "recipient" })).rejects.toThrow("validation");
+    expect(database.runTransaction).toHaveBeenCalledTimes(1);
+  });
+
   it("submits a pending branch payment-access request for an active vendor branch", async () => {
     database.transaction.vendorBranch.findFirst.mockResolvedValueOnce(branch);
     database.transaction.vendorBranchPaymentApplication.create.mockResolvedValueOnce({

@@ -9,7 +9,7 @@ vi.mock("@/lib/paymentProviders/paystack/client", () => ({ createTransferRecipie
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { encryptVendorSecret } from "@/lib/vendors/integrationCrypto";
-import { approveBranchPaymentApplication, rejectBranchPaymentApplication, submitBranchPaymentApplication, PAYMENT_ACCESS_ACKNOWLEDGEMENT_TEXT } from "@/lib/payments/branchOnboarding";
+import { approveBranchPaymentApplication, rejectBranchPaymentApplication, submitBranchPaymentApplication } from "@/lib/payments/branchOnboarding";
 import { loadPaymentAccess, paymentAccessAccountHistory } from "@/lib/payments/paymentAccess";
 import { paymentAccessSummary } from "@/lib/payments/paymentAccessSummary";
 import { saveVendorPayoutDestination } from "@/lib/vendors/payouts";

@@ -185,7 +185,7 @@ export default async function VendorPaymentsPage({
         <section className="rounded-xl border border-warning-border bg-warning-bg p-5 shadow-md">
           <h1 className="text-section-title text-fg">Payment approval is currently inactive</h1>
           <p className="mt-2 text-sm leading-6 text-warning-fg">
-            Past wallet payments remain available. Check payment access for each branch's status and next action.
+            Past wallet payments remain available. Check payment access for each branch&apos;s status and next action.
           </p>
         </section>
       ) : null}

@@ -1,0 +1,1 @@
+export default function LoadingPaymentAccess() { return <div className="space-y-4" role="status" aria-live="polite"><h1 className="text-page-title">Payment access</h1><p className="text-sm text-fg-muted">Loading branch requests…</p><div aria-hidden className="h-24 animate-pulse rounded-md bg-surface-muted motion-reduce:animate-none" /></div>; }

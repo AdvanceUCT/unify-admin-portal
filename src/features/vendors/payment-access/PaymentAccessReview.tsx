@@ -1,9 +1,10 @@
 "use client";
+import { accessButton, accessInput } from "./styles";
 import Link from "next/link";
 import { useActionState, useEffect, useRef } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { PAYMENT_ACCESS_ACKNOWLEDGEMENT, paymentAccessSummary, type AccessActionResult, type AccessBranch, type AccessContext, type PayoutAccount } from "@/lib/payments/paymentAccessSummary";
-import { AccountSummary, accessButton, accessInput } from "./PayoutAccountEditor";
+import { AccountSummary } from "./PayoutAccountEditor";
 type ReviewAction = (state: AccessActionResult, data: FormData) => Promise<AccessActionResult>;
 export type AccountHistoryEntry = { id: string; applicationId: string | null; at: string; previous: PayoutAccount | null; next: PayoutAccount | null };
 export function PaymentAccessReview({ companyName, branch, context, history, approve, reject }: { companyName: string; branch: AccessBranch; context: AccessContext; history: AccountHistoryEntry[]; approve: ReviewAction; reject: ReviewAction }) {
@@ -21,7 +22,7 @@ export function PaymentAccessReview({ companyName, branch, context, history, app
     {context.paymentStatus === "SUSPENDED" && <div className="border-l-2 border-warning-border bg-warning-bg p-4 text-sm"><p className="font-semibold">Vendor payments are suspended</p><p>{context.suspensionReason || "Existing vendor restrictions remain in effect."}</p><p className="mt-2">Approving this branch will not restore vendor payments.</p></div>}
     <section className="space-y-4 border-t border-border pt-5"><h2 className="text-section-title">Submitted payout account</h2><AccountSummary account={application?.payoutAccount ?? null} />
       {summary.needsReconfirmation && <div className="space-y-3 border-l-2 border-warning-border bg-warning-bg p-4 text-sm"><p className="font-semibold">Owner confirmation required</p><p>The account changed or the original request is incomplete. Approval is blocked until the owner confirms.</p><p className="font-medium">Current payout account</p><AccountSummary account={context.payoutAccount} /></div>}
-      <p className="text-xs text-fg-muted">Payout accounts are shared across this vendor's branches.</p>
+      <p className="text-xs text-fg-muted">Payout accounts are shared across this vendor&apos;s branches.</p>
     </section>
     <section className="space-y-3 border-t border-border pt-5"><h2 className="text-section-title">Request details</h2><p className="break-all font-mono text-sm">{application?.id || "No submitted request"}</p><p className="text-sm text-fg-muted">{application?.submittedAt ? `Submitted ${new Date(application.submittedAt).toLocaleString("en-ZA")}` : "Not submitted"}</p><p className="text-sm">{application?.acknowledged ? "Acknowledgement accepted" : "Acknowledgement missing"}</p><details><summary className="cursor-pointer text-sm underline">Student data acknowledgement</summary><p className="mt-2 text-sm text-fg-muted">{PAYMENT_ACCESS_ACKNOWLEDGEMENT}</p></details></section>
     <div ref={feedback} tabIndex={-1} role={result.error ? "alert" : "status"} className="text-sm">{result.error || result.message}</div>

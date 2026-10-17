@@ -1,13 +1,12 @@
 "use client";
 import { useActionState, useEffect, useRef, useState } from "react";
 import type { AccessActionResult, BankOption, PayoutAccount } from "@/lib/payments/paymentAccessSummary";
-export const accessInput = "h-11 w-full rounded-md border border-border bg-surface px-3 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-brand-500/40";
-export const accessButton = "inline-flex min-h-11 items-center justify-center rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50";
+import { accessInput, accessButton } from "./styles";
 export type PayoutEditorActions = { saveAccount: (state: AccessActionResult, data: FormData) => Promise<AccessActionResult>; loadBanks: () => Promise<{ banks?: BankOption[]; error?: string }> };
 export function AccountSummary({ account }: { account: PayoutAccount | null }) {
   return account ? <dl className="grid gap-3 text-sm sm:grid-cols-2"><div><dt className="text-fg-muted">Account holder</dt><dd className="font-medium text-fg">{account.accountHolderName || "Saved account"}</dd></div><div><dt className="text-fg-muted">Bank account</dt><dd className="font-medium text-fg">{account.bankName || "Saved bank"} · {account.accountMask || "Account saved"}</dd></div></dl> : <p className="text-sm text-fg-muted">No payout account saved.</p>;
 }
-export function PayoutAccountEditor({ account, saveAccount, loadBanks, onSaved }: PayoutEditorActions & { account: PayoutAccount | null; onSaved?: (account: PayoutAccount) => void }) {
+export function PayoutAccountEditor({ account, saveAccount, loadBanks, onSaved, onStateChange }: PayoutEditorActions & { account: PayoutAccount | null; onSaved?: (account: PayoutAccount) => void; onStateChange?: (blocked: boolean) => void }) {
   const [editing, setEditing] = useState(!account);
   const [banks, setBanks] = useState<BankOption[]>([]);
   const [loading, setLoading] = useState(false);
@@ -17,7 +16,11 @@ export function PayoutAccountEditor({ account, saveAccount, loadBanks, onSaved }
   const form = useRef<HTMLFormElement>(null);
   const feedback = useRef<HTMLDivElement>(null);
   const [result, action, pending] = useActionState(async (state: AccessActionResult, data: FormData) => {
-    try { return await saveAccount(state, data); } catch { return { uncertain: true, error: "The save could not be confirmed. Reload to check the saved account." }; }
+    try {
+      const saved = await saveAccount(state, data);
+      if (saved.account) { form.current?.reset(); setEditing(false); onSaved?.(saved.account); onStateChange?.(false); }
+      return saved;
+    } catch { return { uncertain: true, error: "The save could not be confirmed. Reload to check the saved account." }; }
   }, {});
   async function fetchBanks() {
     setLoading(true); setBankError("");
@@ -32,16 +35,15 @@ export function PayoutAccountEditor({ account, saveAccount, loadBanks, onSaved }
     return () => { active = false; };
   }, [editing, loadBanks]);
   useEffect(() => {
-    if (result.account) { form.current?.reset(); setEditing(false); onSaved?.(result.account); }
     if (result.error || result.message) feedback.current?.focus();
-  }, [result, onSaved]);
+  }, [result]);
   const shown = banks.filter(bank => bank.code === selectedBank || bank.name.toLowerCase().includes(search.toLowerCase()));
   return <div className="space-y-4">
     <AccountSummary account={result.account ?? account} />
     <div ref={feedback} tabIndex={-1} role={result.error ? "alert" : "status"} className={result.error ? "text-sm text-danger-fg" : "text-sm text-success-fg"}>{result.error || result.message}</div>
     {result.uncertain ? <button type="button" className={accessButton} onClick={() => window.location.reload()}>Reload saved account</button> : <>
-      {account && <button type="button" className="min-h-11 text-sm font-medium text-brand-700 underline" aria-expanded={editing} onClick={() => setEditing(!editing)}>{editing ? "Cancel account edit" : "Change payout account"}</button>}
-      {editing && <form ref={form} action={action} className="max-w-xl space-y-4 border-l-2 border-brand-200 pl-4" aria-label="Payout account">
+      {account && <button type="button" className="min-h-11 text-sm font-medium text-brand-700 underline" aria-expanded={editing} onClick={() => { setEditing(!editing); onStateChange?.(!editing); }}>{editing ? "Cancel account edit" : "Change payout account"}</button>}
+      {editing && <form ref={form} action={action} onSubmit={() => onStateChange?.(true)} className="max-w-xl space-y-4 border-l-2 border-brand-200 pl-4" aria-label="Payout account">
         <p className="text-sm text-fg-muted">This account receives payouts for all your branches.</p>
         <label className="grid gap-1 text-sm font-medium">Account holder name<input className={accessInput} name="accountHolderName" defaultValue={account?.accountHolderName ?? ""} required maxLength={200} aria-invalid={Boolean(result.fieldErrors?.accountHolderName)} aria-describedby="holder-error" /></label>
         <p id="holder-error" className="text-sm text-danger-fg">{result.fieldErrors?.accountHolderName}</p>
