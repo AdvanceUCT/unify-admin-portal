@@ -13,6 +13,8 @@ import { Metric } from "@/components/ui/Metric";
 import { LivePaymentList } from "@/features/vendors/LivePaymentList";
 import { LiveVerificationList } from "@/features/vendors/LiveVerificationList";
 import { QrCodeActions } from "@/features/vendors/QrCodeActions";
+import { loadPaymentAccess } from "@/lib/payments/paymentAccess";
+import { paymentAccessSummary } from "@/lib/payments/paymentAccessSummary";
 import { prisma } from "@/lib/db/prisma";
 import { formatMoneyMinor } from "@/lib/formatters";
 import {
@@ -111,16 +113,9 @@ export default async function VendorBranchPage({
       branch.vendorProfile.walletAccount.currency === "ZAR",
   );
   const isDefault = branch.vendorProfile.defaultBranchId === branch.id;
-  const latestPaymentApplication = branch.paymentApplications[0] ?? null;
-  const canRequestPaymentAccess =
-    context.role === "OWNER" &&
-    branch.active &&
-    branch.status === "ACTIVE" &&
-    !paymentEnabled &&
-    (!latestPaymentApplication ||
-      latestPaymentApplication.status === "REJECTED" ||
-      latestPaymentApplication.status === "REVOKED" ||
-      latestPaymentApplication.status === "WITHDRAWN");
+  const accessData = context.role === "OWNER" ? await loadPaymentAccess(context.vendorProfileId) : null;
+  const accessBranch = accessData?.branches.find(item => item.id === branch.id);
+  const accessSummary = accessBranch && accessData ? paymentAccessSummary(accessBranch, accessData.context) : null;
 
   return (
     <div className="space-y-6">
@@ -217,44 +212,8 @@ export default async function VendorBranchPage({
             <h2 className="text-section-title text-fg">POS payments</h2>
             <p className="mt-1 text-sm text-fg-subtle">Create a sale in the POS. Students scan its QR to review the fixed amount and approve payment.</p>
           </div>
-          {paymentEnabled ? (
-            <Link className="text-sm font-medium text-fg hover:underline" href="/vendor/payment-requests">View POS sales</Link>
-          ) : (
-            <div className="py-16 text-center">
-              <p className="text-sm text-fg-subtle">
-                This branch is not approved for wallet payments.
-              </p>
-              {canRequestPaymentAccess ? (
-                <Link
-                  className="mt-4 inline-flex h-9 items-center rounded-md bg-brand-600 px-3 text-sm font-medium text-white transition hover:bg-brand-700"
-                  href={`/vendor/branches/${branch.id}/payment-access`}
-                >
-                  Request payment access
-                </Link>
-              ) : null}
-            </div>
-          )}
-          {!paymentEnabled && !canRequestPaymentAccess ? (
-            <div className="w-full rounded-lg border border-border bg-surface-muted/60 p-3 text-left text-sm">
-              {latestPaymentApplication?.status === "PENDING" ? (
-                <p className="text-fg-muted">
-                  Payment access request submitted. An administrator still needs to approve this branch.
-                </p>
-              ) : latestPaymentApplication?.status === "APPROVED" ? (
-                <p className="text-warning-fg">
-                  Payment access was approved, but this QR is not currently usable. Ask an administrator to check the vendor payment profile and wallet account.
-                </p>
-              ) : context.role === "OWNER" ? (
-                <p className="text-fg-muted">
-                  Payment access can be requested once this branch is active.
-                </p>
-              ) : (
-                <p className="text-fg-muted">
-                  Ask the vendor owner to request payment access for this branch.
-                </p>
-              )}
-            </div>
-          ) : null}
+          {context.role === "OWNER" ? <div className="space-y-3 text-sm"><p>{accessSummary?.paused || accessSummary?.requestLabel}</p><Link className="inline-flex min-h-11 items-center font-medium underline" href={`/vendor/branches/${branch.id}/payment-access`}>{accessSummary?.actionLabel || "View payment access"}</Link>{accessSummary?.paymentReady && <Link className="ml-4 underline" href="/vendor/payment-requests">View POS sales</Link>}</div> : paymentEnabled ? <Link href="/vendor/payment-requests" className="text-sm underline">View POS sales</Link> : <p className="text-sm text-fg-muted">Ask the vendor owner to review payment access for this branch.</p>}
+
         </section>
       </div>
 

@@ -457,3 +457,26 @@ export async function verifyTransfer(
 
   return parseTransferEnvelope(assertSuccessEnvelope(status, json, "/transfer/verify"), "/transfer/verify");
 }
+
+/** Lists bank names and internal codes only, following every provider cursor. */
+export async function listSouthAfricanBanks(secretKey: string, baseUrl: string): Promise<Array<{ code: string; name: string }>> {
+  const banks = new Map<string, string>();
+  const seen = new Set<string>();
+  let next: string | null = null;
+  let pages = 0;
+  do {
+    if (++pages > 50) throw new PaystackProviderError("MALFORMED_RESPONSE", "Bank-list pagination exceeded its limit.");
+    const params = new URLSearchParams({ country: "south africa", currency: "ZAR", perPage: "100", use_cursor: "true" });
+    if (next) params.set("next", next);
+    const { status, json } = await paystackFetch(secretKey, baseUrl, `/bank?${params}`, { method: "GET" });
+    if (status >= 400 || !isRecord(json) || json.status !== true || !Array.isArray(json.data)) throw new PaystackProviderError("HTTP_ERROR", "The bank list is unavailable.");
+    for (const bank of json.data) {
+      if (isRecord(bank) && bank.active === true && !bank.is_deleted && bank.currency === "ZAR" && bank.type === "basa" && typeof bank.code === "string" && typeof bank.name === "string") banks.set(bank.code, bank.name);
+    }
+    next = isRecord(json.meta) && typeof json.meta.next === "string" && json.meta.next ? json.meta.next : null;
+    if (next && seen.has(next)) throw new PaystackProviderError("MALFORMED_RESPONSE", "Invalid bank-list pagination.");
+    if (next) seen.add(next);
+  } while (next);
+  if (!banks.size) throw new PaystackProviderError("MALFORMED_RESPONSE", "No supported banks were returned.");
+  return [...banks].map(([code, name]) => ({ code, name })).sort((a, b) => a.name.localeCompare(b.name));
+}

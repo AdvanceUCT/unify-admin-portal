@@ -3,6 +3,7 @@
  * @module features/vendors/VendorPaymentAccessRequests
  */
 
+import Link from "next/link";
 import { CreditCard, MapPin } from "lucide-react";
 
 import { Badge } from "@/components/ui/Badge";
@@ -29,7 +30,7 @@ type PaymentAccessRequest = {
 };
 
 function statusTone(status: PaymentAccessRequest["status"]) {
-  return status === BranchPaymentApplicationStatus.APPROVED ? "success" as const : "warning" as const;
+  return status === BranchPaymentApplicationStatus.APPROVED ? "success" as const : status === "REJECTED" || status === "REVOKED" ? "danger" as const : "warning" as const;
 }
 
 export function VendorPaymentAccessRequests({
@@ -42,9 +43,10 @@ export function VendorPaymentAccessRequests({
       <div className="border-b border-border px-5 py-4">
         <div className="flex items-center gap-2">
           <CreditCard aria-hidden className="size-5 text-brand-700" />
-          <h2 className="text-section-title text-fg">Payment requests</h2>
+          <h2 className="text-section-title text-fg">Payment-access requests</h2>
         </div>
       </div>
+      <div className="px-5 py-3"><Link href="/vendor/payments/access" className="text-sm underline">Manage payment access</Link></div>
       <div className="divide-y divide-border">
         {requests.length === 0 ? (
           <p className="px-5 py-6 text-sm text-fg-subtle">
@@ -57,9 +59,10 @@ export function VendorPaymentAccessRequests({
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-medium text-fg">{request.vendorBranch.name}</p>
                   <Badge tone={statusTone(request.status)}>
-                    {request.status === BranchPaymentApplicationStatus.APPROVED ? "Approved" : "Pending"}
+                    {request.status === "PENDING" ? "In review" : request.status === "REJECTED" ? "Not approved" : request.status.charAt(0) + request.status.slice(1).toLowerCase()}
                   </Badge>
                 </div>
+                <Link href={`/vendor/branches/${request.vendorBranch.id}/payment-access`} className="mt-2 inline-block text-sm underline">View request</Link>
                 <p className="mt-1 flex items-center gap-1.5 text-sm text-fg-muted">
                   <MapPin aria-hidden className="size-3.5 shrink-0" />
                   {request.vendorBranch.address || "No branch location supplied"}

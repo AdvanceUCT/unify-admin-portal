@@ -1,0 +1,28 @@
+import LoadingPaymentAccess from "../../src/app/vendor/(portal)/payments/access/loading";
+import PaymentAccessError from "../../src/app/vendor/(portal)/payments/access/error";
+import { PaymentAccessPage } from "../../src/features/vendors/payment-access/PaymentAccessPage";
+import { PaymentAccessOverview } from "../../src/features/vendors/payment-access/PaymentAccessOverview";
+import { PaymentAccessReview } from "../../src/features/vendors/payment-access/PaymentAccessReview";
+import { PaymentAccessQueue } from "../../src/features/vendors/payment-access/PaymentAccessQueue";
+import type { AccessBranch, AccessContext, AccessActionResult } from "../../src/lib/payments/paymentAccessSummary";
+const account = { reference: "synthetic-recipient", provider: "PAYSTACK", accountHolderName: "Campus Cafe", bankName: "Synthetic Bank", bankCode: "001", accountMask: "•••• 1234" };
+const application = { id: "synthetic-application", status: "PENDING", submittedAt: "2026-10-17T08:00:00Z", reviewedAt: null, reviewNotes: null, revokedNotes: null, acknowledged: true, payoutReference: account.reference, payoutProvider: account.provider, payoutAccount: account };
+const context: AccessContext = { vendorApproved: true, walletEnabled: true, paymentStatus: "APPROVED", walletStatus: "ACTIVE", walletCurrency: "ZAR", suspensionCode: null, suspensionReason: null, payoutAccount: account };
+const branch: AccessBranch = { id: "synthetic-campus", name: "Campus counter", address: "Main campus · Student centre", active: true, status: "ACTIVE", acceptanceStatus: null, acceptanceReason: null, applications: [] };
+const url = new URL(window.location.href);
+const loadBanks = async () => url.searchParams.has("bank-error") ? { error: "Banks could not be loaded. Try again." } : { banks: [{ code: "001", name: "Synthetic Bank" }, { code: "002", name: "Campus Bank" }] };
+const saveAccount = async (): Promise<AccessActionResult> => { await new Promise(resolve => setTimeout(resolve, 200)); if (url.searchParams.has("unknown-save")) throw new Error("Synthetic offline result"); return { ok: true, account, message: "Payout account saved." }; };
+const submitRequest = async (): Promise<AccessActionResult> => { await new Promise(resolve => setTimeout(resolve, 200)); if (url.searchParams.has("unknown-submit")) throw new Error("Synthetic offline result"); return { ok: true, applicationId: application.id, message: "Request saved. It is awaiting university review." }; };
+const approve = async (): Promise<AccessActionResult> => ({ ok: true, message: "Branch approved. Existing payment restrictions remain in effect." });
+const reject = async (): Promise<AccessActionResult> => ({ ok: true, message: "Request rejected. The vendor can review your feedback." });
+export function PaymentAccessFixture({ screen }: { screen: string }) {
+  const state = { ...context, payoutAccount: screen === "access-setup" ? null : screen.includes("reconfirm") ? { ...account, reference: "changed-recipient", bankName: "Campus Bank", accountMask: "•••• 5678" } : account };
+  const item = { ...branch, applications: screen === "access-setup" || screen === "access-saved" ? [] : [{ ...application, status: screen === "access-rejected" ? "REJECTED" : screen === "access-approved" || screen === "access-paused" ? "APPROVED" : "PENDING", reviewNotes: screen === "access-rejected" ? "Please update the branch location before resubmitting." : null }] };
+  if (screen === "access-approved" || screen === "access-paused") item.acceptanceStatus = "ACTIVE";
+  if (screen === "access-paused") { state.paymentStatus = "SUSPENDED"; state.suspensionCode = "OVERDRAFT"; state.suspensionReason = "Restore the negative wallet balance to accept payments again."; }
+  if (screen === "access-loading") return <LoadingPaymentAccess />;
+  if (screen === "access-error") return <PaymentAccessError reset={() => window.location.reload()} />;
+  if (screen === "access-inactive") item.active = false;
+  if (screen === "access-empty") return <PaymentAccessOverview data={{ companyName: "Campus Cafe", context, branches: [] }} />;
+  return screen === "access-overview" ? <PaymentAccessOverview data={{ companyName: "Campus Cafe", context, branches: [branch, { ...item, id: "library", name: "Library kiosk", applications: [application] }, { ...branch, id: "inactive", name: "Sports counter", active: false }] }} /> : screen === "access-admin-queue" ? <PaymentAccessQueue now="2026-10-17T10:00:00Z" items={[{ branchId: branch.id, branchName: branch.name, companyName: "Campus Cafe", status: "PENDING", requestLabel: "In review", submittedAt: application.submittedAt, needsReconfirmation: false, paused: false }, { branchId: "library", branchName: "Library kiosk", companyName: "Library Eats", status: "REJECTED", requestLabel: "Not approved", submittedAt: application.submittedAt, needsReconfirmation: false, paused: false }]} /> : screen.includes("admin") ? <PaymentAccessReview companyName="Campus Cafe" branch={item} context={state} history={[]} approve={approve} reject={reject} /> : <PaymentAccessPage branch={item} context={state} saveAccount={saveAccount} loadBanks={loadBanks} submitRequest={submitRequest} />;
+}

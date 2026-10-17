@@ -1,0 +1,2 @@
+"use client";
+export default function PaymentAccessError({ reset }: { reset: () => void }) { return <div className="space-y-4" role="alert"><h1 className="text-page-title">Payment access could not be loaded</h1><p className="text-sm text-fg-muted">Your saved details and requests are still on the server.</p><button onClick={reset} className="min-h-11 rounded-md bg-brand-600 px-4 text-sm text-white">Try again</button></div>; }

@@ -24,15 +24,12 @@ import {
 } from "@/lib/vendors/applications";
 import { applicationReasonLabels } from "@/lib/vendors/application-reasons";
 import {
-  approveBranchPaymentApplicationAction,
   approveVendorApplicationAction,
   createVendorVerificationQrAction,
-  rejectBranchPaymentApplicationAction,
   rejectVendorApplicationAction,
-  revokeBranchPaymentAcceptanceAction,
   revokeVendorApplicationAction,
 } from "./actions";
-import { PaymentAccessRevokeButton } from "./PaymentAccessRevokeButton";
+import { AdminPaymentAccessQueue } from "@/features/vendors/payment-access/AdminPaymentAccessQueue";
 import { RejectForm } from "./RejectForm";
 import { RevokeButton } from "./RevokeButton";
 
@@ -103,28 +100,6 @@ export default async function VendorsPage({
     parsePage(vendorDecisionPage),
     DECISION_PAGE_SIZE,
   );
-  const approvedPaymentGroups = Array.from(
-    paymentAccess.activeAcceptances.reduce((groups, acceptance) => {
-      const vendor = acceptance.vendorBranch.vendorProfile;
-      const existing = groups.get(vendor.id);
-      if (existing) {
-        existing.acceptances.push(acceptance);
-      } else {
-        groups.set(vendor.id, {
-          acceptances: [acceptance],
-          companyName: vendor.companyName,
-          serviceCategory: vendor.serviceCategory,
-          vendorId: vendor.id,
-        });
-      }
-      return groups;
-    }, new Map<string, {
-      acceptances: typeof paymentAccess.activeAcceptances;
-      companyName: string;
-      serviceCategory: string;
-      vendorId: string;
-    }>()),
-  ).map(([, group]) => group);
 
   return (
     <div className="space-y-6">
@@ -417,144 +392,7 @@ export default async function VendorsPage({
         </div>
       )}
 
-      {/* Payment Access tab */}
-      {activeTab === "payments" && (
-        <div className="space-y-6">
-          <section className="rounded-xl border border-border bg-surface p-5 shadow-md">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h2 className="text-section-title text-fg">Branch payment access</h2>
-                <p className="mt-1 text-sm text-fg-subtle">
-                  Review branch-level requests to accept UNIFY wallet payments.
-                </p>
-              </div>
-              <Link
-                className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
-                href="/payments/about"
-              >
-                How payments work
-              </Link>
-            </div>
-          </section>
-
-          <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
-            <div className="border-b border-border px-5 py-4">
-              <h3 className="text-section-title text-fg">
-                Pending requests ({paymentAccess.pendingApplications.length})
-              </h3>
-            </div>
-            <div className="divide-y divide-border">
-              {paymentAccess.pendingApplications.length === 0 ? (
-                <p className="px-5 py-6 text-sm text-fg-subtle">No pending payment-access requests.</p>
-              ) : (
-                paymentAccess.pendingApplications.map((application) => {
-                  const hasPayoutSnapshot = Boolean(application.payoutDestinationReferenceSnapshot);
-                  const hasAcknowledgement = Boolean(application.studentDataAcknowledgedAt);
-                  return (
-                    <div className="flex flex-col gap-3 px-5 py-4 lg:flex-row lg:items-center lg:justify-between" key={application.id}>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h4 className="font-medium text-fg">
-                            {application.vendorBranch.vendorProfile.companyName}
-                          </h4>
-                          <Badge tone="warning">Pending</Badge>
-                        </div>
-                        <p className="mt-1 text-sm text-fg-subtle">
-                          {application.vendorBranch.name} &middot; {application.vendorBranch.vendorProfile.serviceCategory}
-                        </p>
-                        <p className="mt-0.5 text-xs text-fg-muted">
-                          {application.vendorBranch.address || "No branch location supplied"}
-                        </p>
-                        <p className="mt-0.5 text-xs text-fg-subtle">
-                          Submitted {application.submittedAt ? decisionDate(application.submittedAt) : decisionDate(application.createdAt)}
-                          {!hasPayoutSnapshot || !hasAcknowledgement ? " / missing application details" : ""}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 flex-wrap items-center gap-2">
-                        <Link
-                          className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg"
-                          href={`/vendors/payment-access/${application.vendorBranchId}`}
-                        >
-                          <Eye aria-hidden className="size-4" />
-                          View
-                        </Link>
-                        <form action={approveBranchPaymentApplicationAction}>
-                          <input name="applicationId" type="hidden" value={application.id} />
-                          <input name="branchId" type="hidden" value={application.vendorBranchId} />
-                          <button
-                            className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-success-border bg-success-bg px-3 text-sm font-medium text-success-fg transition hover:bg-success-border disabled:cursor-not-allowed disabled:opacity-50"
-                            disabled={!hasPayoutSnapshot || !hasAcknowledgement}
-                            type="submit"
-                          >
-                            <Check aria-hidden className="size-4" />
-                            Approve
-                          </button>
-                        </form>
-                        <RejectForm
-                          action={rejectBranchPaymentApplicationAction}
-                          applicationId={application.id}
-                          hiddenFields={{ branchId: application.vendorBranchId }}
-                          label="Deny"
-                          reasonLabel="Reason for denial"
-                          title="Deny payment access"
-                          confirmLabel="Confirm denial"
-                        />
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </section>
-
-          <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
-            <div className="border-b border-border px-5 py-4">
-              <h3 className="text-section-title text-fg">
-                Approved payment branches ({paymentAccess.activeAcceptances.length})
-              </h3>
-            </div>
-            <div className="divide-y divide-border">
-              {approvedPaymentGroups.length === 0 ? (
-                <p className="px-5 py-6 text-sm text-fg-subtle">No branches are approved for wallet payments yet.</p>
-              ) : (
-                approvedPaymentGroups.map((group) => (
-                  <details className="group p-0" key={group.vendorId}>
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 transition hover:bg-surface-muted/60">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h4 className="font-medium text-fg">{group.companyName}</h4>
-                          <Badge tone="success">{group.acceptances.length} approved</Badge>
-                        </div>
-                        <p className="mt-0.5 text-sm text-fg-subtle">{group.serviceCategory}</p>
-                      </div>
-                      <span className="shrink-0 text-sm font-medium text-fg-muted group-open:hidden">Show</span>
-                      <span className="hidden shrink-0 text-sm font-medium text-fg-muted group-open:inline">Hide</span>
-                    </summary>
-                    <div className="mx-5 mb-5 divide-y divide-border rounded-lg border border-border">
-                      {group.acceptances.map((acceptance) => (
-                        <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between" key={acceptance.id}>
-                          <div>
-                            <p className="font-medium text-fg">{acceptance.vendorBranch.name}</p>
-                            <p className="mt-1 text-sm text-fg-subtle">
-                              QR {acceptance.qrIdentifier} &middot; Approved {decisionDate(acceptance.approvedAt)}
-                            </p>
-                          </div>
-                          <PaymentAccessRevokeButton
-                            action={revokeBranchPaymentAcceptanceAction}
-                            branchId={acceptance.vendorBranchId}
-                            branchName={acceptance.vendorBranch.name}
-                            companyName={group.companyName}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                ))
-              )}
-            </div>
-          </section>
-        </div>
-      )}
+      {activeTab === "payments" && <AdminPaymentAccessQueue />}
 
       {/* Decision Log tab */}
       {activeTab === "log" && (
