@@ -1,8 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { VendorIntegrationSettings } from "@/features/vendors/VendorIntegrationSettings";
+import { VendorIntegrationSettings } from "@/features/vendors/integrations/ApiKeySettings";
 import { CallbackSettings } from "@/features/vendors/integrations/CallbackSettings";
-import { IntegrationDocs } from "@/features/vendors/integrations/IntegrationDocs";
+import { WorkflowGuide } from "@/features/vendors/integrations/WorkflowGuide";
 import { CopyButton } from "@/features/vendors/integrations/IntegrationUi";
 const branches = [{ id: "branch", name: "Campus till", active: true, status: "ACTIVE", paymentStatus: "ACTIVE", isDefault: true }, { id: "inactive", name: "Old till", active: false, status: "DISABLED", paymentStatus: "DISABLED", isDefault: false }];
 const key = { id: "key", name: "Till key", keyPrefix: "prefix", createdAt: "2026-10-07T10:00:00Z", revokedAt: null, lastUsedAt: null, scopes: ["payments:read"], branchIds: ["branch"] };
@@ -89,27 +89,25 @@ describe("callback settings", () => {
   it("offers recovery from a failed initial load", async () => {
     vi.mocked(fetch).mockRejectedValue(new Error("Offline"));
     render(<CallbackSettings kind="verification" branches={branches} />);
-    await screen.findByText(/Unable to load callbacks/);
+    await screen.findByText(/Unable to load webhooks/);
     expect(screen.getByRole("button", { name: "Save and reveal secret" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Reload configuration" })).toBeEnabled();
   });
 });
 describe("developer guidance", () => {
-  it("searches endpoint actions and changes generated code language", () => {
-    render(<IntegrationDocs baseUrl="https://portal.example" branches={branches} />);
-    fireEvent.change(screen.getByLabelText("Search API endpoints"), { target: { value: "Cancel a pending refund" } });
-    expect(screen.getByRole("heading", { name: "Cancel a pending refund" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Create a sale" })).not.toBeInTheDocument();
+  it("keeps request details beside one canonical example and changes generated language", () => {
+    render(<WorkflowGuide kind="payments" ready hasKey baseUrl="https://portal.example" branches={branches} />);
+    expect(document.querySelectorAll("#payment-create")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Copy Create a sale cURL request" })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Example language"), { target: { value: "node" } });
-    expect(screen.getByRole("button", { name: "Copy Cancel a pending refund Node.js request" })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Search API endpoints"), { target: { value: "does-not-exist" } });
-    expect(screen.getByText(/No endpoints match/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy Create a sale Node.js request" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "API reference", exact: true })).not.toBeInTheDocument();
   });
-  it("explains explicit execution and preserves unknown outcomes in the refund guide", () => {
-    render(<IntegrationDocs baseUrl="https://portal.example" branches={branches} guide="refunds" />);
+  it("explains durable execution and preserves unknown refund outcomes inside Payments", () => {
+    render(<WorkflowGuide kind="payments" ready hasKey baseUrl="https://portal.example" branches={branches} />);
     expect(screen.getByRole("heading", { name: "Execute explicitly" })).toBeInTheDocument();
     expect(screen.getAllByText(/missing records and malformed responses/).length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: "Troubleshooting" })).toHaveAttribute("href", "/vendor/integrations/reference#troubleshooting");
+    expect(screen.getByText("Compatibility: older refund POST")).toBeInTheDocument();
   });
   it("provides a manual copy fallback when the clipboard is unavailable", async () => {
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error("Blocked")) } });

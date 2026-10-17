@@ -56,3 +56,27 @@ export const troubleshooting = [
 export function signatureExample(kind: "verification" | "payments") {
   return `import { createHmac, timingSafeEqual } from "node:crypto";\n\n// rawBody must be the exact received Buffer, before JSON parsing.\nfunction validSignature(rawBody, signature${kind === "payments" ? ", timestamp" : ""}, secret) {\n  if (!/^sha256=[a-f0-9]{64}$/.test(signature ?? "")) return false;${kind === "payments" ? '\n  if (!/^\\d{10}$/.test(timestamp ?? "")) return false;\n  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;' : ""}\n  const hmac = createHmac("sha256", secret);${kind === "payments" ? '\n  hmac.update(`${timestamp}.`);' : ""}\n  const expected = hmac.update(rawBody).digest();\n  return timingSafeEqual(expected, Buffer.from(signature.slice(7), "hex"));\n}\n\n// Headers: X-Unify-Signature${kind === "payments" ? ", X-Unify-Timestamp" : ""}.\n// Read the corresponding callback secret from your server environment.\n// Verify first, then parse JSON, validate terms and reread authoritative status.\n// Deduplicate X-Unify-Event-Id durably before fulfillment; acknowledge with 2xx.\n// Continue polling if delivery is unavailable.`;
 }
+
+export const integrationSteps: Record<"verification" | "payments" | "refunds", { title: string; text: string; examples: string[] }[]> = {
+  verification: [
+    { title: "Prepare your server", text: "Create a student verification key. Check that your default verification branch is active and provisioned. A restricted key must include that branch. Keep the key in a server environment variable.", examples: [] },
+    { title: "Start verification", text: "Save your stable checkoutId, then create the session from your backend. Keep that reference if the response is lost.", examples: ["verification-create"] },
+    { title: "Let the student verify", text: "Open the returned verificationUrl from your customer-facing checkout. The student reviews and explicitly agrees to disclose requested details. Keep the checkout pending until an authoritative decision arrives.", examples: [] },
+    { title: "Read the decision", text: "Read the result from your backend. APPROVED permits the action that needs verification. Handle DECLINED, EXPIRED and FAILED visibly. A callback can prompt this read, but polling is your fallback.", examples: ["verification-read"] },
+  ],
+  payments: [
+    { title: "Prepare your till server", text: "Use the current test payment configuration. The vendor payment application and branch must be approved and active. Create a wallet payment key for the branch. Credential verification is separate from payment.", examples: [] },
+    { title: "Create a fixed sale", text: "Persist the original orderReference, amount, branch and idempotencyKey before sending. Amounts are integer cents: 3500 = R35.00. A request expires after ten minutes; retrying creation preserves its original expiry.", examples: ["payment-create"] },
+    { title: "Display the payment QR", text: "Encode the returned qrPayload as a QR in your till. The student scans it, reviews the server-stored amount and explicitly approves payment in their wallet. Do not substitute the verification URL or static branch payment QR.", examples: [] },
+    { title: "Confirm payment", text: "Poll or use a signed callback to trigger an authoritative read. Only PAID confirms the sale and gives receipt identifiers. A missing callback or browser redirect is not payment confirmation.", examples: ["payment-read", "payment-list"] },
+    { title: "Handle an abandoned sale", text: "Cancel an unpaid request explicitly. If payment has already won the race, use its paid receipt. Recover the original sale before creating another.", examples: ["payment-cancel"] },
+  ],
+  refunds: [
+    { title: "Keep the original instruction", text: "Add refunds:create to a key with access to the original sale's branch. Persist the request ID, amount and refund key before registration. Block new refunds for this operator while an instruction is unresolved; do not replace it when the amount or screen changes.", examples: [] },
+    { title: "Register without moving money", text: "Register frozen terms. Registration acknowledgment returns the operation ID. If acknowledgment is lost, replay identical registration. A key reused with different terms is an idempotency conflict.", examples: ["refund-register"] },
+    { title: "Recover before submitting", text: "Hydrate this operator's pending operation across browsers before enabling another refund. Discovery never executes it. A different API credential is a different operator; never reassign an unresolved instruction after credential changes.", examples: ["refund-pending", "refund-read"] },
+    { title: "Execute explicitly", text: "After registration acknowledgment, explicitly execute the stored operation. Inspect its status even when HTTP is successful. COMPLETED, REJECTED and CANCELLED are stable terminal outcomes. Refresh the sale's refund totals after completion.", examples: ["refund-execute"] },
+    { title: "Check or cancel an unknown result", text: "Timeouts, 401/403, 5xx, missing records and malformed responses do not establish rejection. Retain the reference and check again with the original authorized operator. Recovery works through payment suspension and inactive acceptance; identity and branch authorization still apply. Cancellation can return COMPLETED if execution already succeeded.", examples: ["refund-cancel"] },
+  ],
+};
+
