@@ -103,7 +103,7 @@ export default async function VendorPaymentsPage({
         <section className="rounded-xl border border-warning-border bg-warning-bg p-5 shadow-md">
           <h1 className="text-section-title text-fg">No payment branches available</h1>
           <p className="mt-2 text-sm leading-6 text-warning-fg">
-            To request approval, add a service point and submit a payment access application.
+            Request and track branch approval in payment access. <Link href="/vendor/payments/access" className="underline">Review payment access</Link>
           </p>
         </section>
 
@@ -115,7 +115,7 @@ export default async function VendorPaymentsPage({
             <div className="divide-y divide-border">
               {allBranches.length === 0 ? (
                 <p className="px-5 py-6 text-sm text-fg-subtle">
-                  Add a branch before requesting payment access.
+                  Add a branch to request payment access. <Link href="/vendor/branches" className="underline">Add a branch</Link>
                 </p>
               ) : (
                 allBranches.map((branch) => (
@@ -125,7 +125,7 @@ export default async function VendorPaymentsPage({
                     key={branch.id}
                   >
                     <span>{branch.name}</span>
-                    <span>Submit application</span>
+                    <span>Set up payment access</span>
                   </Link>
                 ))
               )}
@@ -171,6 +171,7 @@ export default async function VendorPaymentsPage({
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">{context.role === "OWNER" && <Link href="/vendor/payments/access" className="min-h-11 content-center text-sm font-medium underline">Manage payment access</Link>}</div>
       <VendorWalletStatusBanner overview={payoutOverview} />
 
       {context.role === "OWNER" ? (
@@ -184,7 +185,7 @@ export default async function VendorPaymentsPage({
         <section className="rounded-xl border border-warning-border bg-warning-bg p-5 shadow-md">
           <h1 className="text-section-title text-fg">Payment approval is currently inactive</h1>
           <p className="mt-2 text-sm leading-6 text-warning-fg">
-            Past wallet payments remain visible here, but no branch can accept new wallet payments until access is approved again.
+            Past wallet payments remain available. Check payment access for each branch's status and next action.
           </p>
         </section>
       ) : null}

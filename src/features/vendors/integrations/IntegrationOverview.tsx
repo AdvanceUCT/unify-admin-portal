@@ -6,7 +6,7 @@ export function IntegrationOverview({ state }: { state: Awaited<ReturnType<typeo
   return <div className="space-y-8"><div className="grid gap-8 lg:grid-cols-2">
     {(["verification", "payments"] as const).map(kind => {
       const flow = state[kind];
-      const next = !flow.ready ? { href: kind === "payments" ? state.payments.reason?.includes("suspended") ? "/vendor/payments" : state.branches.length ? `/vendor/branches/${encodeURIComponent(state.branches[0].id)}/payment-access` : "/vendor/branches" : "/vendor/branches", label: "Review setup" } : !flow.key ? { href: `/vendor/integrations/keys?preset=${kind}`, label: "Create API key" } : { href: `/vendor/integrations/guides/${kind}`, label: "Open setup guide" };
+      const next = !flow.ready ? { href: kind === "payments" ? "/vendor/payments/access" : "/vendor/branches", label: "Review setup" } : !flow.key ? { href: `/vendor/integrations/keys?preset=${kind}`, label: "Create API key" } : { href: `/vendor/integrations/guides/${kind}`, label: "Open setup guide" };
       return <section key={kind} className="space-y-4 border-t border-border pt-5">
         <div className="flex flex-wrap items-start justify-between gap-3"><h2 className="text-section-title text-fg">{kind === "verification" ? "Verify students" : "Accept wallet payments"}</h2><Badge tone={flow.ready && flow.key ? "success" : "warning"}>{flow.ready && flow.key ? "Configured" : "Needs attention"}</Badge></div>
         <p className="text-sm text-fg-muted">{kind === "verification" ? "Check student status for your checkout or access flow." : "Let students scan a sale and approve its fixed amount."}</p>
