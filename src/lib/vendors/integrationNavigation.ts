@@ -1,4 +1,4 @@
-import { endpoints } from "./integrationGuide";
+import { endpoints, integrationSteps } from "./integrationGuide";
 export const verificationPath = "/vendor/integrations";
 export const paymentsPath = "/vendor/integrations/payments";
 export function legacyIntegrationDestination(path: string, search = "", hash = "") {
@@ -11,7 +11,8 @@ export function legacyIntegrationDestination(path: string, search = "", hash = "
   if (guide && !["verification", "payments", "refunds"].includes(guide)) return null;
   if (guide || path.endsWith("/guides")) {
     const target = guide === "payments" || guide === "refunds" ? paymentsPath : verificationPath;
-    const step = /^step-[1-9]\d*$/.test(fragment) ? fragment : null;
+    const group = guide === "refunds" ? "refunds" : guide === "payments" ? "payments" : "verification";
+    const step = /^step-[1-9]\d*$/.test(fragment) && Number(fragment.slice(5)) <= integrationSteps[group].length ? fragment : null;
     return `${target}#${endpoint?.id ?? (step ? `${guide === "refunds" ? "refund-" : ""}${step}` : guide === "refunds" ? "refunds" : "setup")}`;
   }
   return null;

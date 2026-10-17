@@ -101,7 +101,7 @@ describe("developer guidance", () => {
     expect(screen.getByRole("button", { name: "Copy Create a sale cURL request" })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Example language"), { target: { value: "node" } });
     expect(screen.getByRole("button", { name: "Copy Create a sale Node.js request" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "API reference", exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "API reference" })).not.toBeInTheDocument();
   });
   it("explains durable execution and preserves unknown refund outcomes inside Payments", () => {
     render(<WorkflowGuide kind="payments" ready hasKey baseUrl="https://portal.example" branches={branches} />);

@@ -17,10 +17,10 @@ describe("production integration route composition", () => {
     const path = kind === "verification" ? "/vendor/integrations" : `/vendor/integrations/${kind}`; mocks.path.mockReturnValue(path);
     const page = kind === "verification" ? await VerificationPage() : kind === "payments" ? await PaymentsPage() : await KeysPage({ searchParams: Promise.resolve({ preset: "payments", returnTo: "payments" }) });
     render(await Layout({ children: page }));
-    expect(screen.getAllByRole("heading", { name: "Integrations", exact: true })).toHaveLength(1);
+    expect(screen.getAllByRole("heading", { name: "Integrations" })).toHaveLength(1);
     const nav = screen.getByRole("navigation", { name: "Integration sections" }); expect(nav.querySelectorAll("a")).toHaveLength(3); expect(nav.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
-    expect(screen.queryByRole("link", { name: "Setup guides", exact: true })).not.toBeInTheDocument();
-    if (kind !== "keys") { expect(screen.getAllByRole("heading", { name: "Webhooks", exact: true })).toHaveLength(1); expect(document.querySelectorAll("#delivery-history")).toHaveLength(1); }
+    expect(screen.queryByRole("link", { name: "Setup guides" })).not.toBeInTheDocument();
+    if (kind !== "keys") { expect(screen.getAllByRole("heading", { name: "Webhooks" })).toHaveLength(1); expect(document.querySelectorAll("#delivery-history")).toHaveLength(1); }
     else expect(screen.getByRole("link", { name: "Return to payment setup" })).toHaveAttribute("href", "/vendor/integrations/payments#setup");
     expect(mocks.overview).toHaveBeenCalledWith("owned-vendor");
   });

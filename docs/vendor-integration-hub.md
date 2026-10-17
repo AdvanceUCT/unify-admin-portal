@@ -1,50 +1,57 @@
-# Vendor integration hub
+# Vendor integrations
 
-AD-217, AD-218 and AD-220 share an owner-only hub at `/vendor/integrations`. Existing credential scopes, branch restrictions, webhook contracts and durable financial operations are unchanged. No database migration is added.
+Owners use one integration layout with three route links. The landing route is Verification, Payments is its own workflow, and API keys is the only place to create or revoke credentials. There is no separate overview, guide index, callback page or API reference to navigate between.
 
-## Page structure
+## Canonical destinations
 
-The landing page uses the approved light design: white surfaces, navy accents, underlined Website verification / POS payments / API keys tabs, 32px page title, 24px section headings and 16px body text. Website and POS instructions sit beside their callback settings on desktop and stack on mobile. Technical examples expand on demand. Keyboard tabs support arrows, Home and End. Form values survive tab changes, while newly revealed secrets are cleared, including late responses from an abandoned tab. Existing deep links retain their separate navigation, guides, preset key creation and callback history.
+| Destination | Purpose |
+|---|---|
+| `/vendor/integrations` | Verification setup and examples |
+| `/vendor/integrations#webhooks` | Verification webhook configuration and signature example |
+| `/vendor/integrations#delivery-history` | Recorded verification delivery attempts |
+| `/vendor/integrations/payments` | Sale setup and examples |
+| `/vendor/integrations/payments#refunds` | Durable refund operations and interrupted-instruction recovery |
+| `/vendor/integrations/payments#webhooks` | Payment/refund webhook configuration and signature example |
+| `/vendor/integrations/payments#delivery-history` | Payment/refund delivery history and retries |
+| `/vendor/integrations/keys?preset=payments&returnTo=payments` | Payment-key creation with a visible return action |
 
-| URL | Purpose |
-| --- | --- |
-| `/vendor/integrations` | Configure website verification, POS payments and shared keys in three focused tabs. |
-| `/vendor/integrations/guides` | Select verification, payments or refunds. |
-| `/vendor/integrations/guides/verification` | Start a checkout verification and read the decision. |
-| `/vendor/integrations/guides/payments` | Create a fixed sale, display its QR, read receipt or cancel. |
-| `/vendor/integrations/guides/refunds` | Register frozen terms, execute explicitly, recover or cancel. |
-| `/vendor/integrations/keys` | Create preset/custom permissions and review masked keys. |
-| `/vendor/integrations/callbacks?type=verification` | Configure verification callbacks and inspect recorded attempts. |
-| `/vendor/integrations/callbacks?type=payments` | Configure payment/refund events and inspect delivery/retry history. |
-| `/vendor/integrations/reference` | Search shared endpoint examples and troubleshooting. |
+The primary navigation has the same heading, spacing and vendor theme on every route. Desktop pages have a sticky outline. Mobile pages have a sticky Jump to selector below the portal header. Section jumps focus their target and keep it clear of sticky controls. Browser refresh and Back/Forward retain the route.
 
-Owner access remains required. Guides and keys use the deployment's `APP_URL`, never a selectable unsupported live/sandbox mode. Current payment-provider configuration is test-only. Empty, loading, failed and partially configured states have explicit next actions. A configuration badge does not claim successful end-to-end acceptance.
+## Guidance and contracts
 
-## Contracts and one-time secrets
+Shared typed endpoint and step content generates each workflow's cURL and Node.js examples. Request fields, permissions, synthetic responses and recovery notes expand beside the relevant example. Each endpoint has one canonical anchor. API keys are never inserted into documentation. Examples use `APP_URL`, the selected branch and environment-variable placeholders. The existing test payment configuration remains; there is no sandbox/live switch or in-page API runner.
 
-`src/lib/vendors/integrationGuide.ts` contains shared typed endpoint content, presets, cURL/Node request generation, synthetic response examples and separate callback signature examples. No example contains an issued secret. Copying code never inserts a key from the key-management screen.
+Verification and payments remain separate. A student does not need credential verification before paying. New refund integrations register frozen instructions, execute only after acknowledgement, and retain unresolved references after errors. The older refund POST wrapper remains under explicitly labelled compatibility details.
 
-Key presets use the existing exact scopes. Refunds are an explicit opt-in. New payment/refund keys require selected owned branches; inactive branches remain visible for authorized recovery, while new execution still checks eligibility. Checkout verification uses the default verification branch. A restricted key must include that branch.
+Real branch and key records determine prerequisites. Configured settings and recorded delivery success are separate facts. Manual integration-test checklists do not claim the system recorded those checks.
 
-Secret creation and replacement are explicit actions. Requests are not automatically repeated after ambiguous failure. Key creation refreshes masked records after a lost acknowledgment. A secret lost in transit cannot be recovered; revoke/reissue the key or explicitly replace the callback secret. Secrets remain in component memory until hidden or the user leaves the page, and are never written to browser storage.
+## Webhooks and one-time secrets
 
-`GET /api/vendor/integrations/webhook/history?limit=20&cursor=...` is additive and owner-authenticated. It pages verification attempts with a stable attemptedAt/id boundary and vendor-bound cursor validation. Limits are 1–50. The response contains `items`, `nextCursor` and `lastSuccess`. Each item exposes attempt ID/number, verification identifiers, checkout reference, current verification status, delivery status, HTTP status, timestamp and safe failure description. It omits stored error messages, student attributes, secrets and historical destinations. Responses disable caching.
+A single webhook controller serves verification or payments in its respective workflow. Configuration and history load independently. Failed history does not disable valid settings; failed configuration does not hide history. History refresh, retry and pagination preserve unsaved configuration input.
 
-Verification callbacks sign raw body bytes and retain their existing manual retry endpoint. Payment callbacks sign `timestamp + "." + rawBody`, enforce a five-minute receiving tolerance and have their existing automatic retry schedule. Payment history and manual retry continue using the existing API and delivery records. Retrying uses the current destination and can repeat an event; receiving systems must deduplicate durably and reread authoritative state before fulfillment.
+Verification signs exact raw bytes and retains its manual retry contract. Payments sign `timestamp + "." + rawBody` with the existing timestamp tolerance and automatic retry schedule. Retry uses the current destination and can repeat an event. Receivers deduplicate event IDs durably and reread authoritative state before fulfillment. Delivery failure never reverses a verification decision or financial result.
 
-Existing verification callbacks and external checkout responses may include a safe student summary. Payment events contain no student identity. No public response shape or financial eligibility rule is changed by this UI increment.
+Key presets, immutable permissions, explicit payment/refund branch restrictions, refund opt-in, default verification branch rules, revocation confirmations and webhook secret rotation remain. Secret-generating requests are never automatically retried. New secrets remain in component memory, support Copy and Hide, and disappear on route departure. A request completed after departure cannot reveal its secret on the returning page. A lost creation response requires authoritative recovery and explicit replacement when necessary.
 
-## Testing and release
+## Existing links
 
-Local validation covers unit/component tests, TypeScript and lint; the tabbed presentation was also checked with synthetic data at desktop/mobile sizes and 200% zoom-equivalent sizing. GitHub Actions CI covers lint, types, unit tests, isolated PostgreSQL regressions and the Next build. Added history regressions cover tied timestamps, foreign cursors, safe projection and suspended-vendor access. Existing refund, callback and credential regressions remain part of CI.
+Old guide, callback and reference routes remain owner-authenticated compatibility entry points. They replace the browser URL with the matching workflow and anchor, rather than rendering another copy of the content.
 
-The Integration browser review workflow uses Chromium at desktop and mobile sizes. Synthetic fixtures import the production presentation components and portal CSS, while replacing only navigation adapters and API responses. The fixture server refuses to run outside GitHub Actions. It never connects to live records. Screenshots, browser errors, horizontal overflow, deep links, endpoint search, language selection and keyboard navigation are checked. Reports and screenshots are uploaded as `integration-browser-review` artifacts for visual inspection.
+- Guide index and verification guide open Verification setup.
+- Payment and refund guides open Payments setup or Refunds.
+- Callback routes use the existing `type` query to choose Verification or Payments.
+- API-reference endpoint fragments choose the matching workflow from the shared endpoint catalogue.
+- Known guide-step fragments remain supported, including refund-step aliases. Unknown fragments fall back to the corresponding setup section.
+- Closed enclosing details open when a legacy link targets a nested endpoint.
 
-These fixtures do not prove authenticated routing or a physical student payment. Server-route authorization tests and the Next build cover routing separately. Record final commit/run URLs and inspected screenshots in the delivery evidence. Keep this PR unmerged and undeployed until separately authorized. Do not transition Jira tickets during implementation.
+Keys retain their preset queries. Return destinations are restricted to the two known workflows. Owner authentication and all existing API authorization contracts remain in place.
 
-## Design references
+## Validation and rollout
 
-- [Plaid quickstart](https://plaid.com/docs/quickstart/) explains prerequisites and the integration flow before deeper requests.
-- [Stripe API keys](https://docs.stripe.com/keys) distinguishes server credentials from webhook signing secrets.
-- [Paystack webhooks](https://paystack.com/docs/payments/webhooks/) explains polling, callback delivery and receiving-server behavior.
-- [Playwright CI](https://playwright.dev/docs/ci-intro) describes GitHub Actions browser tests and report artifacts.
+All automated checks run in GitHub Actions only, including lint, typecheck, unit, isolated PostgreSQL, browser and build checks. Synthetic browser fixtures import the same production shell, workflow composition, key content and loading/error components used by the real routes. Route-composition tests separately verify the owner-authenticated route functions and their shared layout. The fixture no longer renders a different overview component from production.
+
+Browser coverage includes both viewport sizes, one shared heading and three consistent links, legacy redirects and anchors, browser history, keyboard focus, readable code, sticky-section offsets, independent load failures, presets and clearing secrets on departure. Unit coverage retains secret rotation, late responses, clipboard failures, ambiguous mutations, branch restrictions, retry and pagination regressions. Reports and screenshots are uploaded as `integration-browser-review` artifacts.
+
+Fixtures use synthetic data and actions. They do not prove a live authenticated vendor journey, send real webhooks or perform payments. Record the final commit, passing runs and inspected screenshots in PR evidence. Live acceptance and production deployment require separate authorization.
+
+This cleanup is added to PR #129 alongside its branch payment-access improvements. No database migration, public API change, financial-policy change, merge or Jira transition is included.
