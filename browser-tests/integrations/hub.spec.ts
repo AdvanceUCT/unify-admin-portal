@@ -28,9 +28,15 @@ test("visible section navigation reaches history and preserves focus below the h
 });
 test("key presets have a visible route back and one-time secrets clear on departure", async ({ page }) => {
  await page.goto("/vendor/integrations/payments"); await page.getByRole("link", { name: "Create payment key" }).click(); await expect(page.getByRole("link", { name: "Return to payment setup" })).toBeVisible();
- await page.getByLabel("Key name").fill("Synthetic till"); await page.getByRole("checkbox", { name: /Campus café/ }).check(); await page.getByRole("button", { name: "Create API key" }).click(); await expect(page.getByText("unify_vk_synthetic_once", { exact: true })).toBeVisible(); await page.getByRole("link", { name: "Return to payment setup" }).click(); await expect(page).toHaveURL(/integrations\/payments#setup$/); await page.getByRole("navigation", { name: "Integration sections" }).getByRole("link", { name: "API keys", exact: true }).click(); await expect(page.getByText("unify_vk_synthetic_once", { exact: true })).toHaveCount(0);
+ await page.getByLabel("Key name").fill("Synthetic till"); await page.getByRole("checkbox", { name: /Campus cafÃ©/ }).check(); await page.getByRole("button", { name: "Create API key" }).click(); await expect(page.getByText("unify_vk_synthetic_once", { exact: true })).toBeVisible(); await page.getByRole("link", { name: "Return to payment setup" }).click(); await expect(page).toHaveURL(/integrations\/payments#setup$/); await page.getByRole("navigation", { name: "Integration sections" }).getByRole("link", { name: "API keys", exact: true }).click(); await expect(page.getByText("unify_vk_synthetic_once", { exact: true })).toHaveCount(0);
 });
 test("payment signature guidance stays beside settings and examples use selected targets", async ({ page }) => {
  await page.goto("/vendor/integrations/payments#webhooks"); await page.getByText("Node.js signature example", { exact: true }).click(); await expect(page.getByText('Payments use HMAC-SHA256 over timestamp + "." + the exact raw body, with a five-minute timestamp tolerance.')).toBeVisible();
  await page.goto("/vendor/integrations/payments#payment-create"); await page.getByRole("combobox", { name: "Example language" }).selectOption("node"); await expect(page.getByRole("button", { name: "Copy Create a sale Node.js request" })).toBeVisible(); await expect(page.locator("#payment-create")).toContainText("synthetic-campus-branch");
+});
+
+test("section picker follows manual scrolling and can jump back to setup", async ({ page }, info) => {
+ await page.goto("/vendor/integrations/payments"); await page.locator("#delivery-history").scrollIntoViewIfNeeded();
+ if (info.project.name === "mobile") { await page.evaluate(() => window.scrollBy(0, 160)); await expect(page.getByRole("combobox", { name: "Jump to integration section" })).toHaveValue("delivery-history"); await page.getByRole("combobox", { name: "Jump to integration section" }).selectOption("setup"); await expect(page.locator("#setup")).toBeFocused(); }
+ else { const outline = page.getByRole("navigation", { name: "On this page" }); await expect(outline).toBeVisible(); const bounds = await outline.boundingBox(); expect(bounds?.y).toBeGreaterThanOrEqual(64); expect(bounds?.y).toBeLessThan(160); }
 });
