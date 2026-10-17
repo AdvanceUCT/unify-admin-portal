@@ -16,6 +16,11 @@ describe("canonical integration credentials", () => {
     let resolve!: (value: Response) => void; fetcher.mockImplementationOnce(() => new Promise<Response>(done => { resolve = done; })); fireEvent.click(screen.getByRole("button", { name: "Create API key" })); first.unmount();
     render(<VendorIntegrationSettings branches={branches} initialApiKeys={[]} />); await act(async () => resolve(Response.json(key))); expect(screen.queryByText(key.token)).not.toBeInTheDocument(); expect(fetcher.mock.calls.filter(call => call[1]?.method === "POST")).toHaveLength(1);
   });
+  it.each([500, 503])("recovers key history after an ambiguous HTTP %s without repeating creation", async status => {
+    fetcher.mockResolvedValueOnce(Response.json({ error: { message: "Service unavailable" } }, { status })).mockResolvedValueOnce(Response.json([{ ...key, keyPrefix: key.prefix, token: undefined, revokedAt: null, lastUsedAt: null }]));
+    render(<VendorIntegrationSettings branches={branches} initialApiKeys={[]} />); fireEvent.change(screen.getByLabelText("Key name"), { target: { value: "Checkout" } }); fireEvent.click(screen.getByRole("button", { name: "Create API key" }));
+    await screen.findByText(/A key may have been created/); await screen.findByRole("heading", { name: "Checkout" }); expect(fetcher.mock.calls.filter(call => call[1]?.method === "POST")).toHaveLength(1); expect(screen.queryByText(key.token)).not.toBeInTheDocument();
+  });
   it("retains a new key after clipboard failure and clears it explicitly", async () => {
     fetcher.mockResolvedValueOnce(Response.json(key)); render(<VendorIntegrationSettings branches={branches} initialApiKeys={[]} />); fireEvent.change(screen.getByLabelText("Key name"), { target: { value: "Checkout" } }); fireEvent.click(screen.getByRole("button", { name: "Create API key" })); await screen.findByText(key.token);
     vi.mocked(navigator.clipboard.writeText).mockRejectedValueOnce(new Error("Denied")); fireEvent.click(screen.getByRole("button", { name: "Copy api key" })); await screen.findByText("Copy failed. Select and copy the text manually."); expect(screen.getByText(key.token)).toBeVisible(); fireEvent.click(screen.getByRole("button", { name: "Hide secret" })); expect(screen.queryByText(key.token)).not.toBeInTheDocument();
