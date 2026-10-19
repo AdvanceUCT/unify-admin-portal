@@ -7,7 +7,7 @@ import "server-only";
 
 import { z } from "zod";
 
-import type { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import {
   AuditAction,
   BranchPaymentAcceptanceStatus,
@@ -22,14 +22,15 @@ import { WALLET_CURRENCY } from "@/lib/payments/constants";
 import type { ApprovedVendorContext } from "@/lib/vendors/context";
 import { decryptVendorSecret } from "@/lib/vendors/integrationCrypto";
 
+import { PAYMENT_ACCESS_ACKNOWLEDGEMENT } from "./paymentAccessSummary";
+
 const ACTIVE_APPLICATION_STATUSES = [
   BranchPaymentApplicationStatus.DRAFT,
   BranchPaymentApplicationStatus.PENDING,
   BranchPaymentApplicationStatus.APPROVED,
 ] as const;
 
-export const PAYMENT_ACCESS_ACKNOWLEDGEMENT_TEXT =
-  "I will use student transaction data only to process payments and will not store or share it beyond that.";
+export const PAYMENT_ACCESS_ACKNOWLEDGEMENT_TEXT = PAYMENT_ACCESS_ACKNOWLEDGEMENT;
 
 type SafePayoutDestinationSnapshot = {
   accountHolderName?: string | null;
@@ -58,7 +59,7 @@ async function runSerializableTransaction<T>(
     try {
       return await prisma.$transaction(operation, { isolationLevel: "Serializable" });
     } catch (error) {
-      if (!hasPrismaErrorCode(error, "P2034") || attempt === 2) {
+      if ((!hasPrismaErrorCode(error, "P2034") && !hasPrismaErrorCode(error, "P2002")) || attempt === 2) {
         throw error;
       }
     }
@@ -100,6 +101,7 @@ const reviewSchema = z.object({
 });
 
 const submitSchema = branchScopedSchema.extend({
+  expectedPayoutReference: z.string().trim().min(1, "Reload the saved payout account before submitting."),
   acknowledgementAccepted: z.literal(true, {
     error: "The student transaction data acknowledgement is required.",
   }),
@@ -130,7 +132,12 @@ function parsePayoutDestinationSnapshot(value: string | null | undefined): SafeP
   }
 }
 
-function applicationHasPaymentDetails(application: {
+function maskedAuditSnapshot(value: Prisma.JsonValue | null) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return Object.fromEntries(["provider", "accountHolderName", "accountMask", "bankCode", "bankName", "providerAccountName"].map(key => [key, typeof value[key] === "string" ? value[key] : null]));
+}
+
+export function applicationHasPaymentDetails(application: {
   payoutDestinationReferenceSnapshot: string | null;
   payoutDestinationSnapshot: Prisma.JsonValue | null;
   studentDataAcknowledgedAt: Date | null;
@@ -148,6 +155,9 @@ async function currentPayoutSnapshot(
   transaction: Prisma.TransactionClient,
   vendorProfileId: string,
 ) {
+  // Approval and payout-account replacement must have a defined order even when
+  // approval preserves a SUSPENDED profile and would otherwise perform no update.
+  await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "vendor_payment_profile" WHERE "vendorProfileId" = ${vendorProfileId} FOR UPDATE`);
   const profile = await transaction.vendorPaymentProfile.findUnique({
     where: { vendorProfileId },
     select: {
@@ -178,13 +188,16 @@ export async function submitBranchPaymentApplication(input: {
   branchId: string;
   actorId: string;
   acknowledgementAccepted: boolean;
+  expectedPayoutReference: string;
+  reconfirmApplicationId?: string;
 }) {
-  const data = submitSchema.parse(input);
+  const data = submitSchema.extend({ reconfirmApplicationId: z.string().min(1).optional() }).parse(input);
 
   return runSerializableTransaction(async (transaction) => {
     const branch = await transaction.vendorBranch.findFirst({
       where: { id: data.branchId, vendorProfileId: data.vendorProfileId },
       include: {
+        vendorProfile: { select: { applications: { where: { status: "APPROVED" }, take: 1, select: { id: true } } } },
         paymentAcceptance: true,
         paymentApplications: {
           where: { status: { in: [...ACTIVE_APPLICATION_STATUSES] } },
@@ -195,6 +208,7 @@ export async function submitBranchPaymentApplication(input: {
     });
 
     if (!branch) throw new Error("Branch was not found.");
+    if (!branch.vendorProfile.applications.length) throw new Error("Vendor approval is required before requesting payments.");
     if (!branch.active || branch.status !== VendorBranchStatus.ACTIVE) {
       throw new Error("Only active branches can request wallet payment access.");
     }
@@ -206,21 +220,32 @@ export async function submitBranchPaymentApplication(input: {
     if (existing?.status === BranchPaymentApplicationStatus.APPROVED) {
       throw new Error("This branch is already approved for wallet payments.");
     }
+    const snapshot = await currentPayoutSnapshot(transaction, data.vendorProfileId);
+    if (snapshot.payoutDestinationReferenceSnapshot !== data.expectedPayoutReference) {
+      throw new Error("The payout account changed. Reload and confirm the current account.");
+    }
+    if (data.reconfirmApplicationId && (existing?.id !== data.reconfirmApplicationId || existing.status !== "PENDING")) {
+      throw new Error("This request has already changed. Reload its current status.");
+    }
     if (existing?.status === BranchPaymentApplicationStatus.PENDING) {
-      if (applicationHasPaymentDetails(existing)) return existing;
-
-      const snapshot = await currentPayoutSnapshot(transaction, data.vendorProfileId);
-      return transaction.vendorBranchPaymentApplication.update({
+      const matches = existing.payoutDestinationReferenceSnapshot === snapshot.payoutDestinationReferenceSnapshot &&
+        existing.payoutProviderSnapshot === snapshot.payoutProviderSnapshot;
+      if (applicationHasPaymentDetails(existing) && matches) return existing;
+      if (!data.reconfirmApplicationId) throw new Error("Review and confirm the updated payout account for this pending request.");
+      const updated = await transaction.vendorBranchPaymentApplication.update({
         where: { id: existing.id },
-        data: {
-          ...snapshot,
-          studentDataAcknowledgedAt: new Date(),
-          studentDataAcknowledgementText: PAYMENT_ACCESS_ACKNOWLEDGEMENT_TEXT,
-        },
+        data: { ...snapshot, studentDataAcknowledgedAt: new Date(), studentDataAcknowledgementText: PAYMENT_ACCESS_ACKNOWLEDGEMENT_TEXT },
       });
+      // Safe snapshots are retained as JSON strings because audit metadata is scalar-only.
+      await writeAuditLog({ action: AuditAction.VENDOR_BRANCH_PAYMENT_APPLICATION_SUBMITTED, actorId: data.actorId,
+        targetType: "vendor_branch_payment_application", targetId: existing.id,
+        meta: { branchId: branch.id, vendorProfileId: data.vendorProfileId, kind: "PAYOUT_RECONFIRMED",
+          previousSnapshot: JSON.stringify(maskedAuditSnapshot(existing.payoutDestinationSnapshot)),
+          previousReference: existing.payoutDestinationReferenceSnapshot, nextReference: snapshot.payoutDestinationReferenceSnapshot,
+          nextSnapshot: JSON.stringify(snapshot.payoutDestinationSnapshot) } }, transaction);
+      return updated;
     }
 
-    const snapshot = await currentPayoutSnapshot(transaction, data.vendorProfileId);
     const application = existing?.status === BranchPaymentApplicationStatus.DRAFT
       ? await transaction.vendorBranchPaymentApplication.update({
           where: { id: existing.id },
@@ -262,11 +287,11 @@ export async function approveBranchPaymentApplication(input: {
   applicationId: string;
   reviewerId: string;
   notes?: string;
+  expectedPayoutReference: string;
 }) {
-  const data = reviewSchema.parse(input);
+  const data = reviewSchema.extend({ expectedPayoutReference: z.string().min(1, "Reload the payout account before reviewing.") }).parse(input);
 
-  return runSerializableTransaction(async (transaction) => {
-    await assertWalletEnabled(transaction);
+  const result = await runSerializableTransaction(async (transaction) => {
 
     const application = await transaction.vendorBranchPaymentApplication.findUnique({
       where: { id: data.applicationId },
@@ -274,23 +299,34 @@ export async function approveBranchPaymentApplication(input: {
         vendorBranch: {
           include: {
             paymentAcceptance: true,
-            vendorProfile: { select: { id: true } },
+            vendorProfile: { select: { id: true, companyName: true, contactEmail: true, applications: { where: { status: "APPROVED" }, take: 1, select: { id: true } } } },
           },
         },
       },
     });
 
+    if (application?.status === "APPROVED" && application.vendorBranch.paymentAcceptance?.approvedApplicationId === application.id) {
+      return { acceptance: application.vendorBranch.paymentAcceptance, notification: null };
+    }
     if (!application || application.status !== BranchPaymentApplicationStatus.PENDING) {
       throw new Error("This payment-access request is not pending review.");
     }
-
+    await assertWalletEnabled(transaction);
     const branch = application.vendorBranch;
+    if (!branch.vendorProfile.applications.length) throw new Error("Vendor approval is no longer active.");
     if (!branch.active || branch.status !== VendorBranchStatus.ACTIVE) {
       throw new Error("Only active branches can be approved for wallet payments.");
     }
     if (!applicationHasPaymentDetails(application)) {
       throw new Error("This payment-access request is missing its payout destination or student data acknowledgement.");
     }
+
+    const snapshot = await currentPayoutSnapshot(transaction, branch.vendorProfile.id);
+    if (data.expectedPayoutReference !== snapshot.payoutDestinationReferenceSnapshot || application.payoutDestinationReferenceSnapshot !== snapshot.payoutDestinationReferenceSnapshot ||
+        application.payoutProviderSnapshot !== snapshot.payoutProviderSnapshot) {
+      throw new Error("The payout account changed. The owner must reconfirm it before approval.");
+    }
+    const paymentProfile = await transaction.vendorPaymentProfile.findUnique({ where: { vendorProfileId: branch.vendorProfile.id } });
 
     const updateResult = await transaction.vendorBranchPaymentApplication.updateMany({
       where: { id: application.id, status: BranchPaymentApplicationStatus.PENDING },
@@ -314,12 +350,10 @@ export async function approveBranchPaymentApplication(input: {
         approvedAt: new Date(),
         approvedByUserId: data.reviewerId,
       },
-      update: {
+      update: paymentProfile?.status === VendorPaymentProfileStatus.SUSPENDED ? {} : {
         status: VendorPaymentProfileStatus.APPROVED,
         approvedAt: new Date(),
         approvedByUserId: data.reviewerId,
-        suspendedAt: null,
-        suspensionReason: null,
       },
     });
 
@@ -366,8 +400,12 @@ export async function approveBranchPaymentApplication(input: {
       transaction,
     );
 
-    return acceptance;
+    return { acceptance, notification: { applicationId: application.id, branchId: branch.id,
+      branchName: branch.name, to: branch.vendorProfile.contactEmail, companyName: branch.vendorProfile.companyName,
+      approved: true } };
   });
+  if (result.notification) await notifyPaymentAccessDecision(result.notification);
+  return result.acceptance;
 }
 
 export async function rejectBranchPaymentApplication(input: {
@@ -379,12 +417,13 @@ export async function rejectBranchPaymentApplication(input: {
     notes: z.string().trim().min(1, "A rejection reason is required.").max(500),
   }).parse(input);
 
-  return runSerializableTransaction(async (transaction) => {
+  const notification = await runSerializableTransaction(async (transaction) => {
     const application = await transaction.vendorBranchPaymentApplication.findUnique({
       where: { id: data.applicationId },
-      select: { id: true, status: true, vendorBranchId: true },
+      include: { vendorBranch: { include: { vendorProfile: { select: { companyName: true, contactEmail: true } } } } },
     });
 
+    if (application?.status === "REJECTED") return null;
     if (!application || application.status !== BranchPaymentApplicationStatus.PENDING) {
       throw new Error("This payment-access request is not pending review.");
     }
@@ -413,7 +452,10 @@ export async function rejectBranchPaymentApplication(input: {
       },
       transaction,
     );
+    return { applicationId: application.id, branchId: application.vendorBranchId, branchName: application.vendorBranch.name,
+      to: application.vendorBranch.vendorProfile.contactEmail, companyName: application.vendorBranch.vendorProfile.companyName, approved: false };
   });
+  if (notification) await notifyPaymentAccessDecision(notification);
 }
 
 export async function revokeBranchPaymentAcceptance(input: {
@@ -525,12 +567,6 @@ export async function listPaymentHistoryBranchIdsForContext(context: ApprovedVen
 export async function listVendorPaymentAccessApplications(vendorProfileId: string) {
   return prisma.vendorBranchPaymentApplication.findMany({
     where: {
-      status: {
-        in: [
-          BranchPaymentApplicationStatus.PENDING,
-          BranchPaymentApplicationStatus.APPROVED,
-        ],
-      },
       vendorBranch: { vendorProfileId },
     },
     include: {
@@ -718,4 +754,16 @@ export async function listPaymentAccessDecisions({
     totalCount,
     totalPages: Math.max(1, Math.ceil(totalCount / normalizedPageSize)),
   };
+}
+
+async function notifyPaymentAccessDecision(input: {
+  applicationId: string; branchId: string; branchName: string; to: string; companyName: string; approved: boolean;
+}) {
+  try {
+    const { sendPaymentAccessDecisionEmail } = await import("@/lib/email/payment-access");
+    await sendPaymentAccessDecisionEmail(input);
+  } catch {
+    // A committed decision stays successful. Never log recipient, bank or provider error text.
+    console.warn(JSON.stringify({ event: "payment_access_email_failed", applicationId: input.applicationId, approved: input.approved }));
+  }
 }

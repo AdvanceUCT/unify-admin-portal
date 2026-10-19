@@ -28,7 +28,7 @@ Creation keys and order references are vendor-scoped. Identical creation retries
 
 ## Refunds
 
-Use durable refund operations for new integrations. The Integrations hub at `/vendor/integrations/guides/refunds` provides cURL and Node.js examples. Add `refunds:create` explicitly; a payment preset does not include it.
+Use durable refund operations for new integrations. The Integrations hub at `/vendor/integrations/payments#refunds` provides cURL and Node.js examples. Add `refunds:create` explicitly; a payment preset does not include it.
 
 1. Persist `{paymentRequestId, amountMinor, idempotencyKey}` and the original operator identity before sending.
 2. Register with `POST /api/vendor/v1/refund-operations`. Registration freezes the instruction and does not move money. Replay the same terms after a lost acknowledgment.

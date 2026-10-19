@@ -1,9 +1,8 @@
-import { VendorIntegrationSettings } from "@/features/vendors/VendorIntegrationSettings";
+import { IntegrationKeysContent } from "@/features/vendors/integrations/ApiKeySettings";
 import { requireVendorOwnerContextForRender } from "@/lib/vendors/context";
-import { integrationOverview } from "@/lib/vendors/integrationOverview";
-import { listVendorApiCredentials } from "@/lib/vendors/integrations";
-export default async function KeysPage({ searchParams }: { searchParams: Promise<{ preset?: string }> }) {
+export default async function KeysPage({ searchParams }: { searchParams: Promise<{ preset?: string; returnTo?: string }> }) {
   const { context } = await requireVendorOwnerContextForRender();
-  const [overview, keys, query] = await Promise.all([integrationOverview(context.vendorProfileId), listVendorApiCredentials(context.vendorProfileId), searchParams]);
-  return <VendorIntegrationSettings key={query.preset ?? "verification"} branches={overview.branches} initialPreset={query.preset === "payments" ? "payments" : "verification"} initialApiKeys={keys.map(k => ({ ...k, createdAt: k.createdAt.toISOString(), lastUsedAt: k.lastUsedAt?.toISOString() ?? null, revokedAt: k.revokedAt?.toISOString() ?? null }))} />;
+  const [{ integrationOverview }, { listVendorApiCredentials }, query] = await Promise.all([import("@/lib/vendors/integrationOverview"), import("@/lib/vendors/integrations"), searchParams]);
+  const [overview, keys] = await Promise.all([integrationOverview(context.vendorProfileId), listVendorApiCredentials(context.vendorProfileId)]);
+  return <IntegrationKeysContent branches={overview.branches} initialApiKeys={keys.map(key => ({ ...key, createdAt: key.createdAt.toISOString(), lastUsedAt: key.lastUsedAt?.toISOString() ?? null, revokedAt: key.revokedAt?.toISOString() ?? null }))} preset={query.preset === "payments" ? "payments" : "verification"} returnTo={query.returnTo === "verification" || query.returnTo === "payments" ? query.returnTo : undefined} />;
 }

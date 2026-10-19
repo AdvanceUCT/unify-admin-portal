@@ -146,7 +146,7 @@ export async function saveVendorPayoutDestination(
     createdAt: new Date().toISOString(),
   }));
 
-  return prisma.vendorPaymentProfile.upsert({
+  return runSerializableTransaction(async (transaction) => transaction.vendorPaymentProfile.upsert({
     where: { vendorProfileId: context.vendorProfileId },
     create: {
       vendorProfileId: context.vendorProfileId,
@@ -160,7 +160,7 @@ export async function saveVendorPayoutDestination(
       payoutDestinationReference: recipient.recipientCode,
       payoutDestinationCiphertext: destinationSnapshot,
     },
-  });
+  }));
 }
 
 async function payoutSettings() {

@@ -98,6 +98,7 @@ export async function approveBranchPaymentApplicationAction(formData: FormData) 
   await approveBranchPaymentApplication({
     applicationId,
     reviewerId: session.user.id,
+    expectedPayoutReference: String(formData.get("payoutReference") ?? ""),
     notes: String(formData.get("notes") ?? ""),
   });
   revalidatePath("/vendors", "layout");

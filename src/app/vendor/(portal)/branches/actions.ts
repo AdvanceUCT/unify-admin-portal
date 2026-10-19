@@ -90,11 +90,12 @@ export async function requestBranchPaymentAccessAction(formData: FormData) {
     branchId,
     actorId: session.user.id,
     acknowledgementAccepted,
+    expectedPayoutReference: String(formData.get("payoutReference") ?? ""),
   });
   revalidatePath("/vendor");
   revalidatePath("/vendor/branches");
   revalidatePath(`/vendor/branches/${branchId}`);
   revalidatePath(`/vendor/branches/${branchId}/payment-access`);
   revalidatePath("/vendor/applications");
-  redirect("/vendor/applications");
+  redirect(`/vendor/branches/${branchId}/payment-access`);
 }

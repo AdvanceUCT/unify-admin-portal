@@ -10,9 +10,11 @@ import {
 } from "@/generated/prisma/enums";
 
 vi.mock("server-only", () => ({}));
+vi.mock("@/lib/email/payment-access", () => ({ sendPaymentAccessDecisionEmail: vi.fn() }));
 
 const database = vi.hoisted(() => {
   const transaction = {
+    $queryRaw: vi.fn().mockResolvedValue([]),
     universityProfile: { findMany: vi.fn() },
     vendorBranch: { findFirst: vi.fn(), update: vi.fn() },
     vendorBranchPaymentApplication: {
@@ -72,7 +74,7 @@ const branch = {
   status: VendorBranchStatus.ACTIVE,
   paymentAcceptance: null,
   paymentApplications: [],
-  vendorProfile: { id: "vendor-1" },
+  vendorProfile: { id: "vendor-1", applications: [{ id: "approved-vendor" }], companyName: "Campus Cafe", contactEmail: "owner@example.invalid" },
 };
 
 describe("branch payment onboarding", () => {
@@ -85,6 +87,15 @@ describe("branch payment onboarding", () => {
       payoutDestinationReference: "RCP_demo_recipient",
       payoutProvider: "PAYSTACK",
     });
+  });
+
+  it("bounds database retries and does not retry business errors", async () => {
+    database.runTransaction.mockRejectedValue({ code: "P2034" });
+    await expect(submitBranchPaymentApplication({ vendorProfileId: "vendor-1", branchId: "branch-1", actorId: "owner", acknowledgementAccepted: true, expectedPayoutReference: "recipient" })).rejects.toMatchObject({ code: "P2034" });
+    expect(database.runTransaction).toHaveBeenCalledTimes(3);
+    database.runTransaction.mockClear().mockRejectedValue(new Error("validation"));
+    await expect(submitBranchPaymentApplication({ vendorProfileId: "vendor-1", branchId: "branch-1", actorId: "owner", acknowledgementAccepted: true, expectedPayoutReference: "recipient" })).rejects.toThrow("validation");
+    expect(database.runTransaction).toHaveBeenCalledTimes(1);
   });
 
   it("submits a pending branch payment-access request for an active vendor branch", async () => {
@@ -100,6 +111,7 @@ describe("branch payment onboarding", () => {
       branchId: "branch-1",
       actorId: "vendor-user-1",
       acknowledgementAccepted: true,
+      expectedPayoutReference: "RCP_demo_recipient",
     });
 
     expect(database.transaction.vendorBranchPaymentApplication.create).toHaveBeenCalledWith({
@@ -137,6 +149,7 @@ describe("branch payment onboarding", () => {
     await expect(approveBranchPaymentApplication({
       applicationId: "payment-app-1",
       reviewerId: "admin-1",
+      expectedPayoutReference: "RCP_demo_recipient",
     })).rejects.toThrow("missing its payout destination");
 
     expect(database.transaction.vendorPaymentProfile.upsert).not.toHaveBeenCalled();
@@ -148,6 +161,7 @@ describe("branch payment onboarding", () => {
       id: "payment-app-1",
       status: BranchPaymentApplicationStatus.PENDING,
       payoutDestinationReferenceSnapshot: "RCP_demo_recipient",
+      payoutProviderSnapshot: "PAYSTACK",
       payoutDestinationSnapshot: { accountMask: "**** 1234" },
       studentDataAcknowledgedAt: new Date("2026-09-12T07:00:00.000Z"),
       studentDataAcknowledgementText: PAYMENT_ACCESS_ACKNOWLEDGEMENT_TEXT,
@@ -164,6 +178,7 @@ describe("branch payment onboarding", () => {
     await approveBranchPaymentApplication({
       applicationId: "payment-app-1",
       reviewerId: "admin-1",
+      expectedPayoutReference: "RCP_demo_recipient",
       notes: "Looks good",
     });
 
