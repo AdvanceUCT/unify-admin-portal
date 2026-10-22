@@ -13,6 +13,7 @@ export class RefundRecoveryClient {
   private scope?: Scope;
   private epoch = 0;
   private legacyKey?: string;
+  private hydrating?: Promise<void>;
   private listeners = new Set<() => void>();
   constructor(private options: { baseUrl: string; storage: () => Pick<Storage, "getItem" | "setItem" | "removeItem">; fetch?: typeof fetch; legacyDraft?: () => RefundDraft | undefined; clearLegacy?: () => void }) {}
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
@@ -51,10 +52,16 @@ export class RefundRecoveryClient {
     }
     return op;
   }
-  async hydrate() {
-    if (this.state.busy) return;
+  hydrate() {
+    if (this.state.busy) return Promise.resolve();
+    return this.hydrating ??= this.load().finally(() => { this.hydrating = undefined; });
+  }
+  private async load() {
     const epoch = ++this.epoch;
-    this.set({ hydrated: false, busy: true, error: undefined });
+    // Re-checks on focus or another tab's write run in the background. Blocking them disabled
+    // the recovery actions, so the click that refocused the window was swallowed.
+    const blocking = !this.state.hydrated;
+    this.set(blocking ? { busy: true, error: undefined } : { error: undefined });
     try {
       const recovery = refundRecoverySchema.parse(await this.request());
       if (epoch !== this.epoch) return;
@@ -73,7 +80,7 @@ export class RefundRecoveryClient {
       }
       this.set({ hydrated: true });
     } catch (error) { if (epoch === this.epoch) this.set({ error: error instanceof Error ? error.message : "Refund recovery unavailable." }); }
-    finally { if (epoch === this.epoch) this.set({ busy: false }); }
+    finally { if (epoch === this.epoch && blocking) this.set({ busy: false }); }
   }
   private registration(draft: RefundDraft) { const { operationId: _id, ...body } = draft; void _id; return body; }
   private async run(action: "execute" | "cancel", draft: RefundDraft) {
@@ -83,6 +90,7 @@ export class RefundRecoveryClient {
     return this.accept(await this.request(`/${encodeURIComponent(op.id)}/${action}`, {}), draft);
   }
   async submit(input: Omit<RefundDraft, "idempotencyKey" | "operationId">) {
+    await this.hydrating;
     if (!this.state.hydrated || this.state.busy || this.state.draft || this.state.operation) return;
     const draft = draftSchema.parse({ ...input, idempotencyKey: crypto.randomUUID() });
     this.set({ busy: true, outcome: undefined, error: undefined });
@@ -91,6 +99,7 @@ export class RefundRecoveryClient {
     finally { this.set({ busy: false }); }
   }
   async recover(action: "execute" | "cancel" = "execute") {
+    await this.hydrating;
     if (!this.scope || !this.state.draft || this.state.busy) return;
     const draft = this.state.draft;
     this.set({ busy: true, error: undefined });

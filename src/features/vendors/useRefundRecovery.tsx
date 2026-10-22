@@ -16,13 +16,15 @@ export function useRefundRecovery() {
   return { client, state, blocked: !state.hydrated || state.busy || Boolean(state.draft || state.operation) };
 }
 
+const actionClass = "rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-fg-muted transition hover:bg-brand-50 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-60";
+
 export function RefundRecoveryPanel({ recovery }: { recovery: ReturnType<typeof useRefundRecovery> }) {
   const { state, client } = recovery;
   const draft = state.draft;
   return <div className="px-5 py-3 text-sm" aria-live="polite">
     {!state.hydrated && !state.error ? <p>Checking pending refunds…</p> : null}
-    {draft ? <div className="space-y-2"><p>Pending refund {formatMoneyMinor(draft.amountMinor)} · {state.operation?.originalTransactionId ?? draft.transactionId ?? draft.paymentRequestId}</p><div className="flex gap-3"><button type="button" disabled={state.busy} onClick={() => void client.recover()}>Check refund</button><button type="button" disabled={state.busy} onClick={() => void client.recover("cancel")}>Cancel pending refund</button></div></div> : null}
-    {state.error ? <p role="alert">{state.error} <button type="button" disabled={state.busy} onClick={() => void client.hydrate()}>Retry recovery</button></p> : null}
+    {draft ? <div className="space-y-2"><p>Pending refund {formatMoneyMinor(draft.amountMinor)} · {state.operation?.originalTransactionId ?? draft.transactionId ?? draft.paymentRequestId}</p><div className="flex gap-3"><button className={actionClass} type="button" disabled={state.busy} onClick={() => void client.recover()}>Check refund</button><button className={actionClass} type="button" disabled={state.busy} onClick={() => void client.recover("cancel")}>Cancel pending refund</button></div></div> : null}
+    {state.error ? <p role="alert">{state.error} <button className={actionClass} type="button" disabled={state.busy} onClick={() => void client.hydrate()}>Retry recovery</button></p> : null}
     {state.outcome?.status === "REJECTED" ? <p>{state.outcome.rejection?.message}</p> : null}
     {state.outcome?.status === "CANCELLED" ? <p>Refund cancelled.</p> : null}
   </div>;

@@ -135,8 +135,11 @@ export function LivePaymentTable({
     setRefundPaymentToConfirm(null);
   }), [recovery.client]);
 
-  function refundPayment(payment: LivePaymentEvent, amountMinor: number) {
-    if (payment.canRefund && !recovery.blocked) void recovery.client.submit({ transactionId: payment.transactionId, amountMinor });
+  async function refundPayment(payment: LivePaymentEvent, amountMinor: number) {
+    if (!payment.canRefund || recovery.blocked) return;
+    await recovery.client.submit({ transactionId: payment.transactionId, amountMinor });
+    // A refund left pending is resolved from the recovery panel; the dialog can't close while blocked and would cover it.
+    setRefundPaymentToConfirm(null);
   }
 
   return (
