@@ -90,6 +90,21 @@ describe("durable refund browser recovery", () => {
     } });
     await imported.hydrate(); expect(clearLegacy).toHaveBeenCalledTimes(1);
   });
+  it("keeps recovery actions usable during a background re-check and runs a cancel clicked meanwhile", async () => {
+    const local = storage(); let pending: ReturnType<typeof op> | null = op("frozen-key"); let release: (() => void) | undefined;
+    const client = new RefundRecoveryClient({ baseUrl: "/refunds", storage: () => local, fetch: async (url, options) => {
+      if (String(url).endsWith("/cancel")) { pending = null; return json(op("frozen-key", "CANCELLED")); }
+      if (release === undefined && client.getSnapshot().hydrated) await new Promise<void>(resolve => { release = resolve; });
+      return json({ ...scope, operation: pending });
+    } });
+    await client.hydrate();
+    const refresh = client.hydrate();
+    expect(client.getSnapshot()).toMatchObject({ hydrated: true, busy: false });
+    const cancel = client.recover("cancel");
+    while (!release) await new Promise(resolve => setTimeout(resolve, 0));
+    release(); await refresh; await cancel;
+    expect(client.getSnapshot().outcome?.status).toBe("CANCELLED"); expect(local.map.size).toBe(0);
+  });
   it("a late terminal response cannot delete another tab's newer instruction", async () => {
     const local = storage(); let release!: (response: Response) => void;
     const delayed = new Promise<Response>(resolve => { release = resolve; });
