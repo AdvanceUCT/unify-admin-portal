@@ -1,5 +1,1 @@
-import { PortalRouteLoading } from "@/components/layout/PortalRouteLoading";
-
-export default function AdminLoading() {
-  return <PortalRouteLoading label="Loading admin page" sections={3} />;
-}
+export { AdminOverviewSkeleton as default } from "@/components/layout/skeletons/AdminPageSkeletons";

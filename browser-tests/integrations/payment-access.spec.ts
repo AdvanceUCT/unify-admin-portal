@@ -3,7 +3,15 @@ for (const screen of ["overview", "empty", "loading", "error", "inactive", "setu
   test(`payment access ${screen} is readable`, async ({ page }, info) => {
     const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
     await page.goto(`/vendor/payments/access?screen=access-${screen}`);
-    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    if (screen === "loading") {
+      await expect(page.getByRole("status", { name: "Loading branch payment access" })).toBeVisible();
+    } else if (screen === "admin-queue") {
+      await expect(page.getByLabel("Search vendors or branches")).toBeVisible();
+      await expect(page.getByLabel("Request status")).toBeVisible();
+      await expect(page.getByRole("status")).toHaveText("In review (1)");
+    } else {
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     expect(errors).toEqual([]);
     await page.screenshot({ path: info.outputPath(`payment-access-${screen}-${info.project.name}.png`), fullPage: true });
@@ -53,7 +61,8 @@ test("admin queue filters vendor, branch and review status", async ({ page }) =>
   await expect(page.getByText("Library Eats", { exact: true })).toBeVisible();
   await expect(page.getByText("Campus Cafe", { exact: true })).toHaveCount(0);
   await page.getByLabel("Request status").selectOption("PENDING");
-  await expect(page.getByText("No matching payment-access requests.")).toBeVisible();
+  await expect(page.getByText("No matching payment access requests.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("In review (0)");
 });
 
 test("unknown bank save blocks final submission until authoritative reload", async ({ page }) => {

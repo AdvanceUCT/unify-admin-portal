@@ -8,17 +8,15 @@ import Link from "next/link";
 
 import { Badge } from "@/components/ui/Badge";
 import { formatMoneyMinor } from "@/lib/formatters";
-import type { getVendorPayoutOverview } from "@/lib/vendors/payouts";
 import { RunPayoutButton } from "./RunPayoutButton";
-
-type PayoutOverview = Awaited<ReturnType<typeof getVendorPayoutOverview>>;
+import type { VendorWalletOverview } from "./walletOverview";
 
 export function VendorWalletBalanceCard({
   canRunDemoPayout,
   overview,
 }: {
   canRunDemoPayout: boolean;
-  overview: PayoutOverview;
+  overview: VendorWalletOverview;
 }) {
   const isNegative = overview.walletBalanceMinor < 0;
   const threshold = formatMoneyMinor(overview.thresholdMinor, overview.walletCurrency);

@@ -16,9 +16,9 @@ import { listActivePaymentBranchIdsForContext } from "@/lib/payments/branchOnboa
 import { getVendorPayoutOverview } from "@/lib/vendors/payouts";
 import { ExportCsvButton } from "../verifications/ExportCsvButton";
 import { LivePaymentTable } from "./LivePaymentTable";
+import { LiveWalletOverview } from "./LiveWalletOverview";
 import { VendorPaymentsFilterBar } from "./VendorPaymentsFilterBar";
-import { VendorWalletBalanceCard } from "./VendorWalletBalanceCard";
-import { VendorWalletStatusBanner } from "./VendorWalletStatusBanner";
+import { toVendorWalletOverview } from "./walletOverview";
 
 function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -171,15 +171,10 @@ export default async function VendorPaymentsPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">{context.role === "OWNER" && <Link href="/vendor/payments/access" className="min-h-11 content-center text-sm font-medium underline">Manage payment access</Link>}</div>
-      <VendorWalletStatusBanner overview={payoutOverview} />
-
-      {context.role === "OWNER" ? (
-        <VendorWalletBalanceCard
-          canRunDemoPayout
-          overview={payoutOverview}
-        />
-      ) : null}
+      <LiveWalletOverview
+        initialOverview={toVendorWalletOverview(payoutOverview)}
+        showBalanceCard={context.role === "OWNER"}
+      />
 
       {activePaymentBranchIds.length === 0 ? (
         <section className="rounded-xl border border-warning-border bg-warning-bg p-5 shadow-md">

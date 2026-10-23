@@ -7,9 +7,7 @@ import { AlertTriangle, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 
 import { formatMoneyMinor } from "@/lib/formatters";
-import type { getVendorPayoutOverview } from "@/lib/vendors/payouts";
-
-type PayoutOverview = Awaited<ReturnType<typeof getVendorPayoutOverview>>;
+import type { VendorWalletOverview } from "./walletOverview";
 
 const dateFormatter = new Intl.DateTimeFormat("en-ZA", { dateStyle: "medium", timeZone: "Africa/Johannesburg" });
 
@@ -56,7 +54,7 @@ function TopUpLink({ deficitMinor, currency }: { deficitMinor: number; currency:
 }
 
 /** Renders nothing while the wallet is in good standing. Staff see the alert without the top-up button. */
-export function VendorWalletStatusBanner({ overview }: { overview: PayoutOverview }) {
+export function VendorWalletStatusBanner({ overview }: { overview: VendorWalletOverview }) {
   const { overdraft, suspension, walletCurrency } = overview;
   const topUp = overview.canTopUp && overdraft
     ? <TopUpLink currency={walletCurrency} deficitMinor={overdraft.deficitMinor} />

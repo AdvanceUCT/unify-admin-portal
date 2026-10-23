@@ -25,6 +25,6 @@ export function paymentAccessSummary(branch: AccessBranch, context: AccessContex
   const requestLabel = needsReconfirmation ? "Review changes" : application?.status === "PENDING" ? "In review" : approved ? "Approved" : application?.status === "REJECTED" ? "Not approved" : application?.status === "REVOKED" ? "Access revoked" : application?.status === "WITHDRAWN" ? "Withdrawn" : "Not requested";
   return { application, approved, needsReconfirmation: Boolean(needsReconfirmation), canSubmit, canReconfirm, canApprove, requestLabel,
     paymentReady: approved && !paused, paused: approved ? paused : null, blockers,
-    actionLabel: needsReconfirmation ? "Review changes" : application?.status === "PENDING" || application?.status === "REJECTED" ? "View request" : approved ? "View payment setup" : "Set up",
+    actionLabel: needsReconfirmation ? "Review changes" : application?.status === "PENDING" || application?.status === "REJECTED" ? "View request" : approved ? "View payment setup" : "Request access",
     recoveryHref: context.suspensionCode === "OVERDRAFT" ? "/vendor/payments/top-up" : "/vendor/help" };
 }
