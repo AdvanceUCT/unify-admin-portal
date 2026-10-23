@@ -1,1 +1,1 @@
-export { default } from "../../../payments/access/loading";
+export { PaymentAccessDetailSkeleton as default } from "@/components/layout/skeletons/VendorPageSkeletons";
