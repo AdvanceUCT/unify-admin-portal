@@ -17,6 +17,7 @@ import { finalizeVerificationCharge } from "@/lib/billing/charges";
 import { prisma } from "@/lib/db/prisma";
 import { ensureVendorVerificationServicePoint } from "@/lib/vendors/applications";
 import { deliverVendorWebhook } from "@/lib/vendors/integrations";
+import { decodeLiveVerificationCursor, encodeLiveVerificationCursor } from "@/lib/vendors/liveVerifications";
 import {
   billingPeriodKeyFromDate,
   billingPeriodLabel,
@@ -33,6 +34,7 @@ import {
 
 const VERIFICATION_EVENTS_PAGE_SIZE = 10;
 const VERIFICATION_EVENTS_EXPORT_LIMIT = 10_000;
+const LIVE_VERIFICATION_EVENTS_LIMIT = 20;
 
 export type VerificationCompletedEvent = {
   type: "verification.completed";
@@ -815,6 +817,42 @@ export async function listVendorVerificationEvents(
     pageSize: VERIFICATION_EVENTS_PAGE_SIZE,
     total,
     totalPages: Math.max(1, Math.ceil(total / VERIFICATION_EVENTS_PAGE_SIZE)),
+  };
+}
+
+export type VendorVerificationEvent = ReturnType<typeof verificationEventShape>;
+
+/**
+ * Verifications completed after the live cursor that match the verifications page filters,
+ * oldest first, so the page can prepend them without a refresh.
+ */
+export async function listVendorVerificationEventsSince(
+  vendorProfileId: string,
+  allowedBranchIds: string[],
+  filters: VendorVerificationEventFilters,
+  rawCursor: string,
+) {
+  const cursor = decodeLiveVerificationCursor(rawCursor);
+  const completedAt = new Date(cursor.completedAt);
+  const rows = await prisma.vendorVerification.findMany({
+    where: {
+      AND: [
+        verificationEventsWhere(vendorProfileId, allowedBranchIds, filters),
+        { completedAt: { not: null } },
+        { OR: [{ completedAt: { gt: completedAt } }, { completedAt, id: { gt: cursor.id } }] },
+      ],
+    },
+    include: { branch: { select: { name: true } } },
+    orderBy: [{ completedAt: "asc" }, { id: "asc" }],
+    take: LIVE_VERIFICATION_EVENTS_LIMIT,
+  });
+  const last = rows.at(-1);
+
+  return {
+    events: (await Promise.all(rows.map(hydrateVerificationEventRow))).map(verificationEventShape),
+    nextCursor: last?.completedAt
+      ? encodeLiveVerificationCursor({ completedAt: last.completedAt.toISOString(), id: last.id })
+      : rawCursor,
   };
 }
 
