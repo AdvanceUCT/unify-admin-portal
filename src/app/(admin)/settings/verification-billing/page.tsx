@@ -5,6 +5,7 @@
 
 import { FileText, History, Percent, Receipt } from "lucide-react";
 
+import { BackButton } from "@/components/ui/BackButton";
 import { requireRoleForRender } from "@/lib/auth/session";
 import { minorToDecimalString } from "@/lib/billing/money";
 import { prisma } from "@/lib/db/prisma";
@@ -31,10 +32,14 @@ export default async function VerificationBillingSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-fg-subtle">
-        Verification billing is a demo policy for this proof of concept — it is separate from the student payment
-        wallet.
-      </p>
+      <BackButton href="/settings" label="Back to settings" />
+
+      <div>
+        <h1 className="text-page-title text-fg">Vendor verification billing</h1>
+        <p className="mt-1 text-sm text-fg-subtle">
+          Configure verification fees, generate invoices, and review policy history.
+        </p>
+      </div>
 
       <SettingsCard
         description="The rate currently applied to newly completed verifications."

@@ -6,45 +6,45 @@
 import { prisma } from "@/lib/db/prisma";
 import { Suspense } from "react";
 import {
-  Activity,
+  // Activity,
   Building,
   Clock,
-  FileText,
-  Gauge,
-  Link as LinkIcon,
+  // FileText,
+  // Gauge,
+  // Link as LinkIcon,
   Receipt,
   Wallet,
-  Webhook,
+  // Webhook,
 } from "lucide-react";
 import Link from "next/link";
 
-import { SettingsSectionLoading } from "@/components/layout/PortalRouteLoading";
+// import { SettingsSectionLoading } from "@/components/layout/PortalRouteLoading";
 import { VendorPaymentProfileStatus, WalletAccountType } from "@/generated/prisma/enums";
-import { checkAgentHealth, type AgentHealth } from "@/lib/agentClient";
+// import { checkAgentHealth, type AgentHealth } from "@/lib/agentClient";
 import {
   ADMIN_ROLES,
   type AdminRole,
-  ROLE_LABELS,
 } from "@/lib/auth/permissions";
 import { requireRoleForRender } from "@/lib/auth/session";
-import {
-  getBillingOperationsSummary,
-  type BillingOperationsSummary,
-} from "@/lib/billing/operationsSummary";
-import { env } from "@/lib/config/env";
+// import {
+//   getBillingOperationsSummary,
+//   type BillingOperationsSummary,
+// } from "@/lib/billing/operationsSummary";
+// import { env } from "@/lib/config/env";
 import { getUniversityPaymentWalletSettings } from "@/lib/payments/config";
 import { getDocumentSignedUrlForRender } from "@/lib/storage/supabase";
-import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
+// import { getActiveCredentialSchema } from "@/lib/university/credentialSchema";
 import { getUniversityProfileForRender } from "@/lib/university/profile";
 import { RenewalSchedulerDetails } from "./RenewalSchedulerDetails";
 import { RenewalSettingsForm } from "./RenewalSettingsForm";
-import { AgentServiceHealthCard } from "./AgentServiceHealthCard";
-import { BillingOperationsCard } from "./BillingOperationsCard";
+// import { AgentServiceHealthCard } from "./AgentServiceHealthCard";
+// import { BillingOperationsCard } from "./BillingOperationsCard";
 import { PaymentWalletSettingsForm } from "./PaymentWalletSettingsForm";
 import { SettingsCard, SettingsField } from "./SettingsCard";
 import { UniversityLogoUpload } from "./UniversityLogoUpload";
 import { UniversityProfileForm } from "./UniversityProfileForm";
 
+/* Supporting helpers for the hidden settings cards. Retained for reintroduction.
 function configuredStatus(
   value: string | undefined | null,
 ): "Configured" | "Not set" {
@@ -93,6 +93,7 @@ async function BillingOperationsSection({
 
   return <BillingOperationsCard initialSummary={billingOperationsSummary} />;
 }
+*/
 
 async function getPaymentWalletSettingsSummary() {
   const [settings, negativeVendors, suspendedVendors] = await Promise.all([
@@ -119,13 +120,13 @@ export default async function SettingsPage() {
 
   const role = session.user.role as AdminRole;
   const canEditProfile = role === "SUPER_ADMIN" || role === "ADMIN";
-  const canViewBillingOperations = role === "SUPER_ADMIN" || role === "ADMIN";
+  // const canViewBillingOperations = role === "SUPER_ADMIN" || role === "ADMIN";
   const canManageVerificationBilling =
     role === "SUPER_ADMIN" || role === "ADMIN";
-  const agentHealthPromise = handledResult(checkAgentHealth());
-  const billingOperationsSummaryPromise = canViewBillingOperations
-    ? handledResult(getBillingOperationsSummary())
-    : null;
+  // const agentHealthPromise = handledResult(checkAgentHealth());
+  // const billingOperationsSummaryPromise = canViewBillingOperations
+  //   ? handledResult(getBillingOperationsSummary())
+  //   : null;
 
   const profile = await getUniversityProfileForRender();
   const validityPolicy = await prisma.credentialValidityPolicy.findFirst({
@@ -135,26 +136,20 @@ export default async function SettingsPage() {
     month && day
       ? `${String(day).padStart(2, "0")}-${String(month).padStart(2, "0")}`
       : "";
-  const [universityLogoUrl, activeSchema] = await Promise.all([
-    profile?.logoPath ? getDocumentSignedUrlForRender(profile.logoPath) : null,
-    profile ? getActiveCredentialSchema(profile.id) : null,
-  ]);
+  const universityLogoUrl = profile?.logoPath
+    ? await getDocumentSignedUrlForRender(profile.logoPath)
+    : null;
+  // const activeSchema = profile ? await getActiveCredentialSchema(profile.id) : null;
   const paymentWallet = canManageVerificationBilling && profile
     ? await getPaymentWalletSettingsSummary()
     : null;
-  const webhookEndpoint = new URL(
-    "/api/webhooks/agent",
-    env.APP_URL,
-  ).toString();
+  // const webhookEndpoint = new URL(
+  //   "/api/webhooks/agent",
+  //   env.APP_URL,
+  // ).toString();
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-fg-subtle">
-        Signed in as{" "}
-        <span className="font-medium text-fg">{session.user.name}</span> (
-        {session.user.email}) &middot; {ROLE_LABELS[role]}
-      </p>
-
       <SettingsCard
         description="Editable details and branding shown across the admin portal, activation emails, and verifier-facing profile."
         icon={Building}
@@ -231,6 +226,7 @@ export default async function SettingsPage() {
         {canEditProfile && <Suspense fallback={null}><RenewalSchedulerDetails /></Suspense>}
       </SettingsCard>
 
+      {/* Hidden settings cards retained for reintroduction.
       <SettingsCard
         description="Live reachability of the Identity Agent Service used for issuance and verification."
         icon={Activity}
@@ -318,18 +314,22 @@ export default async function SettingsPage() {
         </div>
       </SettingsCard>
 
+      */}
+
       {canManageVerificationBilling && (
         <SettingsCard
           description="Verification fee policy and invoice generation. Separate from the student payment wallet."
           icon={Receipt}
           title="Vendor verification billing"
         >
-          <Link
-            className="text-sm font-medium text-brand-700 hover:underline"
-            href="/settings/verification-billing"
-          >
-            Manage verification billing →
-          </Link>
+          <div className="flex justify-end">
+            <Link
+              className="inline-flex h-10 items-center justify-center rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700"
+              href="/settings/verification-billing"
+            >
+              Manage verification billing
+            </Link>
+          </div>
         </SettingsCard>
       )}
 
@@ -360,6 +360,7 @@ export default async function SettingsPage() {
         </SettingsCard>
       )}
 
+      {/* Billing operations retained for reintroduction.
       {billingOperationsSummaryPromise && (
         <SettingsCard
           description="Job run history, backlog, and exception counts for vendor invoicing and Paystack payments."
@@ -381,6 +382,7 @@ export default async function SettingsPage() {
           </Suspense>
         </SettingsCard>
       )}
+      */}
     </div>
   );
 }

@@ -5,6 +5,7 @@
 
 "use client";
 
+import { LoaderCircle, Save } from "lucide-react";
 import { useActionState } from "react";
 
 import {
@@ -58,10 +59,11 @@ export function UniversityProfileForm({
       ) : null}
       <div className="flex justify-end">
         <button
-          className="h-10 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-fg-subtle"
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-fg-subtle"
           disabled={isPending}
           type="submit"
         >
+          {isPending ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Save aria-hidden className="size-4" />}
           {isPending ? "Saving..." : "Save changes"}
         </button>
       </div>
