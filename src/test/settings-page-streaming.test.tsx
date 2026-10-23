@@ -9,9 +9,7 @@ vi.mock("@/lib/payments/config", () => ({
   getUniversityPaymentWalletSettings: vi.fn().mockResolvedValue(null),
 }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import type { AgentHealth } from "@/lib/agentClient";
-import type { BillingOperationsSummary } from "@/lib/billing/operationsSummary";
+import { Children, isValidElement } from "react";
 
 const {
   checkAgentHealthMock,
@@ -60,17 +58,6 @@ vi.mock("@/lib/university/profile", () => ({
 
 import SettingsPage from "@/app/(admin)/settings/page";
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-
-  return { promise, reject, resolve };
-}
-
 const profile = {
   abbreviation: "UOE",
   automaticCredentialRenewalEnabled: true,
@@ -84,79 +71,42 @@ const profile = {
   websiteUrl: "https://example.edu",
 };
 
-describe("SettingsPage streaming", () => {
+describe("SettingsPage disabled cards", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("returns the page without waiting for diagnostic sections to settle", async () => {
-    const health = deferred<AgentHealth>();
-    const billing = deferred<BillingOperationsSummary>();
+  it.each(["SUPER_ADMIN", "ADMIN", "VIEWER"])(
+    "keeps removed cards and their diagnostic reads disabled for %s",
+    async (role) => {
+      requireRoleMock.mockResolvedValue({
+        user: {
+          email: "admin@example.edu",
+          name: "Admin User",
+          role,
+        },
+      });
+      getUniversityProfileMock.mockResolvedValue(profile);
+      getDocumentSignedUrlMock.mockResolvedValue(
+        "https://cdn.example.edu/logo.png",
+      );
 
-    requireRoleMock.mockResolvedValue({
-      user: {
-        email: "admin@example.edu",
-        name: "Admin User",
-        role: "ADMIN",
-      },
-    });
-    getUniversityProfileMock.mockResolvedValue(profile);
-    getDocumentSignedUrlMock.mockResolvedValue(
-      "https://cdn.example.edu/logo.png",
-    );
-    getActiveCredentialSchemaMock.mockResolvedValue(null);
-    checkAgentHealthMock.mockReturnValue(health.promise);
-    getBillingOperationsSummaryMock.mockReturnValue(billing.promise);
+      const page = await SettingsPage();
+      const cardTitles = Children.toArray(page.props.children)
+        .filter(isValidElement<{ title?: string }>)
+        .map((child) => child.props.title)
+        .filter(Boolean);
 
-    const result = await Promise.race([
-      SettingsPage().then(() => "resolved"),
-      new Promise((resolve) => setTimeout(() => resolve("pending"), 25)),
-    ]);
-
-    expect(result).toBe("resolved");
-    expect(checkAgentHealthMock).toHaveBeenCalledTimes(1);
-    expect(getBillingOperationsSummaryMock).toHaveBeenCalledTimes(1);
-
-    health.resolve({
-      checkedAt: new Date().toISOString(),
-      ok: true,
-      reachable: true,
-      status: "ready",
-    });
-    billing.resolve({
-      collectedTotalDisplay: "0.00",
-      duplicatePaymentExceptionCount: 0,
-      jobRuns: [],
-      oldestPendingAttemptAgeSeconds: null,
-      pendingAttemptCount: 0,
-      settlementNote: "Not applicable — test mode",
-      splitExceptionCount: 0,
-      unclaimedChargeCount: 0,
-      webhookFailureCount: 0,
-    });
-  });
-
-  it("does not start billing operations reads for roles that cannot view them", async () => {
-    requireRoleMock.mockResolvedValue({
-      user: {
-        email: "viewer@example.edu",
-        name: "Viewer User",
-        role: "VIEWER",
-      },
-    });
-    getUniversityProfileMock.mockResolvedValue(profile);
-    getDocumentSignedUrlMock.mockResolvedValue(
-      "https://cdn.example.edu/logo.png",
-    );
-    getActiveCredentialSchemaMock.mockResolvedValue(null);
-    checkAgentHealthMock.mockResolvedValue({
-      checkedAt: new Date().toISOString(),
-      ok: false,
-      error: "Unavailable",
-    });
-
-    await SettingsPage();
-
-    expect(getBillingOperationsSummaryMock).not.toHaveBeenCalled();
-  });
+      expect(cardTitles).toEqual([
+        "University profile",
+        "Validity & renewal",
+        ...(role === "VIEWER" ? [] : ["Vendor verification billing"]),
+      ]);
+      expect(getUniversityProfileMock).toHaveBeenCalledTimes(1);
+      expect(getDocumentSignedUrlMock).toHaveBeenCalledWith(profile.logoPath);
+      expect(checkAgentHealthMock).not.toHaveBeenCalled();
+      expect(getBillingOperationsSummaryMock).not.toHaveBeenCalled();
+      expect(getActiveCredentialSchemaMock).not.toHaveBeenCalled();
+    },
+  );
 });
