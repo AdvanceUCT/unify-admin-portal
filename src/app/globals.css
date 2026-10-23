@@ -363,3 +363,63 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Public welcome: warm paper, deep green, one oversized student-card illustration. */
+.welcome-page { color:#173c32; background:#f7f5ec; font-family:Arial,sans-serif; overflow:clip; }
+.welcome-page * { box-sizing:border-box; }
+.welcome-page a:focus-visible { outline:3px solid #a35924; outline-offset:5px; }
+.welcome-page a { text-underline-offset:5px; }
+.welcome-nav,.welcome-footer { max-width:1280px; margin:auto; padding:28px 5%; display:flex; align-items:center; justify-content:space-between; gap:24px; }
+.welcome-nav { border-bottom:1px solid #d6d9cc; }
+.welcome-wordmark { display:flex; gap:9px; align-items:center; font-size:28px; font-weight:900; letter-spacing:-1px; text-decoration:none; }
+.welcome-wordmark span { color:#5b8b53; }
+.welcome-nav nav { display:flex; align-items:center; flex-wrap:wrap; gap:28px; font-size:14px; font-weight:600; }
+.welcome-nav nav a { display:inline-flex; align-items:center; gap:4px; }
+.welcome-skip { position:fixed; left:20px; top:-100px; z-index:100; padding:12px; background:white; }
+.welcome-skip:focus { top:12px; }
+.welcome-hero { max-width:1280px; margin:auto; padding:94px 5% 110px; display:grid; grid-template-columns:1fr 1fr; align-items:center; gap:45px; min-height:690px; }
+.welcome-kicker { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1.8px; margin-bottom:22px; }
+.welcome-hero h1 { font-family:Georgia,serif; font-size:clamp(52px,6.5vw,88px); line-height:1.02; letter-spacing:-3px; margin:0 0 26px; font-weight:400; }
+.welcome-lead { max-width:340px; font-size:19px; line-height:1.6; margin-bottom:30px; }
+.welcome-primary { display:inline-flex; align-items:center; justify-content:space-between; gap:28px; min-height:48px; padding:14px 21px; color:#fff; background:#205443; border-radius:5px; font-weight:600; font-size:14px; }
+.welcome-primary:hover { background:#143e31; }
+.welcome-nav .welcome-fund { min-height:44px; padding:10px 14px; color:#fff; }
+.welcome-note,.welcome-example { font-size:11px; color:#52695c; }
+.welcome-note { margin-top:22px; }
+.welcome-art { position:relative; padding:60px 0; animation:welcome-reveal .7s ease-out both; }
+.welcome-orbit { position:absolute; width:410px; height:410px; max-width:100%; border:1px solid #b4c6a8; border-radius:50%; top:-10px; left:8%; box-shadow:0 0 0 35px #e7ebdc,0 0 0 36px #c8d3ba; }
+.welcome-student-card { position:relative; background:linear-gradient(125deg,#143c38,#2a7471); color:white; border-radius:18px; padding:27px; transform:rotate(-7deg); box-shadow:0 24px 30px #183d3024; aspect-ratio:1.62; max-width:440px; margin:auto; overflow:hidden; }
+.welcome-student-card::after { content:""; position:absolute; width:250px; height:350px; border:1px solid #ffffff22; border-radius:50%; right:-70px; top:-40px; box-shadow:0 0 0 18px #ffffff08,0 0 0 35px #ffffff08; }
+.welcome-card-top { display:flex; justify-content:space-between; font-weight:800; font-size:22px; }
+.welcome-student-card p { font-size:10px; letter-spacing:1px; margin-top:14px; }
+.welcome-card-name { margin-top:40px; font-size:26px; font-weight:700; letter-spacing:-.5px; }
+.welcome-card-bottom { display:flex; justify-content:space-between; margin-top:15px; }
+.welcome-card-bottom span,.welcome-card-bottom strong { display:block; font-size:13px; }
+.welcome-card-bottom span { font-size:8px; letter-spacing:1px; margin-bottom:5px; }
+.welcome-share { position:relative; margin:18px 0 0 11%; padding:18px 21px; background:#fffdf7; box-shadow:0 8px 25px #173c3212; width:86%; border:1px solid #d8dfd0; display:flex; gap:12px; align-items:center; border-radius:8px; }
+.welcome-share strong,.welcome-share span { display:block; }
+.welcome-share strong { font-size:13px; }
+.welcome-share div span { font-size:11px; margin-top:4px; }
+.welcome-check { color:#356c42; background:#e3ecda; padding:8px; border-radius:50%; }
+.welcome-example { display:block; text-align:right; margin-top:22px; }
+.welcome-students,.welcome-flows,.welcome-audiences { padding:76px max(5%,calc((100vw - 1152px)/2)); }
+.welcome-students { display:grid; grid-template-columns:1fr 1fr; gap:65px; background:#e8edde; }
+.welcome-page h2 { font-family:Georgia,serif; font-size:clamp(32px,3.4vw,46px); line-height:1.13; font-weight:400; margin-bottom:22px; letter-spacing:-1px; }
+.welcome-page h3 { font-size:18px; font-weight:600; margin:0 0 8px; }
+.welcome-students p,.welcome-audiences p,.welcome-flows p { line-height:1.7; max-width:430px; }
+.welcome-steps { list-style:none; padding:0; }
+.welcome-steps li { display:flex; gap:24px; padding:23px 0; border-top:1px solid #c6d2bb; }
+.welcome-steps li>span { font-size:12px; font-weight:700; padding-top:4px; }
+.welcome-steps p { font-size:14px; margin:0; }
+.welcome-flows { background:#183e33; color:#f7f5ec; }
+.welcome-flow-row { display:flex; gap:25px; border-top:1px solid #ffffff30; padding:28px 0; }
+.welcome-flow-row>svg { flex-shrink:0; margin-top:4px; }
+.welcome-flow-row p { max-width:none; margin:0; }
+.welcome-flow-row small { display:block; margin-top:14px; color:#c0d0ba; max-width:620px; line-height:1.6; }
+.welcome-audiences { display:grid; grid-template-columns:1fr 1fr; gap:80px; }
+.welcome-audiences .welcome-primary { margin-top:25px; }
+.welcome-text-link { display:flex; align-items:center; width:fit-content; gap:10px; margin-top:22px; text-decoration:underline; font-size:14px; font-weight:600; }
+.welcome-footer { border-top:1px solid #d6d9cc; font-size:12px; }
+@keyframes welcome-reveal { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+@media(max-width:700px) { .welcome-nav { align-items:flex-start; padding:22px 6%; }.welcome-nav nav { gap:12px; justify-content:flex-end; max-width:220px; font-size:12px; }.welcome-hero { grid-template-columns:1fr; padding:55px 7% 40px; gap:30px; }.welcome-hero h1 { letter-spacing:-2px; }.welcome-art { padding:60px 10px 40px; margin-top:20px; }.welcome-student-card { padding:22px; }.welcome-card-name { margin-top:26px; font-size:23px; }.welcome-orbit { height:300px; width:300px; left:5%; }.welcome-share { margin-left:5%; width:95%; padding:15px; }.welcome-students,.welcome-audiences { grid-template-columns:1fr; gap:35px; }.welcome-students,.welcome-flows,.welcome-audiences { padding:50px 7%; }.welcome-footer { flex-wrap:wrap; }.welcome-footer>span:nth-child(2) { display:none; } }
+@media(prefers-reduced-motion:reduce) { .welcome-art { animation:none; } }

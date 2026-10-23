@@ -46,7 +46,7 @@ export const ROLE_ROUTE_MAP: readonly RoleRoute[] = [
     allowedRoles: ADMIN_ROLES,
   },
   {
-    prefix: "/",
+    prefix: "/dashboard",
     allowedRoles: ["SUPER_ADMIN", "ADMIN", "ISSUER", "VIEWER"],
     exact: true,
   },
@@ -147,7 +147,7 @@ export function canAccessRoute(role: string | null | undefined, pathname: string
   }
 
   return ROLE_ROUTE_MAP.some((route) => {
-    // The dashboard is exact-only so "/" does not accidentally authorize every route.
+    // The dashboard is exact-only to avoid authorizing unknown nested dashboard routes.
     const pathMatches = route.exact
       ? pathname === route.prefix
       : pathname === route.prefix || pathname.startsWith(`${route.prefix}/`);

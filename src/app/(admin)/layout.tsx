@@ -19,7 +19,7 @@ import { getDocumentSignedUrlForRender } from "@/lib/storage/supabase";
 import { getUniversityProfileForRender } from "@/lib/university/profile";
 
 const navItems: (PortalNavItem & { allowedRoles?: readonly AdminRole[] })[] = [
-  { href: "/", label: "Overview", icon: "overview" },
+  { href: "/dashboard", label: "Overview", icon: "overview" },
   { href: "/students", label: "Students", icon: "students" },
   {
     href: "/credentials/schemas",

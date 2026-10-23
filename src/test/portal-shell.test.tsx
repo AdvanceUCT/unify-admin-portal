@@ -1,12 +1,13 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { isNavItemActive, resolveActiveNavItem } from "@/components/layout/navigation";
+vi.mock("next/navigation", () => ({ usePathname: () => "/dashboard", useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 import { PortalShell } from "@/components/layout/PortalShell";
 import { SidebarNav } from "@/components/layout/SidebarNav";
 import type { PortalNavItem } from "@/components/layout/portalTypes";
 
 const navItems: PortalNavItem[] = [
-  { href: "/", label: "Overview", icon: "overview" },
+  { href: "/dashboard", label: "Overview", icon: "overview" },
   { href: "/students", label: "Students", icon: "students" },
   { href: "/vendor/help", label: "Help", icon: "help" },
 ];
@@ -48,7 +49,7 @@ describe("PortalShell", () => {
   it("titles the header from the active nav item and marks it current", () => {
     renderShell();
 
-    // The mocked pathname is "/", so Overview is active.
+    // The mocked pathname is "/dashboard", so Overview is active.
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Overview");
     expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute(
       "aria-current",
@@ -95,7 +96,7 @@ describe("PortalShell", () => {
 
 describe("resolveActiveNavItem", () => {
   it("matches the root only exactly", () => {
-    expect(resolveActiveNavItem("/", navItems)?.href).toBe("/");
+    expect(resolveActiveNavItem("/dashboard", navItems)?.href).toBe("/dashboard");
     expect(resolveActiveNavItem("/settings", navItems)).toBeNull();
   });
 

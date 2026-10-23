@@ -19,6 +19,20 @@ describe("proxy", () => {
     getSessionCookieMock.mockReset();
   });
 
+  it.each([null, "session-cookie"])("keeps the homepage public with cookie %s", cookie => {
+    getSessionCookieMock.mockReturnValue(cookie);
+    const response = proxy(request("/"));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("protects the relocated staff dashboard", () => {
+    getSessionCookieMock.mockReturnValue(null);
+    const response = proxy(request("/dashboard"));
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe("http://localhost:3000/sign-in?callbackURL=%2Fdashboard");
+  });
+
   it("redirects unauthenticated admin routes to sign in with callback", () => {
     getSessionCookieMock.mockReturnValue(null);
 
@@ -33,7 +47,7 @@ describe("proxy", () => {
   it("allows public auth and recovery routes without a session", () => {
     getSessionCookieMock.mockReturnValue(null);
 
-    for (const route of ["/sign-in", "/accept-invite", "/forgot-password", "/reset-password", "/verify", "/verify/sp-public-001", "/verify/checkout/verification-001", "/wallet/topups/return"]) {
+    for (const route of ["/welcome", "/sign-in", "/accept-invite", "/forgot-password", "/reset-password", "/verify", "/verify/sp-public-001", "/verify/checkout/verification-001", "/wallet/topups/return"]) {
       expect(proxy(request(route)).status, route).toBe(200);
     }
   });
@@ -66,7 +80,7 @@ describe("proxy", () => {
     const response = proxy(request("/sign-in"));
 
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("http://localhost:3000/");
+    expect(response.headers.get("location")).toBe("http://localhost:3000/dashboard");
   });
 
   it("skips Better Auth API routes and static assets", () => {

@@ -4,6 +4,7 @@
  */
 
 "use client";
+import { formatSastDateTime } from "@/lib/formatters/time";
 
 import { Building2, CheckCircle2, LoaderCircle, RefreshCw, Server, ShieldCheck, XCircle } from "lucide-react";
 import Link from "next/link";
@@ -64,10 +65,7 @@ function StatusIcon({ status }: { status: Reachability }) {
 
 function formatTimestamp(value?: string | null) {
   if (!value) return "Not available";
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+  return formatSastDateTime(value);
 }
 
 export function SetupWizard({
@@ -504,7 +502,7 @@ function UniversityProfileCard({
         </Link>
         <Link
           className="inline-flex h-10 items-center justify-center rounded-md border border-border px-4 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted"
-          href="/"
+          href="/dashboard"
         >
           Go to dashboard
         </Link>

@@ -132,7 +132,7 @@ describe("StudentCredentialActions", () => {
     expect(reasonField).toHaveFocus();
   });
 
-  it("submits a UTC reactivation time for a timed suspension", async () => {
+  it("converts a SAST suspension end to UTC for the API", async () => {
     if (!caleb) throw new Error("Caleb test record missing.");
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ lifecycleState: "SUSPENDED" }), {
@@ -158,7 +158,7 @@ describe("StudentCredentialActions", () => {
       target: { value: "Enrolment review" },
     });
     fireEvent.click(screen.getByLabelText("Reactivate automatically"));
-    fireEvent.change(screen.getByLabelText("Suspension ends"), {
+    fireEvent.change(screen.getByLabelText("Suspension ends (SAST)"), {
       target: { value: "2099-07-10T11:00" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
@@ -167,7 +167,7 @@ describe("StudentCredentialActions", () => {
     const request = fetchMock.mock.calls[0][1];
     expect(JSON.parse(request.body)).toEqual({
       action: "suspend",
-      reactivateAt: new Date("2099-07-10T11:00").toISOString(),
+      reactivateAt: "2099-07-10T09:00:00.000Z",
       reason: "Enrolment review",
     });
   });

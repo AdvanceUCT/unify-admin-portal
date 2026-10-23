@@ -10,12 +10,12 @@ describe("sanitizeCallbackUrl", () => {
   });
 
   it("falls back to dashboard for external URLs", () => {
-    expect(sanitizeCallbackUrl("https://evil.example/phish")).toBe("/");
-    expect(sanitizeCallbackUrl("//evil.example/phish")).toBe("/");
+    expect(sanitizeCallbackUrl("https://evil.example/phish")).toBe("/dashboard");
+    expect(sanitizeCallbackUrl("//evil.example/phish")).toBe("/dashboard");
   });
 
   it("falls back to dashboard for empty or malformed values", () => {
-    expect(sanitizeCallbackUrl(undefined)).toBe("/");
-    expect(sanitizeCallbackUrl("http://[::1")).toBe("/");
+    expect(sanitizeCallbackUrl(undefined)).toBe("/dashboard");
+    expect(sanitizeCallbackUrl("http://[::1")).toBe("/dashboard");
   });
 });
