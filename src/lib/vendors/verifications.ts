@@ -15,6 +15,7 @@ import {
 import { Prisma } from "@/generated/prisma/client";
 import { VendorVerificationBillingStatus, type VendorVerificationStatus } from "@/generated/prisma/enums";
 import { finalizeVerificationCharge } from "@/lib/billing/charges";
+import { assertVendorVerificationAllowed } from "@/lib/billing/verificationSuspension";
 import { prisma } from "@/lib/db/prisma";
 import { ensureVendorVerificationServicePoint } from "@/lib/vendors/applications";
 import { deliverVendorWebhook } from "@/lib/vendors/integrations";
@@ -363,6 +364,7 @@ export async function createVendorCheckoutSession(vendorProfileId: string, check
   if (!normalizedCheckoutId || normalizedCheckoutId.length > 128) {
     throw new Error("checkoutId must contain between 1 and 128 characters.");
   }
+  await assertVendorVerificationAllowed(vendorProfileId);
 
   if (permittedBranchIds) {
     const scopedVendor = await prisma.vendorProfile.findUnique({ where: { id: vendorProfileId }, select: { defaultBranchId: true } });

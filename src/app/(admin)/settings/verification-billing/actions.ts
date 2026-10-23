@@ -11,6 +11,7 @@ import { writeAuditLog } from "@/lib/audit/audit";
 import { assertCan } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
 import { requireSingleUniversityId } from "@/lib/billing/config";
+import { INVOICE_PAYMENT_DUE_DAYS_MAX } from "@/lib/billing/constants";
 import { runVendorInvoiceGeneration } from "@/lib/billing/invoices";
 import { parsePercentageToBasisPoints } from "@/lib/billing/money";
 import { createFollowUpVerificationBillingPolicy } from "@/lib/billing/policy";
@@ -43,6 +44,46 @@ export async function updateVerificationBillingPolicyAction(formData: FormData) 
   );
 
   revalidatePath("/settings/verification-billing");
+}
+
+export type InvoicePaymentWindowResult = { status: "saved" } | { status: "error"; message: string };
+
+/**
+ * SUPER_ADMIN only (`billing-policy:manage`). Sets how many days a vendor has
+ * to pay an invoice before its verifications are suspended. Applies to
+ * invoices issued after the change; issued invoices keep their due date.
+ */
+export async function updateInvoicePaymentWindowAction(formData: FormData): Promise<InvoicePaymentWindowResult> {
+  const session = await requireRole(["SUPER_ADMIN"]);
+  assertCan("billing-policy:manage", session);
+
+  const input = String(formData.get("invoicePaymentDueDays") ?? "").trim();
+  const days = /^\d+$/.test(input) ? Number(input) : NaN;
+  if (!(days >= 1 && days <= INVOICE_PAYMENT_DUE_DAYS_MAX)) {
+    return {
+      status: "error",
+      message: `The payment window must be a whole number of days between 1 and ${INVOICE_PAYMENT_DUE_DAYS_MAX}.`,
+    };
+  }
+
+  const universityId = await requireSingleUniversityId(prisma);
+  await prisma.$transaction(async (tx) => {
+    const current = await tx.universityProfile.findUniqueOrThrow({
+      where: { id: universityId },
+      select: { invoicePaymentDueDays: true },
+    });
+    await tx.universityProfile.update({ where: { id: universityId }, data: { invoicePaymentDueDays: days } });
+    await writeAuditLog({
+      action: "INVOICE_PAYMENT_WINDOW_UPDATED",
+      actorId: session.user.id,
+      targetType: "UniversityProfile",
+      targetId: universityId,
+      meta: { oldInvoicePaymentDueDays: current.invoicePaymentDueDays, newInvoicePaymentDueDays: days },
+    }, tx);
+  });
+
+  revalidatePath("/settings/verification-billing");
+  return { status: "saved" };
 }
 
 /**

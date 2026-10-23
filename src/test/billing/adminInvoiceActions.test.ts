@@ -5,6 +5,7 @@ vi.mock("@/lib/auth/session", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/audit/audit", () => ({ writeAuditLog: vi.fn() }));
 vi.mock("@/lib/billing/invoices", () => ({ runVendorInvoiceGeneration: vi.fn() }));
 vi.mock("@/lib/billing/paymentConfirmation", () => ({ confirmInvoicePayment: vi.fn() }));
+vi.mock("@/lib/billing/verificationSuspension", () => ({ reinstateAfterInvoicePayment: vi.fn() }));
 vi.mock("@/lib/paymentProviders/paystack/config", () => ({ resolvePaystackProviderConfig: vi.fn() }));
 vi.mock("@/lib/vendors/applications", () => ({ getApprovedApplicationIdForVendorProfile: vi.fn() }));
 vi.mock("@/lib/db/prisma", () => ({

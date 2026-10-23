@@ -6,15 +6,9 @@
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 
-import { StatusText, type StatusTone } from "@/components/ui/StatusText";
+import { InvoicePaymentStatus, formatInvoiceDueDate } from "@/features/vendors/InvoicePaymentStatus";
 import { listVendorInvoices } from "@/lib/billing/invoiceQueries";
 import { requireVendorInvoiceOwnerContextForRender } from "@/lib/billing/vendorAuthorization";
-
-const PAYMENT_TONE: Record<string, StatusTone> = {
-  UNPAID: "warning",
-  PAID: "success",
-  NO_PAYMENT_REQUIRED: "neutral",
-};
 
 export default async function VendorInvoicesPage() {
   const { context } = await requireVendorInvoiceOwnerContextForRender();
@@ -36,6 +30,7 @@ export default async function VendorInvoicesPage() {
                 <th className="px-4 py-3 font-medium">Invoice</th>
                 <th className="px-4 py-3 font-medium">Period</th>
                 <th className="px-4 py-3 font-medium">Total</th>
+                <th className="px-4 py-3 font-medium">Due</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium" />
               </tr>
@@ -55,10 +50,9 @@ export default async function VendorInvoicesPage() {
                   <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-fg">
                     {invoice.currency} {invoice.totalDisplay}
                   </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-fg-muted">{formatInvoiceDueDate(invoice) ?? "—"}</td>
                   <td className="px-4 py-3">
-                    <StatusText tone={PAYMENT_TONE[invoice.paymentStatus] ?? "neutral"}>
-                      {invoice.paymentStatus.replaceAll("_", " ")}
-                    </StatusText>
+                    <InvoicePaymentStatus isOverdue={invoice.isOverdue} paymentStatus={invoice.paymentStatus} />
                     {invoice.hasUnresolvedException && (
                       <p className="mt-1 text-xs text-danger-fg">Needs review</p>
                     )}

@@ -13,6 +13,7 @@ vi.mock("@/lib/billing/gatewayEvents", () => ({
   recordGatewayEventFailure: vi.fn(),
 }));
 vi.mock("@/lib/billing/paymentConfirmation", () => ({ confirmInvoicePayment: vi.fn() }));
+vi.mock("@/lib/billing/verificationSuspension", () => ({ reinstateAfterInvoicePayment: vi.fn() }));
 vi.mock("@/lib/billing/exceptions", () => ({ recordBillingException: vi.fn() }));
 vi.mock("@/lib/payments/topups", () => ({ reconcileWalletTopupByReference: vi.fn() }));
 vi.mock("@/lib/vendors/payouts", () => ({ handlePaystackTransferWebhook: vi.fn() }));
@@ -22,6 +23,7 @@ import { POST } from "@/app/api/webhooks/paystack/route";
 import { resolvePaystackProviderConfig, resolvePaystackWalletTopupConfig } from "@/lib/paymentProviders/paystack/config";
 import { recordGatewayEvent, markGatewayEventProcessed, recordGatewayEventFailure } from "@/lib/billing/gatewayEvents";
 import { confirmInvoicePayment } from "@/lib/billing/paymentConfirmation";
+import { reinstateAfterInvoicePayment } from "@/lib/billing/verificationSuspension";
 import { recordBillingException } from "@/lib/billing/exceptions";
 import { reconcileWalletTopupByReference } from "@/lib/payments/topups";
 import { handlePaystackTransferWebhook } from "@/lib/vendors/payouts";
@@ -141,6 +143,7 @@ describe("POST /api/webhooks/paystack", () => {
     expect(response.status).toBe(200);
     expect(confirmInvoicePayment).toHaveBeenCalledWith({}, { reference: "unify-inv-abc", config: CONFIG });
     expect(markGatewayEventProcessed).toHaveBeenCalledWith({}, "event-1");
+    expect(reinstateAfterInvoicePayment).toHaveBeenCalledWith({ outcome: "confirmed", invoiceId: "invoice-1", paymentId: "payment-1" });
     await expect(response.json()).resolves.toEqual({ received: true, outcome: "confirmed" });
   });
 
@@ -160,6 +163,7 @@ describe("POST /api/webhooks/paystack", () => {
     expect(response.status).toBe(200);
     expect(reconcileWalletTopupByReference).toHaveBeenCalledWith({ reference: "unify-wlt-abc", config: CONFIG });
     expect(confirmInvoicePayment).not.toHaveBeenCalled();
+    expect(reinstateAfterInvoicePayment).not.toHaveBeenCalled();
     expect(markGatewayEventProcessed).toHaveBeenCalledWith({}, "event-1");
   });
 

@@ -6,18 +6,14 @@
 import { notFound } from "next/navigation";
 
 import { BackButton } from "@/components/ui/BackButton";
-import { StatusText, type StatusTone } from "@/components/ui/StatusText";
+import { InvoicePaymentStatus, formatInvoiceDueDate } from "@/features/vendors/InvoicePaymentStatus";
 import { env } from "@/lib/config/env";
 import { getVendorInvoiceDocument } from "@/lib/billing/invoiceQueries";
 import { requireVendorInvoiceOwnerContextForRender } from "@/lib/billing/vendorAuthorization";
+import { getVendorVerificationSuspension } from "@/lib/billing/verificationSuspension";
 
+import { VerificationSuspensionNoticeBanner } from "../../VendorVerificationSuspensionNotice";
 import { PayInvoiceButton } from "./PayInvoiceButton";
-
-const PAYMENT_TONE: Record<string, StatusTone> = {
-  UNPAID: "warning",
-  PAID: "success",
-  NO_PAYMENT_REQUIRED: "neutral",
-};
 
 export default async function VendorInvoiceDetailPage({
   params,
@@ -26,25 +22,38 @@ export default async function VendorInvoiceDetailPage({
 }) {
   const { context } = await requireVendorInvoiceOwnerContextForRender();
   const { invoiceId } = await params;
-  const result = await getVendorInvoiceDocument(context.vendorProfileId, invoiceId);
+  const [result, suspension] = await Promise.all([
+    getVendorInvoiceDocument(context.vendorProfileId, invoiceId),
+    getVendorVerificationSuspension(context.vendorProfileId),
+  ]);
   if (!result) notFound();
 
-  const { document, paymentStatus, hasUnresolvedException, isPayable } = result;
+  const { document, paymentStatus, hasUnresolvedException, isOverdue, isPayable } = result;
+  const dueDate = formatInvoiceDueDate(result);
   const canCheckout = isPayable && env.VERIFICATION_INVOICE_CHECKOUT_ENABLED;
 
   return (
     <div className="space-y-6">
+      {/* The portal layout skips its banner here; an overdue invoice already explains the suspension below. */}
+      {suspension && !isOverdue && (
+        <VerificationSuspensionNoticeBanner
+          canPayInvoices
+          reason={suspension.reason}
+          suspendedAtIso={suspension.suspendedAt.toISOString()}
+        />
+      )}
       <BackButton href="/vendor/invoices" label="Back to invoices" />
       <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
           <div>
             <h2 className="text-section-title text-fg">Invoice {document.invoiceNumber}</h2>
-            <p className="text-sm text-fg-muted">{document.periodLabel}</p>
+            <p className="text-sm text-fg-muted">
+              {document.periodLabel}
+              {dueDate ? ` · Due ${dueDate}` : null}
+            </p>
           </div>
           <div className="flex items-center gap-3">
-            <StatusText tone={PAYMENT_TONE[paymentStatus] ?? "neutral"}>
-              {paymentStatus.replaceAll("_", " ")}
-            </StatusText>
+            <InvoicePaymentStatus isOverdue={isOverdue} paymentStatus={paymentStatus} />
             <a
               className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-fg hover:bg-surface-muted"
               href={`/api/vendor/invoices/${invoiceId}/download`}
@@ -54,6 +63,12 @@ export default async function VendorInvoiceDetailPage({
             {canCheckout && <PayInvoiceButton invoiceId={invoiceId} />}
           </div>
         </div>
+
+        {isOverdue && (
+          <div className="border-b border-border bg-danger-fg/10 px-5 py-3 text-sm text-danger-fg">
+            This invoice is overdue. New verifications stay suspended until every overdue invoice is paid.
+          </div>
+        )}
 
         {hasUnresolvedException && (
           <div className="border-b border-border bg-danger-fg/10 px-5 py-3 text-sm text-danger-fg">

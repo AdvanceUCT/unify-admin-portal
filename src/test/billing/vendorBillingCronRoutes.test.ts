@@ -9,12 +9,22 @@ vi.mock("@/lib/billing/jobLease", () => ({
 }));
 vi.mock("@/lib/billing/invoices", () => ({ runVendorInvoiceGeneration: vi.fn() }));
 vi.mock("@/lib/billing/reconciliation", () => ({ runVendorBillingReconciliation: vi.fn() }));
+vi.mock("@/lib/billing/verificationSuspension", () => ({
+  reinstateSettledVendors: vi.fn(),
+  runVerificationSuspensionMonitor: vi.fn(),
+  syncVendorVerificationSuspensions: vi.fn(),
+}));
 
 import { GET as getVendorBilling } from "@/app/api/cron/vendor-billing/route";
 import { GET as getVendorBillingReconcile } from "@/app/api/cron/vendor-billing-reconcile/route";
 import { acquireJobLease, completeJobLease, failJobLease } from "@/lib/billing/jobLease";
 import { runVendorInvoiceGeneration } from "@/lib/billing/invoices";
 import { runVendorBillingReconciliation } from "@/lib/billing/reconciliation";
+import {
+  reinstateSettledVendors,
+  runVerificationSuspensionMonitor,
+  syncVendorVerificationSuspensions,
+} from "@/lib/billing/verificationSuspension";
 
 function authedRequest() {
   return new Request("http://localhost:3000/api/cron/vendor-billing", { headers: { authorization: "Bearer test-cron-secret" } });
@@ -47,6 +57,11 @@ describe("GET /api/cron/vendor-billing", () => {
 
   it("runs generation then reconciliation and completes the lease", async () => {
     vi.mocked(acquireJobLease).mockResolvedValue({ runId: "run-1", cursor: null });
+    vi.mocked(runVerificationSuspensionMonitor).mockResolvedValue({
+      reinstated: [],
+      suspended: ["vendor-1"],
+      agentSync: { synced: ["vendor-1"], failed: [] },
+    });
     vi.mocked(runVendorInvoiceGeneration).mockResolvedValue({ vendorsScanned: 2, invoicesIssued: 1, zeroTotalInvoices: 0, skippedDisabled: false });
     vi.mocked(runVendorBillingReconciliation).mockResolvedValue({
       configured: true,
@@ -63,6 +78,11 @@ describe("GET /api/cron/vendor-billing", () => {
     expect(response.status).toBe(200);
     expect(completeJobLease).toHaveBeenCalledWith({}, "run-1", expect.any(Object));
     expect(failJobLease).not.toHaveBeenCalled();
+    // Suspension runs last so payments confirmed by this run's reconciliation count first.
+    expect(vi.mocked(runVerificationSuspensionMonitor).mock.invocationCallOrder[0]).toBeGreaterThan(
+      vi.mocked(runVendorBillingReconciliation).mock.invocationCallOrder[0],
+    );
+    expect(await response.json()).toMatchObject({ verificationSuspension: { suspended: ["vendor-1"] } });
   });
 
   it("marks the lease FAILED and returns 500 when the job throws", async () => {
@@ -100,6 +120,8 @@ describe("GET /api/cron/vendor-billing-reconcile", () => {
 
   it("runs the reconciliation sweep and completes the lease", async () => {
     vi.mocked(acquireJobLease).mockResolvedValue({ runId: "run-2", cursor: null });
+    vi.mocked(reinstateSettledVendors).mockResolvedValue({ reinstated: ["vendor-1"] });
+    vi.mocked(syncVendorVerificationSuspensions).mockResolvedValue({ synced: ["vendor-1"], failed: [] });
     vi.mocked(runVendorBillingReconciliation).mockResolvedValue({
       configured: true,
       attemptsSwept: 3,
@@ -114,6 +136,8 @@ describe("GET /api/cron/vendor-billing-reconcile", () => {
 
     expect(response.status).toBe(200);
     expect(completeJobLease).toHaveBeenCalledWith({}, "run-2", expect.any(Object));
+    expect(reinstateSettledVendors).toHaveBeenCalled();
+    expect(syncVendorVerificationSuspensions).toHaveBeenCalled();
   });
 
   it("marks the lease FAILED and returns 500 on an unexpected error", async () => {

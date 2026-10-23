@@ -4,7 +4,8 @@
  * The single Vercel-scheduled entry point for vendor billing (Hobby plan
  * constraint: kept to one additional cron job alongside the existing
  * `credential-automation` one). Runs invoice generation, then a
- * reconciliation sweep, in one bounded invocation — `/api/cron/vendor-billing-reconcile`
+ * reconciliation sweep, then the overdue-invoice verification suspension
+ * monitor, in one bounded invocation — `/api/cron/vendor-billing-reconcile`
  * still exists as its own independently-triggerable route for on-demand
  * recovery outside this daily schedule.
  * @module app/api/cron/vendor-billing/route
@@ -20,6 +21,7 @@ import { prisma } from "@/lib/db/prisma";
 import { runVendorInvoiceGeneration } from "@/lib/billing/invoices";
 import { acquireJobLease, completeJobLease, failJobLease } from "@/lib/billing/jobLease";
 import { runVendorBillingReconciliation } from "@/lib/billing/reconciliation";
+import { runVerificationSuspensionMonitor } from "@/lib/billing/verificationSuspension";
 
 function authorized(request: Request, secret: string) {
   const supplied = Buffer.from(request.headers.get("authorization") ?? "");
@@ -43,15 +45,17 @@ export async function GET(request: Request) {
   try {
     const generation = await runVendorInvoiceGeneration(prisma);
     const reconciliation = await runVendorBillingReconciliation(prisma);
+    // After reconciliation, so a payment confirmed by this run counts before suspending.
+    const verificationSuspension = await runVerificationSuspensionMonitor();
 
     await completeJobLease(prisma, lease.runId, {
       scannedCount: generation.vendorsScanned,
       importedCount: generation.invoicesIssued,
-      exceptionCount: reconciliation.gatewayEventsStillFailing,
-      totalsSnapshot: { generation, reconciliation },
+      exceptionCount: reconciliation.gatewayEventsStillFailing + verificationSuspension.agentSync.failed.length,
+      totalsSnapshot: { generation, reconciliation, verificationSuspension },
     });
 
-    return NextResponse.json({ generation, reconciliation });
+    return NextResponse.json({ generation, reconciliation, verificationSuspension });
   } catch (error) {
     await failJobLease(prisma, lease.runId, error);
     return NextResponse.json({ error: { message: "The vendor-billing job failed." } }, { status: 500 });

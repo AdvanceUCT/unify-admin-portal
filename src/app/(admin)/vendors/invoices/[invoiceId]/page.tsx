@@ -6,19 +6,14 @@
 import { notFound } from "next/navigation";
 
 import { BackButton } from "@/components/ui/BackButton";
-import { StatusText, type StatusTone } from "@/components/ui/StatusText";
+import { StatusText } from "@/components/ui/StatusText";
+import { InvoicePaymentStatus, formatInvoiceDueDate } from "@/features/vendors/InvoicePaymentStatus";
 import { assertCan } from "@/lib/auth/permissions";
 import { requireRoleForRender } from "@/lib/auth/session";
 import { getAdminInvoiceDetail } from "@/lib/billing/invoiceQueries";
 import { getApprovedApplicationIdForVendorProfile } from "@/lib/vendors/applications";
 
 import { reconcileInvoicePaymentAction } from "./actions";
-
-const PAYMENT_TONE: Record<string, StatusTone> = {
-  UNPAID: "warning",
-  PAID: "success",
-  NO_PAYMENT_REQUIRED: "neutral",
-};
 
 const UNRESOLVED_ATTEMPT_STATUSES = new Set(["READY", "PENDING", "UNKNOWN"]);
 
@@ -36,6 +31,7 @@ export default async function AdminVendorInvoiceDetailPage({
   if (!detail) notFound();
 
   const { document } = detail;
+  const dueDate = formatInvoiceDueDate(detail);
   const canReconcile = detail.paymentStatus === "UNPAID" && detail.attempts.some((attempt) => UNRESOLVED_ATTEMPT_STATUSES.has(attempt.status));
   const reconcileAction = reconcileInvoicePaymentAction.bind(null, invoiceId);
   const applicationId = await getApprovedApplicationIdForVendorProfile(detail.vendorProfileId);
@@ -51,12 +47,11 @@ export default async function AdminVendorInvoiceDetailPage({
             <h2 className="text-section-title text-fg">Invoice {document.invoiceNumber}</h2>
             <p className="text-sm text-fg-muted">
               {detail.vendorCompanyName} · {document.periodLabel}
+              {dueDate ? ` · Due ${dueDate}` : null}
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <StatusText tone={PAYMENT_TONE[detail.paymentStatus] ?? "neutral"}>
-              {detail.paymentStatus.replaceAll("_", " ")}
-            </StatusText>
+            <InvoicePaymentStatus isOverdue={detail.isOverdue} paymentStatus={detail.paymentStatus} />
             {canReconcile && (
               <form action={reconcileAction}>
                 <button

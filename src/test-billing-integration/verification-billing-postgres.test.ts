@@ -204,7 +204,9 @@ beforeAll(async () => {
         "id" TEXT PRIMARY KEY,
         "name" TEXT NOT NULL DEFAULT 'Test University',
         "abbreviation" TEXT NOT NULL DEFAULT 'TU',
-        "contactEmail" TEXT NOT NULL DEFAULT 'admin@example.test'
+        "contactEmail" TEXT NOT NULL DEFAULT 'admin@example.test',
+        -- Added by 20261023120000_vendor_verification_suspension; read at invoice issuance.
+        "invoicePaymentDueDays" INTEGER NOT NULL DEFAULT 14
       );
       CREATE TABLE "vendor_profile" (
         "id" TEXT PRIMARY KEY,
@@ -820,9 +822,11 @@ describe("vendor invoice generation", () => {
         servicePeriodKey: "2024-01",
       });
 
+      const issuedAt = new Date("2024-02-05T10:00:00.000Z");
       const invoice = await invoices.issueInvoiceForVendorPeriod(scopedPrisma, {
         vendorProfileId,
         periodKey: "2024-01",
+        now: issuedAt,
       });
 
       expect(invoice).toMatchObject({
@@ -832,6 +836,9 @@ describe("vendor invoice generation", () => {
         totalMinor: BigInt(350),
         platformShareMinor: BigInt(35),
         universityShareMinor: BigInt(315),
+        issuedAt,
+        // The default 14-day payment window from the university profile.
+        dueAt: new Date("2024-02-19T10:00:00.000Z"),
       });
       expect(invoice!.invoiceNumber).toMatch(/^DEMO-\d{4}-\d{6}$/);
 

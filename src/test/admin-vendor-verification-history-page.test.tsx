@@ -18,6 +18,10 @@ const reports = vi.hoisted(() => ({
 }));
 const invoiceQueries = vi.hoisted(() => ({
   getVendorInvoiceHistory: vi.fn(),
+  getVendorOverdueInvoiceSummary: vi.fn(),
+}));
+const verificationSuspension = vi.hoisted(() => ({
+  getVendorVerificationSuspension: vi.fn(),
 }));
 const payoutHistory = vi.hoisted(() => ({
   listVendorPayoutHistoryForVendorProfile: vi.fn(),
@@ -40,6 +44,7 @@ vi.mock("@/lib/auth/session", () => auth);
 vi.mock("@/lib/vendors/applications", () => applications);
 vi.mock("@/lib/vendors/monthlyVerificationHistory", () => reports);
 vi.mock("@/lib/billing/invoiceQueries", () => invoiceQueries);
+vi.mock("@/lib/billing/verificationSuspension", () => verificationSuspension);
 vi.mock("@/lib/vendors/payoutHistory", () => ({
   listVendorPayoutHistoryForVendorProfile: payoutHistory.listVendorPayoutHistoryForVendorProfile,
 }));
@@ -118,6 +123,8 @@ const invoiceHistory = {
       hasUnresolvedException: false,
       isDemo: false,
       issuedAtIso: "2026-09-01T00:00:00.000Z",
+      dueAtIso: "2026-09-15T00:00:00.000Z",
+      isOverdue: false,
     },
     {
       id: "invoice-2",
@@ -131,6 +138,8 @@ const invoiceHistory = {
       hasUnresolvedException: false,
       isDemo: false,
       issuedAtIso: "2026-08-01T00:00:00.000Z",
+      dueAtIso: "2026-08-15T00:00:00.000Z",
+      isOverdue: false,
     },
   ],
 };
@@ -146,6 +155,13 @@ describe("admin vendor verification history", () => {
     ));
     reports.getVendorMonthlyVerificationHistory.mockResolvedValue(history);
     invoiceQueries.getVendorInvoiceHistory.mockResolvedValue(invoiceHistory);
+    invoiceQueries.getVendorOverdueInvoiceSummary.mockResolvedValue({
+      count: 0,
+      totalMinor: 0,
+      currency: "ZAR",
+      oldestDueAtIso: null,
+    });
+    verificationSuspension.getVendorVerificationSuspension.mockResolvedValue(null);
     payoutHistory.listVendorPayoutHistoryForVendorProfile.mockResolvedValue({
       page: 1,
       pageSize: 10,
@@ -242,6 +258,52 @@ describe("admin vendor verification history", () => {
       "vendor-profile-1",
       { year: 2026 },
     );
+  });
+
+  it("shows the due date only while an invoice is unpaid", async () => {
+    render(
+      await VendorVerificationHistoryPage({
+        params: Promise.resolve({ applicationId: "application-1" }),
+      }),
+    );
+
+    expect(screen.getByRole("columnheader", { name: "Due" })).toBeInTheDocument();
+    expect(screen.getByText(/15 Sept? 2026/)).toBeInTheDocument();
+    expect(screen.queryByText(/15 Aug 2026/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("No overdue invoices")).toBeInTheDocument();
+  });
+
+  it("flags overdue invoices and shows a read-only suspension notice", async () => {
+    invoiceQueries.getVendorInvoiceHistory.mockResolvedValue({
+      ...invoiceHistory,
+      invoices: [{ ...invoiceHistory.invoices[0], isOverdue: true }, invoiceHistory.invoices[1]],
+    });
+    invoiceQueries.getVendorOverdueInvoiceSummary.mockResolvedValue({
+      count: 1,
+      totalMinor: 875,
+      currency: "ZAR",
+      oldestDueAtIso: "2026-09-15T00:00:00.000Z",
+    });
+    verificationSuspension.getVendorVerificationSuspension.mockResolvedValue({
+      code: "UNPAID_INVOICE",
+      suspendedAt: new Date("2026-09-16T00:00:00.000Z"),
+      reason: "Invoice INV-0001 was due 15 Sept 2026",
+    });
+
+    render(
+      await VendorVerificationHistoryPage({
+        params: Promise.resolve({ applicationId: "application-1" }),
+      }),
+    );
+
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent(/Verification suspended since 16 Sept? 2026/);
+    expect(alert).toHaveTextContent("Invoice INV-0001 was due 15 Sept 2026");
+    expect(alert.querySelector("button, a")).toBeNull();
+    expect(screen.getByText("OVERDUE")).toBeInTheDocument();
+    expect(screen.queryByText("UNPAID")).not.toBeInTheDocument();
+    expect(screen.getByText("1 overdue invoice")).toBeInTheDocument();
   });
 
   it("shows a plain empty-state message when the vendor has no invoices for the selected year", async () => {

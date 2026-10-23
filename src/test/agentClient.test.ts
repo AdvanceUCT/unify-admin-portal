@@ -18,6 +18,7 @@ vi.mock("@/lib/config/env", () => ({
 import {
   AgentServiceError,
   changeCredentialLifecycle,
+  clearVendorVerificationSuspension,
   createBatchActivationLinks,
   createCheckoutVerificationSession,
   createIssuerDid,
@@ -30,6 +31,7 @@ import {
   listVerificationServicePoints,
   registerTrustedCredentialDefinition,
   resolveActivation,
+  setVendorVerificationSuspension,
   updateVerificationServicePoint,
 } from "@/lib/agentClient";
 
@@ -175,6 +177,11 @@ describe("agent client timeouts", () => {
       servicePointId: "service-point-1",
       vendorId: "vendor-1",
     }), "/api/verifier/checkout-sessions", 22],
+    ["setVendorVerificationSuspension", () => setVendorVerificationSuspension("vendor-1", {
+      code: "UNPAID_INVOICE",
+      suspendedAt: "2026-10-01T00:00:00.000Z",
+    }), "/api/verifier/vendors/vendor-1/suspension", 22],
+    ["clearVendorVerificationSuspension", () => clearVendorVerificationSuspension("vendor-1"), "/api/verifier/vendors/vendor-1/suspension", 22],
     ["getVerificationResult", () => getVerificationResult("request-1"), "/api/verifier/proof-requests/request-1", 22],
     ["getInPersonVerificationDetails", () => getInPersonVerificationDetails("request-1"), "/api/verifier/proof-requests/request-1/details", 22],
     ["issuanceSetup", () => issuanceSetup({
@@ -243,6 +250,31 @@ describe("agent client timeouts", () => {
 
     await expect(createIssuerDid("UNIFY")).rejects.toMatchObject({ status: 503 });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends vendor suspension changes as idempotent PUT and DELETE calls", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(responseJson({ vendorId: "vendor/1", suspended: true }))
+      .mockResolvedValueOnce(responseJson({ vendorId: "vendor/1", suspended: false, suspension: null }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await setVendorVerificationSuspension("vendor/1", { code: "UNPAID_INVOICE", suspendedAt: "2026-10-01T00:00:00.000Z" });
+    await clearVendorVerificationSuspension("vendor/1");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://agent.example/api/verifier/vendors/vendor%2F1/suspension",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ code: "UNPAID_INVOICE", suspendedAt: "2026-10-01T00:00:00.000Z" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://agent.example/api/verifier/vendors/vendor%2F1/suspension",
+      expect.objectContaining({ method: "DELETE" }),
+    );
   });
 
   it("exposes the agent response correlation ID on terminal errors", async () => {

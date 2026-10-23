@@ -124,6 +124,11 @@ model VendorProfile {
   agentServicePointId String?
   defaultBranchId     String?               @unique
   defaultBranch       VendorBranch?         @relation("VendorDefaultBranch", fields: [defaultBranchId], references: [id], onDelete: SetNull)
+  // Billing suspension of verification across every branch; enforced by the agent service.
+  verificationSuspensionCode   VendorVerificationSuspensionCode?
+  verificationSuspendedAt      DateTime?
+  verificationSuspensionReason String?
+  verificationAgentSyncPending Boolean                           @default(false)
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
   applications        VendorApplication[]
@@ -458,6 +463,7 @@ model UniversityProfile {
   paymentWalletEnabled                 Boolean                 @default(false)
   paymentWalletPayoutThresholdMinor    BigInt                  @default(50000)
   paymentWalletOverdraftSuspensionDays Int                     @default(14)
+  invoicePaymentDueDays                Int                     @default(14)
   createdAt                           DateTime                @default(now())
   updatedAt                           DateTime                @updatedAt
   credentialSchemas                   CredentialSchema[]
@@ -839,6 +845,10 @@ enum VendorPaymentProfileStatus {
 
 enum VendorPaymentSuspensionCode {
   OVERDRAFT
+}
+
+enum VendorVerificationSuspensionCode {
+  UNPAID_INVOICE
 }
 
 enum BranchPaymentApplicationStatus {
@@ -1310,6 +1320,9 @@ enum AuditAction {
   VENDOR_PAYMENT_SUSPENDED
   VENDOR_PAYMENT_REINSTATED
   VENDOR_WALLET_TOPUP_COMPLETED
+  VENDOR_VERIFICATION_SUSPENDED
+  VENDOR_VERIFICATION_REINSTATED
+  INVOICE_PAYMENT_WINDOW_UPDATED
 }
 
 // ─── Vendor verification invoicing (Paystack POC) ──────────────────────────
@@ -1411,6 +1424,7 @@ model VendorInvoice {
   @@unique([vendorProfileId, periodKey, currency])
   @@index([vendorProfileId, documentStatus])
   @@index([paymentStatus])
+  @@index([paymentStatus, dueAt])
   @@map("vendor_invoice")
 }
 

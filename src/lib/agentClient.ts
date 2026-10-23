@@ -515,6 +515,43 @@ export async function updateVerificationServicePoint(
   return response.json();
 }
 
+export type AgentVendorSuspensionState = {
+  vendorId: string;
+  suspended: boolean;
+  suspension: { code: "UNPAID_INVOICE"; suspendedAt: string; updatedAt: string } | null;
+};
+
+/**
+ * Blocks new verifications at every service point of the vendor. The agent
+ * treats a repeated PUT as a replacement, so callers may retry it safely.
+ */
+export async function setVendorVerificationSuspension(
+  vendorId: string,
+  payload: { code: "UNPAID_INVOICE"; suspendedAt: string },
+): Promise<AgentVendorSuspensionState> {
+  const response = await agentFetch(
+    `/api/verifier/vendors/${encodeURIComponent(vendorId)}/suspension`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+      timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
+    },
+  );
+  return response.json();
+}
+
+/** Lifts a vendor's verification suspension; succeeds even when none is set. */
+export async function clearVendorVerificationSuspension(vendorId: string): Promise<AgentVendorSuspensionState> {
+  const response = await agentFetch(
+    `/api/verifier/vendors/${encodeURIComponent(vendorId)}/suspension`,
+    {
+      method: "DELETE",
+      timeoutMs: env.AGENT_STANDARD_TIMEOUT_MS,
+    },
+  );
+  return response.json();
+}
+
 export type AgentVerificationResult = {
   verificationRequestId: string;
   checkoutId?: string;

@@ -9,18 +9,14 @@ import { notFound } from "next/navigation";
 
 import { BackButton } from "@/components/ui/BackButton";
 import { Metric } from "@/components/ui/Metric";
-import { StatusText, type StatusTone } from "@/components/ui/StatusText";
+import { InvoicePaymentStatus, formatInvoiceDueDate } from "@/features/vendors/InvoicePaymentStatus";
+import { VerificationSuspensionBanner } from "@/features/vendors/VerificationSuspensionBanner";
 import { requireRoleForRender } from "@/lib/auth/session";
-import { getVendorInvoiceHistory } from "@/lib/billing/invoiceQueries";
+import { getVendorInvoiceHistory, getVendorOverdueInvoiceSummary } from "@/lib/billing/invoiceQueries";
+import { getVendorVerificationSuspension } from "@/lib/billing/verificationSuspension";
 import { formatMoneyMinor } from "@/lib/formatters";
 import { getVendorApplicationById } from "@/lib/vendors/applications";
 import { getVendorMonthlyVerificationHistory } from "@/lib/vendors/monthlyVerificationHistory";
-
-const PAYMENT_TONE: Record<string, StatusTone> = {
-  UNPAID: "warning",
-  PAID: "success",
-  NO_PAYMENT_REQUIRED: "neutral",
-};
 
 function yearParam(value: string | string[] | undefined) {
   const raw = Array.isArray(value) ? value[0] : value;
@@ -51,9 +47,11 @@ export default async function VendorVerificationHistoryPage({
   const serviceCategory =
     application.snapshotServiceCategory ?? application.vendorProfile.serviceCategory;
   const history = await getVendorMonthlyVerificationHistory(application.vendorProfileId);
-  const invoiceHistory = await getVendorInvoiceHistory(application.vendorProfileId, {
-    year: yearParam(filters.year),
-  });
+  const [invoiceHistory, overdue, suspension] = await Promise.all([
+    getVendorInvoiceHistory(application.vendorProfileId, { year: yearParam(filters.year) }),
+    getVendorOverdueInvoiceSummary(application.vendorProfileId),
+    getVendorVerificationSuspension(application.vendorProfileId),
+  ]);
   const compactValueClassName = "text-lg leading-tight break-all sm:text-xl xl:text-2xl";
 
   return (
@@ -69,7 +67,16 @@ export default async function VendorVerificationHistoryPage({
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      {suspension && (
+        // Read only by design: only paying the overdue invoices lifts the suspension.
+        <VerificationSuspensionBanner
+          detail="New verifications are blocked at every branch until the vendor pays all overdue invoices."
+          reason={suspension.reason}
+          suspendedAtIso={suspension.suspendedAt.toISOString()}
+        />
+      )}
+
+      <div className="grid gap-4 md:grid-cols-3">
         <Metric
           label="Current month"
           value={history.currentMonth.successfulVerifications}
@@ -80,6 +87,16 @@ export default async function VendorVerificationHistoryPage({
           label="Amount due"
           value={formatMoneyMinor(history.currentMonth.amountDueMinor, history.currentMonth.currency)}
           detail={`Estimated for ${history.currentMonth.label}`}
+          valueClassName={compactValueClassName}
+        />
+        <Metric
+          label="Overdue"
+          value={formatMoneyMinor(overdue.totalMinor, overdue.currency)}
+          detail={
+            overdue.count === 0
+              ? "No overdue invoices"
+              : `${overdue.count} overdue invoice${overdue.count === 1 ? "" : "s"}`
+          }
           valueClassName={compactValueClassName}
         />
       </div>
@@ -114,12 +131,13 @@ export default async function VendorVerificationHistoryPage({
           </form>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[40rem] text-left text-body">
+          <table className="w-full min-w-[46rem] text-left text-body">
             <thead className="border-b border-border bg-surface-muted/60">
               <tr className="whitespace-nowrap text-caption uppercase tracking-wide text-fg-subtle">
                 <th className="px-4 py-3 font-medium">Invoice</th>
                 <th className="px-4 py-3 font-medium">Period</th>
                 <th className="px-4 py-3 font-medium">Total</th>
+                <th className="px-4 py-3 font-medium">Due</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium" />
               </tr>
@@ -139,10 +157,11 @@ export default async function VendorVerificationHistoryPage({
                   <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-fg">
                     {invoice.currency} {invoice.totalDisplay}
                   </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-fg-muted">
+                    {formatInvoiceDueDate(invoice) ?? "—"}
+                  </td>
                   <td className="px-4 py-3">
-                    <StatusText tone={PAYMENT_TONE[invoice.paymentStatus] ?? "neutral"}>
-                      {invoice.paymentStatus.replaceAll("_", " ")}
-                    </StatusText>
+                    <InvoicePaymentStatus isOverdue={invoice.isOverdue} paymentStatus={invoice.paymentStatus} />
                     {invoice.hasUnresolvedException && (
                       <p className="mt-1 text-xs text-danger-fg">Needs review</p>
                     )}

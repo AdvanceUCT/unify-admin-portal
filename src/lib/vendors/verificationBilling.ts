@@ -53,6 +53,12 @@ export function billingPeriodEndUtc(periodKey: string) {
   return new Date(nextPeriodStartAsUtc - REPORTING_OFFSET_MS);
 }
 
+/** The UTC instant a Johannesburg-local billing period starts (inclusive). */
+export function billingPeriodStartUtc(periodKey: string) {
+  const [year, month] = periodKey.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0) - REPORTING_OFFSET_MS);
+}
+
 /** The period key immediately following `periodKey` (e.g. "2026-09" -> "2026-10"). */
 export function nextBillingPeriodKey(periodKey: string) {
   const [year, month] = periodKey.split("-").map(Number);
