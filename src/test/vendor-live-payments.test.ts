@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   encodeLivePaymentCursor,
+  exportVendorPaymentEventsCsv,
   getLivePaymentEvents,
   listRecentVendorPayments,
   listVendorPaymentEvents,
@@ -47,6 +48,14 @@ describe("live vendor payment feed", () => {
     database.vendorPaymentProfile.findUnique.mockResolvedValue({ status: "APPROVED" });
   });
 
+  it("filters South African days and exports the same offset-bearing timestamp", async () => {
+    database.walletTransaction.findMany.mockResolvedValue([payment]);
+    await listVendorPaymentEvents(context, { dateFrom: "2026-09-11", dateTo: "2026-09-11" });
+    expect(database.walletTransaction.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ completedAt: { not: null, gte: new Date("2026-09-10T22:00:00Z"), lt: new Date("2026-09-11T22:00:00Z") } }) }));
+    const csv = await exportVendorPaymentEventsCsv(context);
+    expect(csv).toContain("Completed At (SAST +02:00)");
+    expect(csv).toContain("2026-09-11T10:10:00.000+02:00");
+  });
   it("initializes a cursor without replaying old payments", async () => {
     const result = await getLivePaymentEvents(context);
     expect(result.events).toEqual([]);
