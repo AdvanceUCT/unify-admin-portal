@@ -12,6 +12,7 @@ import {
   BranchPaymentApplicationStatus,
 } from "@/generated/prisma/enums";
 import { formatDateTime } from "@/lib/formatters";
+import { accessButton, accessCardHeader, accessSecondaryButton } from "./payment-access/styles";
 
 type PaymentAccessRequest = {
   id: string;
@@ -40,13 +41,13 @@ export function VendorPaymentAccessRequests({
 }) {
   return (
     <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
-      <div className="border-b border-border px-5 py-4">
+      <div className={accessCardHeader}>
         <div className="flex items-center gap-2">
           <CreditCard aria-hidden className="size-5 text-brand-700" />
-          <h2 className="text-section-title text-fg">Payment-access requests</h2>
+          <h2 className="text-section-title text-fg">Payment access requests</h2>
         </div>
+        <Link className={accessButton} href="/vendor/payments/access">Manage payment access</Link>
       </div>
-      <div className="px-5 py-3"><Link href="/vendor/payments/access" className="text-sm underline">Manage payment access</Link></div>
       <div className="divide-y divide-border">
         {requests.length === 0 ? (
           <p className="px-5 py-6 text-sm text-fg-subtle">
@@ -54,7 +55,7 @@ export function VendorPaymentAccessRequests({
           </p>
         ) : (
           requests.map((request) => (
-            <div className="px-5 py-4" key={request.id}>
+            <div className="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between" key={request.id}>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-medium text-fg">{request.vendorBranch.name}</p>
@@ -62,8 +63,7 @@ export function VendorPaymentAccessRequests({
                     {request.status === "PENDING" ? "In review" : request.status === "REJECTED" ? "Not approved" : request.status.charAt(0) + request.status.slice(1).toLowerCase()}
                   </Badge>
                 </div>
-                <Link href={`/vendor/branches/${request.vendorBranch.id}/payment-access`} className="mt-2 inline-block text-sm underline">View request</Link>
-                <p className="mt-1 flex items-center gap-1.5 text-sm text-fg-muted">
+                <p className="mt-1.5 flex items-center gap-1.5 text-sm text-fg-muted">
                   <MapPin aria-hidden className="size-3.5 shrink-0" />
                   {request.vendorBranch.address || "No branch location supplied"}
                 </p>
@@ -71,6 +71,10 @@ export function VendorPaymentAccessRequests({
                   Submitted {formatDateTime((request.submittedAt ?? request.createdAt).toISOString())}
                 </p>
               </div>
+              <Link className={accessSecondaryButton} href={`/vendor/branches/${request.vendorBranch.id}/payment-access`}>
+                View request
+                <span className="sr-only"> for {request.vendorBranch.name}</span>
+              </Link>
             </div>
           ))
         )}

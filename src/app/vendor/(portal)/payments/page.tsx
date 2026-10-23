@@ -171,7 +171,6 @@ export default async function VendorPaymentsPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">{context.role === "OWNER" && <Link href="/vendor/payments/access" className="min-h-11 content-center text-sm font-medium underline">Manage payment access</Link>}</div>
       <VendorWalletStatusBanner overview={payoutOverview} />
 
       {context.role === "OWNER" ? (
