@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { runOwnPayoutAction, type RunOwnPayoutResult } from "./actions";
+import { requestWalletRefresh } from "./walletOverview";
 
 function formatMoney(amountMinor: number, currency = "ZAR") {
   return new Intl.NumberFormat("en-ZA", {
@@ -61,6 +62,7 @@ export function RunPayoutButton({
     startTransition(async () => {
       const nextResult = await runOwnPayoutAction();
       setResult(nextResult);
+      requestWalletRefresh();
       router.refresh();
     });
   }

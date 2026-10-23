@@ -14,6 +14,7 @@ import { RefundPaymentDialog, type RefundGuidance } from "@/features/vendors/Ref
 import { formatDateTime, formatMoneyMinor } from "@/lib/formatters";
 import { type LivePaymentEvent } from "@/features/vendors/LivePaymentList";
 import type { VendorPaymentEventFilters } from "@/lib/vendors/livePayments";
+import { requestWalletRefresh, WALLET_UPDATED_EVENT, type VendorWalletOverview } from "./walletOverview";
 
 const REFUND_STATUS_LABEL: Record<LivePaymentEvent["refundStatus"], string> = {
   NONE: "Not refunded",
@@ -101,6 +102,7 @@ export function LivePaymentTable({
           .filter((event) => matchesFilters(event, filters))
           .reverse();
         if (incoming.length === 0) return;
+        requestWalletRefresh();
         setItems((current) => {
           const known = new Set(current.map((item) => item.transactionId));
           const next = incoming.filter((item) => !known.has(item.transactionId));
@@ -133,7 +135,23 @@ export function LivePaymentTable({
     setItems(current => current.map(item => item.transactionId === result.originalTransactionId ? { ...item, totalRefundedMinor: result.totalRefundedMinor, remainingRefundableMinor: result.remainingRefundableMinor, refundStatus: result.refundStatus, canRefund: item.canRefund && result.remainingRefundableMinor > 0 } : item));
     setRefundMessage(`Refunded ${formatMoneyMinor(result.refundedAmountMinor)}.`);
     setRefundPaymentToConfirm(null);
+    requestWalletRefresh();
   }), [recovery.client]);
+
+  // Keep the refund dialog's overdraft warning in step with the live wallet card.
+  useEffect(() => {
+    function onWalletUpdated(event: Event) {
+      const overview = (event as CustomEvent<VendorWalletOverview>).detail;
+      setGuidance((current) => current && {
+        ...current,
+        walletBalanceMinor: overview.walletBalanceMinor,
+        overdraftSuspensionDays: overview.overdraftSuspensionDays,
+        paymentsSuspended: overview.suspension !== null,
+      });
+    }
+    window.addEventListener(WALLET_UPDATED_EVENT, onWalletUpdated);
+    return () => window.removeEventListener(WALLET_UPDATED_EVENT, onWalletUpdated);
+  }, []);
 
   async function refundPayment(payment: LivePaymentEvent, amountMinor: number) {
     if (!payment.canRefund || recovery.blocked) return;
