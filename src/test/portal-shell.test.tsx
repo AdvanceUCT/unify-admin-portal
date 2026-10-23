@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { isNavItemActive, resolveActiveNavItem } from "@/components/layout/navigation";
-vi.mock("next/navigation", () => ({ usePathname: () => "/dashboard" }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/dashboard", useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 import { PortalShell } from "@/components/layout/PortalShell";
 import { SidebarNav } from "@/components/layout/SidebarNav";
 import type { PortalNavItem } from "@/components/layout/portalTypes";
