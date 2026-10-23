@@ -5,18 +5,17 @@
 
 "use client";
 
-import { Bell, Menu } from "lucide-react";
+import { Menu } from "lucide-react";
 
 import type { PortalUser } from "@/components/layout/portalTypes";
 import { UserMenu } from "@/components/layout/UserMenu";
 import { IconButton } from "@/components/ui/IconButton";
 
 /**
- * True-white bar above the page canvas. Shows the active tab's title, a
- * placeholder notifications control, and the account menu.
+ * True-white bar above the page canvas. Shows the active tab's title,
+ * portal status, and the account menu.
  */
 export function PortalHeader({
-  notificationCount = 0,
   onOpenNav,
   settingsHref,
   settingsLabel,
@@ -25,7 +24,6 @@ export function PortalHeader({
   title,
   user,
 }: {
-  notificationCount?: number;
   onOpenNav: () => void;
   settingsHref: string;
   settingsLabel?: string;
@@ -51,25 +49,6 @@ export function PortalHeader({
 
       <div className="flex items-center gap-2 sm:gap-3">
         {status}
-
-        {/* Placeholder — no notifications feed exists yet. */}
-        <div className="relative">
-          <IconButton
-            aria-label={`Notifications (${notificationCount} unread) — coming soon`}
-            className="rounded-full"
-            title="Notifications — coming soon"
-          >
-            <Bell aria-hidden="true" size={18} />
-          </IconButton>
-          {notificationCount > 0 ? (
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute -right-1 -top-1 grid h-4.5 min-w-4.5 place-items-center rounded-full bg-danger-fg px-1 text-[0.625rem] font-semibold leading-none text-white"
-            >
-              {notificationCount > 99 ? "99+" : notificationCount}
-            </span>
-          ) : null}
-        </div>
 
         <span aria-hidden="true" className="hidden h-8 w-px bg-border sm:block" />
 
