@@ -60,6 +60,12 @@ export function proxy(request: NextRequest) {
   });
   const isSignedIn = Boolean(sessionCookie);
 
+  // The public entry point is the welcome page. Explicit sign-in URLs and
+  // protected deep links retain their existing authentication behavior.
+  if (!isSignedIn && pathname === "/") {
+    return NextResponse.redirect(new URL("/welcome", request.url));
+  }
+
   // The cookie only proves *a* session exists, not its userType (cookie
   // caching is off, so userType isn't available here). Cross-portal checks
   // (a vendor hitting an admin route, or vice versa) are authoritative in

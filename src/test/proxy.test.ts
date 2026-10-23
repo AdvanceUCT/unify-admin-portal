@@ -19,6 +19,20 @@ describe("proxy", () => {
     getSessionCookieMock.mockReset();
   });
 
+  it("opens welcome instead of sign-in for an anonymous homepage visit", () => {
+    getSessionCookieMock.mockReturnValue(null);
+    const response = proxy(request("/"));
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe("http://localhost:3000/welcome");
+  });
+
+  it("keeps the dashboard available to authenticated homepage visits", () => {
+    getSessionCookieMock.mockReturnValue("session-cookie");
+    const response = proxy(request("/"));
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+  });
+
   it("redirects unauthenticated admin routes to sign in with callback", () => {
     getSessionCookieMock.mockReturnValue(null);
 

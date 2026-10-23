@@ -383,6 +383,7 @@ body {
 .welcome-lead { max-width:340px; font-size:19px; line-height:1.6; margin-bottom:30px; }
 .welcome-primary { display:inline-flex; align-items:center; justify-content:space-between; gap:28px; min-height:48px; padding:14px 21px; color:#fff; background:#205443; border-radius:5px; font-weight:600; font-size:14px; }
 .welcome-primary:hover { background:#143e31; }
+.welcome-nav .welcome-fund { min-height:44px; padding:10px 14px; color:#fff; }
 .welcome-note,.welcome-example { font-size:11px; color:#52695c; }
 .welcome-note { margin-top:22px; }
 .welcome-art { position:relative; padding:60px 0; animation:welcome-reveal .7s ease-out both; }

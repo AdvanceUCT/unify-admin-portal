@@ -3,6 +3,12 @@ test("public welcome has clear audience actions and a responsive illustration", 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/welcome");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your campus.In your pocket.");
+  const navigation = page.getByRole("navigation", { name: "Welcome navigation" });
+  await expect(navigation.getByRole("link", { name: "Vendors", exact: true })).toHaveAttribute("href", "/vendor/sign-in");
+  const funding = navigation.getByRole("link", { name: "Fund a student", exact: true });
+  await expect(funding).toHaveAttribute("href", "/fund");
+  await expect(funding).toBeVisible();
+  await expect(navigation.getByRole("link", { name: "Students", exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Register your business" })).toHaveAttribute("href", "/vendor/sign-up");
   await expect(page.getByRole("link", { name: "Vendor sign in", exact: true })).toHaveAttribute("href", "/vendor/sign-in");
   await expect(page.getByRole("link", { name: "University staff sign in" })).toHaveAttribute("href", "/sign-in");
