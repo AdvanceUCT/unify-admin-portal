@@ -5,15 +5,13 @@ import { listVendorApiCredentials } from "./integrations";
 import { keyPresets } from "./integrationGuide";
 
 export async function integrationOverview(vendorProfileId: string) {
-  const [vendor, keys, verificationSuccess, paymentSuccess] = await Promise.all([
+  const [vendor, keys] = await Promise.all([
     prisma.vendorProfile.findUniqueOrThrow({ where: { id: vendorProfileId }, select: {
       defaultBranchId: true, walletAccount: { select: { status: true, currency: true } }, paymentProfile: { select: { status: true } }, webhookConfig: { select: { enabled: true } },
       branches: { orderBy: { name: "asc" }, select: { id: true, name: true, active: true, status: true, agentServicePointId: true, paymentAcceptance: { select: { status: true } } } },
       paymentWebhookConfigs: { where: { enabled: true }, select: { id: true, branchIds: true }, take: 1 },
     } }),
     listVendorApiCredentials(vendorProfileId),
-    prisma.vendorWebhookDelivery.findFirst({ where: { vendorVerification: { vendorProfileId, checkoutId: { not: null } }, status: "DELIVERED" }, orderBy: { attemptedAt: "desc" }, select: { attemptedAt: true } }),
-    prisma.paymentWebhookDelivery.findFirst({ where: { event: { vendorProfileId }, status: "DELIVERED" }, orderBy: { deliveredAt: "desc" }, select: { deliveredAt: true } }),
   ]);
   const branches = vendor.branches.map(b => ({ id: b.id, name: b.name, active: b.active, status: b.status, paymentStatus: b.paymentAcceptance?.status ?? null, isDefault: b.id === vendor.defaultBranchId }));
   const eligibleBranches = branches.filter(b => b.active && b.status === "ACTIVE" && b.paymentStatus === "ACTIVE");
@@ -27,8 +25,8 @@ export async function integrationOverview(vendorProfileId: string) {
   }).paymentReady);
   return {
     branches,
-    verification: { ready: Boolean(verificationBranch?.active && verificationBranch.status === "ACTIVE" && verificationBranch.agentServicePointId), key: verificationKey, callback: vendor.webhookConfig?.enabled ?? false, lastSuccess: verificationSuccess?.attemptedAt.toISOString() ?? null },
-    payments: { ready: paymentReady, key: paymentKey, callback: vendor.paymentWebhookConfigs.some(c => eligibleBranches.some(b => c.branchIds.includes(b.id))), lastSuccess: paymentSuccess?.deliveredAt?.toISOString() ?? null,
+    verification: { ready: Boolean(verificationBranch?.active && verificationBranch.status === "ACTIVE" && verificationBranch.agentServicePointId), key: verificationKey, callback: vendor.webhookConfig?.enabled ?? false },
+    payments: { ready: paymentReady, key: paymentKey, callback: vendor.paymentWebhookConfigs.some(c => eligibleBranches.some(b => c.branchIds.includes(b.id))),
       reason: !walletEnabled ? "Wallet payments are disabled by the university." : vendor.paymentProfile?.status === "SUSPENDED" ? "Payments are suspended. Existing sale and refund recovery remains available." : vendor.paymentProfile?.status !== "APPROVED" ? "Your vendor payment application needs approval." : eligibleBranches.length === 0 ? "No active branch currently accepts payments." : !paymentReady ? "Your vendor wallet needs administrator attention." : null },
   };
 }

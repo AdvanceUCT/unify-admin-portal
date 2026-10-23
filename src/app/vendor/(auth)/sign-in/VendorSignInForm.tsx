@@ -144,6 +144,7 @@ export function VendorSignInForm({ callbackURL }: { callbackURL: string }) {
             Go to the admin portal
           </Link>
         </p>
+        <Link href="/welcome" className="mt-6 block text-center text-sm font-medium text-brand-700 underline">About UNIFY</Link>
       </section>
     </main>
   );

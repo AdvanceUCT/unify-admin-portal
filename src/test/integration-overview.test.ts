@@ -11,11 +11,13 @@ beforeEach(() => {
   mocks.verification.mockResolvedValue(null); mocks.payment.mockResolvedValue(null); mocks.university.mockResolvedValue({ paymentWalletEnabled: true });
 });
 describe("integration readiness", () => {
-  it("separates configured status from delivery evidence", async () => {
+  it("loads configuration without reading hidden delivery history", async () => {
     const state = await integrationOverview("vendor");
-    expect(state.verification).toMatchObject({ ready: true, key: true, callback: true, lastSuccess: null });
-    expect(state.payments).toMatchObject({ ready: true, key: true, callback: true, lastSuccess: null });
+    expect(state.verification).toMatchObject({ ready: true, key: true, callback: true });
+    expect(state.payments).toMatchObject({ ready: true, key: true, callback: true });
     expect(state.branches[0].isDefault).toBe(true);
+    expect(mocks.verification).not.toHaveBeenCalled();
+    expect(mocks.payment).not.toHaveBeenCalled();
   });
   it("does not count revoked or incompatible branch keys as configured", async () => {
     mocks.keys.mockResolvedValue([{ scopes: ["verification:create", "verification:read"], branchIds: ["other"], revokedAt: null }, { scopes: ["payments:create", "payments:read", "payments:cancel"], branchIds: ["branch"], revokedAt: new Date() }]);

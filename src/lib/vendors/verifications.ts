@@ -1,3 +1,4 @@
+import { sastDayBoundary, sastIsoTimestamp } from "@/lib/formatters/time";
 /**
  * @fileoverview Creates, scopes, materializes, exports, and retries vendor verification records.
  * @module lib/vendors/verifications
@@ -162,11 +163,7 @@ function inPersonResultShape(verification: VendorVerificationResultRow) {
   };
 }
 
-function parsedDate(value: string | undefined, endOfDay = false) {
-  if (!value) return undefined;
-  const parsed = new Date(`${value}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}`);
-  return Number.isFinite(parsed.getTime()) ? parsed : undefined;
-}
+
 
 function normalizedPage(value: number | undefined) {
   return Number.isInteger(value) && value && value > 0 ? value : 1;
@@ -238,8 +235,8 @@ function verificationEventsWhere(
   allowedBranchIds: string[],
   filters: VendorVerificationEventFilters = {},
 ): Prisma.VendorVerificationWhereInput {
-  const dateFrom = parsedDate(filters.dateFrom);
-  const dateTo = parsedDate(filters.dateTo, true);
+  const dateFrom = sastDayBoundary(filters.dateFrom);
+  const dateTo = sastDayBoundary(filters.dateTo, true);
   const branchIds = filters.branchId && allowedBranchIds.includes(filters.branchId)
     ? [filters.branchId]
     : allowedBranchIds;
@@ -254,7 +251,7 @@ function verificationEventsWhere(
   ];
 
   if (dateFrom || dateTo) {
-    and.push({ completedAt: { ...(dateFrom ? { gte: dateFrom } : {}), ...(dateTo ? { lte: dateTo } : {}) } });
+    and.push({ completedAt: { ...(dateFrom ? { gte: dateFrom } : {}), ...(dateTo ? { lt: dateTo } : {}) } });
   }
 
   const queryFilters = searchFilters(filters.query ?? "");
@@ -901,8 +898,8 @@ export async function exportVendorVerificationEventsCsv(
     take: VERIFICATION_EVENTS_EXPORT_LIMIT,
   });
   const header = [
-    "Completed At",
-    "Created At",
+    "Completed At (SAST +02:00)",
+    "Created At (SAST +02:00)",
     "Branch",
     "Source",
     "Status",
@@ -925,8 +922,8 @@ export async function exportVendorVerificationEventsCsv(
     const attributes = normalizedVerificationAttributes(row.attributes);
     const student = summarizeVerificationStudent(attributes);
     return [
-      row.completedAt?.toISOString() ?? "",
-      row.createdAt.toISOString(),
+      row.completedAt ? sastIsoTimestamp(row.completedAt) : "",
+      sastIsoTimestamp(row.createdAt),
       row.branch?.name ?? row.servicePointName ?? "",
       row.checkoutId ? "Website / API checkout" : "QR / in-person",
       row.status,

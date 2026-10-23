@@ -1,4 +1,6 @@
 "use client";
+import { formatSastDateTime } from "@/lib/formatters/time";
+
 import { useState } from "react";
 export const input = "mt-1 block w-full rounded-md border border-border bg-surface px-3 py-2 text-base text-fg";
 export const button = "inline-flex min-h-11 items-center justify-center rounded-md border border-border px-3 py-2 text-base font-medium text-fg transition-colors hover:bg-surface-muted disabled:opacity-50";
@@ -17,4 +19,4 @@ export function CodeBlock({ code, label }: { code: string; label: string }) {
 export function Secret({ value, label, onHide }: { value: string; label: string; onHide: () => void }) {
   return <div className="space-y-2 rounded-md border border-warning-border bg-warning-bg p-4 text-warning-fg"><h3 className="font-medium">{label}</h3><p className="text-sm">Copy this to your server now. It will not be shown again.</p><code className="block select-all break-all text-sm">{value}</code><div className="flex flex-wrap gap-2"><CopyButton value={value} label={`Copy ${label.toLowerCase()}`} /><button className={button} type="button" onClick={onHide}>Hide secret</button></div></div>;
 }
-export function localDate(value: string | null) { return value ? new Date(value).toLocaleString() : "None recorded"; }
+export function localDate(value: string | null) { return value ? formatSastDateTime(value) : "None recorded"; }

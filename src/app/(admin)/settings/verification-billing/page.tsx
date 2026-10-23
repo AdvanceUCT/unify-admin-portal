@@ -1,3 +1,4 @@
+import { sastDateKey } from "@/lib/formatters/time";
 /**
  * @fileoverview Renders the authenticated administrator page at `/settings/verification-billing`.
  * @module app/(admin)/settings/verification-billing/page
@@ -62,7 +63,7 @@ export default async function VerificationBillingSettingsPage() {
             </div>
             <div className="flex items-center justify-between">
               <dt className="text-fg-subtle">Effective from</dt>
-              <dd className="font-medium text-fg">{openPolicy.effectiveFrom.toISOString().slice(0, 10)}</dd>
+              <dd className="font-medium text-fg">{sastDateKey(openPolicy.effectiveFrom)}</dd>
             </div>
             <div className="flex items-center justify-between">
               <dt className="text-fg-subtle">Version</dt>
@@ -136,9 +137,9 @@ export default async function VerificationBillingSettingsPage() {
                     {policy.currency} {minorToDecimalString(policy.verificationFeeMinor, policy.currency)}
                   </td>
                   <td className="py-1.5 pr-4 text-fg">{formatBasisPoints(policy.platformBasisPoints)}</td>
-                  <td className="py-1.5 pr-4 text-fg-muted">{policy.effectiveFrom.toISOString().slice(0, 10)}</td>
+                  <td className="py-1.5 pr-4 text-fg-muted">{sastDateKey(policy.effectiveFrom)}</td>
                   <td className="py-1.5 pr-4 text-fg-muted">
-                    {policy.effectiveTo ? policy.effectiveTo.toISOString().slice(0, 10) : "Current"}
+                    {policy.effectiveTo ? sastDateKey(policy.effectiveTo) : "Current"}
                   </td>
                   <td className="py-1.5 pr-4 text-fg-muted">{policy.source}</td>
                 </tr>

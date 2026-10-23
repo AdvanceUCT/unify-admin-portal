@@ -4,6 +4,8 @@
  */
 
 "use client";
+import { formatSastDateTime } from "@/lib/formatters/time";
+
 
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
@@ -129,7 +131,7 @@ export function PaymentAccessPage({ branch, context, submitRequest, saveAccount,
               {application?.submittedAt ? (
                 <div className="grid grid-cols-[8rem_minmax(0,1fr)] gap-2">
                   <dt className="text-fg-subtle">Submitted</dt>
-                  <dd className="font-medium text-fg">{new Date(application.submittedAt).toLocaleString("en-ZA")}</dd>
+                  <dd className="font-medium text-fg">{formatSastDateTime(application.submittedAt)}</dd>
                 </div>
               ) : null}
             </dl>
@@ -180,7 +182,7 @@ export function PaymentAccessPage({ branch, context, submitRequest, saveAccount,
               {branch.applications.slice(1).map((app) => (
                 <li className="space-y-1 px-5 py-3 text-sm" key={app.id}>
                   <p className="font-medium text-fg">
-                    {app.status.replaceAll("_", " ")} · {app.submittedAt ? new Date(app.submittedAt).toLocaleDateString("en-ZA") : "Earlier request"}
+                    {app.status.replaceAll("_", " ")} · {app.submittedAt ? formatSastDateTime(app.submittedAt) : "Earlier request"}
                   </p>
                   {app.reviewNotes ? <p className="text-fg-muted">{app.reviewNotes}</p> : null}
                 </li>

@@ -1,3 +1,4 @@
+import { formatSastDate } from "@/lib/formatters/time";
 /**
  * @fileoverview Shared vendor and payment decision log tables.
  * @module features/audit/DecisionLogTables
@@ -10,13 +11,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { StatusText } from "@/components/ui/StatusText";
 import { DecisionNoteButton } from "@/features/audit/DecisionNoteButton";
 
-function decisionDate(value: Date | string) {
-  return new Date(value).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
+const decisionDate = formatSastDate;
 
 function PaginationLink({
   children,

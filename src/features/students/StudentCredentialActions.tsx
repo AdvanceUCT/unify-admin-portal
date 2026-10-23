@@ -4,6 +4,7 @@
  */
 
 "use client";
+import { sastInputToUtc } from "@/lib/formatters/time";
 
 import {
   Ban,
@@ -274,7 +275,7 @@ export function StudentCredentialActions({
             action: lifecycleAction,
             reason: reason.trim(),
             ...(lifecycleAction === "suspend" && reactivateAutomatically
-              ? { reactivateAt: new Date(reactivationTime).toISOString() }
+              ? { reactivateAt: sastInputToUtc(reactivationTime) }
               : {}),
           }),
           headers: { "Content-Type": "application/json" },
@@ -564,7 +565,7 @@ export function StudentCredentialActions({
                     className="block text-sm font-medium text-fg"
                     htmlFor="reactivation-time"
                   >
-                    Suspension ends
+                    Suspension ends (SAST)
                     <input
                       className="mt-1.5 h-10 w-full rounded-md border border-border px-3 text-sm"
                       disabled={isChangingLifecycle}

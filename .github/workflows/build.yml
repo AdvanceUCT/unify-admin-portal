@@ -66,3 +66,7 @@ jobs:
             echo "No build script configured."
           fi
 
+
+      - name: Smoke public homepage and protected dashboard
+        if: steps.node.outputs.present == 'true'
+        run: node scripts/smoke-public-entry.mjs

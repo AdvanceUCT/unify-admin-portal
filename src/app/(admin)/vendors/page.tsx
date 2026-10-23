@@ -1,3 +1,4 @@
+import { formatSastDate } from "@/lib/formatters/time";
 /**
  * @fileoverview Renders the authenticated administrator page at `/vendors`.
  * @module app/(admin)/vendors/page
@@ -35,13 +36,7 @@ import { RevokeButton } from "./RevokeButton";
 
 const DECISION_PAGE_SIZE = 5;
 
-function decisionDate(value: Date | string) {
-  return new Date(value).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
+const decisionDate = formatSastDate;
 
 function parsePage(value: string | string[] | undefined) {
   const rawValue = Array.isArray(value) ? value[0] : value;

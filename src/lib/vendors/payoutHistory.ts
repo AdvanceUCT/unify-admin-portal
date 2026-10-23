@@ -1,3 +1,4 @@
+import { sastDayBoundary } from "@/lib/formatters/time";
 /**
  * @fileoverview Read-only payout history queries shared by vendor and admin pages.
  * @module lib/vendors/payoutHistory
@@ -28,11 +29,7 @@ function toSafeNumber(value: bigint) {
   return Number(value);
 }
 
-function parsedDate(value: string | undefined, endOfDay = false) {
-  if (!value) return undefined;
-  const parsed = new Date(`${value}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}`);
-  return Number.isFinite(parsed.getTime()) ? parsed : undefined;
-}
+
 
 function normalizedPage(value: number | undefined) {
   return Number.isInteger(value) && value && value > 0 ? value : 1;
@@ -57,14 +54,14 @@ export async function listVendorPayoutHistoryForVendorProfile(
     };
   }
 
-  const dateFrom = parsedDate(filters.dateFrom);
-  const dateTo = parsedDate(filters.dateTo, true);
+  const dateFrom = sastDayBoundary(filters.dateFrom);
+  const dateTo = sastDayBoundary(filters.dateTo, true);
   const where: Prisma.PayoutBatchWhereInput = {
     vendorPaymentProfileId: profile.id,
     ...(filters.status ? { status: filters.status } : {}),
     ...(filters.initiationSource ? { initiationSource: filters.initiationSource } : {}),
     ...(dateFrom || dateTo
-      ? { createdAt: { ...(dateFrom ? { gte: dateFrom } : {}), ...(dateTo ? { lte: dateTo } : {}) } }
+      ? { createdAt: { ...(dateFrom ? { gte: dateFrom } : {}), ...(dateTo ? { lt: dateTo } : {}) } }
       : {}),
   };
 

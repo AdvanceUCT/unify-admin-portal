@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { revealIntegrationAnchor } from "@/lib/vendors/integrationNavigation";
 export function WorkflowOutline({ kind }: { kind: "verification" | "payments" }) {
-  const sections = [["setup", "Setup"], ...(kind === "payments" ? [["refunds", "Refunds"]] : []), ["webhooks", "Webhooks"], ["delivery-history", "Delivery history"], ["troubleshooting", "Troubleshooting"]];
+  const sections = [["setup", "Setup"], ...(kind === "payments" ? [["refunds", "Refunds"]] : []), ["webhooks", "Webhooks"], ["troubleshooting", "Troubleshooting"]];
   const [active, setActive] = useState("setup");
   useEffect(() => {
     const reveal = () => { revealIntegrationAnchor(); setActive(window.location.hash.slice(1) || "setup"); };
@@ -11,7 +11,7 @@ export function WorkflowOutline({ kind }: { kind: "verification" | "payments" })
       if (frame) return;
       frame = window.requestAnimationFrame(() => {
         frame = 0;
-        const ids = ["setup", ...(kind === "payments" ? ["refunds"] : []), "webhooks", "delivery-history", "troubleshooting"];
+        const ids = ["setup", ...(kind === "payments" ? ["refunds"] : []), "webhooks", "troubleshooting"];
         const current = ids.filter(id => (document.getElementById(id)?.getBoundingClientRect().top ?? Infinity) <= 180).at(-1);
         if (current) setActive(current);
       });

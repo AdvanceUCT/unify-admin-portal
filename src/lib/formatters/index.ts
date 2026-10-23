@@ -12,11 +12,8 @@ import type {
   StoredCredentialLifecycleState,
 } from "@/lib/api/types";
 
-const dateTimeFormatter = new Intl.DateTimeFormat("en-ZA", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "UTC",
-});
+import { formatSastDateTime } from "./time";
+export * from "./time";
 
 const credentialStatusLabels: Record<CredentialLifecycleState, string> = {
   ACCEPTED: "Accepted",
@@ -69,21 +66,8 @@ const eventTypeLabels: Record<AuditEvent["eventType"], string> = {
   PaymentDeclined: "Payment declined",
 };
 
-export function formatDateTime(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Not set" : dateTimeFormatter.format(date);
-}
-
-const academicDateTimeFormatter = new Intl.DateTimeFormat("en-ZA", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "Africa/Johannesburg",
-});
-
-export function formatAcademicDateTime(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Not set" : academicDateTimeFormatter.format(date);
-}
+export const formatDateTime = formatSastDateTime;
+export const formatAcademicDateTime = formatSastDateTime;
 
 export function formatMoneyMinor(amountMinor: number, currency = "ZAR") {
   return new Intl.NumberFormat("en-ZA", {

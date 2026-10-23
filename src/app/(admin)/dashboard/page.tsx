@@ -1,6 +1,6 @@
 /**
  * @fileoverview Renders the authenticated administrator dashboard.
- * @module app/(admin)/page
+ * @module app/(admin)/dashboard/page
  */
 
 import { Metric } from "@/components/ui/Metric";

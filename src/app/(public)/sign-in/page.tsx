@@ -20,7 +20,7 @@ export default async function SignInPage({
   const session = await getCurrentAdminSessionForRender();
 
   if (session) {
-    redirect(session.user.userType === "VENDOR" ? "/vendor" : "/");
+    redirect(session.user.userType === "VENDOR" ? "/vendor" : "/dashboard");
   }
 
   const { callbackURL, inviteAccepted } = await searchParams;
