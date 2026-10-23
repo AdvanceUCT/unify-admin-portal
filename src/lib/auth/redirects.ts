@@ -17,7 +17,7 @@ const CALLBACK_URL_BASE = "http://unify-admin.local";
  */
 export function sanitizeCallbackUrl(
   callbackUrl: string | null | undefined,
-  fallback = "/",
+  fallback = "/dashboard",
 ) {
   if (!callbackUrl) {
     return fallback;

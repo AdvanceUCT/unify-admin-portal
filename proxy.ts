@@ -11,7 +11,7 @@ const VENDOR_PUBLIC_ROUTES = ["/vendor/sign-in", "/vendor/sign-up", "/vendor/acc
 const PUBLIC_FILE = /\.(.*)$/;
 
 function isPublicRoute(pathname: string) {
-  return PUBLIC_ROUTES.some(
+  return pathname === "/" || PUBLIC_ROUTES.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`),
   );
 }
@@ -60,12 +60,6 @@ export function proxy(request: NextRequest) {
   });
   const isSignedIn = Boolean(sessionCookie);
 
-  // The public entry point is the welcome page. Explicit sign-in URLs and
-  // protected deep links retain their existing authentication behavior.
-  if (!isSignedIn && pathname === "/") {
-    return NextResponse.redirect(new URL("/welcome", request.url));
-  }
-
   // The cookie only proves *a* session exists, not its userType (cookie
   // caching is off, so userType isn't available here). Cross-portal checks
   // (a vendor hitting an admin route, or vice versa) are authoritative in
@@ -91,7 +85,7 @@ export function proxy(request: NextRequest) {
 
   if (isPublicRoute(pathname)) {
     if (isSignedIn && pathname === "/sign-in") {
-      return NextResponse.redirect(new URL("/", request.url));
+      return NextResponse.redirect(new URL("/dashboard", request.url));
     }
 
     return NextResponse.next();

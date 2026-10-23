@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 test("public welcome has clear audience actions and a responsive illustration", async ({ page }, info) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("/welcome");
+  await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your campus.In your pocket.");
   const navigation = page.getByRole("navigation", { name: "Welcome navigation" });
   await expect(navigation.getByRole("link", { name: "Vendors", exact: true })).toHaveAttribute("href", "/vendor/sign-in");

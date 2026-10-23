@@ -18,7 +18,7 @@ export default function ForbiddenPage() {
         </p>
         <Link
           className="mt-6 inline-flex h-10 items-center justify-center rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800"
-          href="/"
+          href="/dashboard"
         >
           Return to dashboard
         </Link>

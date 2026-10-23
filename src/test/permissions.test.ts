@@ -21,7 +21,7 @@ function session(role: string): SessionWithRole {
 describe("permissions", () => {
   const routeMatrix: Record<AdminRole, Record<string, boolean>> = {
     SUPER_ADMIN: {
-      "/": true,
+      "/dashboard": true,
       "/credentials": true,
       "/students": true,
       "/vendors": true,
@@ -29,7 +29,7 @@ describe("permissions", () => {
       "/users": true,
     },
     ADMIN: {
-      "/": true,
+      "/dashboard": true,
       "/credentials": true,
       "/students": true,
       "/vendors": true,
@@ -37,7 +37,7 @@ describe("permissions", () => {
       "/users": false,
     },
     ISSUER: {
-      "/": true,
+      "/dashboard": true,
       "/credentials": true,
       "/students": true,
       "/vendors": false,
@@ -45,7 +45,7 @@ describe("permissions", () => {
       "/users": false,
     },
     VIEWER: {
-      "/": true,
+      "/dashboard": true,
       "/credentials": false,
       "/students": false,
       "/vendors": false,
@@ -56,7 +56,7 @@ describe("permissions", () => {
 
   it("allows every role to access the dashboard route", () => {
     for (const role of ADMIN_ROLES) {
-      expect(canAccessRoute(role, "/")).toBe(true);
+      expect(canAccessRoute(role, "/dashboard")).toBe(true);
     }
   });
 
@@ -86,9 +86,9 @@ describe("permissions", () => {
   });
 
   it("rejects unknown role strings", () => {
-    expect(canAccessRoute("OWNER", "/")).toBe(false);
-    expect(canAccessRoute(null, "/")).toBe(false);
-    expect(canAccessRoute(undefined, "/")).toBe(false);
+    expect(canAccessRoute("OWNER", "/dashboard")).toBe(false);
+    expect(canAccessRoute(null, "/dashboard")).toBe(false);
+    expect(canAccessRoute(undefined, "/dashboard")).toBe(false);
     expect(() => assertRole(session("OWNER"), ["SUPER_ADMIN"])).toThrow(PermissionError);
   });
 

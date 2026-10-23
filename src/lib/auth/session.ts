@@ -90,7 +90,7 @@ export async function getCurrentVendorSessionForRender() {
 
 /**
  * Gets the current session or redirects to `/vendor/sign-in` if there isn't
- * one. A signed-in admin is redirected to `/` rather than shown a 403, since
+ * one. A signed-in admin is redirected to `/dashboard` rather than shown a 403, since
  * the vendor portal and admin portal are different sections, not access levels.
  */
 export async function requireVendorSession() {
@@ -101,7 +101,7 @@ export async function requireVendorSession() {
   }
 
   if (session.user.userType !== "VENDOR") {
-    redirect("/");
+    redirect("/dashboard");
   }
 
   return session;
@@ -115,7 +115,7 @@ export async function requireVendorSessionForRender() {
   }
 
   if (session.user.userType !== "VENDOR") {
-    redirect("/");
+    redirect("/dashboard");
   }
 
   return session;

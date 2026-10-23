@@ -37,7 +37,7 @@ describe("sign-in page", () => {
       SignInPage({
         searchParams: Promise.resolve({}),
       }),
-    ).rejects.toThrow("redirect:/");
-    expect(redirect).toHaveBeenCalledWith("/");
+    ).rejects.toThrow("redirect:/dashboard");
+    expect(redirect).toHaveBeenCalledWith("/dashboard");
   });
 });

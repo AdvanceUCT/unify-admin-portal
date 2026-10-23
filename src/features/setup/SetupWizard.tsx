@@ -502,7 +502,7 @@ function UniversityProfileCard({
         </Link>
         <Link
           className="inline-flex h-10 items-center justify-center rounded-md border border-border px-4 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted"
-          href="/"
+          href="/dashboard"
         >
           Go to dashboard
         </Link>

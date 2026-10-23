@@ -19,18 +19,18 @@ describe("proxy", () => {
     getSessionCookieMock.mockReset();
   });
 
-  it("opens welcome instead of sign-in for an anonymous homepage visit", () => {
-    getSessionCookieMock.mockReturnValue(null);
+  it.each([null, "session-cookie"])("keeps the homepage public with cookie %s", cookie => {
+    getSessionCookieMock.mockReturnValue(cookie);
     const response = proxy(request("/"));
-    expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("http://localhost:3000/welcome");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("location")).toBeNull();
   });
 
-  it("keeps the dashboard available to authenticated homepage visits", () => {
-    getSessionCookieMock.mockReturnValue("session-cookie");
-    const response = proxy(request("/"));
-    expect(response.headers.get("location")).toBeNull();
-    expect(response.headers.get("x-middleware-next")).toBe("1");
+  it("protects the relocated staff dashboard", () => {
+    getSessionCookieMock.mockReturnValue(null);
+    const response = proxy(request("/dashboard"));
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe("http://localhost:3000/sign-in?callbackURL=%2Fdashboard");
   });
 
   it("redirects unauthenticated admin routes to sign in with callback", () => {
@@ -80,7 +80,7 @@ describe("proxy", () => {
     const response = proxy(request("/sign-in"));
 
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("http://localhost:3000/");
+    expect(response.headers.get("location")).toBe("http://localhost:3000/dashboard");
   });
 
   it("skips Better Auth API routes and static assets", () => {

@@ -56,7 +56,7 @@ describe("requireVendorSession", () => {
     expect(redirect).toHaveBeenCalledWith("/vendor/sign-in");
   });
 
-  it("redirects an admin session to / instead of allowing vendor access", async () => {
+  it("redirects an admin session to /dashboard instead of allowing vendor access", async () => {
     getSessionMock.mockResolvedValueOnce({
       user: {
         id: "admin_1",
@@ -65,8 +65,8 @@ describe("requireVendorSession", () => {
       },
     } as Awaited<ReturnType<typeof auth.api.getSession>>);
 
-    await expect(requireVendorSession()).rejects.toThrow("redirect:/");
-    expect(redirect).toHaveBeenCalledWith("/");
+    await expect(requireVendorSession()).rejects.toThrow("redirect:/dashboard");
+    expect(redirect).toHaveBeenCalledWith("/dashboard");
   });
 
   it("returns the session for a signed-in vendor", async () => {
@@ -98,8 +98,8 @@ describe("requireVendorSession", () => {
       },
     } as Awaited<ReturnType<typeof auth.api.getSession>>);
 
-    await expect(requireVendorSessionForRender()).rejects.toThrow("redirect:/");
-    expect(redirect).toHaveBeenCalledWith("/");
+    await expect(requireVendorSessionForRender()).rejects.toThrow("redirect:/dashboard");
+    expect(redirect).toHaveBeenCalledWith("/dashboard");
   });
 });
 
