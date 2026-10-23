@@ -3,6 +3,7 @@
  * @module app/vendor/(portal)/branches/[branchId]/page
  */
 
+import { Check } from "lucide-react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import QRCode from "qrcode";
@@ -47,6 +48,8 @@ import {
 const inputClassName =
   "h-10 rounded-md border border-border bg-surface px-3 text-sm font-normal text-fg outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20";
 const labelClassName = "grid gap-1 text-sm font-medium text-fg-muted";
+const primaryButtonClassName =
+  "inline-flex h-9 items-center rounded-md bg-brand-600 px-3 text-sm font-medium text-white transition hover:bg-brand-700";
 const secondaryButtonClassName =
   "h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg-muted transition hover:border-border-strong hover:bg-surface-muted hover:text-fg";
 const metricValueClassName = "text-lg leading-tight break-all sm:text-xl xl:text-2xl";
@@ -116,6 +119,45 @@ export default async function VendorBranchPage({
   const accessData = context.role === "OWNER" ? await loadPaymentAccess(context.vendorProfileId) : null;
   const accessBranch = accessData?.branches.find(item => item.id === branch.id);
   const accessSummary = accessBranch && accessData ? paymentAccessSummary(accessBranch, accessData.context) : null;
+  const isOwner = context.role === "OWNER";
+  const paymentReady = accessSummary ? accessSummary.paymentReady : paymentEnabled;
+  const paymentSteps: Array<{
+    action?: { href: string; label: string };
+    description: string;
+    done: boolean;
+    notice?: string | null;
+    title: string;
+  }> = [
+    {
+      title: "Get payment access",
+      description: paymentReady
+        ? "This branch is approved to accept wallet payments."
+        : isOwner
+          ? "Request approval from the university and confirm your payout account."
+          : "Ask the vendor owner to request payment access for this branch.",
+      notice: accessSummary?.paused || (!paymentReady ? accessSummary?.blockers[0] : null),
+      done: paymentReady,
+      action: isOwner
+        ? { href: `/vendor/branches/${branch.id}/payment-access`, label: accessSummary?.actionLabel || "View payment access" }
+        : undefined,
+    },
+    {
+      title: "Connect your POS",
+      description: isOwner
+        ? "Create a payments API key and follow the guide to add wallet payments to your existing POS."
+        : "The vendor owner connects your POS to Unify wallet payments.",
+      done: false,
+      action: isOwner ? { href: "/vendor/integrations/payments", label: "Open integration guide" } : undefined,
+    },
+    {
+      title: "Take payments",
+      description: "Create a sale in your POS. The student scans the sale's QR code and approves the amount from their wallet.",
+      done: false,
+      action: paymentReady ? { href: "/vendor/payments", label: "View payments" } : undefined,
+    },
+  ];
+  // POS setup isn't tracked, so highlight access until approved, then taking payments.
+  const currentStepIndex = paymentReady ? 2 : 0;
 
   return (
     <div className="space-y-6">
@@ -210,10 +252,45 @@ export default async function VendorBranchPage({
         <section className="flex h-full flex-col items-center gap-4 rounded-xl border border-border bg-surface p-6 text-center shadow-md">
           <div>
             <h2 className="text-section-title text-fg">POS payments</h2>
-            <p className="mt-1 text-sm text-fg-subtle">Create a sale in the POS. Students scan its QR to review the fixed amount and approve payment.</p>
+            <p className="mt-1 text-sm text-fg-subtle">Accept student wallet payments at this branch in three steps.</p>
           </div>
-          {context.role === "OWNER" ? <div className="space-y-3 text-sm"><p>{accessSummary?.paused || accessSummary?.requestLabel}</p><Link className="inline-flex min-h-11 items-center font-medium underline" href={`/vendor/branches/${branch.id}/payment-access`}>{accessSummary?.actionLabel || "View payment access"}</Link>{accessSummary?.paymentReady && <Link className="ml-4 underline" href="/vendor/payment-requests">View POS sales</Link>}</div> : paymentEnabled ? <Link href="/vendor/payment-requests" className="text-sm underline">View POS sales</Link> : <p className="text-sm text-fg-muted">Ask the vendor owner to review payment access for this branch.</p>}
-
+          <ol className="w-full divide-y divide-border text-left">
+            {paymentSteps.map((step, index) => {
+              const done = step.done;
+              const current = index === currentStepIndex;
+              return (
+                <li className="flex gap-4 py-4 first:pt-2 last:pb-0" key={step.title}>
+                  <span
+                    className={`grid size-8 shrink-0 place-items-center rounded-full text-sm font-semibold ${
+                      done
+                        ? "bg-success-bg text-success-fg"
+                        : current
+                          ? "bg-brand-600 text-white"
+                          : "bg-surface-muted text-fg-subtle"
+                    }`}
+                  >
+                    {done ? <Check aria-hidden="true" size={16} /> : index + 1}
+                    {done ? <span className="sr-only">Step {index + 1} complete</span> : null}
+                  </span>
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div>
+                      <p className={`font-medium ${done || current ? "text-fg" : "text-fg-muted"}`}>{step.title}</p>
+                      <p className="mt-0.5 text-sm text-fg-subtle">{step.description}</p>
+                      {step.notice ? <p className="mt-1 text-sm text-warning-fg">{step.notice}</p> : null}
+                    </div>
+                    {step.action ? (
+                      <Link
+                        className={current ? primaryButtonClassName : `inline-flex items-center ${secondaryButtonClassName}`}
+                        href={step.action.href}
+                      >
+                        {step.action.label}
+                      </Link>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
         </section>
       </div>
 

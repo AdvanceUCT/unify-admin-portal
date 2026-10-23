@@ -6,7 +6,7 @@ const application = { id: "application", status: "PENDING", submittedAt: "2026-1
 const branch: AccessBranch = { id: "branch", name: "Campus counter", address: "Main campus", active: true, status: "ACTIVE", acceptanceStatus: null, acceptanceReason: null, applications: [] };
 describe("payment-access summary", () => {
   it("guides first and subsequent requests using the saved vendor account", () => {
-    expect(paymentAccessSummary(branch, context)).toMatchObject({ requestLabel: "Not requested", canSubmit: true, actionLabel: "Set up" });
+    expect(paymentAccessSummary(branch, context)).toMatchObject({ requestLabel: "Not requested", canSubmit: true, actionLabel: "Request access" });
     expect(paymentAccessSummary(branch, { ...context, payoutAccount: null }).canSubmit).toBe(false);
   });
   it("distinguishes review from a changed or incomplete request", () => {

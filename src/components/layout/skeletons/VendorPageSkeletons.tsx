@@ -67,34 +67,54 @@ export function VendorVerificationsSkeleton() {
 export function VendorPaymentsSkeleton() {
   return (
     <SkeletonPage label="Loading vendor payments">
-      <SkeletonAction />
+      {/* Wallet balance card: balance and payout progress, then payout destination and payout button. */}
       <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
         <div className="grid lg:grid-cols-[1.25fr_0.9fr]">
-          <div className="space-y-4 p-6 sm:p-7">
-            <SkeletonBlock className="h-5 w-36" />
-            <SkeletonBlock className="h-12 w-56" />
-            <SkeletonBlock className="h-4 w-80" />
-            <SkeletonBlock className="h-2 w-full" />
-            <SkeletonBlock className="h-4 w-48" />
+          <div className="p-6 sm:p-7">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-4">
+                <SkeletonBlock className="h-4 w-32" />
+                <SkeletonBlock className="h-12 w-56" />
+              </div>
+              <SkeletonBlock className="h-9 w-36" />
+            </div>
+            <SkeletonBlock className="mt-4 h-4 w-80 max-w-full" />
+            <div className="mt-5 max-w-sm space-y-1.5">
+              <div className="flex justify-between gap-3">
+                <SkeletonBlock className="h-3 w-20" />
+                <SkeletonBlock className="h-3 w-16" />
+              </div>
+              <SkeletonBlock className="h-1.5 w-full" />
+              <SkeletonBlock className="h-3 w-48" />
+            </div>
           </div>
-          <div className="space-y-4 border-t border-border p-6 sm:p-7 lg:border-l lg:border-t-0">
+          <div className="flex flex-col justify-center gap-6 border-t border-border p-6 sm:p-7 lg:border-l lg:border-t-0">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <SkeletonBlock className="size-10 shrink-0 rounded-full" />
+                <div className="space-y-1.5">
+                  <SkeletonBlock className="h-4 w-32" />
+                  <SkeletonBlock className="h-3 w-44" />
+                </div>
+              </div>
+              <SkeletonBlock className="h-6 w-14" />
+            </div>
             <SkeletonBlock className="h-10 w-full" />
-            <SkeletonFacts count={2} />
-            <SkeletonAction align="left" />
           </div>
         </div>
       </section>
       <SkeletonCard header={false}>
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))_auto]">
+        <div className="grid gap-3 lg:grid-cols-[minmax(14rem,1fr)_repeat(3,minmax(10rem,12rem))_auto]">
           {Array.from({ length: 4 }, (_, i) => (
             <SkeletonFields columns={1} count={1} key={i} />
           ))}
-          <div className="self-end">
-            <SkeletonBlock className="h-10 w-28" />
+          <div className="flex items-end gap-2">
+            <SkeletonBlock className="h-10 w-20" />
+            <SkeletonBlock className="h-10 w-20" />
           </div>
         </div>
       </SkeletonCard>
-      <SkeletonTable columns={9} minWidth="72rem" pagination />
+      <SkeletonTable columns={8} minWidth="64rem" pagination />
     </SkeletonPage>
   );
 }

@@ -15,7 +15,14 @@ export default async function BranchPaymentAccessReviewPage({ params }: { params
   const branch = data.branches.find(branch => branch.id === branchId);
   if (!branch) notFound();
   const history = await paymentAccessAccountHistory(branch.applications.map(application => application.id));
-  return <div className="space-y-6"><PaymentAccessReview key={`${branch.id}:${branch.applications[0]?.status}`} companyName={data.companyName} branch={branch} context={data.context} history={history} approve={approvePaymentAccessAction} reject={rejectPaymentAccessAction} />
-    {branch.acceptanceStatus === "ACTIVE" && <div className="mx-auto max-w-4xl border-t border-border pt-5"><PaymentAccessRevokeButton action={revokeBranchPaymentAcceptanceAction} branchId={branch.id} branchName={branch.name} companyName={data.companyName} /></div>}
-  </div>;
+  return <PaymentAccessReview
+    key={`${branch.id}:${branch.applications[0]?.status}`}
+    companyName={data.companyName}
+    branch={branch}
+    context={data.context}
+    history={history}
+    approve={approvePaymentAccessAction}
+    reject={rejectPaymentAccessAction}
+    headerActions={branch.acceptanceStatus === "ACTIVE" ? <PaymentAccessRevokeButton action={revokeBranchPaymentAcceptanceAction} branchId={branch.id} branchName={branch.name} companyName={data.companyName} /> : null}
+  />;
 }

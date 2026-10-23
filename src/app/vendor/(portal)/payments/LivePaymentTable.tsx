@@ -151,7 +151,7 @@ export function LivePaymentTable({
         </p>
       ) : null}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[72rem] text-center text-body">
+        <table className="w-full min-w-[64rem] text-center text-body">
           <thead className="border-b border-border bg-surface-muted/60">
             <tr className="whitespace-nowrap text-caption uppercase tracking-wide text-fg-subtle">
               <th className="px-4 py-3 font-medium">Completed</th>
@@ -161,7 +161,6 @@ export function LivePaymentTable({
               <th className="px-4 py-3 font-medium">Amount</th>
               <th className="px-4 py-3 font-medium">Refunded</th>
               <th className="px-4 py-3 font-medium">Refund status</th>
-              <th className="px-4 py-3 font-medium">Reference</th>
               <th className="px-4 py-3 font-medium">Action</th>
             </tr>
           </thead>
@@ -187,9 +186,6 @@ export function LivePaymentTable({
                     <StatusText tone={REFUND_STATUS_TONE[payment.refundStatus]}>
                       {REFUND_STATUS_LABEL[payment.refundStatus]}
                     </StatusText>
-                  </td>
-                  <td className="max-w-44 truncate px-4 py-3 font-mono text-xs text-fg-muted">
-                    {payment.reference ?? payment.transactionId}
                   </td>
                   <td className="px-4 py-3">
                     {canRefundPayment ? (
