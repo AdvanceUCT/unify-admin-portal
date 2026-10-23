@@ -18,6 +18,7 @@ import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
 import { acquireJobLease, completeJobLease, failJobLease } from "@/lib/billing/jobLease";
 import { runVendorBillingReconciliation } from "@/lib/billing/reconciliation";
+import { reinstateSettledVendors, syncVendorVerificationSuspensions } from "@/lib/billing/verificationSuspension";
 
 function authorized(request: Request, secret: string) {
   const supplied = Buffer.from(request.headers.get("authorization") ?? "");
@@ -40,13 +41,16 @@ export async function GET(request: Request) {
 
   try {
     const reconciliation = await runVendorBillingReconciliation(prisma);
+    // Recovered payments lift suspensions now; new suspensions stay with the daily job.
+    const { reinstated } = await reinstateSettledVendors();
+    const agentSync = await syncVendorVerificationSuspensions();
     await completeJobLease(prisma, lease.runId, {
       scannedCount: reconciliation.attemptsSwept + reconciliation.gatewayEventsRetried,
       importedCount: reconciliation.attemptsConfirmed + reconciliation.gatewayEventsRecovered,
-      exceptionCount: reconciliation.gatewayEventsStillFailing,
-      totalsSnapshot: reconciliation,
+      exceptionCount: reconciliation.gatewayEventsStillFailing + agentSync.failed.length,
+      totalsSnapshot: { ...reconciliation, verificationReinstated: reinstated, verificationAgentSync: agentSync },
     });
-    return NextResponse.json({ reconciliation });
+    return NextResponse.json({ reconciliation, verificationSuspension: { reinstated, agentSync } });
   } catch (error) {
     await failJobLease(prisma, lease.runId, error);
     return NextResponse.json({ error: { message: "The vendor-billing-reconcile job failed." } }, { status: 500 });

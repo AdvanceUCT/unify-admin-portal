@@ -5,13 +5,16 @@
 
 import { NextResponse } from "next/server";
 
+import { PosApiError, posErrorResponse } from "@/lib/payments/posErrors";
 import { vendorFromApiRequest } from "@/lib/vendors/routeAuth";
 import { createVendorCheckoutSession } from "@/lib/vendors/verifications";
 
 /** Handles POST requests to `/api/vendor/v1/verification-sessions`. */
 export async function POST(request: Request) {
   let vendor;
-  try { vendor = await vendorFromApiRequest(request, "verification:create"); } catch {
+  try { vendor = await vendorFromApiRequest(request, "verification:create"); } catch (error) {
+    // Coded refusals such as VENDOR_VERIFICATION_SUSPENDED keep their own code and status.
+    if (error instanceof PosApiError) return posErrorResponse(error);
     return NextResponse.json({ error: { code: "MISSING_SCOPE", message: "This API key cannot access verification." } }, { status: 403 });
   }
   if (!vendor) return NextResponse.json({ error: { message: "Invalid vendor API key." } }, { status: 401 });
@@ -23,6 +26,7 @@ export async function POST(request: Request) {
     }
     return NextResponse.json(await createVendorCheckoutSession(vendor.id, body.checkoutId, vendor.branchIds.length ? vendor.branchIds : undefined), { status: 201 });
   } catch (error) {
+    if (error instanceof PosApiError) return posErrorResponse(error);
     return NextResponse.json(
       { error: { message: error instanceof Error ? error.message : "Unable to create verification session." } },
       { status: 400 },

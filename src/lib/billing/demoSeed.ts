@@ -14,7 +14,13 @@
 import { randomUUID } from "node:crypto";
 
 import type { Prisma } from "@/generated/prisma/client";
-import { resolveVerificationBillingSnapshot } from "@/lib/vendors/verificationBilling";
+import {
+  billingPeriodEndUtc,
+  billingPeriodKeyFromDate,
+  billingPeriodLabel,
+  billingPeriodStartUtc,
+  resolveVerificationBillingSnapshot,
+} from "@/lib/vendors/verificationBilling";
 
 export type DemoSeedClient = Pick<Prisma.TransactionClient, "vendorVerification" | "vendorBranch">;
 
@@ -37,6 +43,38 @@ function randomCompletedAt(monthsBack: number): Date {
   return date;
 }
 
+/** A random instant inside one billing period, never later than `now` for the current month. */
+function randomCompletedAtInPeriod(periodKey: string, now: Date): Date {
+  const start = billingPeriodStartUtc(periodKey).getTime();
+  const end = Math.min(billingPeriodEndUtc(periodKey).getTime(), now.getTime());
+  return new Date(start + Math.floor(Math.random() * (end - start)));
+}
+
+/** The months the test tool offers: the current billing month back to January of the same year, newest first. */
+export function seedMonthOptions(now = new Date()): Array<{ periodKey: string; label: string }> {
+  const [year, month] = billingPeriodKeyFromDate(now).split("-").map(Number);
+  return Array.from({ length: month }, (_, index) => {
+    const periodKey = `${year}-${String(month - index).padStart(2, "0")}`;
+    return { periodKey, label: billingPeriodLabel(periodKey) };
+  });
+}
+
+/**
+ * Validates explicitly chosen billing months: well-formed, de-duplicated,
+ * oldest first, and never in the future.
+ */
+export function normalizeSeedPeriodKeys(periodKeys: string[], now = new Date()): string[] {
+  const currentPeriodKey = billingPeriodKeyFromDate(now);
+  const unique = Array.from(new Set(periodKeys)).sort();
+  if (unique.length === 0) throw new Error("Select at least one month to seed.");
+  for (const periodKey of unique) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(periodKey) || periodKey > currentPeriodKey) {
+      throw new Error(`Cannot seed verifications for ${periodKey}.`);
+    }
+  }
+  return unique;
+}
+
 export function clampSeedCount(count: number): number {
   if (!Number.isInteger(count) || count <= 0) return DEFAULT_SEED_COUNT_PER_VENDOR;
   return Math.min(count, MAX_SEED_COUNT_PER_CALL);
@@ -49,16 +87,20 @@ export function clampSeedMonthsBack(monthsBack: number): number {
 
 /**
  * Creates `count` fake `APPROVED`/billable verifications for exactly
- * `vendorProfileId`, with `completedAt` spread randomly across the last
- * `monthsBack` months, so `billing:backfill` + invoice generation have real
- * usage to work with. Never touches any other vendor's data.
+ * `vendorProfileId`, so `billing:backfill` + invoice generation have real
+ * usage to work with. Never touches any other vendor's data. With
+ * `periodKeys`, verifications are dealt round-robin across exactly those
+ * months (each gets a share when `count` allows); otherwise `completedAt`
+ * is spread randomly across the last `monthsBack` months.
  */
 export async function seedVerificationHistoryForVendor(
   client: DemoSeedClient,
-  params: { vendorProfileId: string; count?: number; monthsBack?: number },
+  params: { vendorProfileId: string; count?: number; monthsBack?: number; periodKeys?: string[]; now?: Date },
 ): Promise<number> {
   const count = clampSeedCount(params.count ?? DEFAULT_SEED_COUNT_PER_VENDOR);
   const monthsBack = clampSeedMonthsBack(params.monthsBack ?? DEFAULT_SEED_MONTHS_BACK);
+  const now = params.now ?? new Date();
+  const periodKeys = params.periodKeys ? normalizeSeedPeriodKeys(params.periodKeys, now) : null;
 
   const branches = await client.vendorBranch.findMany({
     where: { vendorProfileId: params.vendorProfileId, active: true },
@@ -67,7 +109,9 @@ export async function seedVerificationHistoryForVendor(
 
   for (let i = 0; i < count; i += 1) {
     const branch = branches.length > 0 ? branches[Math.floor(Math.random() * branches.length)] : null;
-    const completedAt = randomCompletedAt(monthsBack);
+    const completedAt = periodKeys
+      ? randomCompletedAtInPeriod(periodKeys[i % periodKeys.length], now)
+      : randomCompletedAt(monthsBack);
     const snapshot = resolveVerificationBillingSnapshot({ status: "APPROVED", isVerified: true, completedAt });
     const suffix = `${params.vendorProfileId}-${i}-${randomUUID()}`;
 

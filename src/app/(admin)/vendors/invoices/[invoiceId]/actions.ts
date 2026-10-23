@@ -11,6 +11,7 @@ import { writeAuditLog } from "@/lib/audit/audit";
 import { assertCan } from "@/lib/auth/permissions";
 import { requireRole } from "@/lib/auth/session";
 import { confirmInvoicePayment } from "@/lib/billing/paymentConfirmation";
+import { reinstateAfterInvoicePayment } from "@/lib/billing/verificationSuspension";
 import { prisma } from "@/lib/db/prisma";
 import { resolvePaystackProviderConfig } from "@/lib/paymentProviders/paystack/config";
 import { getApprovedApplicationIdForVendorProfile } from "@/lib/vendors/applications";
@@ -35,6 +36,7 @@ export async function reconcileInvoicePaymentAction(invoiceId: string) {
 
   const config = resolvePaystackProviderConfig();
   const result = await confirmInvoicePayment(prisma, { reference: attempt.reference, config });
+  await reinstateAfterInvoicePayment(result);
 
   await writeAuditLog({
     action: "INVOICE_PAYMENT_RECONCILED",

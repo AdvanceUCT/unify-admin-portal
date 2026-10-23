@@ -8,6 +8,7 @@ import { NextResponse } from "next/server";
 import { recordBillingException } from "@/lib/billing/exceptions";
 import { recordGatewayEvent, recordGatewayEventFailure, markGatewayEventProcessed } from "@/lib/billing/gatewayEvents";
 import { confirmInvoicePayment } from "@/lib/billing/paymentConfirmation";
+import { reinstateAfterInvoicePayment } from "@/lib/billing/verificationSuspension";
 import { prisma } from "@/lib/db/prisma";
 import { resolvePaystackProviderConfig, resolvePaystackWalletTopupConfig } from "@/lib/paymentProviders/paystack/config";
 import { isPaystackWebhookBodyWithinLimit, verifyPaystackWebhookSignature } from "@/lib/paymentProviders/paystack/signature";
@@ -56,6 +57,13 @@ function parseTransferWebhookPayload(eventType: string, payload: Record<string, 
     status: typeof data.status === "string" ? data.status : undefined,
     amountMinor: typeof data.amount === "number" ? BigInt(Math.trunc(data.amount)) : undefined,
   };
+}
+
+async function confirmInvoiceAndReinstate(reference: string) {
+  const result = await confirmInvoicePayment(prisma, { reference, config: resolvePaystackProviderConfig() });
+  // Lifting an overdue-invoice verification suspension is best-effort and never fails the webhook.
+  await reinstateAfterInvoicePayment(result);
+  return result;
 }
 
 /**
@@ -177,7 +185,7 @@ export async function POST(request: Request) {
       ? await reconcileWalletTopupByReference({ reference, config: signatureConfig })
       : reference.startsWith(VENDOR_WALLET_TOPUP_REFERENCE_PREFIX)
         ? await (await import("@/lib/vendors/walletTopups")).reconcileVendorWalletTopupByReference({ reference, config: signatureConfig })
-        : await confirmInvoicePayment(prisma, { reference, config: resolvePaystackProviderConfig() });
+        : await confirmInvoiceAndReinstate(reference);
     await markGatewayEventProcessed(prisma, dedupe.id);
     return NextResponse.json({ received: true, outcome: "outcome" in result ? result.outcome : result.status }, { status: 200 });
   } catch (error) {

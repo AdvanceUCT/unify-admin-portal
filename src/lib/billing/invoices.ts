@@ -9,7 +9,11 @@
 
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { VendorInvoicePaymentStatus } from "@/generated/prisma/enums";
-import { INVOICE_CLOSING_DELAY_SECONDS, MAX_INVOICES_PER_VENDOR_PER_RUN, VENDOR_INVOICE_NUMBER_PREFIX } from "@/lib/billing/constants";
+import {
+  INVOICE_CLOSING_DELAY_SECONDS,
+  MAX_INVOICES_PER_VENDOR_PER_RUN,
+  VENDOR_INVOICE_NUMBER_PREFIX,
+} from "@/lib/billing/constants";
 import { env } from "@/lib/config/env";
 import { billingPeriodEndUtc, nextBillingPeriodKey } from "@/lib/vendors/verificationBilling";
 
@@ -22,6 +26,7 @@ export type InvoiceGenerationRunner = Pick<PrismaClient, "$transaction"> & ReadC
 type TransactionRunner = Pick<PrismaClient, "$transaction">;
 
 const MAX_SERIALIZABLE_ATTEMPTS = 3;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function hasPrismaErrorCode(error: unknown, code: string) {
   return typeof error === "object" && error !== null && "code" in error && error.code === code;
@@ -221,7 +226,7 @@ export async function issueInvoiceForVendorPeriod(
         select: { companyName: true, contactEmail: true },
       });
       const university = await tx.universityProfile.findFirstOrThrow({
-        select: { name: true, abbreviation: true, contactEmail: true },
+        select: { name: true, abbreviation: true, contactEmail: true, invoicePaymentDueDays: true },
       });
       const invoiceNumber = await nextVendorInvoiceNumber(tx, now);
 
@@ -262,12 +267,15 @@ export async function issueInvoiceForVendorPeriod(
         })),
       });
 
+      const paymentRequired = totalMinor !== zero;
       return tx.vendorInvoice.update({
         where: { id: draftInvoice.id },
         data: {
           documentStatus: "ISSUED",
           issuedAt: now,
-          paymentStatus: totalMinor === zero ? VendorInvoicePaymentStatus.NO_PAYMENT_REQUIRED : VendorInvoicePaymentStatus.UNPAID,
+          paymentStatus: paymentRequired ? VendorInvoicePaymentStatus.UNPAID : VendorInvoicePaymentStatus.NO_PAYMENT_REQUIRED,
+          // An unpaid invoice past this date suspends the vendor's verifications.
+          dueAt: paymentRequired ? new Date(now.getTime() + university.invoicePaymentDueDays * DAY_MS) : null,
         },
       });
     });
@@ -339,7 +347,18 @@ export async function runVendorInvoiceGeneration(
   return summary;
 }
 
-async function issueDueInvoicesForVendor(db: TransactionRunner & ReadClient, vendorProfileId: string, currency: string, now: Date) {
+/** The earliest moment a regular run could have issued `periodKey`'s invoice. */
+export function invoicePeriodCloseTime(periodKey: string) {
+  return new Date(billingPeriodEndUtc(periodKey).getTime() + INVOICE_CLOSING_DELAY_SECONDS * 1000);
+}
+
+async function issueDueInvoicesForVendor(
+  db: TransactionRunner & ReadClient,
+  vendorProfileId: string,
+  currency: string,
+  now: Date,
+  issueAtPeriodClose = false,
+) {
   let invoicesIssued = 0;
   let zeroTotalInvoices = 0;
 
@@ -347,7 +366,10 @@ async function issueDueInvoicesForVendor(db: TransactionRunner & ReadClient, ven
     const periodKey = await resolveNextInvoicePeriodForVendor(db, vendorProfileId, currency, now);
     if (!periodKey) break;
 
-    const invoice = await issueInvoiceForVendorPeriod(db, { vendorProfileId, periodKey, currency, now });
+    // Backfilled history is issued as if the regular job had run when the period closed,
+    // so its issue and due dates (and any resulting overdue status) are realistic.
+    const issuedAt = issueAtPeriodClose ? invoicePeriodCloseTime(periodKey) : now;
+    const invoice = await issueInvoiceForVendorPeriod(db, { vendorProfileId, periodKey, currency, now: issuedAt });
     if (!invoice) break;
 
     invoicesIssued += 1;
@@ -364,18 +386,25 @@ async function issueDueInvoicesForVendor(db: TransactionRunner & ReadClient, ven
  * self-service test tool so a vendor can only ever generate their own
  * invoices, never anyone else's. Also respects
  * `VERIFICATION_INVOICING_ENABLED`, for the same reason the global version does.
+ * `issueAtPeriodClose` dates each invoice at its own period's close instead of `now`.
  */
 export async function runVendorInvoiceGenerationForVendor(
   db: TransactionRunner & ReadClient,
   vendorProfileId: string,
-  options: { now?: Date; currency?: string } = {},
+  options: { now?: Date; currency?: string; issueAtPeriodClose?: boolean } = {},
 ): Promise<VendorInvoiceGenerationSummary> {
   if (!env.VERIFICATION_INVOICING_ENABLED) return DISABLED_SUMMARY;
 
   const now = options.now ?? new Date();
   const currency = options.currency ?? "ZAR";
 
-  const { invoicesIssued, zeroTotalInvoices } = await issueDueInvoicesForVendor(db, vendorProfileId, currency, now);
+  const { invoicesIssued, zeroTotalInvoices } = await issueDueInvoicesForVendor(
+    db,
+    vendorProfileId,
+    currency,
+    now,
+    options.issueAtPeriodClose,
+  );
 
   return { vendorsScanned: 1, invoicesIssued, zeroTotalInvoices, skippedDisabled: false };
 }

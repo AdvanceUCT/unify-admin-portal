@@ -3,7 +3,7 @@
  * @module app/(admin)/settings/verification-billing/page
  */
 
-import { FileText, History, Percent, Receipt } from "lucide-react";
+import { CalendarClock, FileText, History, Percent, Receipt } from "lucide-react";
 
 import { BackButton } from "@/components/ui/BackButton";
 import { requireRoleForRender } from "@/lib/auth/session";
@@ -11,6 +11,7 @@ import { minorToDecimalString } from "@/lib/billing/money";
 import { prisma } from "@/lib/db/prisma";
 import { SettingsCard } from "../SettingsCard";
 import { generateMissingInvoicesAction } from "./actions";
+import { InvoicePaymentWindowForm } from "./InvoicePaymentWindowForm";
 import { UpdateVerificationBillingPolicyForm } from "./UpdateVerificationBillingPolicyForm";
 
 function formatBasisPoints(basisPoints: number) {
@@ -29,6 +30,7 @@ export default async function VerificationBillingSettingsPage() {
 
   const policies = await prisma.verificationBillingPolicy.findMany({ orderBy: { version: "desc" } });
   const openPolicy = policies.find((policy) => policy.effectiveTo === null) ?? null;
+  const university = await prisma.universityProfile.findFirst({ select: { invoicePaymentDueDays: true } });
 
   return (
     <div className="space-y-6">
@@ -82,6 +84,19 @@ export default async function VerificationBillingSettingsPage() {
           title="Change platform percentage"
         >
           <UpdateVerificationBillingPolicyForm />
+        </SettingsCard>
+      )}
+
+      {university && (
+        <SettingsCard
+          description="How long vendors have to pay an invoice before their verifications are suspended."
+          icon={CalendarClock}
+          title="Invoice payment window"
+        >
+          <InvoicePaymentWindowForm
+            canEdit={canManagePolicy}
+            invoicePaymentDueDays={university.invoicePaymentDueDays}
+          />
         </SettingsCard>
       )}
 

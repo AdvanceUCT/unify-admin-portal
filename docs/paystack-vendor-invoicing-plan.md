@@ -99,11 +99,11 @@ Late-arriving charges for a closed month appear as labelled prior-period items o
 
 Reconcile unresolved attempts even when the browser never returns or a webhook is missed. Track refunds, reversals, and disputes against their original payments with explicit state transitions and an agreed debt policy. Maintain settlement reporting for gross collection, fees, expected shares, actual payouts, and exceptions.
 
-## Payment reporting without enforcement
+## Payment reporting and overdue enforcement
 
-Show whether each invoice is unpaid or paid, the outstanding amount, payment date, and receipt reference. Payment attempts separately show processing, failed, or unresolved outcomes so a failed attempt does not change the invoice's underlying debt. Exceptional refund/dispute states retain their own records.
+Show whether each invoice is unpaid, overdue, or paid, the outstanding amount, payment date, and receipt reference. Payment attempts separately show processing, failed, or unresolved outcomes so a failed attempt does not change the invoice's underlying debt. Exceptional refund/dispute states retain their own records.
 
-No billing status changes verification eligibility, QR behavior, API access, or manual branch activation. With no agreed payment terms, leave due dates unset and report outstanding amounts without declaring invoices overdue. If terms are configured later, any overdue label is informational only under this scope.
+> **Superseded (October 2026):** this plan originally left due dates unset and kept billing out of verification eligibility. Invoices issued since then get a due date (`invoicePaymentDueDays`, default 14 days after issue), and an invoice still unpaid past it suspends the vendor's verifications at every branch until it is paid. Payments, refunds, top-ups, and portal access are unaffected. See [vendor-verification-suspension-plan.md](vendor-verification-suspension-plan.md).
 
 ## Configuration and setup
 

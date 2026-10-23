@@ -8,6 +8,7 @@ import { NextResponse } from "next/server";
 import { getCurrentVendorSession } from "@/lib/auth/session";
 import { isRateLimited, isSameOriginRequest } from "@/lib/billing/paymentRouteGuards";
 import { confirmInvoicePayment } from "@/lib/billing/paymentConfirmation";
+import { reinstateAfterInvoicePayment } from "@/lib/billing/verificationSuspension";
 import { getVendorInvoiceOwnerContext } from "@/lib/billing/vendorAuthorization";
 import { prisma } from "@/lib/db/prisma";
 import { resolvePaystackProviderConfig } from "@/lib/paymentProviders/paystack/config";
@@ -64,5 +65,6 @@ export async function POST(request: Request, context: { params: Promise<{ invoic
   }
 
   const result = await confirmInvoicePayment(prisma, { reference: attempt.reference, config });
+  await reinstateAfterInvoicePayment(result);
   return NextResponse.json({ outcome: result.outcome });
 }

@@ -78,6 +78,29 @@ describe("vendor API credentials", () => {
     });
   });
 
+  it("blocks starting verifications for a suspended vendor but still allows reading results", async () => {
+    const token = "unify_vk_abcdef123456_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG";
+    database.vendorApiCredential.findUnique.mockResolvedValue({
+      id: "credential-001",
+      keyHash: "stored-api-key-hash",
+      revokedAt: null,
+      vendorProfile: {
+        id: "vendor-001",
+        applications: [{ id: "approved-application" }],
+        verificationSuspensionCode: "UNPAID_INVOICE",
+      },
+      scopes: ["verification:create", "verification:read"],
+      branchIds: [],
+    });
+    database.vendorApiCredential.update.mockResolvedValue({});
+
+    await expect(authenticateVendorApiKey(`Bearer ${token}`, "verification:create")).rejects.toMatchObject({
+      code: "VENDOR_VERIFICATION_SUSPENDED",
+      status: 403,
+    });
+    await expect(authenticateVendorApiKey(`Bearer ${token}`, "verification:read")).resolves.toMatchObject({ id: "vendor-001" });
+  });
+
   it("rejects missing payment branches, invalid scopes and foreign branch ownership", async () => {
     await expect(createVendorApiCredential("vendor-001", "Till", ["payments:create"], [])).rejects.toThrow("explicit branch selection");
     await expect(createVendorApiCredential("vendor-001", "Till", ["unknown:permission"], [])).rejects.toThrow("valid API scope");

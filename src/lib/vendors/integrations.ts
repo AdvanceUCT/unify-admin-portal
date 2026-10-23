@@ -88,6 +88,11 @@ export async function authenticateVendorApiKey(header: string | null, requiredSc
     const { PosApiError } = await import("@/lib/payments/posErrors");
     throw new PosApiError("MISSING_SCOPE", "This API key does not have the required scope.", 403);
   }
+  // An overdue invoice blocks new verifications only; results stay readable.
+  if (requiredScope === "verification:create" && credential.vendorProfile.verificationSuspensionCode) {
+    const { PosApiError } = await import("@/lib/payments/posErrors");
+    throw new PosApiError("VENDOR_VERIFICATION_SUSPENDED", "This vendor's verifications are suspended until overdue invoices are paid.", 403);
+  }
   // Suspended vendors keep read access to sale and refund history; every money-moving scope is blocked.
   const paymentStatus = credential.vendorProfile.paymentProfile?.status;
   const movesMoney = requiredScope && requiredScope !== "payments:read" &&

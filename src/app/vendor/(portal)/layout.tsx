@@ -21,6 +21,7 @@ import { encodeLivePaymentCursor } from "@/lib/vendors/livePayments";
 import { encodeLiveVerificationCursor } from "@/lib/vendors/liveVerifications";
 
 import { checkVendorAgentHealthAction } from "./actions";
+import { VendorVerificationSuspensionNotice } from "./VendorVerificationSuspensionNotice";
 
 const ownerNavItems: PortalNavItem[] = [
   { href: "/vendor", label: "Overview", icon: "overview" },
@@ -73,7 +74,12 @@ function roleLabelForVendorContext(context: ApprovedVendorContext | null) {
 async function getVendorPortalChromeProfile(vendorProfileId: string) {
   return prisma.vendorProfile.findUnique({
     where: { id: vendorProfileId },
-    select: { defaultBranchId: true, logoPath: true },
+    select: {
+      defaultBranchId: true,
+      logoPath: true,
+      verificationSuspendedAt: true,
+      verificationSuspensionReason: true,
+    },
   });
 }
 
@@ -152,6 +158,14 @@ export default async function VendorPortalLayout({
             initialCursor={encodeLivePaymentCursor({ completedAt: new Date().toISOString(), id: "_" })}
           />
         </>
+      ) : null}
+      {chromeProfile?.verificationSuspendedAt ? (
+        <VendorVerificationSuspensionNotice
+          canPayInvoices={Boolean(invoiceOwnerContext)}
+          className="mb-6"
+          reason={chromeProfile.verificationSuspensionReason}
+          suspendedAtIso={chromeProfile.verificationSuspendedAt.toISOString()}
+        />
       ) : null}
       {children}
     </PortalShell>

@@ -102,6 +102,8 @@ describe("GET /api/vendor/invoices/[invoiceId]", () => {
     vi.mocked(getVendorInvoiceDocument).mockResolvedValue({
       id: "invoice-1",
       paymentStatus: "UNPAID",
+      dueAtIso: null,
+      isOverdue: false,
       hasUnresolvedException: false,
       isPayable: true,
       document: { invoiceNumber: "DEMO-2026-000001" } as never,
@@ -153,6 +155,8 @@ describe("GET /api/vendor/invoices/[invoiceId]/download", () => {
     vi.mocked(getVendorInvoiceDocument).mockResolvedValue({
       id: "invoice-1",
       paymentStatus: "UNPAID",
+      dueAtIso: null,
+      isOverdue: false,
       hasUnresolvedException: false,
       isPayable: true,
       document: { invoiceNumber: "DEMO-2026-000001" } as never,

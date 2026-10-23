@@ -7,6 +7,7 @@ import "server-only";
 
 import { minorToDecimalString } from "@/lib/billing/money";
 import { buildInvoiceDocumentData } from "@/lib/billing/invoiceDocument";
+import { isInvoiceOverdue, overdueInvoiceWhere } from "@/lib/billing/overdue";
 import { prisma } from "@/lib/db/prisma";
 import { billingPeriodLabel } from "@/lib/vendors/verificationBilling";
 
@@ -22,6 +23,8 @@ export type VendorInvoiceSummary = {
   hasUnresolvedException: boolean;
   isDemo: boolean;
   issuedAtIso: string | null;
+  dueAtIso: string | null;
+  isOverdue: boolean;
 };
 
 function toSummary(invoice: {
@@ -35,7 +38,8 @@ function toSummary(invoice: {
   hasUnresolvedException: boolean;
   isDemo: boolean;
   issuedAt: Date | null;
-}): VendorInvoiceSummary {
+  dueAt: Date | null;
+}, now = new Date()): VendorInvoiceSummary {
   return {
     id: invoice.id,
     invoiceNumber: invoice.invoiceNumber,
@@ -48,6 +52,8 @@ function toSummary(invoice: {
     hasUnresolvedException: invoice.hasUnresolvedException,
     isDemo: invoice.isDemo,
     issuedAtIso: invoice.issuedAt?.toISOString() ?? null,
+    dueAtIso: invoice.dueAt?.toISOString() ?? null,
+    isOverdue: isInvoiceOverdue(invoice, now),
   };
 }
 
@@ -67,9 +73,11 @@ export async function listVendorInvoices(vendorProfileId: string): Promise<Vendo
       hasUnresolvedException: true,
       isDemo: true,
       issuedAt: true,
+      dueAt: true,
     },
   });
-  return invoices.map(toSummary);
+  const now = new Date();
+  return invoices.map((invoice) => toSummary(invoice, now));
 }
 
 /** Returns null for a missing invoice *or* one belonging to a different vendor — same response either way. */
@@ -84,6 +92,8 @@ export async function getVendorInvoiceDocument(vendorProfileId: string, invoiceI
     id: invoice.id,
     paymentStatus: invoice.paymentStatus,
     hasUnresolvedException: invoice.hasUnresolvedException,
+    dueAtIso: invoice.dueAt?.toISOString() ?? null,
+    isOverdue: isInvoiceOverdue(invoice, new Date()),
     // A raw totalMinor is never sent to the client — this boolean is the only
     // signal the Pay button needs. A paid, zero-total, or exception-flagged
     // invoice never gets a Pay action, per the handoff.
@@ -93,6 +103,31 @@ export async function getVendorInvoiceDocument(vendorProfileId: string, invoiceI
       invoice.totalMinor > BigInt(0) &&
       !invoice.hasUnresolvedException,
     document: buildInvoiceDocumentData(invoice, invoice.items),
+  };
+}
+
+export type VendorOverdueInvoiceSummary = {
+  count: number;
+  totalMinor: number;
+  currency: string;
+  oldestDueAtIso: string | null;
+};
+
+/** Every overdue invoice for the vendor, across all years — drives the suspension notices. */
+export async function getVendorOverdueInvoiceSummary(
+  vendorProfileId: string,
+  now = new Date(),
+): Promise<VendorOverdueInvoiceSummary> {
+  const invoices = await prisma.vendorInvoice.findMany({
+    where: { vendorProfileId, ...overdueInvoiceWhere(now) },
+    orderBy: { dueAt: "asc" },
+    select: { totalMinor: true, currency: true, dueAt: true },
+  });
+  return {
+    count: invoices.length,
+    totalMinor: invoices.reduce((sum, invoice) => sum + Number(invoice.totalMinor), 0),
+    currency: invoices[0]?.currency ?? "ZAR",
+    oldestDueAtIso: invoices[0]?.dueAt?.toISOString() ?? null,
   };
 }
 
@@ -222,6 +257,8 @@ export async function getAdminInvoiceDetail(invoiceId: string) {
     vendorCompanyName: invoice.vendorProfile.companyName,
     paymentStatus: invoice.paymentStatus,
     hasUnresolvedException: invoice.hasUnresolvedException,
+    dueAtIso: invoice.dueAt?.toISOString() ?? null,
+    isOverdue: isInvoiceOverdue(invoice, new Date()),
     document: buildInvoiceDocumentData(invoice, invoice.items),
     attempts,
     payments,

@@ -3,6 +3,7 @@
  * @module app/vendor/(portal)/test-tools/page
  */
 
+import { seedMonthOptions } from "@/lib/billing/demoSeed";
 import { requireVendorInvoiceOwnerContextForRender } from "@/lib/billing/vendorAuthorization";
 
 import { TestToolsPanel } from "./TestToolsPanel";
@@ -21,7 +22,7 @@ export default async function VendorTestToolsPage() {
           </p>
         </div>
         <div className="px-5 py-5">
-          <TestToolsPanel />
+          <TestToolsPanel months={seedMonthOptions()} />
         </div>
       </section>
     </div>

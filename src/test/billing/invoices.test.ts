@@ -136,7 +136,7 @@ describe("issueInvoiceForVendorPeriod", () => {
         findUniqueOrThrow: vi.fn().mockResolvedValue({ companyName: "Library Cafe", contactEmail: "cafe@example.test" }),
       },
       universityProfile: {
-        findFirstOrThrow: vi.fn().mockResolvedValue({ name: "UNIFY U", abbreviation: "UU", contactEmail: "admin@example.test" }),
+        findFirstOrThrow: vi.fn().mockResolvedValue({ name: "UNIFY U", abbreviation: "UU", contactEmail: "admin@example.test", invoicePaymentDueDays: 14 }),
       },
       $queryRaw: vi.fn().mockResolvedValue([{ nextval: BigInt(1) }]),
       vendorInvoice: {
@@ -194,9 +194,31 @@ describe("issueInvoiceForVendorPeriod", () => {
     });
     expect(tx.vendorInvoice.update).toHaveBeenCalledWith({
       where: { id: "invoice-001" },
-      data: expect.objectContaining({ documentStatus: "ISSUED", issuedAt: now, paymentStatus: "UNPAID" }),
+      data: expect.objectContaining({
+        documentStatus: "ISSUED",
+        issuedAt: now,
+        paymentStatus: "UNPAID",
+        dueAt: new Date("2026-10-19T12:00:00.000Z"),
+      }),
     });
     expect(result).toMatchObject({ documentStatus: "ISSUED" });
+  });
+
+  it("uses the university's configured payment window for the due date", async () => {
+    const now = new Date("2026-10-05T12:00:00.000Z");
+    const { db, tx } = makeDb([charge()]);
+    tx.universityProfile.findFirstOrThrow.mockResolvedValueOnce({
+      name: "UNIFY U",
+      abbreviation: "UU",
+      contactEmail: "admin@example.test",
+      invoicePaymentDueDays: 30,
+    });
+
+    await issueInvoiceForVendorPeriod(db, { vendorProfileId: "vendor-001", periodKey: "2026-09", now });
+
+    expect(tx.vendorInvoice.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ dueAt: new Date("2026-11-04T12:00:00.000Z") }) }),
+    );
   });
 
   it("marks a zero-total invoice as NO_PAYMENT_REQUIRED", async () => {
@@ -206,7 +228,7 @@ describe("issueInvoiceForVendorPeriod", () => {
     await issueInvoiceForVendorPeriod(db, { vendorProfileId: "vendor-001", periodKey: "2026-09" });
 
     expect(tx.vendorInvoice.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ paymentStatus: "NO_PAYMENT_REQUIRED" }) }),
+      expect.objectContaining({ data: expect.objectContaining({ paymentStatus: "NO_PAYMENT_REQUIRED", dueAt: null }) }),
     );
   });
 
@@ -289,7 +311,7 @@ describe("previewVendorInvoiceGeneration and runVendorInvoiceGeneration", () => 
         findUniqueOrThrow: vi.fn().mockResolvedValue({ companyName: "Library Cafe", contactEmail: "cafe@example.test" }),
       },
       universityProfile: {
-        findFirstOrThrow: vi.fn().mockResolvedValue({ name: "UNIFY U", abbreviation: "UU", contactEmail: "admin@example.test" }),
+        findFirstOrThrow: vi.fn().mockResolvedValue({ name: "UNIFY U", abbreviation: "UU", contactEmail: "admin@example.test", invoicePaymentDueDays: 14 }),
       },
       $queryRaw: vi.fn().mockResolvedValue([{ nextval: BigInt(1) }]),
       vendorInvoiceItem: { createMany: vi.fn().mockResolvedValue({ count: 1 }) },
@@ -335,7 +357,7 @@ describe("runVendorInvoiceGenerationForVendor", () => {
         }),
       },
       vendorProfile: { findUniqueOrThrow: vi.fn().mockResolvedValue({ companyName: "Library Cafe", contactEmail: "cafe@example.test" }) },
-      universityProfile: { findFirstOrThrow: vi.fn().mockResolvedValue({ name: "UNIFY U", abbreviation: "UU", contactEmail: "admin@example.test" }) },
+      universityProfile: { findFirstOrThrow: vi.fn().mockResolvedValue({ name: "UNIFY U", abbreviation: "UU", contactEmail: "admin@example.test", invoicePaymentDueDays: 14 }) },
       $queryRaw: vi.fn().mockResolvedValue([{ nextval: BigInt(1) }]),
       vendorInvoiceItem: { createMany: vi.fn().mockResolvedValue({ count: 1 }) },
     };
@@ -352,6 +374,21 @@ describe("runVendorInvoiceGenerationForVendor", () => {
     expect(summary).toEqual({ vendorsScanned: 1, invoicesIssued: 1, zeroTotalInvoices: 0, skippedDisabled: false });
     // The per-vendor path never runs the "which vendors have unclaimed charges" distinct scan.
     expect(db.verificationCharge.findMany).not.toHaveBeenCalledWith(expect.objectContaining({ distinct: expect.anything() }));
+  });
+
+  it("dates backfilled invoices at their own period's close so the due date is realistic", async () => {
+    const now = new Date("2026-10-31T23:00:01.000Z");
+    const db = makeSingleVendorDb([charge({ servicePeriodKey: "2026-08" })]);
+
+    await runVendorInvoiceGenerationForVendor(db as never, "vendor-001", { now, issueAtPeriodClose: true });
+
+    // August closes at 2026-08-31T22:00Z (midnight SAST) plus the one-hour closing delay.
+    const issuedAt = new Date("2026-08-31T23:00:00.000Z");
+    expect(db.vendorInvoice.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ issuedAt, dueAt: new Date("2026-09-14T23:00:00.000Z") }),
+      }),
+    );
   });
 
   it("reports skippedDisabled when VERIFICATION_INVOICING_ENABLED is off, matching the global function's behavior", async () => {

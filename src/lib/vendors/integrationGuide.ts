@@ -47,6 +47,7 @@ export const troubleshooting = [
   ["MISSING_SCOPE", "Create a replacement key with the required permission. Existing keys cannot gain permissions."],
   ["BRANCH_NOT_ALLOWED / REQUEST_NOT_FOUND", "Check vendor ownership, the key's branch list and the original request ID. A missing record does not prove an unknown refund failed."],
   ["VENDOR_PAYMENT_SUSPENDED", "Read existing sales and recover refund operations. New refund execution and new sales require eligibility. Check the vendor wallet and payment status."],
+  ["VENDOR_VERIFICATION_SUSPENDED", "An invoice is unpaid past its due date. Pay the overdue invoices in the vendor portal to restore new verifications; existing results stay readable."],
   ["VENDOR_NOT_PAYMENT_ENABLED / BRANCH_NOT_PAYMENT_ENABLED", "Check the payment application and branch acceptance before attempting new financial operations."],
   ["IDEMPOTENCY_CONFLICT / ORDER_REFERENCE_CONFLICT", "Retrieve the original instruction. Reuse its exact terms for recovery; create a new reference only for a genuinely new sale."],
   ["REFUND_OPERATION_PENDING", "Check or cancel this operator's existing operation before registering another refund."],
