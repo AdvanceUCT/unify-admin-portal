@@ -11,5 +11,6 @@ test("public welcome has clear audience actions and a responsive illustration", 
   await page.keyboard.press("Tab"); await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(await page.locator(".welcome-art").evaluate(el => getComputedStyle(el).animationName)).toBe("none");
+  await page.getByRole("heading", { level: 1 }).click();
   await page.screenshot({ path: info.outputPath(`welcome-${info.project.name}.png`), fullPage: true });
 });
