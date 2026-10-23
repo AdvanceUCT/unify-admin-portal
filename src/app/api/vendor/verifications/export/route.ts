@@ -1,3 +1,4 @@
+import { sastDateKey } from "@/lib/formatters/time";
 /**
  * @fileoverview Handles the `/api/vendor/verifications/export` API boundary, including its authorization and request validation.
  * @module app/api/vendor/verifications/export/route
@@ -24,7 +25,7 @@ function sourceParam(searchParams: URLSearchParams): VendorVerificationSource | 
 }
 
 function exportFilename() {
-  return `verification-events-${new Date().toISOString().slice(0, 10)}.csv`;
+  return `verification-events-${sastDateKey()}.csv`;
 }
 
 /** Handles GET requests to `/api/vendor/verifications/export`. */

@@ -155,6 +155,7 @@ export function SignInForm({
             Go to the vendor portal
           </Link>
         </p>
+        <Link href="/welcome" className="mt-6 block text-center text-sm font-medium text-brand-700 underline">About UNIFY</Link>
       </section>
     </main>
   );

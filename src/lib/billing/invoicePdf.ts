@@ -1,3 +1,4 @@
+import { sastDateKey } from "@/lib/formatters/time";
 /**
  * @fileoverview Renders the frozen invoice document model to a PDF buffer using pdfkit.
  *
@@ -61,7 +62,7 @@ export function renderInvoicePdf(data: InvoiceDocumentData): Promise<Buffer> {
     doc.fontSize(14).font("Helvetica-Bold").text(`Invoice ${data.invoiceNumber}`);
     doc.fontSize(10).font("Helvetica");
     doc.text(`Period: ${data.periodLabel}`);
-    doc.text(`Issued: ${data.issuedAtIso ? new Date(data.issuedAtIso).toISOString().slice(0, 10) : "Not yet issued"}`);
+    doc.text(`Issued: ${data.issuedAtIso ? sastDateKey(data.issuedAtIso) : "Not yet issued"}`);
     doc.text(`Status: ${data.paymentStatus}`);
     doc.moveDown(1);
 

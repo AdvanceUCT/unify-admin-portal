@@ -1,3 +1,4 @@
+import { sastDayBoundary, sastIsoTimestamp } from "@/lib/formatters/time";
 /**
  * @fileoverview Reads recent branch-scoped wallet payments for live vendor screens.
  * @module lib/vendors/livePayments
@@ -52,11 +53,7 @@ function paymentBranchIdsFor(context: ApprovedVendorContext, branchIds?: string[
   return branchIds?.filter((branchId) => context.branchIds.includes(branchId)) ?? context.branchIds;
 }
 
-function parsedDate(value: string | undefined, endOfDay = false) {
-  if (!value) return undefined;
-  const parsed = new Date(`${value}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}`);
-  return Number.isFinite(parsed.getTime()) ? parsed : undefined;
-}
+
 
 function normalizedPage(value: number | undefined) {
   return Number.isInteger(value) && value && value > 0 ? value : 1;
@@ -171,8 +168,8 @@ function paymentTransactionsWhere(
   context: ApprovedVendorContext,
   filters: VendorPaymentEventFilters = {},
 ): Prisma.WalletTransactionWhereInput {
-  const dateFrom = parsedDate(filters.dateFrom);
-  const dateTo = parsedDate(filters.dateTo, true);
+  const dateFrom = sastDayBoundary(filters.dateFrom);
+  const dateTo = sastDayBoundary(filters.dateTo, true);
   const branchIds = filters.branchId && context.branchIds.includes(filters.branchId)
     ? [filters.branchId]
     : context.branchIds;
@@ -184,7 +181,7 @@ function paymentTransactionsWhere(
     completedAt: {
       not: null,
       ...(dateFrom ? { gte: dateFrom } : {}),
-      ...(dateTo ? { lte: dateTo } : {}),
+      ...(dateTo ? { lt: dateTo } : {}),
     },
   };
 }
@@ -273,7 +270,7 @@ export async function exportVendorPaymentEventsCsv(
     .map((row) => serializePayment(row, refundsEnabled))
     .filter((payment) => matchesPaymentFilters(payment, filters));
   const header = [
-    "Completed At",
+    "Completed At (SAST +02:00)",
     "Branch",
     "Student Name",
     "Student Number",
@@ -286,7 +283,7 @@ export async function exportVendorPaymentEventsCsv(
     "Transaction ID",
   ];
   const body = payments.map((payment) => [
-    payment.completedAt,
+    sastIsoTimestamp(payment.completedAt),
     payment.branchName,
     payment.studentName,
     payment.studentNumber,

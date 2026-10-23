@@ -4,6 +4,8 @@
  */
 
 "use client";
+import { formatSastDateTime } from "@/lib/formatters/time";
+
 
 import { useState, useTransition } from "react";
 
@@ -64,7 +66,7 @@ export function AgentServiceHealthCard({
           {isPending ? "Checking..." : "Refresh"}
         </button>
         <span className="text-sm text-fg-subtle">
-          Checked {new Date(health.checkedAt).toLocaleString()}
+          Checked {formatSastDateTime(health.checkedAt)}
         </span>
       </div>
     </div>

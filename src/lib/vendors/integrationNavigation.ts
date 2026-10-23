@@ -6,7 +6,7 @@ export function legacyIntegrationDestination(path: string, search = "", hash = "
   const fragment = hash.replace(/^#/, "");
   const endpoint = endpoints.find(item => item.id === fragment);
   if (path.endsWith("/reference")) return `${endpoint && endpoint.group !== "verification" ? paymentsPath : verificationPath}#${endpoint?.id ?? (fragment === "troubleshooting" ? fragment : "setup")}`;
-  if (path.endsWith("/callbacks")) return `${params.get("type") === "payments" ? paymentsPath : verificationPath}#${fragment === "delivery-history" ? fragment : "webhooks"}`;
+  if (path.endsWith("/callbacks")) return `${params.get("type") === "payments" ? paymentsPath : verificationPath}#webhooks`;
   const guide = path.split("/guides/")[1];
   if (guide && !["verification", "payments", "refunds"].includes(guide)) return null;
   if (guide || path.endsWith("/guides")) {
@@ -19,6 +19,7 @@ export function legacyIntegrationDestination(path: string, search = "", hash = "
 }
 export function revealIntegrationAnchor() {
   let id: string; try { id = decodeURIComponent(window.location.hash.slice(1)); } catch { return; }
+  if (id === "delivery-history") { id = "webhooks"; window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#webhooks`); }
   const target = document.getElementById(id);
   if (!target) return;
   let ancestor = target.parentElement;

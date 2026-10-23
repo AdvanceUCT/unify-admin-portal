@@ -4,6 +4,7 @@
  */
 
 "use client";
+import { formatSastDateTime } from "@/lib/formatters/time";
 
 import { Building2, CheckCircle2, LoaderCircle, RefreshCw, Server, ShieldCheck, XCircle } from "lucide-react";
 import Link from "next/link";
@@ -64,10 +65,7 @@ function StatusIcon({ status }: { status: Reachability }) {
 
 function formatTimestamp(value?: string | null) {
   if (!value) return "Not available";
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+  return formatSastDateTime(value);
 }
 
 export function SetupWizard({

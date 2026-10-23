@@ -859,7 +859,7 @@ describe("vendor checkout verification", () => {
     });
 
     expect(csv.split("\r\n")[0]).toBe(
-      '"Completed At","Created At","Branch","Source","Status","Billing Status","Fee","Currency","Billing Period","Billing Reason","Student Name","Student Number","University","Failure Code","Failure Reason","Verification Request ID","Checkout ID","Event ID"',
+      '"Completed At (SAST +02:00)","Created At (SAST +02:00)","Branch","Source","Status","Billing Status","Fee","Currency","Billing Period","Billing Reason","Student Name","Student Number","University","Failure Code","Failure Reason","Verification Request ID","Checkout ID","Event ID"',
     );
     expect(csv).toContain('"Ada ""Countess"" Lovelace"');
     expect(csv).toContain('"BILLABLE","125","ZAR","2026-08","APPROVED_VERIFICATION"');

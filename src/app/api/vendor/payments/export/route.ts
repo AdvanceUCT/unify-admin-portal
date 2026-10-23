@@ -1,3 +1,4 @@
+import { sastDateKey } from "@/lib/formatters/time";
 /**
  * @fileoverview Handles the `/api/vendor/payments/export` API boundary.
  * @module app/api/vendor/payments/export/route
@@ -23,7 +24,7 @@ function refundStatusParam(searchParams: URLSearchParams): VendorPaymentEventFil
 }
 
 function exportFilename() {
-  return `wallet-payments-${new Date().toISOString().slice(0, 10)}.csv`;
+  return `wallet-payments-${sastDateKey()}.csv`;
 }
 
 /** Handles GET requests to `/api/vendor/payments/export`. */

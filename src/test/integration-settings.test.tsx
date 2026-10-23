@@ -56,15 +56,12 @@ describe("callback settings", () => {
   function stubCallbacks(configuration: unknown, records: unknown = history) {
     return vi.mocked(fetch).mockImplementation(async url => response(String(url).includes("/history") ? records : configuration));
   }
-  it("loads verification history and retries using the stored request, not editable fields", async () => {
-    const records = { ...history, items: [{ id: "attempt", verificationId: "verification", verificationRequestId: "request", checkoutId: "order", verificationStatus: "APPROVED", attemptNumber: 2, status: "FAILED", httpStatus: 500, attemptedAt: "2026-10-07T10:00:00Z", failureReason: "Receiver did not accept the callback." }] };
-    const fetcher = stubCallbacks({ url: "https://receiver.example/events", enabled: true }, records);
-    render(<CallbackSettings kind="verification" branches={branches} />);
-    await screen.findByText("order");
-    fireEvent.change(screen.getByLabelText("HTTPS destination"), { target: { value: "https://edited.example/events" } });
-    fireEvent.click(screen.getByRole("button", { name: "Retry to current destination" }));
-    await waitFor(() => expect(fetcher.mock.calls.some(c => c[0] === "/api/vendor/verifications/request/retry" && c[1]?.method === "POST")).toBe(true));
-    expect(fetcher.mock.calls.find(c => c[1]?.method === "POST")![1]).not.toHaveProperty("body");
+  it.each(["verification", "payments"] as const)("never fetches or renders %s delivery history", async kind => {
+    const fetcher = stubCallbacks({ url: "https://receiver.example/events", enabled: true, branchIds: ["branch"] });
+    render(<CallbackSettings kind={kind} branches={branches} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save and replace secret" })).toBeEnabled());
+    expect(screen.queryByRole("heading", { name: "Delivery history" })).not.toBeInTheDocument();
+    expect(fetcher.mock.calls.every(([url]) => !String(url).includes("/history"))).toBe(true);
   });
   it("requires explicit confirmation for replacement and does not repeat ambiguous saves", async () => {
     const fetcher = stubCallbacks({ url: "https://receiver.example/events", enabled: true });
@@ -76,15 +73,6 @@ describe("callback settings", () => {
     fetcher.mockImplementationOnce(async () => { throw new Error("Lost response"); }); fireEvent.click(save);
     await screen.findByText(/Do not automatically repeat/);
     expect(fetcher.mock.calls.filter(c => c[1]?.method === "PUT")).toHaveLength(1);
-  });
-  it("keeps parked payment history visible when delivery is disabled and disables retry", async () => {
-    const records = { ...history, items: [{ id: "event", eventType: "payment_request.paid", requestId: "sale", createdAt: "2026-10-07T10:00:00Z", delivery: { status: "PARKED", nextAttemptAt: null, attempts: [] } }] };
-    stubCallbacks({ url: "https://receiver.example/events", enabled: false, branchIds: ["branch"] }, records);
-    render(<CallbackSettings kind="payments" branches={branches} />);
-    await screen.findByText("Parked");
-    expect(screen.getByRole("button", { name: "Retry to current destination" })).toBeDisabled();
-    expect(screen.getByRole("link", { name: "sale" })).toHaveAttribute("href", "/vendor/payment-requests/sale");
-    expect(screen.getByLabelText(/Old till/)).toBeDisabled();
   });
   it("offers recovery from a failed initial load", async () => {
     vi.mocked(fetch).mockRejectedValue(new Error("Offline"));

@@ -6,7 +6,7 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_ROUTES = ["/sign-in", "/accept-invite", "/forgot-password", "/reset-password", "/activate", "/verify", "/wallet/topups/return", "/fund"];
+const PUBLIC_ROUTES = ["/welcome", "/sign-in", "/accept-invite", "/forgot-password", "/reset-password", "/activate", "/verify", "/wallet/topups/return", "/fund"];
 const VENDOR_PUBLIC_ROUTES = ["/vendor/sign-in", "/vendor/sign-up", "/vendor/accept-invite"];
 const PUBLIC_FILE = /\.(.*)$/;
 

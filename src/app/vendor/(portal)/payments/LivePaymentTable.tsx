@@ -4,6 +4,7 @@
  */
 
 "use client";
+import { sastDayBoundary } from "@/lib/formatters/time";
 
 import { Loader2, RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -33,8 +34,8 @@ function dateWithinFilter(value: string, filters: VendorPaymentEventFilters) {
   if (!filters.dateFrom && !filters.dateTo) return true;
   const time = Date.parse(value);
   if (!Number.isFinite(time)) return false;
-  if (filters.dateFrom && time < Date.parse(`${filters.dateFrom}T00:00:00.000`)) return false;
-  if (filters.dateTo && time > Date.parse(`${filters.dateTo}T23:59:59.999`)) return false;
+  if (filters.dateFrom && time < (sastDayBoundary(filters.dateFrom)?.getTime() ?? -Infinity)) return false;
+  if (filters.dateTo && time >= (sastDayBoundary(filters.dateTo, true)?.getTime() ?? Infinity)) return false;
   return true;
 }
 

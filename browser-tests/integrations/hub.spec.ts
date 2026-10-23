@@ -1,14 +1,13 @@
 import { expect, test } from "@playwright/test";
 const screens = [
  ["verification", "/vendor/integrations"], ["payments", "/vendor/integrations/payments"], ["keys", "/vendor/integrations/keys?preset=payments&returnTo=payments"],
- ["empty", "/vendor/integrations?empty=1"], ["disabled", "/vendor/integrations/payments?disabled=1"], ["history-error", "/vendor/integrations?history-error=1"], ["config-error", "/vendor/integrations?config-error=1"], ["loading", "/vendor/integrations?screen=loading"], ["error", "/vendor/integrations?screen=error"]
+ ["empty", "/vendor/integrations?empty=1"], ["disabled", "/vendor/integrations/payments?disabled=1"], ["config-error", "/vendor/integrations?config-error=1"], ["loading", "/vendor/integrations?screen=loading"], ["error", "/vendor/integrations?screen=error"]
 ];
 for (const [name, path] of screens) test(`${name} uses production composition without overflow`, async ({ page }, info) => {
  const errors: string[] = []; page.on("pageerror", error => errors.push(error.message)); await page.goto(path);
  await expect(page.getByRole("heading", { name: "Integrations", exact: true })).toHaveCount(1);
  const nav = page.getByRole("navigation", { name: "Integration sections" }); await expect(nav.getByRole("link")).toHaveCount(3); await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);
- if (name === "history-error") { await expect(page.getByText(/Unable to load webhook history/)).toBeVisible(); await expect(page.getByRole("button", { name: "Save and replace secret" })).toBeEnabled(); }
- if (name === "config-error") { await expect(page.getByText(/Unable to load webhooks/)).toBeVisible(); await expect(page.getByText("checkout-001", { exact: true })).toBeVisible(); }
+ if (name === "config-error") { await expect(page.getByText(/Unable to load webhooks/)).toBeVisible(); }
  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true); expect(errors).toEqual([]);
  await page.screenshot({ path: info.outputPath(`integrations-${name}-${info.project.name}.png`), fullPage: true });
 });
@@ -20,12 +19,16 @@ test("legacy guide, webhook and endpoint bookmarks resolve within the matching w
  await page.goto("/vendor/integrations/callbacks?type=payments"); await expect(page).toHaveURL(/integrations\/payments#webhooks$/); await expect(page.getByRole("heading", { name: "Webhooks", exact: true })).toBeVisible();
  await page.goto("/vendor/integrations/reference#refund-compatibility"); await expect(page).toHaveURL(/integrations\/payments#refund-compatibility$/); await expect(page.getByText("Compatibility: older refund POST").locator("..")).toHaveAttribute("open", ""); await expect(page.locator("#refund-compatibility")).toBeFocused();
 });
-test("visible section navigation reaches history and preserves focus below the header", async ({ page }, info) => {
- await page.goto("/vendor/integrations/payments");
- if (info.project.name === "mobile") await page.getByRole("combobox", { name: "Jump to integration section" }).selectOption("delivery-history"); else { await page.getByRole("navigation", { name: "On this page" }).getByRole("link", { name: "Delivery history", exact: true }).focus(); await page.keyboard.press("Enter"); }
- await expect(page.locator("#delivery-history")).toBeFocused(); const box = await page.getByRole("heading", { name: "Delivery history", exact: true }).boundingBox(); expect(box!.y).toBeGreaterThan(64);
- await page.getByRole("button", { name: "Refresh history" }).focus(); await expect(page.getByRole("button", { name: "Refresh history" })).toBeFocused();
+test("history stays hidden and old bookmarks reach webhooks without history requests", async ({ page }) => {
+ const requests: string[] = []; page.on("request", request => requests.push(request.url()));
+ for (const path of ["/vendor/integrations#delivery-history", "/vendor/integrations/payments#delivery-history", "/vendor/integrations/callbacks?type=payments#delivery-history"]) {
+   await page.goto(path); await expect(page).toHaveURL(/#webhooks$/); await expect(page.locator("#webhooks")).toBeFocused();
+   await expect(page.getByRole("heading", { name: "Delivery history" })).toHaveCount(0);
+   await expect(page.getByRole("button", { name: "Refresh history" })).toHaveCount(0);
+ }
+ expect(requests.filter(url => url.includes("/history"))).toEqual([]);
 });
+
 test("key presets have a visible route back and one-time secrets clear on departure", async ({ page }) => {
  await page.goto("/vendor/integrations/payments"); await page.getByRole("link", { name: "Create payment key" }).click(); await expect(page.getByRole("link", { name: "Return to payment setup" })).toBeVisible();
  await page.getByLabel("Key name").fill("Synthetic till"); await page.getByRole("checkbox", { name: /Campus café/ }).check(); await page.getByRole("button", { name: "Create API key" }).click(); await expect(page.getByText("unify_vk_synthetic_once", { exact: true })).toBeVisible(); await page.getByRole("link", { name: "Return to payment setup" }).click(); await expect(page).toHaveURL(/integrations\/payments#setup$/); await page.getByRole("navigation", { name: "Integration sections" }).getByRole("link", { name: "API keys", exact: true }).click(); await expect(page.getByText("unify_vk_synthetic_once", { exact: true })).toHaveCount(0);
@@ -36,7 +39,7 @@ test("payment signature guidance stays beside settings and examples use selected
 });
 
 test("section picker follows manual scrolling and can jump back to setup", async ({ page }, info) => {
- await page.goto("/vendor/integrations/payments"); await page.locator("#delivery-history").scrollIntoViewIfNeeded();
- if (info.project.name === "mobile") { await page.evaluate(() => window.scrollBy(0, 160)); await expect(page.getByRole("combobox", { name: "Jump to integration section" })).toHaveValue("delivery-history"); await page.getByRole("combobox", { name: "Jump to integration section" }).selectOption("setup"); await expect(page.locator("#setup")).toBeFocused(); }
+ await page.goto("/vendor/integrations/payments"); await page.locator("#webhooks").scrollIntoViewIfNeeded();
+ if (info.project.name === "mobile") { await page.evaluate(() => window.scrollBy(0, 160)); await expect(page.getByRole("combobox", { name: "Jump to integration section" })).toHaveValue("webhooks"); await page.getByRole("combobox", { name: "Jump to integration section" }).selectOption("setup"); await expect(page.locator("#setup")).toBeFocused(); }
  else { const outline = page.getByRole("navigation", { name: "On this page" }); await expect(outline).toBeVisible(); const bounds = await outline.boundingBox(); expect(bounds?.y).toBeGreaterThanOrEqual(64); expect(bounds?.y).toBeLessThan(160); }
 });
