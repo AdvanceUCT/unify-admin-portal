@@ -84,6 +84,27 @@ async function waitForBalanceLock() {
 }
 
 describe("Durable refund instructions", () => {
+  it("recovers a connection failure reported after commit without another posting", async () => {
+    const f = await fixture();
+    const sale = await createPaymentRequest(f.access, { branchId: f.branch.id, orderReference: randomUUID(), amountMinor: 5000, currency: "ZAR", idempotencyKey: randomUUID() });
+    const receipt = await payPaymentRequest(f.student.id, sale.id, { idempotencyKey: randomUUID() });
+    const op = await instruction(f, receipt.transactionId!, 1500);
+    const original = prisma.$transaction.bind(prisma);
+    const spy = vi.spyOn(prisma, "$transaction").mockImplementation((async (callback: unknown, options: unknown) => {
+      await original(callback as (tx: Prisma.TransactionClient) => Promise<unknown>, options as { isolationLevel?: "Serializable" });
+      throw { code: "P1017" }; // The commit succeeded, but its acknowledgement was lost.
+    }) as typeof prisma.$transaction);
+    try {
+      await expect(refundOperation(owner(f), op.id, "execute")).rejects.toMatchObject({ code: "P1017" });
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally { spy.mockRestore(); }
+    const recovered = await refundOperation(owner(f), op.id);
+    expect(recovered.status).toBe("COMPLETED");
+    expect((await refundOperation(owner(f), op.id, "execute")).result?.refundTransactionId).toBe(recovered.result?.refundTransactionId);
+    expect(await prisma.walletTransaction.count({ where: { linkedTransactionId: receipt.transactionId, type: "REFUND" } })).toBe(1);
+    expect(await prisma.paymentWebhookEvent.count({ where: { requestId: sale.id, eventType: "payment_request.refunded" } })).toBe(1);
+  });
+
   it.each(["before posting", "after posting"])("rolls back a real transaction timeout %s and retries the original operation once", async stage => {
     const f = await fixture();
     const sale = await createPaymentRequest(f.access, { branchId: f.branch.id, orderReference: randomUUID(), amountMinor: 5000, currency: "ZAR", idempotencyKey: randomUUID() });
