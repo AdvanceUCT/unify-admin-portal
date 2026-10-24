@@ -113,16 +113,16 @@ describe("Durable refund instructions", () => {
     const before = [await balanceOf(f.studentAccountId), await balanceOf(f.vendorAccountId)];
     const original = prisma.$transaction.bind(prisma);
     const spy = vi.spyOn(prisma, "$transaction").mockImplementation((async (callback: unknown, options: unknown) => original(async tx => {
-      if (stage === "before posting") await tx.$queryRaw(Prisma.sql`SELECT pg_sleep(1.2)`);
+      if (stage === "before posting") await tx.$queryRaw(Prisma.sql`SELECT 1 AS slept FROM pg_sleep(1.2)`);
       else {
         const update = tx.refundOperation.update.bind(tx.refundOperation);
         tx.refundOperation.update = (async (...args: Parameters<typeof update>) => {
           if (args[0].data.status === "COMPLETED") {
             expect(await tx.paymentWebhookEvent.count({ where: { requestId: sale.id, eventType: "payment_request.refunded" } })).toBe(1);
-            await tx.$queryRaw(Prisma.sql`SELECT pg_sleep(1.2)`);
+            await tx.$queryRaw(Prisma.sql`SELECT 1 AS slept FROM pg_sleep(1.2)`);
           }
           return update(...args);
-        }) as typeof update;
+        }) as unknown as typeof update;
       }
       return (callback as (tx: Prisma.TransactionClient) => Promise<unknown>)(tx);
     }, { ...options as { isolationLevel?: "Serializable" }, timeout: 1000 })) as typeof prisma.$transaction);
