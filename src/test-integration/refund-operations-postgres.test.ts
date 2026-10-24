@@ -3,6 +3,32 @@
 // top-ups and the refund webhook outbox (docs/payments/REFUNDS_OVERDRAFT_PAYOUTS.md §13.2).
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+const databaseDelay = vi.hoisted(() => ({ ms: 0, queries: 0 }));
+// Only this test module adds latency. Every statement still executes against isolated PostgreSQL.
+vi.mock("@prisma/adapter-pg", async importOriginal => {
+  const actual = await importOriginal<typeof import("@prisma/adapter-pg")>();
+  return { ...actual, PrismaPg: class extends actual.PrismaPg {
+    async connect() {
+      const adapter = await super.connect();
+      const start = adapter.startTransaction.bind(adapter);
+      adapter.startTransaction = async (...args) => {
+        const transaction = await start(...args);
+        const query = transaction.queryRaw.bind(transaction);
+        const execute = transaction.executeRaw.bind(transaction);
+        const delay = async () => {
+          if (databaseDelay.ms) {
+            databaseDelay.queries++;
+            await new Promise(resolve => setTimeout(resolve, databaseDelay.ms));
+          }
+        };
+        transaction.queryRaw = async (...values) => { await delay(); return query(...values); };
+        transaction.executeRaw = async (...values) => { await delay(); return execute(...values); };
+        return transaction;
+      };
+      return adapter;
+    }
+  } };
+});
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/config/env", () => ({ env: { APP_URL: "http://localhost:3000", DATABASE_URL: process.env.DATABASE_URL, VENDOR_API_KEY_PEPPER: "isolated-pos-test-pepper-at-least-32-characters", VENDOR_WEBHOOK_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64") } }));
 vi.mock("@/lib/vendors/paymentWebhookTransport", async (importOriginal) => ({ ...await importOriginal<object>(), resolvePaymentWebhookDestination: vi.fn(async () => ({})) }));
@@ -58,6 +84,24 @@ async function waitForBalanceLock() {
 }
 
 describe("Durable refund instructions", () => {
+  it("completes and replays a refund with 150 ms database round trips", async () => {
+    const f = await fixture();
+    const sale = await createPaymentRequest(f.access, { branchId: f.branch.id, orderReference: randomUUID(), amountMinor: 5000, currency: "ZAR", idempotencyKey: randomUUID() });
+    const receipt = await payPaymentRequest(f.student.id, sale.id, { idempotencyKey: randomUUID() });
+    databaseDelay.ms = 150;
+    databaseDelay.queries = 0;
+    try {
+      const op = await instruction(f, receipt.transactionId!, 1500);
+      const completed = await refundOperation(owner(f), op.id, "execute");
+      expect(completed.status).toBe("COMPLETED");
+      const replay = await refundOperation(owner(f), op.id, "execute");
+      expect(replay.result?.refundTransactionId).toBe(completed.result?.refundTransactionId);
+      expect(databaseDelay.queries).toBeGreaterThan(30);
+      expect(await prisma.walletTransaction.count({ where: { linkedTransactionId: receipt.transactionId, type: "REFUND", status: "COMPLETED" } })).toBe(1);
+      expect(await prisma.paymentWebhookEvent.count({ where: { requestId: sale.id, eventType: "payment_request.refunded" } })).toBe(1);
+    } finally { databaseDelay.ms = 0; }
+  }, 60_000);
+
   it("survives a lost response, blocks that operator, and allows another operator", async () => {
     const f = await fixture(); const sale = await paid(f);
     const op = await instruction(f, sale.id);
