@@ -21,7 +21,7 @@ import {
   getUniversityPaymentWalletSettings,
   requireEnabledUniversityPaymentWallet,
 } from "@/lib/payments/config";
-import { postPayout, postRefund, postSpend, postTopup } from "@/lib/payments/posting";
+import { postPayout, postRefund, postSpend, postTopup, runSerializableTransaction } from "@/lib/payments/posting";
 
 vi.mock("server-only", () => ({}));
 
@@ -422,5 +422,34 @@ describe("typed wallet posting", () => {
       .mockImplementationOnce(async (operation) => operation(database.transaction));
     await postSpend(spendInput());
     expect(database.runTransaction).toHaveBeenCalledTimes(3);
+  });
+});
+
+
+describe("serializable transaction budgets", () => {
+  it("keeps unrelated callers on their existing options", async () => {
+    await runSerializableTransaction(async () => "ok");
+    expect(database.runTransaction).toHaveBeenLastCalledWith(expect.any(Function), { isolationLevel: "Serializable" });
+  });
+  it("passes explicit budgets through and reports each conflict attempt", async () => {
+    const attempt = vi.fn();
+    database.runTransaction.mockRejectedValueOnce({ code: "P2034" }).mockResolvedValueOnce("done");
+    expect(await runSerializableTransaction(async () => "ok", { timeout: 15000, maxWait: 5000, onAttempt: attempt })).toBe("done");
+    expect(database.runTransaction).toHaveBeenLastCalledWith(expect.any(Function), { isolationLevel: "Serializable", timeout: 15000, maxWait: 5000 });
+    expect(attempt.mock.calls).toEqual([[1], [2]]);
+  });
+  it.each([
+    { code: "P2034" },
+    { code: "P2010", meta: { code: "40P01" } },
+    { code: "P2010", meta: { driverAdapterError: { cause: { originalCode: "40001" } } } },
+  ])("bounds conflict retries at three attempts: %j", async error => {
+    database.runTransaction.mockRejectedValueOnce(error).mockRejectedValueOnce(error).mockRejectedValueOnce(error);
+    await expect(runSerializableTransaction(async () => undefined)).rejects.toEqual(error);
+    expect(database.runTransaction).toHaveBeenCalledTimes(3);
+  });
+  it.each(["P2028", "P1001", "P2024", "P1017"])("never automatically retries %s, including an ambiguous commit failure", async code => {
+    database.runTransaction.mockRejectedValueOnce({ code });
+    await expect(runSerializableTransaction(async () => undefined)).rejects.toEqual({ code });
+    expect(database.runTransaction).toHaveBeenCalledTimes(1);
   });
 });

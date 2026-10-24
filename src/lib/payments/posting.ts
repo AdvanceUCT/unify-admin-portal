@@ -113,10 +113,16 @@ function isRetryableTransactionConflict(error: unknown) {
 
 export async function runSerializableTransaction<T>(
   operation: (transaction: Prisma.TransactionClient) => Promise<T>,
+  options: { timeout?: number; maxWait?: number; onAttempt?: (attempt: number) => void } = {},
 ) {
   for (let attempt = 0; attempt < MAX_SERIALIZABLE_ATTEMPTS; attempt += 1) {
     try {
-      return await prisma.$transaction(operation, { isolationLevel: "Serializable" });
+      options.onAttempt?.(attempt + 1);
+      return await prisma.$transaction(operation, {
+        isolationLevel: "Serializable",
+        ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),
+        ...(options.maxWait !== undefined ? { maxWait: options.maxWait } : {}),
+      });
     } catch (error) {
       if (!isRetryableTransactionConflict(error) || attempt === MAX_SERIALIZABLE_ATTEMPTS - 1) {
         throw error;

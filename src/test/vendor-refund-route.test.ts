@@ -15,3 +15,13 @@ describe("portal compatibility refund route", () => {
  it("preserves the success result and includes operation metadata", async () => { operations.legacyRefundOperation.mockResolvedValue({ id: "op-1", status: "COMPLETED", result: { originalTransactionId: "spend-1", refundTransactionId: "refund-1" } }); const response = await POST(request({ amountMinor: 400, idempotencyKey: "key-1" }), context); expect(await response.json()).toMatchObject({ refundTransactionId: "refund-1", operation: { id: "op-1" } }); });
  it("returns the durable rejected outcome with its prior status", async () => { operations.legacyRefundOperation.mockResolvedValue({ id: "op-1", status: "REJECTED", rejection: { code: "VENDOR_PAYMENT_SUSPENDED", status: 403, message: "Suspended." } }); const response = await POST(request({ amountMinor: 400, idempotencyKey: "key-1" }), context); expect(response.status).toBe(403); expect(await response.json()).toMatchObject({ error: { code: "VENDOR_PAYMENT_SUSPENDED" }, operation: { status: "REJECTED" } }); });
 });
+
+ it("returns a correlated recoverable error for a database timeout", async () => {
+   const log = vi.spyOn(console, "error").mockImplementation(() => {});
+   operations.legacyRefundOperation.mockRejectedValueOnce({ code: "P2028", message: "private SQL" });
+   try {
+     const response = await POST(request({ amountMinor: 400, idempotencyKey: "key-1" }), context);
+     expect(response.status).toBe(503);
+     expect(await response.json()).toMatchObject({ error: { code: "REFUND_TEMPORARILY_UNAVAILABLE", requestId: response.headers.get("x-request-id") } });
+   } finally { log.mockRestore(); }
+ });

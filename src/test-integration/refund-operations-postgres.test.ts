@@ -84,6 +84,44 @@ async function waitForBalanceLock() {
 }
 
 describe("Durable refund instructions", () => {
+  it.each(["before posting", "after posting"])("rolls back a real transaction timeout %s and retries the original operation once", async stage => {
+    const f = await fixture();
+    const sale = await createPaymentRequest(f.access, { branchId: f.branch.id, orderReference: randomUUID(), amountMinor: 5000, currency: "ZAR", idempotencyKey: randomUUID() });
+    const receipt = await payPaymentRequest(f.student.id, sale.id, { idempotencyKey: randomUUID() });
+    const op = await instruction(f, receipt.transactionId!, 1500);
+    const before = [await balanceOf(f.studentAccountId), await balanceOf(f.vendorAccountId)];
+    const original = prisma.$transaction.bind(prisma);
+    const spy = vi.spyOn(prisma, "$transaction").mockImplementation((async (callback: unknown, options: unknown) => original(async tx => {
+      if (stage === "before posting") await tx.$queryRaw(Prisma.sql`SELECT pg_sleep(1.2)`);
+      else {
+        const update = tx.refundOperation.update.bind(tx.refundOperation);
+        tx.refundOperation.update = (async (...args: Parameters<typeof update>) => {
+          if (args[0].data.status === "COMPLETED") {
+            expect(await tx.paymentWebhookEvent.count({ where: { requestId: sale.id, eventType: "payment_request.refunded" } })).toBe(1);
+            await tx.$queryRaw(Prisma.sql`SELECT pg_sleep(1.2)`);
+          }
+          return update(...args);
+        }) as typeof update;
+      }
+      return (callback as (tx: Prisma.TransactionClient) => Promise<unknown>)(tx);
+    }, { ...options as { isolationLevel?: "Serializable" }, timeout: 1000 })) as typeof prisma.$transaction);
+    try {
+      await expect(refundOperation(owner(f), op.id, "execute")).rejects.toMatchObject({ code: "P2028" });
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls[0][1]).toMatchObject({ timeout: 15000, maxWait: 5000 });
+    } finally { spy.mockRestore(); }
+    expect((await refundOperation(owner(f), op.id)).status).toBe("PENDING");
+    expect([await balanceOf(f.studentAccountId), await balanceOf(f.vendorAccountId)]).toEqual(before);
+    expect(await prisma.walletTransaction.count({ where: { linkedTransactionId: receipt.transactionId, type: "REFUND" } })).toBe(0);
+    expect(await prisma.paymentWebhookEvent.count({ where: { requestId: sale.id, eventType: "payment_request.refunded" } })).toBe(0);
+    const retried = await refundOperation(owner(f), op.id, "execute");
+    expect(retried).toMatchObject({ id: op.id, idempotencyKey: op.idempotencyKey, status: "COMPLETED" });
+    const replay = await refundOperation(owner(f), op.id, "execute");
+    expect(replay.result?.refundTransactionId).toBe(retried.result?.refundTransactionId);
+    expect(await prisma.walletTransaction.count({ where: { linkedTransactionId: receipt.transactionId, type: "REFUND" } })).toBe(1);
+    expect(await prisma.paymentWebhookEvent.count({ where: { requestId: sale.id, eventType: "payment_request.refunded" } })).toBe(1);
+  });
+
   it("completes and replays a refund with 150 ms database round trips", async () => {
     const f = await fixture();
     const sale = await createPaymentRequest(f.access, { branchId: f.branch.id, orderReference: randomUUID(), amountMinor: 5000, currency: "ZAR", idempotencyKey: randomUUID() });

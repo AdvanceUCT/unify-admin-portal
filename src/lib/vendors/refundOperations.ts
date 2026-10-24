@@ -3,7 +3,19 @@ import { Prisma, type RefundOperation } from "@/generated/prisma/client";
 import { WalletDomainError } from "@/lib/payments/errors";
 import { PosApiError } from "@/lib/payments/posErrors";
 import { runSerializableTransaction } from "@/lib/payments/posting";
-import { finishRefund, refundSpendInTransaction, type RefundActor, type RefundTarget } from "./refunds";
+import { finishRefund, refundSpendInTransaction, type RefundActor, type RefundTarget, type RefundResult } from "./refunds";
+
+import { refundAttempt, refundStage } from "@/lib/payments/refundTrace";
+
+function runRefundTransaction<T>(phase: string, operation: (tx: Prisma.TransactionClient) => Promise<T>) {
+  refundStage(`${phase}.begin`);
+  return runSerializableTransaction(async tx => {
+    refundStage(`${phase}.authorization`);
+    const result = await operation(tx);
+    refundStage(`${phase}.commit`);
+    return result;
+  }, { timeout: 15_000, maxWait: 5_000, onAttempt: refundAttempt });
+}
 
 export type RefundAccess = { vendorProfileId: string; actor: RefundActor };
 export const operatorIdFor = (actor: RefundActor) => "userId" in actor ? `user:${actor.userId}` : `api:${actor.apiCredentialId}`;
@@ -35,12 +47,12 @@ async function assertOperationAccess(tx: Prisma.TransactionClient, access: Refun
   return branches;
 }
 
-async function serialize(tx: Prisma.TransactionClient, op: RefundOperation, branchIds: string[]) {
-  const result = op.status === "COMPLETED" ? (await refundSpendInTransaction(tx, {
+async function serialize(tx: Prisma.TransactionClient, op: RefundOperation, branchIds: string[], postedResult?: RefundResult) {
+  const result = postedResult ?? (op.status === "COMPLETED" ? (await refundSpendInTransaction(tx, {
     vendorProfileId: op.vendorProfileId, allowedBranchIds: branchIds, target: { transactionId: op.originalTransactionId },
     amountMinor: Number(op.amountMinor), idempotencyKey: op.idempotencyKey,
     actor: op.userId ? { userId: op.userId } : { apiCredentialId: op.apiCredentialId! },
-  }, true)).result : undefined;
+  }, true)).result : undefined);
   return {
     id: op.id, vendorProfileId: op.vendorProfileId, operatorId: op.operatorId, originalTransactionId: op.originalTransactionId,
     paymentRequestId: op.paymentRequestId, branchId: op.branchId, amountMinor: Number(op.amountMinor), currency: "ZAR" as const,
@@ -55,7 +67,7 @@ export type RefundOperationSnapshot = Awaited<ReturnType<typeof serialize>>;
 export async function registerRefundOperation(access: RefundAccess, input: { target: RefundTarget; amountMinor: number; idempotencyKey: string }) {
   const key = input.idempotencyKey.trim();
   if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0 || !key || key.length > 128) throw new PosApiError("INVALID_REQUEST", "Invalid refund instructions.", 400);
-  return runSerializableTransaction(async tx => {
+  return runRefundTransaction("register", async tx => {
     const branches = await authorizedBranches(tx, access);
     await tx.$queryRaw(Prisma.sql`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${`refund-operator:${access.vendorProfileId}:${operatorIdFor(access.actor)}`}, 0))`);
     const request = "paymentRequestId" in input.target ? await tx.paymentRequest.findFirst({ where: { id: input.target.paymentRequestId, vendorProfileId: access.vendorProfileId }, select: { id: true, status: true, walletTransactionId: true, vendorBranchId: true } }) : null;
@@ -87,7 +99,7 @@ export async function registerRefundOperation(access: RefundAccess, input: { tar
 }
 
 export async function getPendingRefundOperation(access: RefundAccess) {
-  return runSerializableTransaction(async tx => {
+  return runRefundTransaction("pending", async tx => {
     const branches = await authorizedBranches(tx, access);
     const op = await tx.refundOperation.findFirst({ where: { vendorProfileId: access.vendorProfileId, operatorId: operatorIdFor(access.actor), status: "PENDING" } });
     if (op && !branches.includes(op.branchId)) throw new PosApiError("FORBIDDEN", "Your pending refund requires access to its original branch.", 403);
@@ -96,21 +108,25 @@ export async function getPendingRefundOperation(access: RefundAccess) {
 }
 
 export async function refundOperation(access: RefundAccess, id: string, action: "read" | "execute" | "cancel" = "read") {
-  const outcome = await runSerializableTransaction(async tx => {
+  const outcome = await runRefundTransaction(action, async tx => {
+    refundStage(`${action}.operation_lock`);
     if (action !== "read") await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "refund_operation" WHERE "id" = ${id} FOR UPDATE`);
     let op = await tx.refundOperation.findUnique({ where: { id } });
     if (!op) throw new PosApiError("REQUEST_NOT_FOUND", "Refund operation was not found.", 404);
     const branches = await assertOperationAccess(tx, access, op);
     if (action === "read" || op.status !== "PENDING") return { snapshot: await serialize(tx, op, branches), overdraftStarted: false };
     // A legacy client may have posted the same key after registration. Reconcile before cancelling.
+    refundStage(`${action}.reconcile`);
     const existing = await tx.walletTransaction.findFirst({ where: { initiatorAccountId: op.vendorAccountId, type: "REFUND", idempotencyKey: op.idempotencyKey } });
     if (existing && (existing.linkedTransactionId !== op.originalTransactionId || existing.amountMinor !== op.amountMinor || existing.status !== "COMPLETED")) throw new WalletDomainError("IDEMPOTENCY_CONFLICT", "Refund reference was used for different terms.");
     if (action === "cancel" && !existing) {
+      refundStage("cancel.resolve");
       op = await tx.refundOperation.update({ where: { id }, data: { status: "CANCELLED", resolvedAt: new Date() } });
       return { snapshot: await serialize(tx, op, branches), overdraftStarted: false };
     }
     let posted;
     try {
+      refundStage("execute.posting");
       posted = await refundSpendInTransaction(tx, { vendorProfileId: op.vendorProfileId, allowedBranchIds: branches, target: { transactionId: op.originalTransactionId }, amountMinor: Number(op.amountMinor), idempotencyKey: op.idempotencyKey, actor: access.actor });
     } catch (error) {
       // These domain checks precede ledger writes. SQL/unexpected failures roll back the whole execution.
@@ -119,9 +135,10 @@ export async function refundOperation(access: RefundAccess, id: string, action: 
       op = await tx.refundOperation.update({ where: { id }, data: { status: "REJECTED", rejectionCode: error.code, rejectionMessage: error.message, rejectionStatus: status, resolvedAt: new Date() } });
       return { snapshot: await serialize(tx, op, branches), overdraftStarted: false };
     }
+    refundStage("execute.resolve");
     op = await tx.refundOperation.update({ where: { id }, data: { status: "COMPLETED", refundTransactionId: posted.result.refundTransactionId, resolvedAt: new Date() } });
-    const snapshot = await serialize(tx, op, branches);
-    snapshot.result = posted.result;
+    refundStage("execute.response");
+    const snapshot = await serialize(tx, op, branches, posted.result);
     return { snapshot, overdraftStarted: posted.overdraftStarted };
   });
   if (action !== "read" && outcome.snapshot.status === "COMPLETED") finishRefund(access.vendorProfileId, outcome.overdraftStarted);

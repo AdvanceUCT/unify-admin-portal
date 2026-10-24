@@ -50,6 +50,7 @@ export const troubleshooting = [
   ["VENDOR_VERIFICATION_SUSPENDED", "An invoice is unpaid past its due date. Pay the overdue invoices in the vendor portal to restore new verifications; existing results stay readable."],
   ["VENDOR_NOT_PAYMENT_ENABLED / BRANCH_NOT_PAYMENT_ENABLED", "Check the payment application and branch acceptance before attempting new financial operations."],
   ["IDEMPOTENCY_CONFLICT / ORDER_REFERENCE_CONFLICT", "Retrieve the original instruction. Reuse its exact terms for recovery; create a new reference only for a genuinely new sale."],
+  ["REFUND_TEMPORARILY_UNAVAILABLE", "Refresh the original operation status. If it remains pending, retry or cancel that same operation. Keep its amount and key; do not create a replacement refund. Include the response requestId when asking for help."],
   ["REFUND_OPERATION_PENDING", "Check or cancel this operator's existing operation before registering another refund."],
   ["REFUND_AMOUNT_EXCEEDED / PAYMENT_FULLY_REFUNDED", "Refresh authoritative refund totals. Do not exceed the original spend."],
 ] as const;

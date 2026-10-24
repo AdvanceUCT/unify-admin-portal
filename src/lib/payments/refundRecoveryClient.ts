@@ -74,9 +74,12 @@ export class RefundRecoveryClient {
       if (recovery.operation) this.accept(recovery.operation, undefined, true);
       else if (draft) {
         this.save(draft);
-        const value = draft.operationId ? await this.request(`/${encodeURIComponent(draft.operationId)}`) : await this.request("", this.registration(draft));
-        if (epoch !== this.epoch) return;
-        this.accept(value, draft); // Hydration registers only; it never executes money movement.
+        // A refresh only reads. Unacknowledged registration is retried explicitly by the operator.
+        if (draft.operationId) {
+          const value = await this.request(`/${encodeURIComponent(draft.operationId)}`);
+          if (epoch !== this.epoch) return;
+          this.accept(value, draft);
+        }
       }
       this.set({ hydrated: true });
     } catch (error) { if (epoch === this.epoch) this.set({ error: error instanceof Error ? error.message : "Refund recovery unavailable." }); }
