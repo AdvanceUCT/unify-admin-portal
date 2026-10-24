@@ -3,6 +3,32 @@
 // top-ups and the refund webhook outbox (docs/payments/REFUNDS_OVERDRAFT_PAYOUTS.md §13.2).
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+const databaseDelay = vi.hoisted(() => ({ ms: 0, queries: 0 }));
+// Only this test module adds latency. Every statement still executes against isolated PostgreSQL.
+vi.mock("@prisma/adapter-pg", async importOriginal => {
+  const actual = await importOriginal<typeof import("@prisma/adapter-pg")>();
+  return { ...actual, PrismaPg: class extends actual.PrismaPg {
+    async connect() {
+      const adapter = await super.connect();
+      const start = adapter.startTransaction.bind(adapter);
+      adapter.startTransaction = async (...args) => {
+        const transaction = await start(...args);
+        const query = transaction.queryRaw.bind(transaction);
+        const execute = transaction.executeRaw.bind(transaction);
+        const delay = async () => {
+          if (databaseDelay.ms) {
+            databaseDelay.queries++;
+            await new Promise(resolve => setTimeout(resolve, databaseDelay.ms));
+          }
+        };
+        transaction.queryRaw = async (...values) => { await delay(); return query(...values); };
+        transaction.executeRaw = async (...values) => { await delay(); return execute(...values); };
+        return transaction;
+      };
+      return adapter;
+    }
+  } };
+});
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/config/env", () => ({ env: { APP_URL: "http://localhost:3000", DATABASE_URL: process.env.DATABASE_URL, VENDOR_API_KEY_PEPPER: "isolated-pos-test-pepper-at-least-32-characters", VENDOR_WEBHOOK_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64") } }));
 vi.mock("@/lib/vendors/paymentWebhookTransport", async (importOriginal) => ({ ...await importOriginal<object>(), resolvePaymentWebhookDestination: vi.fn(async () => ({})) }));
@@ -58,6 +84,83 @@ async function waitForBalanceLock() {
 }
 
 describe("Durable refund instructions", () => {
+  it("recovers a connection failure reported after commit without another posting", async () => {
+    const f = await fixture();
+    const sale = await createPaymentRequest(f.access, { branchId: f.branch.id, orderReference: randomUUID(), amountMinor: 5000, currency: "ZAR", idempotencyKey: randomUUID() });
+    const receipt = await payPaymentRequest(f.student.id, sale.id, { idempotencyKey: randomUUID() });
+    const op = await instruction(f, receipt.transactionId!, 1500);
+    const original = prisma.$transaction.bind(prisma);
+    const spy = vi.spyOn(prisma, "$transaction").mockImplementation((async (callback: unknown, options: unknown) => {
+      await original(callback as (tx: Prisma.TransactionClient) => Promise<unknown>, options as { isolationLevel?: "Serializable" });
+      throw { code: "P1017" }; // The commit succeeded, but its acknowledgement was lost.
+    }) as typeof prisma.$transaction);
+    try {
+      await expect(refundOperation(owner(f), op.id, "execute")).rejects.toMatchObject({ code: "P1017" });
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally { spy.mockRestore(); }
+    const recovered = await refundOperation(owner(f), op.id);
+    expect(recovered.status).toBe("COMPLETED");
+    expect((await refundOperation(owner(f), op.id, "execute")).result?.refundTransactionId).toBe(recovered.result?.refundTransactionId);
+    expect(await prisma.walletTransaction.count({ where: { linkedTransactionId: receipt.transactionId, type: "REFUND" } })).toBe(1);
+    expect(await prisma.paymentWebhookEvent.count({ where: { requestId: sale.id, eventType: "payment_request.refunded" } })).toBe(1);
+  });
+
+  it.each(["before posting", "after posting"])("rolls back a real transaction timeout %s and retries the original operation once", async stage => {
+    const f = await fixture();
+    const sale = await createPaymentRequest(f.access, { branchId: f.branch.id, orderReference: randomUUID(), amountMinor: 5000, currency: "ZAR", idempotencyKey: randomUUID() });
+    const receipt = await payPaymentRequest(f.student.id, sale.id, { idempotencyKey: randomUUID() });
+    const op = await instruction(f, receipt.transactionId!, 1500);
+    const before = [await balanceOf(f.studentAccountId), await balanceOf(f.vendorAccountId)];
+    const original = prisma.$transaction.bind(prisma);
+    const spy = vi.spyOn(prisma, "$transaction").mockImplementation((async (callback: unknown, options: unknown) => original(async tx => {
+      if (stage === "before posting") await tx.$queryRaw(Prisma.sql`SELECT 1 AS slept FROM pg_sleep(1.2)`);
+      else {
+        const update = tx.refundOperation.update.bind(tx.refundOperation);
+        tx.refundOperation.update = (async (...args: Parameters<typeof update>) => {
+          if (args[0].data.status === "COMPLETED") {
+            expect(await tx.paymentWebhookEvent.count({ where: { requestId: sale.id, eventType: "payment_request.refunded" } })).toBe(1);
+            await tx.$queryRaw(Prisma.sql`SELECT 1 AS slept FROM pg_sleep(1.2)`);
+          }
+          return update(...args);
+        }) as unknown as typeof update;
+      }
+      return (callback as (tx: Prisma.TransactionClient) => Promise<unknown>)(tx);
+    }, { ...options as { isolationLevel?: "Serializable" }, timeout: 1000 })) as typeof prisma.$transaction);
+    try {
+      await expect(refundOperation(owner(f), op.id, "execute")).rejects.toMatchObject({ code: "P2028" });
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls[0][1]).toMatchObject({ timeout: 15000, maxWait: 5000 });
+    } finally { spy.mockRestore(); }
+    expect((await refundOperation(owner(f), op.id)).status).toBe("PENDING");
+    expect([await balanceOf(f.studentAccountId), await balanceOf(f.vendorAccountId)]).toEqual(before);
+    expect(await prisma.walletTransaction.count({ where: { linkedTransactionId: receipt.transactionId, type: "REFUND" } })).toBe(0);
+    expect(await prisma.paymentWebhookEvent.count({ where: { requestId: sale.id, eventType: "payment_request.refunded" } })).toBe(0);
+    const retried = await refundOperation(owner(f), op.id, "execute");
+    expect(retried).toMatchObject({ id: op.id, idempotencyKey: op.idempotencyKey, status: "COMPLETED" });
+    const replay = await refundOperation(owner(f), op.id, "execute");
+    expect(replay.result?.refundTransactionId).toBe(retried.result?.refundTransactionId);
+    expect(await prisma.walletTransaction.count({ where: { linkedTransactionId: receipt.transactionId, type: "REFUND" } })).toBe(1);
+    expect(await prisma.paymentWebhookEvent.count({ where: { requestId: sale.id, eventType: "payment_request.refunded" } })).toBe(1);
+  });
+
+  it("completes and replays a refund with 150 ms database round trips", async () => {
+    const f = await fixture();
+    const sale = await createPaymentRequest(f.access, { branchId: f.branch.id, orderReference: randomUUID(), amountMinor: 5000, currency: "ZAR", idempotencyKey: randomUUID() });
+    const receipt = await payPaymentRequest(f.student.id, sale.id, { idempotencyKey: randomUUID() });
+    databaseDelay.ms = 150;
+    databaseDelay.queries = 0;
+    try {
+      const op = await instruction(f, receipt.transactionId!, 1500);
+      const completed = await refundOperation(owner(f), op.id, "execute");
+      expect(completed.status).toBe("COMPLETED");
+      const replay = await refundOperation(owner(f), op.id, "execute");
+      expect(replay.result?.refundTransactionId).toBe(completed.result?.refundTransactionId);
+      expect(databaseDelay.queries).toBeGreaterThan(30);
+      expect(await prisma.walletTransaction.count({ where: { linkedTransactionId: receipt.transactionId, type: "REFUND", status: "COMPLETED" } })).toBe(1);
+      expect(await prisma.paymentWebhookEvent.count({ where: { requestId: sale.id, eventType: "payment_request.refunded" } })).toBe(1);
+    } finally { databaseDelay.ms = 0; }
+  }, 60_000);
+
   it("survives a lost response, blocks that operator, and allows another operator", async () => {
     const f = await fixture(); const sale = await paid(f);
     const op = await instruction(f, sale.id);

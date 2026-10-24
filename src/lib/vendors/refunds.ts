@@ -16,6 +16,7 @@ import {
 } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/db/prisma";
 import { sendVendorOverdraftStartedEmail } from "@/lib/email/vendor-wallet";
+import { refundStage } from "@/lib/payments/refundTrace";
 import { WalletDomainError } from "@/lib/payments/errors";
 import { PosApiError } from "@/lib/payments/posErrors";
 import { postRefundInTransaction, runSerializableTransaction } from "@/lib/payments/posting";
@@ -113,6 +114,7 @@ export async function refundSpendInTransaction(transaction: Prisma.TransactionCl
   const amountMinor = BigInt(input.amountMinor);
 
 
+    refundStage("refund.read_original");
     const spendId = await resolveSpendId(transaction, input.vendorProfileId, input.allowedBranchIds, input.target);
     const original = spendId
       ? await transaction.walletTransaction.findFirst({
@@ -140,6 +142,7 @@ export async function refundSpendInTransaction(transaction: Prisma.TransactionCl
       throw new WalletDomainError("PAYMENT_NOT_REFUNDABLE", "Payment was not found or cannot be refunded.");
     }
 
+    refundStage("refund.replay_lookup");
     // Portal and API refunds share one idempotency namespace per vendor wallet.
     const existing = await transaction.walletTransaction.findFirst({
       where: { type: WalletTransactionType.REFUND, initiatorAccountId: vendorEntry.accountId, idempotencyKey },
@@ -154,7 +157,9 @@ export async function refundSpendInTransaction(transaction: Prisma.TransactionCl
       throw new Error("Completed refund operation has no completed posting.");
     }
 
+    refundStage("refund.balance_before");
     const balanceBefore = await readBalance(transaction, vendorEntry.accountId);
+    refundStage("refund.ledger");
     const refund = existing ?? await postRefundInTransaction(transaction, {
       originalTransactionId: original.id,
       amountMinor,
@@ -162,6 +167,7 @@ export async function refundSpendInTransaction(transaction: Prisma.TransactionCl
       initiatedByUserId: "userId" in input.actor ? input.actor.userId : undefined,
       reference: `Refund for ${original.reference ?? original.id}`,
     });
+    refundStage("refund.totals");
     const balanceAfter = await readBalance(transaction, vendorEntry.accountId);
     const refunded = await transaction.walletTransaction.aggregate({
       where: {

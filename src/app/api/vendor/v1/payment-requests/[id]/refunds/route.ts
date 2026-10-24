@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { WalletDomainError } from "@/lib/payments/errors";
-import { posErrorResponse, PosApiError } from "@/lib/payments/posErrors";
+import { PosApiError } from "@/lib/payments/posErrors";
+
+import { withRefundRequest } from "@/lib/payments/refundRequest";
+import { refundStage } from "@/lib/payments/refundTrace";
+
+export const maxDuration = 150;
 
 const refundSchema = z.object({
   amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
@@ -25,9 +30,11 @@ function apiError(error: unknown) {
 
 /** Compatibility endpoint: registration is durable before execution starts. */
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+ return withRefundRequest(request, "api.compatibility", async () => {
  try {
   const { refundAccess, refundJson } = await import("@/lib/vendors/refundOperationRoutes");
   const access = await refundAccess(request, true);
+  refundStage("registration.validation");
   const body = refundSchema.parse(await request.json());
   const id = (await context.params).id;
   const { legacyRefundOperation } = await import("@/lib/vendors/refundOperations");
@@ -39,5 +46,6 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!vendor) throw new PosApiError("INVALID_API_KEY", "Invalid vendor API key.", 401);
   const paymentRequest = await getMerchantPaymentRequest({ id: vendor.id, branchIds: vendor.branchIds }, id);
   return refundJson({ refund: { ...op.result.refund, paymentRequestId: id, transactionId: op.result.originalTransactionId }, paymentRequest, operation: op }, op.result.replayed ? 200 : 201);
- } catch (error) { return posErrorResponse(apiError(error)); }
+ } catch (error) { throw apiError(error); }
+ });
 }

@@ -1,9 +1,12 @@
 "use client";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useRouter } from "next/navigation";
 import { RefundRecoveryClient } from "@/lib/payments/refundRecoveryClient";
 import { formatMoneyMinor } from "@/lib/formatters";
 
 export function useRefundRecovery() {
+  const router = useRouter();
+  const refreshedRefund = useRef<string | undefined>(undefined);
   const [client] = useState(() => new RefundRecoveryClient({ baseUrl: "/api/vendor/refund-operations", storage: () => localStorage }));
   const state = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getServerSnapshot);
   useEffect(() => {
@@ -13,6 +16,13 @@ export function useRefundRecovery() {
     window.addEventListener("focus", refresh);
     return () => { window.removeEventListener("storage", refresh); window.removeEventListener("focus", refresh); };
   }, [client]);
+  useEffect(() => {
+    const result = state.outcome?.result;
+    if (result && refreshedRefund.current !== result.refundTransactionId) {
+      refreshedRefund.current = result.refundTransactionId;
+      router.refresh();
+    }
+  }, [state.outcome, router]);
   return { client, state, blocked: !state.hydrated || state.busy || Boolean(state.draft || state.operation) };
 }
 
@@ -23,8 +33,9 @@ export function RefundRecoveryPanel({ recovery }: { recovery: ReturnType<typeof 
   const draft = state.draft;
   return <div className="px-5 py-3 text-sm" aria-live="polite">
     {!state.hydrated && !state.error ? <p>Checking pending refunds…</p> : null}
-    {draft ? <div className="space-y-2"><p>Pending refund {formatMoneyMinor(draft.amountMinor)} · {state.operation?.originalTransactionId ?? draft.transactionId ?? draft.paymentRequestId}</p><div className="flex gap-3"><button className={actionClass} type="button" disabled={state.busy} onClick={() => void client.recover()}>Check refund</button><button className={actionClass} type="button" disabled={state.busy} onClick={() => void client.recover("cancel")}>Cancel pending refund</button></div></div> : null}
-    {state.error ? <p role="alert">{state.error} <button className={actionClass} type="button" disabled={state.busy} onClick={() => void client.hydrate()}>Retry recovery</button></p> : null}
+    {draft ? <div className="space-y-2"><p className="break-words">Pending refund {formatMoneyMinor(draft.amountMinor)} · {state.operation?.originalTransactionId ?? draft.transactionId ?? draft.paymentRequestId}</p><div className="flex flex-wrap gap-3"><button className={actionClass} type="button" disabled={state.busy} onClick={() => void client.recover()}>{state.busy ? "Working…" : "Retry refund"}</button><button className={actionClass} type="button" disabled={state.busy} onClick={() => void client.recover("cancel")}>Cancel pending refund</button></div></div> : null}
+    {state.error ? <p role="alert">{state.error}</p> : null}
+    {draft || state.error ? <button className={actionClass} type="button" disabled={state.busy} onClick={() => void client.hydrate()}>Refresh status</button> : null}
     {state.outcome?.status === "REJECTED" ? <p>{state.outcome.rejection?.message}</p> : null}
     {state.outcome?.status === "CANCELLED" ? <p>Refund cancelled.</p> : null}
   </div>;

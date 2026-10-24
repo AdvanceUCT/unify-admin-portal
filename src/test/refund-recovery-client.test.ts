@@ -31,7 +31,7 @@ describe("durable refund browser recovery", () => {
     const reloaded = new RefundRecoveryClient({ baseUrl: "/refunds", storage: () => local, fetch: async url => String(url).endsWith("operation-1") ? json(authoritative) : json({ ...scope, operation: null }) });
     await reloaded.hydrate(); expect(reloaded.getSnapshot().outcome?.status).toBe("COMPLETED"); expect(local.map.size).toBe(0); expect(postings).toBe(1);
   });
-  it.each([401, 403, 500, 502])("retains frozen instructions after HTTP %s", async status => {
+  it.each([401, 403, 404, 500, 502, 503])("retains frozen instructions after HTTP %s", async status => {
     const local = storage(); let pending: ReturnType<typeof op> | null = null;
     const client = new RefundRecoveryClient({ baseUrl: "/refunds", storage: () => local, fetch: async (url, options) => {
       if (!options?.method) return json({ ...scope, operation: pending });
@@ -88,7 +88,8 @@ describe("durable refund browser recovery", () => {
       if (!options?.method) return json({ ...scope, operation: null });
       return json(op("legacy-key", "COMPLETED"));
     } });
-    await imported.hydrate(); expect(clearLegacy).toHaveBeenCalledTimes(1);
+    await imported.hydrate(); expect(clearLegacy).not.toHaveBeenCalled();
+    await imported.recover(); expect(clearLegacy).toHaveBeenCalledTimes(1);
   });
   it("keeps recovery actions usable during a background re-check and runs a cancel clicked meanwhile", async () => {
     const local = storage(); let pending: ReturnType<typeof op> | null = op("frozen-key"); let release: (() => void) | undefined;
@@ -120,5 +121,44 @@ describe("durable refund browser recovery", () => {
     local.setItem(storeKey, JSON.stringify({ transactionId: "spend-2", amountMinor: 1000, idempotencyKey: "newer-key" }));
     release(json(op(key, "COMPLETED"))); await submission;
     expect(JSON.parse(local.getItem(storeKey)!).idempotencyKey).toBe("newer-key");
+  });
+});
+
+
+describe("read-only refund status refresh", () => {
+  it("does not register an unacknowledged instruction during hydration or refresh", async () => {
+    const local = storage();
+    const draft = { transactionId: "spend-1", amountMinor: 2000, idempotencyKey: "unacknowledged" };
+    local.setItem("unify.refund-registration.v1:vendor-1:user:owner-1", JSON.stringify(draft));
+    const network = vi.fn(async (url: string | URL | Request, options?: RequestInit) => {
+      if (!options?.method) return json({ ...scope, operation: null });
+      return json(op(draft.idempotencyKey, String(url).endsWith("/execute") ? "COMPLETED" : "PENDING"));
+    });
+    const client = new RefundRecoveryClient({ baseUrl: "/refunds", storage: () => local, fetch: network });
+    await client.hydrate(); await client.hydrate();
+    expect(network.mock.calls.every(([, options]) => !options?.method)).toBe(true);
+    expect(client.getSnapshot().draft).toEqual(draft);
+    expect(local.map.size).toBe(1);
+    await client.recover();
+    expect(network.mock.calls.filter(([, options]) => options?.method)).toHaveLength(2);
+    expect(client.getSnapshot().outcome?.status).toBe("COMPLETED");
+  });
+  it.each(["timeout", "malformed JSON"])("keeps the operation after %s and a read-only refresh", async failure => {
+    const local = storage();
+    const network = vi.fn(async (url: string | URL | Request, options?: RequestInit) => {
+      if (!options?.method) return json({ ...scope, operation: op("frozen") });
+      if (String(url).endsWith("/execute")) {
+        if (failure === "timeout") throw new TypeError("fetch timed out");
+        return new Response("not json", { status: 503 });
+      }
+      throw new Error("Must not replace registration");
+    });
+    const client = new RefundRecoveryClient({ baseUrl: "/refunds", storage: () => local, fetch: network });
+    await client.hydrate(); await client.recover();
+    expect(local.map.size).toBe(1);
+    expect(client.getSnapshot().draft).toMatchObject({ idempotencyKey: "frozen", operationId: "operation-1" });
+    const posts = network.mock.calls.filter(([, options]) => options?.method).length;
+    await client.hydrate();
+    expect(network.mock.calls.filter(([, options]) => options?.method)).toHaveLength(posts);
   });
 });

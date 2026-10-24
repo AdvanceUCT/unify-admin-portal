@@ -3,7 +3,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentVendorSession } from "@/lib/auth/session";
 import { isSameOriginRequest } from "@/lib/billing/paymentRouteGuards";
-import { PosApiError, posErrorResponse } from "@/lib/payments/posErrors";
+import { PosApiError } from "@/lib/payments/posErrors";
+import { withRefundRequest } from "@/lib/payments/refundRequest";
+import { refundStage } from "@/lib/payments/refundTrace";
 import { refundRegistrationSchema } from "@/lib/payments/refundOperationContract";
 import { getApprovedVendorContextForUser } from "./context";
 import { authenticateVendorApiKey } from "./integrations";
@@ -24,21 +26,23 @@ export async function refundAccess(request: Request, api: boolean): Promise<Refu
 
 export function refundJson(value: unknown, status = 200) { return NextResponse.json(value, { status, headers: { "Cache-Control": "private, no-store, max-age=0" } }); }
 export async function refundOperationCollection(request: Request, api: boolean) {
-  try {
+  return withRefundRequest(request, api ? "api.collection" : "portal.collection", async () => {
     const access = await refundAccess(request, api);
     if (request.method === "GET") return refundJson(await getPendingRefundOperation(access));
     if (!api && !isSameOriginRequest(request)) throw new PosApiError("FORBIDDEN", "Cross-origin refund requests are not allowed.", 403);
+    refundStage("registration.validation");
     const schema = refundRegistrationSchema.extend(api ? { paymentRequestId: z.string().min(1) } : { transactionId: z.string().min(1) }).strict();
     const body = schema.parse(await request.json());
     const target = api ? { paymentRequestId: z.string().min(1).parse(body.paymentRequestId) } : { transactionId: z.string().min(1).parse(body.transactionId) };
     return refundJson(await registerRefundOperation(access, { target, amountMinor: body.amountMinor, idempotencyKey: body.idempotencyKey }));
-  } catch (error) { return posErrorResponse(error); }
+  });
 }
 export async function refundOperationItem(request: Request, api: boolean, id: string, action: "read" | "execute" | "cancel") {
-  try {
+  return withRefundRequest(request, `${api ? "api" : "portal"}.${action}`, async () => {
     const access = await refundAccess(request, api);
     if (!api && action !== "read" && !isSameOriginRequest(request)) throw new PosApiError("FORBIDDEN", "Cross-origin refund requests are not allowed.", 403);
+    refundStage(`${action}.validation`);
     if (action !== "read") { const body = await request.text(); z.object({}).strict().parse(body ? JSON.parse(body) : {}); }
     return refundJson(await refundOperation(access, id, action));
-  } catch (error) { return posErrorResponse(error); }
+  });
 }
