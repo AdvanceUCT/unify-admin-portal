@@ -17,25 +17,6 @@ Email: admin@example.com
 Password: UnifyAdminSeed!2026
 ```
 
-## Deployed Mock POS (for testing student wallet payments)
-
-🔗 **Deployment:** [https://unify-pos-simulator.vercel.app/terminal](https://unify-pos-simulator.vercel.app/terminal)
-
-## Login Credentials
-
-### Demo Vendor Account
-
-```
-Email: technest-integration@voskuils.com
-Password: 32qdpwBAg1pSz3xx7YlKea_M2gfn48X3!9a
-```
-
-### Demo POS Account 
-
-```
-Password: WSrhaDis9rWD3xr4iOsp64aEGTDkWX7s
-```
-
 # Admin Portal
 ## Current capabilities
 
