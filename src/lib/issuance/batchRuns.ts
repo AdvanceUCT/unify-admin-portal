@@ -394,20 +394,13 @@ export async function createQueuedBatchRun({
 }
 
 /**
- * Processes all pending items in a batch run. For each item it:
- * 1. Skips students that already have an active issuance.
- * 2. Calls the agent in bulk to create activation links for the rest.
- * 3. Sends activation emails and records each delivery outcome.
- * 4. Saves a `CredentialIssuance` record, syncs event logs, and writes an audit entry.
- * 5. Updates item status to `DELIVERED` or `DELIVERY_FAILED`.
- *
- * Once all items are done, saves final counts and marks the run as `COMPLETED`,
- * `PARTIALLY_FAILED`, or `FAILED`. Also used by `retryFailedBatchRun`.
- *
- * @param batchId - The batch run to process.
- * @param actorIdOverride - Overrides the stored actor ID in audit logs if provided.
- * @returns The final `BatchIssuanceRunDetail`.
- * @throws If the batch run is not found.
+ * Process retryable batch items with a bounded worker count and a stable reference per item.
+ * Reuse prepared offers; skip already-active students only when no saved attempt exists.
+ * Persist each item's issuance/delivery outcome before deriving aggregate run status, so retry does not recreate successful offers.
+ * @param batchId - Saved batch to process.
+ * @param actorIdOverride - Optional actor for this processing attempt's audit entries.
+ * @returns The current saved batch detail.
+ * @throws If the saved batch cannot be found.
  */
 export async function processBatchRun(
   batchId: string,

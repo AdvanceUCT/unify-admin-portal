@@ -1,5 +1,9 @@
 import { config } from "dotenv";
 config({ path: ".env.local" }); config({ path: ".env" });
+/**
+ * Inventory stored schemas or page through validity recovery, defaulting to a dry run.
+ * Apply only with the explicit flag, report aggregate counts and always disconnect; no signed dates are invented.
+ */
 async function main() {
   if (process.argv.slice(2).some(flag => !["--apply", "--inventory"].includes(flag)) || (process.argv.includes("--apply") && process.argv.includes("--inventory"))) throw new Error("Use --inventory, --apply, or no flags for dry-run.");
   const { prisma } = await import("../src/lib/db/prisma");

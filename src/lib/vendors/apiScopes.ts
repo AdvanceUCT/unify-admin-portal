@@ -4,6 +4,10 @@ export const VENDOR_API_SCOPES = [
 export type VendorApiScope = typeof VENDOR_API_SCOPES[number];
 export const LEGACY_VERIFICATION_SCOPES: VendorApiScope[] = ["verification:create", "verification:read"];
 
+/**
+ * Accept only known nonempty permission sets and deduplicate branch restrictions.
+ * Payment/refund scopes require explicit branches so an empty selection cannot imply unrestricted access.
+ */
 export function validateCredentialPermissions(scopes: unknown, branchIds: unknown) {
   if (!Array.isArray(scopes) || scopes.length === 0 || scopes.some((scope) => !VENDOR_API_SCOPES.includes(scope))) {
     throw new Error("Select at least one valid API scope.");

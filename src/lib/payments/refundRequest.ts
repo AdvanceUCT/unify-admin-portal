@@ -12,6 +12,10 @@ function record(value: unknown): Record<string, unknown> | undefined {
 function safeCode(value: unknown) {
   return typeof value === "string" && /^(?:P\d{4}|[0-9A-Z]{5}|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE)$/.test(value) ? value : undefined;
 }
+/**
+ * Extract only recognized database/connection error codes from expected adapter locations.
+ * Return safe diagnostic codes and whether the error represents temporary unavailability; never return raw SQL or error payloads.
+ */
 export function refundDatabaseFailure(error: unknown) {
   const outer = record(error);
   const meta = record(outer?.meta);
@@ -22,7 +26,11 @@ export function refundDatabaseFailure(error: unknown) {
   return { unavailable: Boolean(databaseCode), code: databaseCode ?? codes[0] ?? "UNKNOWN" };
 }
 
-/** All refund endpoints share safe diagnostics and outcome-unknown handling. */
+/**
+ * Give every refund route a request-local correlation ID and safe stage/attempt diagnostics.
+ * Translate recognized database failures to an outcome-unknown 503 while preserving business errors.
+ * An error response does not establish whether a financial commit happened; clients must keep the original reference.
+ */
 export async function withRefundRequest(request: Request, action: string, operation: () => Promise<Response>) {
   const trace: RefundTrace = { requestId: requestIdFrom(request.headers.get("x-request-id")), action, stage: "authorization", attempts: 0, startedAt: Date.now() };
   return refundTrace.run(trace, async () => {

@@ -21,6 +21,10 @@ export function CallbackSettings({ kind, branches }: { kind: Kind; branches: Int
   const [loaded, setLoaded] = useState(false);
   const locked = useRef(false);
   const sequence = useRef(0);
+  /**
+   * Read the current webhook configuration and discard obsolete navigation/read results.
+   * Loading settings never saves a configuration or rotates its secret.
+   */
   const reload = useCallback(async () => {
     const current = lifetime.capture(); const generation = ++sequence.current;
     const response = await fetch(base, { cache: "no-store" });
@@ -34,6 +38,10 @@ export function CallbackSettings({ kind, branches }: { kind: Kind; branches: Int
     void reload().catch(() => { if (active) setConfigError("Unable to load webhooks. Reload configuration to try again."); }).finally(() => { if (active) setBusy(false); });
     return () => { active = false; };
   }, [reload]);
+  /**
+   * Confirm replacement/disable effects and perform one explicit settings mutation.
+   * A save rotates the secret and reveals it once; uncertain errors prompt a read before retry instead of repeating rotation.
+   */
   async function run(action: "save" | "disable") {
     if (locked.current) return;
     if (action === "save") {
@@ -56,6 +64,9 @@ export function CallbackSettings({ kind, branches }: { kind: Kind; branches: Int
     } catch (error) { if (lifetime.isCurrent(current)) setMessage(`${error instanceof Error ? error.message : "The result could not be confirmed."} Do not automatically repeat the request. Reload configuration before retrying.`); }
     finally { locked.current = false; if (lifetime.isCurrent(current)) setBusy(false); }
   }
+  /**
+   * Confirm before discarding unsaved edits, then reload saved settings without issuing another mutation.
+   */
   async function reloadConfiguration() {
     if (locked.current || loaded && (url !== (config?.url ?? "") || JSON.stringify(branchIds) !== JSON.stringify(config?.branchIds ?? [])) && !window.confirm("Discard unsaved edits and reload the saved configuration?")) return;
     const current = lifetime.capture(); locked.current = true; setBusy(true);

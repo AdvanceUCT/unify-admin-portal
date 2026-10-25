@@ -13,6 +13,8 @@ const isPreviewVercelBuild =
 const runPreviewMigrations =
   isPreviewVercelBuild && process.env.RUN_PRISMA_MIGRATIONS_ON_PREVIEW === "true";
 
+// Only an enabled deployment build may apply migrations; ordinary local builds exit here.
+// Preview opt-in must point at its intended database before this script is invoked.
 if (!isProductionVercelBuild && !runPreviewMigrations) {
   console.log("Skipping database migrations outside an enabled Vercel build.");
   process.exit(0);
@@ -29,6 +31,7 @@ console.log("Applying pending Prisma migrations before Vercel deployment...");
 
 const require = createRequire(import.meta.url);
 const prismaCliPath = require.resolve("prisma/build/index.js");
+// Apply committed migrations without changing their history, and stop deployment if Prisma fails.
 const result = spawnSync(process.execPath, [prismaCliPath, "migrate", "deploy"], {
   env: process.env,
   stdio: "inherit",

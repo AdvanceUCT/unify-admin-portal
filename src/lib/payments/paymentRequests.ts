@@ -64,6 +64,10 @@ function assertAccess(access: MerchantAccess, record: { vendorProfileId: string;
 async function expireRequests(where: Prisma.PaymentRequestWhereInput) {
   await prisma.paymentRequest.updateMany({ where: { ...where, status: "PENDING", expiresAt: { lte: new Date() } }, data: { status: "EXPIRED" } });
 }
+/**
+ * Create a fixed-amount sale for an authorized branch, or replay the same vendor reference and terms.
+ * After a uniqueness race, reload the saved instruction rather than quietly creating a second sale.
+ */
 export async function createPaymentRequest(access: MerchantAccess, raw: unknown) {
   const input = createPaymentRequestSchema.parse(raw);
   if (!access.branchIds.includes(input.branchId)) throw new PosApiError("BRANCH_NOT_ALLOWED", "This API key cannot access that branch.", 403);
@@ -95,6 +99,10 @@ export async function createPaymentRequest(access: MerchantAccess, raw: unknown)
     throw error;
   }
 }
+/**
+ * List only this vendor's permitted branches and validate the cursor against that same scope.
+ * Materialize expired pending sales before returning status and refund summaries.
+ */
 export async function listPaymentRequests(access: Pick<MerchantAccess, "id" | "branchIds">, search: URLSearchParams) {
   const query = z.object({ limit: z.coerce.number().int().min(1).max(50).default(20), cursor: z.string().max(128).optional(), orderReference: z.string().trim().min(1).max(128).optional() }).parse(Object.fromEntries(search));
   const where = { vendorProfileId: access.id, vendorBranchId: { in: access.branchIds }, ...(query.orderReference ? { orderReference: query.orderReference } : {}) };
@@ -112,12 +120,19 @@ export async function getMerchantPaymentRequest(access: Pick<MerchantAccess, "id
   if (!record) throw new PosApiError("REQUEST_NOT_FOUND", "Payment request was not found.", 404);
   return merchantPaymentRequestSummary(record);
 }
+/**
+ * Lock the sale before rereading it so payment and cancellation have a defined order.
+ */
 async function lockedRequest(tx: Prisma.TransactionClient, id: string) {
   await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "payment_request" WHERE "id" = ${id} FOR UPDATE`);
   const record = await tx.paymentRequest.findUnique({ where: { id }, include: requestInclude });
   if (!record) throw new PosApiError("REQUEST_NOT_FOUND", "Payment request was not found.", 404);
   return record;
 }
+/**
+ * Cancel only an unpaid pending sale under its row lock.
+ * A competing successful payment stays PAID and must be refunded through the separate refund flow.
+ */
 export async function cancelPaymentRequest(access: MerchantAccess, id: string) {
   const result = await runSerializableTransaction(async (tx) => {
     const record = await lockedRequest(tx, id); assertAccess(access, record);
@@ -141,6 +156,10 @@ export async function getStudentRequestReceipt(studentId: string, id: string) {
   const balance = await getMobileWalletBalance(studentId);
   return { ...paymentRequestSummary(record), resultingBalanceMinor: balance.postedBalanceMinor, status: "COMPLETED" as const };
 }
+/**
+ * Lock the sale and commit its ledger spend and PAID state together.
+ * Replay only the same payer/reference, reject a different payer and roll back spending if the sale expires before completion.
+ */
 export async function payPaymentRequest(studentId: string, id: string, raw: unknown) {
   const input = payRequestSchema.parse(raw);
   const result = await runSerializableTransaction(async (tx) => {

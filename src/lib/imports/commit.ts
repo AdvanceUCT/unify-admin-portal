@@ -76,6 +76,7 @@ export async function commitImportRun(params: {
     updatedCount: run.rows.filter((row) => row.status === ImportRowStatus.UPDATED).length,
   };
 
+  // Reject the whole preview before writing: fixing one row must not leave a partially imported cohort.
   if (counts.errorCount > 0) {
     throw new ImportRunHasErrorsError("Fix or remove rows with errors before committing this import.");
   }

@@ -84,6 +84,10 @@ async function writeJobAudit(
   });
 }
 
+/**
+ * Read current issuance state before a scheduled lifecycle action.
+ * Reactivation must still refer to the originating suspension revision/event; an old job cannot undo a later manual decision or permanent revocation.
+ */
 async function executeJob(job: CredentialAutomationJob) {
   const issuance = await prisma.credentialIssuance.findUnique({
     where: { id: job.credentialIssuanceId },
@@ -137,6 +141,10 @@ async function executeJob(job: CredentialAutomationJob) {
   });
 }
 
+/**
+ * Run a claimed job and distinguish cancellation, deferral and retryable failure.
+ * Release its lease and persist the next status/audit; deferred work does not consume a failure attempt.
+ */
 async function processClaimedJob(job: CredentialAutomationJob, now: Date) {
   try {
     await executeJob(job);
@@ -207,6 +215,10 @@ async function processClaimedJob(job: CredentialAutomationJob, now: Date) {
   }
 }
 
+/**
+ * Claim due jobs within the run budget, process annual renewals and persist aggregate run results.
+ * A run-level failure is recorded before propagating so operational monitoring can distinguish incomplete work.
+ */
 export async function runCredentialAutomation(
   now = new Date(),
   limit = RUN_LIMIT,

@@ -98,6 +98,10 @@ export async function suspendOverdueVendors(now = new Date(), options: { vendorP
   return { suspended };
 }
 
+/**
+ * Clear only an unpaid-invoice verification suspension after checking that every overdue invoice is settled.
+ * Commit the change and audit together, marking agent synchronization pending for delivery outside this transaction.
+ */
 async function reinstateVendor(vendorProfileId: string, now: Date) {
   return runSerializableTransaction(async (transaction) => {
     const vendor = await transaction.vendorProfile.findUnique({

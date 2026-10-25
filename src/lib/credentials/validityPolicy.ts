@@ -13,6 +13,10 @@ export async function currentValidityPolicy() {
   return policy;
 }
 
+/**
+ * Compare proposed academic dates with renewals that have no prepared offer yet.
+ * Return counts and sample changes for confirmation without changing saved dates.
+ */
 export async function previewPolicyChange(
   policy: AnnualPeriodPolicy,
   now = new Date(),
@@ -54,6 +58,10 @@ export async function previewPolicyChange(
   };
 }
 
+/**
+ * Save a new policy and reschedule only unprepared renewals under the same lock used by offer preparation.
+ * Already-frozen offers keep their signed dates, and the policy change is audited in the transaction.
+ */
 export async function saveValidityPolicy(
   policy: AnnualPeriodPolicy,
   actorId: string,

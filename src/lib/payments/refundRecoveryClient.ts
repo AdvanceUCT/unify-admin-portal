@@ -21,6 +21,10 @@ export class RefundRecoveryClient {
   getServerSnapshot = () => initial;
   private set(value: Partial<RefundRecoveryState>) { this.state = { ...this.state, ...value }; this.listeners.forEach(f => f()); }
   private key() { if (!this.scope) throw new Error("Refund recovery is not hydrated."); return `unify.refund-registration.v1:${this.scope.vendorProfileId}:${this.scope.operatorId}`; }
+  /**
+   * Persist the original instruction before sending it and preserve another tab's different reference.
+   * The server's canonical pending operation can be displayed without overwriting that other local reference.
+   */
   private save(draft: RefundDraft, canonical = false) {
     const storage = this.options.storage();
     const raw = storage.getItem(this.key());
@@ -36,6 +40,10 @@ export class RefundRecoveryClient {
     if (!response.ok) throw new Error(data.error?.message ?? data.error ?? "Refund outcome unavailable. Keep this reference and check again.");
     return data;
   }
+  /**
+   * Validate operation shape, vendor/operator ownership and frozen terms before trusting the response.
+   * Only a matching terminal result may clear the saved recovery reference; PENDING stays available for recovery.
+   */
   private accept(value: unknown, draft?: RefundDraft, canonical = false) {
     const op = refundOperationSchema.parse(value);
     if (!this.scope || op.vendorProfileId !== this.scope.vendorProfileId || (op.status === "PENDING" && op.operatorId !== this.scope.operatorId)) throw new Error("Recover this refund with its original vendor and operator.");
@@ -56,6 +64,10 @@ export class RefundRecoveryClient {
     if (this.state.busy) return Promise.resolve();
     return this.hydrating ??= this.load().finally(() => { this.hydrating = undefined; });
   }
+  /**
+   * Hydrate the server's pending operation and any locally saved registration reference using reads only.
+   * Ignore results from an obsolete hydration, and keep unresolved instructions after missing/error responses.
+   */
   private async load() {
     const epoch = ++this.epoch;
     // Re-checks on focus or another tab's write run in the background. Blocking them disabled
@@ -86,12 +98,20 @@ export class RefundRecoveryClient {
     finally { if (epoch === this.epoch && blocking) this.set({ busy: false }); }
   }
   private registration(draft: RefundDraft) { const { operationId: _id, ...body } = draft; void _id; return body; }
+  /**
+   * Recover or register the original instruction before explicitly executing or cancelling its acknowledged operation.
+   * Never send editable replacement terms to the execution/cancellation endpoint.
+   */
   private async run(action: "execute" | "cancel", draft: RefundDraft) {
     let op = this.state.operation;
     if (!op) op = this.accept(draft.operationId ? await this.request(`/${encodeURIComponent(draft.operationId)}`) : await this.request("", this.registration(draft)), draft);
     if (op.status !== "PENDING") return op;
     return this.accept(await this.request(`/${encodeURIComponent(op.id)}/${action}`, {}), draft);
   }
+  /**
+   * Freeze a new instruction and save its reference locally before registration or execution.
+   * Block when another instruction is unresolved, and retain the draft when the outcome cannot be confirmed.
+   */
   async submit(input: Omit<RefundDraft, "idempotencyKey" | "operationId">) {
     await this.hydrating;
     if (!this.state.hydrated || this.state.busy || this.state.draft || this.state.operation) return;
@@ -101,6 +121,10 @@ export class RefundRecoveryClient {
     catch (error) { this.set({ error: error instanceof Error ? error.message : "Refund outcome unknown. Check this refund again." }); }
     finally { this.set({ busy: false }); }
   }
+  /**
+   * Retry or cancel only the already-frozen instruction after hydration finishes.
+   * Errors leave its amount and reference available for the next status check.
+   */
   async recover(action: "execute" | "cancel" = "execute") {
     await this.hydrating;
     if (!this.scope || !this.state.draft || this.state.busy) return;

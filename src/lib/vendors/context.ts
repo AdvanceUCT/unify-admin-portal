@@ -19,6 +19,11 @@ export type ApprovedVendorContext = {
   branchIds: string[];
 };
 
+/**
+ * Resolve current active membership in a vendor with an approved application.
+ * Owners receive all vendor branch IDs; staff receive assigned branches, normally filtered to active ones.
+ * Recovery callers may include inactive assignments without granting unassigned-branch access.
+ */
 async function resolveApprovedVendorContextForUser(userId: string, includeInactiveBranches = false): Promise<ApprovedVendorContext | null> {
   const membership = await prisma.vendorMembership.findFirst({
     where: {

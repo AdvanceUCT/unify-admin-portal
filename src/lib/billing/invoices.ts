@@ -32,6 +32,10 @@ function hasPrismaErrorCode(error: unknown, code: string) {
   return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
+/**
+ * Retry invoice database work up to three times only for Prisma's recognized serialization conflict.
+ * The callback can run again, so external provider calls do not belong inside it.
+ */
 async function runSerializableTransaction<T>(
   db: TransactionRunner,
   operation: (transaction: Prisma.TransactionClient) => Promise<T>,

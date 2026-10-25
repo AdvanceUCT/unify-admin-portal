@@ -1,7 +1,10 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
 
-/** Replay-safe activation reconciliation, including missed intermediate offers. */
+/**
+ * Mark an observed issued replacement activated and find the newest activated offer in its enrolment.
+ * Queue deduplicated revocation of older issued credentials, including when intermediate activation events were missed.
+ */
 export async function reconcileRenewalActivation(issuanceId: string) {
   const attempt = await prisma.credentialOfferAttempt.findUnique({
     where: { issuanceId },

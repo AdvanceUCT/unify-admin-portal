@@ -179,11 +179,10 @@ async function prepareAttemptSnapshotOnce(db: TransactionRunner, input: PrepareI
 }
 
 /**
- * The full attempt-preparation service. Phase A (above) is retried on
- * serialization conflicts; phase B (the Paystack call) is not retried
- * automatically here — an ambiguous or failed outcome is a valid *result*
- * (status UNKNOWN or FAILED), not a thrown error, and a repeat Pay click
- * calls this function again to recover or retry.
+ * Save/reuse the invoice payment snapshot before contacting Paystack outside the transaction.
+ * Retry database serialization conflicts during preparation, never the provider call automatically.
+ * Known timeout/unknown outcomes return UNKNOWN for recovery by the same reference;
+ * other initialization errors are recorded as FAILED and then thrown to the caller.
  */
 export async function prepareInvoicePaymentAttempt(
   db: TransactionRunner & PaymentAttemptClient,

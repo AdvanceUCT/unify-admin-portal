@@ -113,6 +113,10 @@ function toSafeAmountNumber(amountMinor: bigint, fieldName: string): number {
   return Number(amountMinor);
 }
 
+/**
+ * Send one authenticated provider request with a deadline and parse its JSON response.
+ * No response means the outcome may be unknown, so expose timeout/transport errors without automatically repeating the request.
+ */
 async function paystackFetch(
   secretKey: string,
   baseUrl: string,
