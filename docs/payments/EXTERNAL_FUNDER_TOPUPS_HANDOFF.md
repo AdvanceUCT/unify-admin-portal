@@ -428,7 +428,7 @@ Recorded after implementation. Everything not listed here was built as specified
 
 ### UI changes after manual testing
 
-20. The form's button says **"Pay"** and shows a spinner with "Redirecting to Paystack…" (disabled) until checkout opens. The form uses a **two-column layout** (one column on phones), with shorter "Your name" / "Your email" labels. Success reads **"Payment successful"** / "You sent R… to the student's wallet. Thank you." and has a **"Fund another student"** button. "Try again" on failure is also a button.
+20. The form's button says **"Continue to payment"** and shows a spinner with "Redirecting to Paystack…" (disabled) until checkout opens. The form uses a **two-column layout** (one column on phones), with shorter "Your name" / "Your email" labels. Success reads **"Payment successful"** / "You sent R… to the student's wallet. Thank you." and has a **"Fund another student"** button. "Try again" on failure is also a button.
 21. **The delay after a successful payment** before returning to `/fund/return` is Paystack's own success screen, which we don't control. Accepted as is.
 
 ### Verification notes

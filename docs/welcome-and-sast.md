@@ -1,6 +1,6 @@
 # Welcome and South African time
 
-Visual direction: warm campus paper, forest green and one oversized fictional student card. A serif headline leads to a short Android installation flow, followed by verification/payment context and audience actions. The card is a CSS illustration, with no personal data or remote assets. Entrance motion is disabled under reduced motion. No APK is published.
+Visual direction: warm campus paper, forest green and one oversized fictional student card. A serif headline leads to a short wallet installation flow, followed by verification/payment context and audience actions. The card is a CSS illustration, with no personal data or remote assets. Entrance motion is disabled under reduced motion. No APK is published.
 
 The public homepage renders at `/` for every visitor, with or without a portal session. `/welcome` remains available as an alias. The staff overview is at `/dashboard`, behind the existing admin layout and role checks. Default staff sign-in, setup completion, cross-portal admin redirects and the Overview navigation target `/dashboard`. Protected deep links retain their callback destinations. The welcome header links directly to `/fund`, `/vendor/sign-in` and `/sign-in`.
 

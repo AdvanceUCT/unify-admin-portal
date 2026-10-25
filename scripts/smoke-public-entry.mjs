@@ -24,7 +24,7 @@ try {
     const response = await fetch(base, { redirect: "manual", headers: cookie ? { cookie } : {}, signal: AbortSignal.timeout(5000) });
     assert.equal(response.status, 200, "Root must render the landing page without redirecting to sign-in");
     const html = await response.text();
-    assert(html.includes("Your campus."));
+    assert(html.includes("Your identity."));
     assert(html.includes('href="/fund"'));
     assert(html.includes('href="/vendor/sign-in"'));
   }
