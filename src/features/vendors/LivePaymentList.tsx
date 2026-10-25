@@ -75,6 +75,10 @@ export function LivePaymentList({
     let cursor = liveCursor;
     let polling = false;
 
+    /**
+     * Read new payment events only while visible and avoid overlapping polls.
+     * Advance the server cursor, deduplicate transaction IDs and bound the rendered list; this polling never initiates refunds.
+     */
     async function poll() {
       if (cancelled || document.visibilityState !== "visible" || polling) return;
       polling = true;

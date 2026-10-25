@@ -8,6 +8,10 @@ export function isPublicAddress(address: string) {
   try { return ipaddr.process(address).range() === "unicast"; } catch { return false; }
 }
 
+/**
+ * Require HTTPS without credentials/fragments and resolve every address before delivery.
+ * Reject the destination if any resolved address is non-public, then return a checked address to use for the connection.
+ */
 export async function resolvePaymentWebhookDestination(rawUrl: string) {
   const url = new URL(rawUrl);
   if (url.protocol !== "https:" || url.username || url.password || url.hash || url.port && url.port !== "443") {

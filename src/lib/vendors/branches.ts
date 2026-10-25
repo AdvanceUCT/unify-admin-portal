@@ -36,6 +36,10 @@ async function resolveExistingServicePoint(vendorProfileId: string, externalId: 
   );
 }
 
+/**
+ * Create the agent service point for this saved branch, or attach its existing match after a conflict.
+ * Record provisioning failure on the branch so it can be retried rather than pretending setup completed.
+ */
 export async function provisionVendorBranch(branchId: string) {
   const branch = await prisma.vendorBranch.findUnique({
     where: { id: branchId },
@@ -84,6 +88,10 @@ export async function provisionVendorBranch(branchId: string) {
   }
 }
 
+/**
+ * Ensure the owner membership and one default branch exist, provisioning the agent service point if missing.
+ * Mirror that default onto older vendor-level verification fields for compatibility.
+ */
 export async function ensureDefaultVendorBranch(vendorProfileId: string) {
   const vendor = await prisma.vendorProfile.findUnique({
     where: { id: vendorProfileId },
@@ -127,6 +135,10 @@ export async function ensureDefaultVendorBranch(vendorProfileId: string) {
   return branch;
 }
 
+/**
+ * Save the named branch before agent provisioning and audit both success and provisioning failure.
+ * A failed external call leaves the branch available for setup recovery instead of losing its identity.
+ */
 export async function createVendorBranch(
   vendorProfileId: string,
   createdByUserId: string,

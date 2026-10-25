@@ -8,6 +8,10 @@ export type PaymentAccessData = { companyName: string; context: AccessContext; b
 export type AccessActionResult = { ok?: boolean; error?: string; fieldErrors?: Record<string, string>; message?: string; applicationId?: string; uncertain?: boolean; account?: PayoutAccount };
 export type BankOption = { code: string; name: string };
 
+/**
+ * Derive the request label, next action and current payment blockers from shared server data.
+ * Keep application approval separate from operational eligibility: an approved branch may still have paused payments.
+ */
 export function paymentAccessSummary(branch: AccessBranch, context: AccessContext) {
   const application = branch.applications[0] ?? null;
   const branchActive = branch.active && branch.status === "ACTIVE";

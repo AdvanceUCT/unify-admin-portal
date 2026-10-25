@@ -1,6 +1,10 @@
 import { endpoints, integrationSteps } from "./integrationGuide";
 export const verificationPath = "/vendor/integrations";
 export const paymentsPath = "/vendor/integrations/payments";
+/**
+ * Map old guide/reference/webhook URLs to one canonical verification or payment workflow section.
+ * Use shared endpoint and step definitions so old bookmarks do not introduce a second navigation structure.
+ */
 export function legacyIntegrationDestination(path: string, search = "", hash = "") {
   const params = new URLSearchParams(search);
   const fragment = hash.replace(/^#/, "");
@@ -17,6 +21,10 @@ export function legacyIntegrationDestination(path: string, search = "", hash = "
   }
   return null;
 }
+/**
+ * Resolve a browser-only fragment, redirect hidden history anchors to Webhooks and open enclosing details.
+ * Scroll and focus the section so a deep link is usable with the keyboard as well as visible on screen.
+ */
 export function revealIntegrationAnchor() {
   let id: string; try { id = decodeURIComponent(window.location.hash.slice(1)); } catch { return; }
   if (id === "delivery-history") { id = "webhooks"; window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#webhooks`); }

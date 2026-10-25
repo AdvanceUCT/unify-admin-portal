@@ -20,6 +20,10 @@ function hasPrismaErrorCode(error: unknown, codes: string[]) {
   );
 }
 
+/**
+ * Prepare the university wallet settings and required system accounts in one serializable transaction.
+ * The enable flag is for development/preview; refuse production enablement and explain missing-schema errors.
+ */
 async function main() {
   const unknownArguments = process.argv
     .slice(2)

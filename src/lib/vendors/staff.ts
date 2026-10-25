@@ -50,6 +50,10 @@ async function validateBranches(vendorProfileId: string, branchIds: string[]) {
   return uniqueIds;
 }
 
+/**
+ * Validate owned active branches, revoke earlier live invites for this address and save a hashed invitation token.
+ * Audit before sending email; delivery is outside these writes, so a delivery error does not erase the saved invite.
+ */
 export async function createVendorStaffInvite(
   vendorProfileId: string,
   createdByUserId: string,
@@ -123,6 +127,10 @@ export async function getPendingVendorStaffInvite(token: string) {
   return invite;
 }
 
+/**
+ * Claim the still-valid invite before creating the user, then save membership, branch assignments and audit together.
+ * On setup failure, remove the newly created user and release an uncompleted claim so acceptance can be retried.
+ */
 export async function acceptVendorStaffInvite(input: z.input<typeof acceptStaffInviteSchema>) {
   const data = acceptStaffInviteSchema.parse(input);
   const invite = await getPendingVendorStaffInvite(data.token);

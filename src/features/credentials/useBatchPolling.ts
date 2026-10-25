@@ -12,6 +12,10 @@ export function useBatchPolling<T>(initial: T, active: (value: T) => boolean, lo
     let stopped = false;
     let controller: AbortController | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    /**
+     * Poll persisted progress only while visible, with one request and one next timer.
+     * Ignore aborted or unmounted results; a read failure keeps the batch intact and schedules another progress check.
+     */
     async function poll() {
       if (stopped || document.hidden) return;
       controller?.abort();

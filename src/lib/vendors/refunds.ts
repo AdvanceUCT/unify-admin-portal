@@ -98,11 +98,20 @@ export async function refundSpend(input: RefundInput): Promise<RefundResult> {
   return outcome.result;
 }
 
+/**
+ * Schedule delivery work only after the financial transaction has committed.
+ * Email or webhook-dispatch failure must not roll back the refund.
+ */
 export function finishRefund(vendorProfileId: string, overdraftStarted: boolean) {
   if (overdraftStarted) scheduleOverdraftStartedEmail(vendorProfileId);
   schedulePaymentWebhookDispatch();
 }
 
+/**
+ * Authorize the original spend and replay only matching refund terms, or post the refund in the caller's transaction.
+ * Return authoritative refund totals, balance and whether this new refund began an overdraft.
+ * The caller commits its operation status with this posting; replayOnly refuses to manufacture a missing completed posting.
+ */
 export async function refundSpendInTransaction(transaction: Prisma.TransactionClient, input: RefundInput, replayOnly = false) {
   const idempotencyKey = input.idempotencyKey.trim();
   if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) {

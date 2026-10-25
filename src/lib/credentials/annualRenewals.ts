@@ -89,6 +89,11 @@ export async function claimAnnualRenewal(now: Date) {
   return rows[0];
 }
 
+/**
+ * Process only the renewal lease still owned by this worker and reuse any prepared offer.
+ * Revocation cancels enrolment, suspension defers it, and temporary failures receive bounded retries.
+ * Finish updates match the lease token so an interrupted old worker cannot finish a replacement worker's claim.
+ */
 export async function processAnnualRenewal(
   record: CredentialRenewalRecord,
   now: Date,
@@ -206,6 +211,10 @@ export async function processAnnualRenewal(
   }
 }
 
+/**
+ * Mark elapsed periods and observed activations, then claim due renewals in groups of four until the deadline.
+ * Record each outcome and complete enrolments with no future schedulable work while retaining activation history.
+ */
 export async function runAnnualRenewals(
   now = new Date(),
   deadline = Date.now() + 240_000,
@@ -273,6 +282,11 @@ export async function runAnnualRenewals(
   return totals;
 }
 
+/**
+ * Recover only a failed, unexpired renewal.
+ * Delivery retry reuses the offer; explicit replacement requires expiry and revokes a still-manageable old offer before preparing another.
+ * Audit the administrator's recovery choice.
+ */
 export async function retryAnnualRenewal(
   id: string,
   actorId: string,

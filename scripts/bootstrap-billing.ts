@@ -51,6 +51,10 @@ function hasPrismaErrorCode(error: unknown, codes: string[]) {
   );
 }
 
+/**
+ * Validate exact cents and revenue-share inputs, then initialize policy for exactly one configured university.
+ * Existing open policy is reused; bootstrap does not overwrite its negotiated settings.
+ */
 async function main() {
   const args = process.argv.slice(2);
   for (let index = 0; index < args.length; index += 1) {

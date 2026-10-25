@@ -97,6 +97,10 @@ function hasPrismaErrorCode(error: unknown, code: string) {
   return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
+/**
+ * Recognize serialization conflicts and deadlocks from Prisma or its PostgreSQL adapter.
+ * Only these known rolled-back conflicts are safe for this helper to repeat; timeouts and uncertain connection failures are not.
+ */
 function isRetryableTransactionConflict(error: unknown) {
   if (hasPrismaErrorCode(error, "P2034")) return true;
   if (!hasPrismaErrorCode(error, "P2010") || typeof error !== "object" || error === null || !("meta" in error)) return false;
@@ -111,6 +115,11 @@ function isRetryableTransactionConflict(error: unknown) {
     (cause.originalCode === "40001" || cause.originalCode === "40P01");
 }
 
+/**
+ * Run database work with serializable isolation, which rejects conflicting concurrent results instead of accepting both.
+ * Retry recognized conflicts at most three times. Optional timing limits affect only callers that supply them.
+ * Keep provider calls and other external side effects outside the callback because it can run again.
+ */
 export async function runSerializableTransaction<T>(
   operation: (transaction: Prisma.TransactionClient) => Promise<T>,
   options: { timeout?: number; maxWait?: number; onAttempt?: (attempt: number) => void } = {},
@@ -263,6 +272,10 @@ function isVendorPaymentEnabled(branch: BranchEligibility) {
   );
 }
 
+/**
+ * Resolve the accounts and ledger entries for this financial instruction and collect any eligibility error.
+ * Defer that error until after replay lookup so an already-completed matching payment can still be recovered.
+ */
 async function preparePosting(
   transaction: Prisma.TransactionClient,
   operation: WalletOperation,
@@ -469,6 +482,11 @@ function assertAccountStatuses(
   }
 }
 
+/**
+ * Lock the affected balances in account-ID order, then replay a matching reference or post balanced ledger entries.
+ * An idempotency key is the reference that prevents the same financial instruction from moving money twice.
+ * Use the caller's transaction so posting and its related operation/outbox changes can commit or roll back together.
+ */
 async function postWalletOperationInTransaction(transaction: Prisma.TransactionClient, operation: WalletOperation) {
     validateBase(operation.input);
     const settings = await getPaymentWalletSettings(transaction);
@@ -635,6 +653,10 @@ export function completePendingVendorTopup(input: CompletePendingVendorTopupInpu
   );
 }
 
+/**
+ * Complete a previously reserved top-up by adding its clearing/student or clearing/vendor ledger entries.
+ * Use locked state and the saved transaction identity to prevent concurrent reconciliation from crediting it twice.
+ */
 async function completePendingCredit(
   type: typeof WalletTransactionType.TOPUP | typeof WalletTransactionType.VENDOR_TOPUP,
   rawWalletTransactionId: string,

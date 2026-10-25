@@ -9,6 +9,10 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 config({ path: ".env" });
 
+/**
+ * Read provider configuration health without creating a payment or recipient.
+ * Print only the selected health fields and set a failing exit status for unhealthy configuration.
+ */
 async function main() {
   const { checkPaystackConfiguration } = await import("../src/lib/billing/paystackHealth");
   const { PaystackProviderError } = await import("../src/lib/paymentProviders/paystack/errors");

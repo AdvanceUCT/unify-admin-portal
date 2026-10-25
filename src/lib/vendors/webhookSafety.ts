@@ -25,6 +25,10 @@ function isPrivateAddress(address: string) {
   return normalized === "::1" || normalized.startsWith("fe80:") || normalized.startsWith("fc") || normalized.startsWith("fd");
 }
 
+/**
+ * Validate a verification-webhook URL and reject local names and recognized private resolved addresses.
+ * This is a DNS precheck; unlike the payment transport, it does not pin the later fetch connection to that checked address.
+ */
 export async function assertSafeWebhookUrl(rawUrl: string) {
   let url: URL;
   try {

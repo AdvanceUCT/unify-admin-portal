@@ -59,6 +59,7 @@ export async function acquireJobLease(
     if (!existing) return null; // it completed between our create() and this read; the caller can retry next invocation.
     if (existing.leaseExpiresAt && existing.leaseExpiresAt > now) return null; // genuinely still running elsewhere.
 
+    // Match the old expiry as well as the ID: only one contender can extend this expired claim.
     const takenOver = await tx.billingRun.updateMany({
       where: { id: existing.id, status: "RUNNING", leaseExpiresAt: existing.leaseExpiresAt },
       data: { leaseOwner: params.leaseOwner, leaseExpiresAt, startedAt: now },

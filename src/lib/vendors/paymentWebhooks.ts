@@ -19,6 +19,10 @@ async function parkConfiguration(tx: Prisma.TransactionClient, vendorId: string)
   await tx.paymentWebhookConfig.updateMany({ where: { vendorProfileId: vendorId, enabled: true }, data: { enabled: false, disabledAt: new Date() } });
   await tx.paymentWebhookDelivery.updateMany({ where: { event: { vendorProfileId: vendorId }, status: { not: "DELIVERED" } }, data: { status: "PARKED", nextAttemptAt: null, leaseToken: null, leaseExpiresAt: null } });
 }
+/**
+ * Validate the destination and branch ownership, then replace configuration under a vendor lock.
+ * Saving creates a new secret and parks undelivered work from the old configuration; reveal the secret only in this response.
+ */
 export async function configurePaymentWebhook(vendorId: string, raw: unknown) {
   const input = configSchema.parse(raw);
   await resolvePaymentWebhookDestination(input.url);
@@ -50,6 +54,10 @@ export async function paymentWebhookHistory(vendorId: string, search: URLSearchP
   ]);
   return { items: events.slice(0, limit), nextCursor: events.length > limit ? events[limit - 1].id : null, lastSuccess: lastSuccess?.deliveredAt ?? null, oldestOutstanding: oldestOutstanding?.createdAt ?? null };
 }
+/**
+ * Requeue this vendor event at the current enabled destination for its branch.
+ * Refuse a still-live delivery lease; manual retry may duplicate a notification already received by the vendor.
+ */
 export async function retryPaymentWebhook(vendorId: string, eventId: string) {
   return runSerializableTransaction(async (tx) => {
     await lockVendor(tx, vendorId);
@@ -64,6 +72,10 @@ export async function retryPaymentWebhook(vendorId: string, eventId: string) {
 }
 
 // Leases and fencing tokens make concurrent dispatchers and interrupted workers safe.
+/**
+ * Park disabled configurations and reclaim interrupted attempts before claiming a bounded batch with row locks.
+ * A lease token identifies each worker's claim so a late worker cannot overwrite a replacement worker's delivery state.
+ */
 export async function claimPaymentWebhookDeliveries(limit = 20) {
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`UPDATE payment_webhook_delivery d SET status = 'PARKED', "nextAttemptAt" = NULL, "leaseToken" = NULL, "leaseExpiresAt" = NULL
@@ -88,13 +100,17 @@ export async function claimPaymentWebhookDeliveries(limit = 20) {
   });
 }
 type Claimed = Awaited<ReturnType<typeof claimPaymentWebhookDeliveries>>[number];
+/**
+ * Sign timestamp plus the exact body, send outside the database transaction, then save attempt and delivery results.
+ * Only the current lease token can advance delivery state; failures schedule the next bounded automatic retry.
+ */
 export async function deliverClaimedPaymentWebhook(delivery: Claimed, transport = sendPaymentWebhook) {
   const body = JSON.stringify(delivery.event.payload);
   const timestamp = Math.floor(Date.now() / 1000).toString();
   let httpStatus: number | null = null;
   let errorCode: string | null = null;
   try {
-    // Recheck the revision immediately before opening the connection.
+    // Recheck that this configuration is still enabled immediately before opening the connection.
     if (!await prisma.paymentWebhookConfig.findFirst({ where: { id: delivery.configId, enabled: true } })) errorCode = "CONFIGURATION_DISABLED";
     else {
       const signature = createHmac("sha256", decryptVendorSecret(delivery.config.secretEncrypted)).update(`${timestamp}.${body}`).digest("hex");
@@ -112,6 +128,10 @@ export async function deliverClaimedPaymentWebhook(delivery: Claimed, transport 
     } });
   });
 }
+/**
+ * Expire a bounded set of unattended sales, claim due deliveries and send them in groups of four.
+ * Recorded financial/verification outcomes remain authoritative regardless of notification delivery.
+ */
 export async function dispatchPaymentWebhooks() {
   // Bounded expiry sweep also creates events for requests nobody has read.
   await prisma.$executeRaw`UPDATE payment_request SET status = 'EXPIRED' WHERE id IN

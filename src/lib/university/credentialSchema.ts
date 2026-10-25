@@ -262,6 +262,10 @@ export async function createDraftCredentialSchemaVersion(input: {
   });
 }
 
+/**
+ * Reserve a unique version on this local draft before contacting the agent.
+ * Serializable retries handle concurrent version allocation; a retry reuses the version already saved on the draft.
+ */
 async function reserveDraftSchemaVersionForPublish(input: {
   profileId: string;
   schemaId: string;
@@ -312,6 +316,11 @@ async function reserveDraftSchemaVersionForPublish(input: {
   throw new CredentialSchemaVersionError("Unable to allocate a unique schema version. Try again.", 409);
 }
 
+/**
+ * Validate the reserved draft, register revocation-enabled issuer artifacts and trust the definition at the agent.
+ * Only then retire the previous local active schema and activate this one with audit evidence.
+ * Agent/ledger work and the portal transaction are separate; local failure does not undo registration.
+ */
 export async function publishCredentialSchemaVersion(input: {
   actorId?: string | null;
   schemaId: string;

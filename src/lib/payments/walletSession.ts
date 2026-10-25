@@ -35,6 +35,11 @@ function transactionConflict(error: unknown): boolean {
     [value.meta, value.cause, value.driverAdapterError].some(transactionConflict);
 }
 
+/**
+ * Take namespaced student/device/IP advisory locks in sorted order within one transaction.
+ * Read database time after waiting for locks so cooldown and expiry checks use the actual reservation time.
+ * Retry recognized transaction conflicts at most three times; email is sent after these locks are released.
+ */
 async function withOtpLocks<T>(keys: string[], now: Date | undefined, operation: (tx: OtpTransaction, time: Date) => Promise<T>): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {
@@ -120,7 +125,10 @@ async function credentialStudentReferences(studentId: string) {
   return Array.from(new Set([studentId, student?.studentNumber].filter((value): value is string => Boolean(value))));
 }
 
-/** Requires an accepted/issued active credential before a student can activate payments. */
+/**
+ * Require at least one accepted/issued, lifecycle-eligible credential with a valid date window for new activation.
+ * Only confirmed legacy definitions whose schemas omit both dates can be exempt; existing payment sessions do not call this check.
+ */
 async function assertStudentPaymentEligible(studentId: string, now = new Date()) {
   const studentReferences = await credentialStudentReferences(studentId);
   const candidates = await prisma.credentialIssuance.findMany({
@@ -163,6 +171,11 @@ function toTokenResponse(session: {
   };
 }
 
+/**
+ * Reserve cooldown/quota usage and replace older codes atomically before sending email.
+ * Unknown students receive the same generic challenge shape. A delivery failure expires only this replacement and retains quota usage.
+ * The explicit test bypass still checks credential eligibility before creating a session.
+ */
 export async function requestStudentPaymentActivation(input: {
   studentNumber: string;
   deviceId: string;
@@ -240,8 +253,8 @@ export async function requestStudentPaymentActivation(input: {
     throw new WalletDomainError("RATE_LIMITED", "Please wait before requesting another activation code.");
   }
 
-  // Supersede older active challenges for this same student/device pair so
-  // only the latest delivered OTP can be used.
+  // Supersede older active challenges for this same student/device pair.
+  // Failed delivery invalidates the replacement below; it never restores an older code.
   await tx.studentPaymentActivationChallenge.updateMany({
     where: {
       studentNumberHash,
@@ -330,6 +343,10 @@ async function createSession(studentId: string, deviceIdHash: string, now: Date)
   return toTokenResponse(session, accessToken, refreshToken);
 }
 
+/**
+ * Recheck and consume the challenge under the same student/device locks used by resend.
+ * Persist invalid attempts and allow only one successful consumption, then create payment authentication separately from credential storage.
+ */
 export async function verifyStudentPaymentActivation(input: {
   challengeId: string;
   otp: string;
@@ -376,6 +393,11 @@ export async function verifyStudentPaymentActivation(input: {
   return createSession(studentId, deviceIdHash, now);
 }
 
+/**
+ * Validate the refresh token, session lifetime and device, then atomically rotate both tokens.
+ * Treat mismatched or racing refresh reuse as session compromise and revoke it.
+ * Credential expiry is checked at activation, not again during this existing-session refresh.
+ */
 export async function refreshStudentPaymentSession(input: {
   refreshToken: string;
   sessionId: string;
@@ -449,6 +471,10 @@ export async function refreshStudentPaymentSession(input: {
   return toTokenResponse(updated, accessToken, nextRefreshToken);
 }
 
+/**
+ * Hash the opaque access token and validate its saved session/expiry before identifying the student.
+ * Update last use without requiring credential verification for each payment request.
+ */
 export async function authenticateWalletBearer(request: Request, now: Date = new Date()) {
   const authorization = request.headers.get("authorization") ?? "";
   const match = authorization.match(/^Bearer\s+(.+)$/i);

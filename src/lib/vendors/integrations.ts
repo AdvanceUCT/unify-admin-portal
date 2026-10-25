@@ -28,6 +28,10 @@ export async function approvedVendorProfileForUser(userId: string) {
   });
 }
 
+/**
+ * Validate immutable scopes and owned branch restrictions before storing a hash of the new key.
+ * Return the raw secret only once so later list responses cannot recover it from storage.
+ */
 export async function createVendorApiCredential(vendorProfileId: string, name: string, scopes: unknown = LEGACY_VERIFICATION_SCOPES, branchIds: unknown = []) {
   const normalizedName = name.trim();
   if (!normalizedName) throw new Error("API key name is required.");
@@ -65,6 +69,10 @@ export async function revokeVendorApiCredential(vendorProfileId: string, credent
   if (result.count !== 1) throw new Error("Active API key was not found.");
 }
 
+/**
+ * Verify the hashed API key, approved vendor and required permission, then record last use.
+ * Apply payment eligibility according to the requested scope; refund recovery bypasses payment suspension, not key validity or permissions.
+ */
 export async function authenticateVendorApiKey(header: string | null, requiredScope?: VendorApiScope, refundRecovery = false) {
   const token = header?.match(/^Bearer\s+(\S+)$/i)?.[1];
   const prefix = token?.match(/^unify_vk_([a-f0-9]{12})_[A-Za-z0-9_-]+$/)?.[1];
@@ -109,6 +117,10 @@ export async function authenticateVendorApiKey(header: string | null, requiredSc
   return { ...credential.vendorProfile, credentialId: credential.id, scopes: credential.scopes, branchIds: credential.branchIds };
 }
 
+/**
+ * Validate the verification destination and replace its encrypted signing secret on every save.
+ * Return the new secret once; it is separate from the vendor API key.
+ */
 export async function configureVendorWebhook(vendorProfileId: string, rawUrl: string) {
   const url = await assertSafeWebhookUrl(rawUrl);
   const signingSecret = randomBytes(32).toString("base64url");
@@ -140,6 +152,10 @@ export async function disableVendorWebhook(vendorProfileId: string) {
   await prisma.vendorWebhookConfig.updateMany({ where: { vendorProfileId }, data: { enabled: false } });
 }
 
+/**
+ * Build a safe verification result and sign the exact serialized body for one delivery attempt.
+ * Record delivery outcome without changing the authoritative verification result; retries are requested separately.
+ */
 export async function deliverVendorWebhook(vendorVerificationId: string, requestId?: string) {
   const verification = await prisma.vendorVerification.findUnique({
     where: { id: vendorVerificationId },

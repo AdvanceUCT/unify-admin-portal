@@ -22,6 +22,10 @@ function readAsOf(): Date {
   return parsed;
 }
 
+/**
+ * Preview due invoices by default, or issue them only with --apply.
+ * The optional as-of instant simulates period closure for demo/testing; it does not change stored database clocks.
+ */
 async function main() {
   const args = process.argv.slice(2);
   for (let index = 0; index < args.length; index += 1) {

@@ -102,6 +102,7 @@ export async function confirmInvoicePayment(
   input: ConfirmInvoicePaymentInput,
 ): Promise<ConfirmInvoicePaymentResult> {
   const now = input.now ?? new Date();
+  // The provider call happens before database posting; a browser redirect is never proof of payment.
   const verified = await verifyTransaction(input.config.secretKey, input.config.baseUrl, input.reference);
 
   const attempt = await db.vendorInvoicePaymentAttempt.findUnique({ where: { reference: input.reference } });

@@ -151,6 +151,10 @@ export function applicationHasPaymentDetails(application: {
   );
 }
 
+/**
+ * Read the current saved destination and require its masked review details.
+ * Keep the provider reference with the safe snapshot so submission/approval can detect an account change.
+ */
 async function currentPayoutSnapshot(
   transaction: Prisma.TransactionClient,
   vendorProfileId: string,
@@ -183,6 +187,10 @@ async function currentPayoutSnapshot(
   };
 }
 
+/**
+ * Validate branch eligibility and the payout reference shown to the owner in one serializable transaction.
+ * Reuse a matching pending request; reconfirm changed payout details only on that pending request and retain the previous safe snapshot in audit.
+ */
 export async function submitBranchPaymentApplication(input: {
   vendorProfileId: string;
   branchId: string;
@@ -283,6 +291,11 @@ export async function submitBranchPaymentApplication(input: {
   });
 }
 
+/**
+ * Recheck branch/vendor eligibility and the current payout reference before approving this pending request.
+ * Commit acceptance and audit together while preserving an existing vendor-wide payment suspension.
+ * Send the decision email after commit; replayed approval does not send another decision email.
+ */
 export async function approveBranchPaymentApplication(input: {
   applicationId: string;
   reviewerId: string;
@@ -756,6 +769,10 @@ export async function listPaymentAccessDecisions({
   };
 }
 
+/**
+ * Send the already-committed decision without exposing bank details in the email.
+ * Log delivery failure without telling the caller that approval or rejection failed.
+ */
 async function notifyPaymentAccessDecision(input: {
   applicationId: string; branchId: string; branchName: string; to: string; companyName: string; approved: boolean;
 }) {

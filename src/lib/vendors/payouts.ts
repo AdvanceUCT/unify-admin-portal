@@ -105,6 +105,10 @@ function toSafeNumber(value: bigint) {
   return Number(value);
 }
 
+/**
+ * Require owner access, create the provider recipient outside database locks, then save its reference and encrypted safe snapshot.
+ * The returned recipient must use ZAR; the application does not store the full submitted account number here.
+ */
 export async function saveVendorPayoutDestination(
   context: ApprovedVendorContext,
   actorId: string,
@@ -210,8 +214,8 @@ export async function calculateVendorPayoutAmount(
 }
 
 /**
- * Serializes calculate-and-reserve per vendor (P5) by locking the payment profile row, so
- * concurrent runs (cron and the demo button) cannot reserve the same funds.
+ * Lock balances and the payment profile before rereading eligibility, posted funds and existing reservations.
+ * Reserve exactly the currently available amount so refunds and other payout runs cannot both use the same funds.
  */
 async function reservePayoutBatch(input: {
   profileId: string;
@@ -258,6 +262,10 @@ async function reservePayoutBatch(input: {
   });
 }
 
+/**
+ * Take balance locks in account-ID order, then the payment profile and any batch row.
+ * Reservation and completion use this order to reduce deadlocks and coordinate changes to available funds.
+ */
 async function lockPayoutRows(tx: Prisma.TransactionClient, profileId: string, accountIds: string[], batchId?: string) {
   await tx.$queryRaw(Prisma.sql`SELECT "accountId" FROM "wallet_account_balance"
     WHERE "accountId" IN (${Prisma.join(accountIds)}) ORDER BY "accountId" FOR UPDATE`);
@@ -265,6 +273,10 @@ async function lockPayoutRows(tx: Prisma.TransactionClient, profileId: string, a
   if (batchId) await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "payout_batch" WHERE "id" = ${batchId} FOR UPDATE`);
 }
 
+/**
+ * Find the batch and its accounts, take the common payout locks, then reread the batch before changing it.
+ * Include the clearing account when the operation will create ledger entries.
+ */
 async function withLockedPayout<T>(reference: string, ledger: boolean, operation: (tx: Prisma.TransactionClient, batch: Prisma.PayoutBatchGetPayload<{ include: { vendorPaymentProfile: true } }>, accountId: string) => Promise<T>) {
   return runSerializableTransaction(async tx => {
     const initial = await tx.payoutBatch.findUnique({ where: { providerIdempotencyKey: reference }, include: { vendorPaymentProfile: true } });
@@ -278,6 +290,11 @@ async function withLockedPayout<T>(reference: string, ledger: boolean, operation
   });
 }
 
+/**
+ * Apply a provider-confirmed transfer under the payout locks.
+ * Post the debit and complete the batch in one transaction; a repeated confirmation reuses the original posting.
+ * An amount mismatch retains the reservation for reconciliation instead of releasing unpaid-looking funds.
+ */
 export async function completePayoutBatchWithTransfer(input: {
   providerReference: string;
   transfer: PaystackInitiateTransferResult;
@@ -317,6 +334,10 @@ export async function completePayoutBatchWithTransfer(input: {
   });
 }
 
+/**
+ * Change reservation state under the same locks as posting.
+ * Never reopen a completed batch, and repair older batches whose ledger debit committed before their status did.
+ */
 async function transitionPayout(reference: string, data: Prisma.PayoutBatchUpdateInput) {
   return withLockedPayout(reference, false, async (tx, batch) => {
     if (batch.status === PayoutBatchStatus.COMPLETED) return batch;
@@ -343,6 +364,10 @@ async function markPayoutBatchNeedsReconciliation(reference: string, failureCode
   });
 }
 
+/**
+ * Translate the provider's transfer status into a locked payout transition.
+ * A delayed processing/failure response cannot reopen a batch already completed by another confirmation.
+ */
 async function handleTransferOutcome(reference: string, transfer: PaystackInitiateTransferResult) {
   const status = transfer.status.toLowerCase();
   if (["success", "successful", "completed"].includes(status)) {
@@ -423,6 +448,10 @@ export async function runVendorWalletPayouts(input: PayoutRunInput = {}) {
   return summary;
 }
 
+/**
+ * Commit a reservation before contacting Paystack, then materialize the provider outcome separately.
+ * Ambiguous provider or database failures retain the reserved amount for reconciliation rather than assuming no payment happened.
+ */
 async function payOutVendor(
   profile: { id: string; vendorProfileId: string },
   thresholdMinor: bigint,
@@ -538,6 +567,9 @@ export async function runVendorWalletPayoutForVendor(input: {
   });
 }
 
+/**
+ * Ask Paystack for the saved transfer reference and apply its authoritative outcome through the normal locked transition.
+ */
 export async function reconcilePayoutBatchByReference(reference: string) {
   const config = resolvePaystackWalletTopupConfig();
   const transfer = await verifyTransfer(config.secretKey, config.baseUrl, reference);
