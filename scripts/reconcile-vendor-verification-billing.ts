@@ -11,6 +11,10 @@ config({ path: ".env" });
 
 const KNOWN_FLAGS = new Set(["--apply"]);
 
+/**
+ * Page through verification billing snapshots and report aggregate repair results.
+ * Write repaired snapshots/charges only with --apply, using the same reconciliation service as the portal.
+ */
 async function main() {
   for (const argument of process.argv.slice(2)) {
     if (!KNOWN_FLAGS.has(argument)) {

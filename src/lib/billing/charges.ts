@@ -100,6 +100,7 @@ export async function finalizeVerificationCharge(
     }
 
     const feeMinor = BigInt(input.verificationFeeMinor);
+    // Use the policy effective when service completed, not whichever share policy is current today.
     const { platformMinor, universityMinor } = computeVerificationShares(feeMinor, policy.platformBasisPoints);
 
     try {

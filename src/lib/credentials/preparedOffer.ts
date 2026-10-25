@@ -37,6 +37,11 @@ type Payload = Parameters<typeof createBatchActivationLinks>[0] & {
   schemaVersion?: string;
 };
 
+/**
+ * Freeze the schema, signed validity dates and student attributes under a stable attempt reference before delivery.
+ * A shared advisory lock coordinates policy/renewal preparation; retries reuse the saved payload instead of recalculating dates.
+ * An automatic renewal waits for its academic period, while manual issuance starts at the supplied current time.
+ */
 export async function prepareOffer(input: {
   key: string;
   student: StudentRecord;
@@ -208,7 +213,11 @@ export async function prepareOffer(input: {
   });
 }
 
-/** Resume from persisted offer/issuance; email failures do not recreate the offer. */
+/**
+ * Deliver the saved payload or resume its existing issuance after an interrupted attempt.
+ * Recheck renewal lease ownership after the agent call and before email; a stale worker must stop.
+ * Persist email failure against the same offer so retry does not create another credential.
+ */
 export async function deliverPreparedOffer(
   attempt: CredentialOfferAttempt,
   leaseToken?: string | null,

@@ -3,7 +3,10 @@ import { prisma } from "@/lib/db/prisma";
 import { getCredentialValidity } from "@/lib/agentClient";
 import { credentialDate } from "./validity";
 
-/** Dry-run by default. Copy only exact bound issuer values; never derive dates. */
+/**
+ * Scan a bounded page and recover only exact dates from the matching authenticated agent credential/definition.
+ * Never infer missing signed dates from current policy or acceptance time. Default to reporting; apply uses old-value conditions to detect concurrent changes.
+ */
 export async function backfillCredentialValidity(options: { apply?: boolean; after?: string; limit?: number } = {}) {
   const rows = await prisma.credentialIssuance.findMany({
     where: { OR: [{ credentialValidFrom: null }, { credentialExpiresAt: null }], ...(options.after ? { id: { gt: options.after } } : {}) },

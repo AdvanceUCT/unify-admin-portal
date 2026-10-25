@@ -62,6 +62,11 @@ function messageFor(status: PersistedLifecycleChange["status"]) {
   return "Credential reactivated.";
 }
 
+/**
+ * Lock the issuance and validate its ledger binding before comparing the agent's revision and event identity.
+ * Higher revisions advance state; equal matching revisions replay, and conflicting equal revisions fail.
+ * Commit state, audit and automation together; stale responses may enrich audit actor details but cannot recreate obsolete reactivation jobs.
+ */
 async function persistLifecycleChange(change: PersistedLifecycleChange) {
   const occurredAt = new Date(change.timestamp);
   if (Number.isNaN(occurredAt.getTime())) {
@@ -329,6 +334,8 @@ export async function requestCredentialLifecycleChange(params: {
 /** Replays an agent lifecycle webhook through the same idempotent persistence path. */
 export async function recordCredentialLifecycleChangedEvent(payload: CredentialLifecycleChangedWebhookPayload) {
   if (payload.revision === undefined) {
+    // An old payload cannot establish ordering. Fetch the current authenticated snapshot
+    // before opening the persistence transaction, then apply its revision rather than the historical status.
     let current: AgentCredentialLifecycleResult;
     try { current = await getCredentialLifecycle(payload.credentialExchangeId); }
     catch { throw new CredentialLifecycleActionError("Authoritative lifecycle snapshot is unavailable.", 503); }

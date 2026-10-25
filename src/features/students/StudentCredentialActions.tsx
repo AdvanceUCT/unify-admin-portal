@@ -149,6 +149,10 @@ export function StudentCredentialActions({
     }
   }, [student.credential.isRevocable, student.credential.lifecycleState]);
 
+  /**
+   * Request issuance with the selected renewal options and show the returned activation-delivery outcome.
+   * Distinguish offer creation from email delivery, then refresh the authoritative student state.
+   */
   async function issueCredential() {
     setCopyLabel("Copy");
     setError(null);
@@ -192,6 +196,10 @@ export function StudentCredentialActions({
     }
   }
 
+  /**
+   * Request a replacement through the renewal endpoint with the selected enrolment options.
+   * Display delivery failure separately from offer creation and refresh the saved credential state.
+   */
   async function renewCredential() {
     setCopyLabel("Copy");
     setError(null);
@@ -261,6 +269,10 @@ export function StudentCredentialActions({
     setLifecycleAction(null);
   }
 
+  /**
+   * Send the selected action and reason after form validation, converting scheduled reactivation from SAST to UTC.
+   * Refresh authoritative state only after the lifecycle endpoint acknowledges the request.
+   */
   async function submitLifecycleChange() {
     if (!lifecycleAction || !reason.trim()) return;
     setError(null);

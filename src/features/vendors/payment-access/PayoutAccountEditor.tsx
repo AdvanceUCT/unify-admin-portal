@@ -11,6 +11,10 @@ export function AccountSummary({ account }: { account: PayoutAccount | null }) {
     </dl>
   ) : <p className="text-sm text-fg-muted">No payout account saved.</p>;
 }
+/**
+ * Keep unsaved bank details in the form and reset them only after an acknowledged saved account.
+ * An uncertain save requires reloading server state; it must not be automatically repeated or treated as submission approval.
+ */
 export function PayoutAccountEditor({ account, saveAccount, loadBanks, onSaved, onStateChange }: PayoutEditorActions & { account: PayoutAccount | null; onSaved?: (account: PayoutAccount) => void; onStateChange?: (blocked: boolean) => void }) {
   const [editing, setEditing] = useState(!account);
   const [banks, setBanks] = useState<BankOption[]>([]);
@@ -27,6 +31,10 @@ export function PayoutAccountEditor({ account, saveAccount, loadBanks, onSaved, 
       return saved;
     } catch { return { uncertain: true, error: "The save could not be confirmed. Reload to check the saved account." }; }
   }, {});
+  /**
+   * Reload supported bank choices without resubmitting payout details.
+   * Expose service failure inline and keep the editor available for retry.
+   */
   async function fetchBanks() {
     setLoading(true); setBankError("");
     try { const result = await loadBanks(); setBanks(result.banks ?? []); setBankError(result.error ?? ""); }

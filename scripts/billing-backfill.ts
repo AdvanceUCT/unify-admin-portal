@@ -10,6 +10,11 @@ config({ path: ".env" });
 
 const KNOWN_FLAGS = ["--apply"];
 
+/**
+ * Walk historical verification batches and reconcile every scanned row into one reported category.
+ * Default to read-only reporting; only --apply writes charges and a persisted run outcome.
+ * Always close the database connection, including after a failed batch.
+ */
 async function main() {
   for (const argument of process.argv.slice(2)) {
     if (!KNOWN_FLAGS.includes(argument)) {

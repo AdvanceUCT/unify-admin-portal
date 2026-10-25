@@ -214,6 +214,10 @@ function isSameOrigin(existing: { funderName: string | null; funderEmail: string
   return existing.funderEmail === origin.funderEmail && existing.funderName === origin.funderName;
 }
 
+/**
+ * Save immutable amount/provider terms and a pending wallet transaction before calling the provider.
+ * Replay only matching instructions and count funder limits in the transaction that creates the attempt.
+ */
 async function prepareTopupSnapshot(input: {
   studentId: string;
   origin: TopupOrigin;
@@ -329,6 +333,10 @@ async function prepareTopupSnapshot(input: {
 
 type TopupSnapshot = NonNullable<Awaited<ReturnType<typeof prepareTopupSnapshot>>["snapshot"]>;
 
+/**
+ * Initialize Paystack after the durable snapshot commits, using its saved reference.
+ * Known timeout/unknown-outcome errors stay recoverable as UNKNOWN; other initialization failures are recorded as FAILED.
+ */
 async function initializeProviderCheckout(input: {
   attempt: TopupSnapshot;
   origin: TopupOrigin;
@@ -604,6 +612,11 @@ async function notifyStudentOfFunding(attemptId: string) {
   }
 }
 
+/**
+ * Verify the stored reference with Paystack before crediting the wallet.
+ * Require matching amount, currency, account mode and provider identity; uncertain results remain recoverable.
+ * The pending-credit helper prevents duplicate credit, and a conditional success transition selects one funding notification sender.
+ */
 export async function reconcileWalletTopup(input: {
   studentId: string;
   topUpId: string;

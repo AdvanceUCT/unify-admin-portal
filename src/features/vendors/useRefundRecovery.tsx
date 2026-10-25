@@ -4,6 +4,10 @@ import { useRouter } from "next/navigation";
 import { RefundRecoveryClient } from "@/lib/payments/refundRecoveryClient";
 import { formatMoneyMinor } from "@/lib/formatters";
 
+/**
+ * Share one recovery controller across this refund list's renders and rehydrate on focus or cross-tab storage changes.
+ * Block new instructions until hydration succeeds or a pending reference resolves; refresh authoritative totals once per completed refund.
+ */
 export function useRefundRecovery() {
   const router = useRouter();
   const refreshedRefund = useRef<string | undefined>(undefined);

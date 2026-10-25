@@ -97,6 +97,10 @@ export function SchemaVersionManager({ attributeAvailability, nextPublishVersion
     );
   }
 
+  /**
+   * Save the chosen attributes as a local draft and refresh server-rendered history.
+   * Creating a draft does not publish ledger artifacts; publishing is a separate confirmed action.
+   */
   async function createDraftVersion() {
     setError(null);
     setMessage(null);
@@ -131,6 +135,10 @@ export function SchemaVersionManager({ attributeAvailability, nextPublishVersion
     setPendingPublish(null);
   }
 
+  /**
+   * Publish only the selected draft after confirmation, keeping the dialog busy until the response.
+   * Refresh saved history on success and retain an inline error when agent/server publication cannot be confirmed.
+   */
   async function confirmPublish() {
     if (!pendingPublish) return;
     setPublishError(null);

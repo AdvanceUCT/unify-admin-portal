@@ -8,6 +8,10 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 config({ path: ".env" });
 
+/**
+ * Acquire the shared billing job lease before sweeping unresolved provider references.
+ * A lease is a temporary claim that prevents overlapping job runs; record completion/failure and release database resources.
+ */
 async function main() {
   const args = process.argv.slice(2);
   if (args.length > 0) {

@@ -13,18 +13,28 @@ export function sastDateKey(value: string | Date = new Date()) {
 export function formatSastDate(value: string | Date) {
   return new Intl.DateTimeFormat("en-ZA", { dateStyle: "medium", timeZone: PORTAL_TIME_ZONE }).format(new Date(value));
 }
+/**
+ * Render the same instant with an explicit South African +02:00 offset for exports.
+ * Shift the display components before replacing Z; stored/API timestamps remain UTC.
+ */
 export function sastIsoTimestamp(value: string | Date) {
   const time = new Date(value).getTime();
   return new Date(time + 2 * 60 * 60 * 1000).toISOString().replace("Z", "+02:00");
 }
-/** A date input is a SAST calendar day, independent of the host timezone. */
+/**
+ * Interpret a date-only filter as a South African calendar day, independent of the host timezone.
+ * Return its UTC start, or the next day's exclusive boundary for an end-date filter.
+ */
 export function sastDayBoundary(value: string | undefined, nextDay = false): Date | undefined {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
   const utc = new Date(`${value}T00:00:00.000Z`);
   if (!Number.isFinite(utc.getTime()) || utc.toISOString().slice(0, 10) !== value) return undefined;
   return new Date(utc.getTime() - 2 * 60 * 60 * 1000 + (nextDay ? 24 * 60 * 60 * 1000 : 0));
 }
-/** datetime-local inputs represent SAST, never the browser's local timezone. */
+/**
+ * Treat datetime-local form values as South African wall-clock time and return the corresponding UTC instant.
+ * Validate calendar and clock fields instead of letting the browser's timezone choose the interpretation.
+ */
 export function sastInputToUtc(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(value)) throw new Error("Enter a valid South African date and time.");
   const day = sastDayBoundary(value.slice(0, 10));

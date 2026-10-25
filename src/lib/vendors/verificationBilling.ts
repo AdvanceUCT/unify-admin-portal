@@ -89,6 +89,11 @@ function notBillableReason(status: VendorVerificationStatus, isVerified: boolean
   return status;
 }
 
+/**
+ * Classify the materialized decision for billing using its completion time and configured price.
+ * Pending or undated results are not billable; an approval with explicitly false proof verification is also excluded.
+ * Assign the service month using South African time rather than the server's timezone.
+ */
 export function resolveVerificationBillingSnapshot({
   completedAt,
   isVerified,

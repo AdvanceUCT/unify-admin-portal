@@ -29,6 +29,10 @@ export function VendorIntegrationSettings({ branches, initialApiKeys, initialPre
     setPreset(value);
     if (value !== "custom") { setScopes([...keyPresets[value]]); setBranchIds([]); }
   }
+  /**
+   * Refresh key metadata only for the current mounted workflow and latest list revision.
+   * A delayed read must not overwrite the result of a newer key mutation.
+   */
   async function refresh() {
     const current = lifetime.capture(); const revision = ++recordsRevision.current;
     const response = await fetch(base, { cache: "no-store" });
@@ -37,6 +41,10 @@ export function VendorIntegrationSettings({ branches, initialApiKeys, initialPre
     if (!Array.isArray(next)) throw new Error("Unable to read key history.");
     if (lifetime.isCurrent(current) && revision === recordsRevision.current) setKeys(next);
   }
+  /**
+   * Validate and issue a key once while blocking duplicate clicks.
+   * Keep its secret only in component memory; an ambiguous response refreshes metadata rather than automatically generating another secret.
+   */
   async function create() {
     if (locked.current) return;
     if (validation) { setMessage(validation); return; }
@@ -59,6 +67,10 @@ export function VendorIntegrationSettings({ branches, initialApiKeys, initialPre
       if (!rejected) await refresh().catch(() => { if (lifetime.isCurrent(current)) setMessage("Unable to confirm creation or refresh keys. Reload key history before creating another key."); });
     } finally { locked.current = false; if (lifetime.isCurrent(current)) setBusy(false); }
   }
+  /**
+   * Confirm the concrete effects, revoke the selected key and hide a matching revealed secret.
+   * After an uncertain response, require a metadata refresh before another attempt.
+   */
   async function revoke(key: IntegrationKey) {
     if (locked.current || !window.confirm(`Revoke ${key.name}? Requests using this key will stop working. Existing sales and webhook settings remain intact. Pending refunds remain bound to their original operator.`)) return;
     recordsRevision.current++; locked.current = true; setBusy(true); setMessage("");
