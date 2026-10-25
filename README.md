@@ -17,6 +17,25 @@ Email: admin@example.com
 Password: UnifyAdminSeed!2026
 ```
 
+## Deployed Mock POS (for testing student wallet payments)
+
+🔗 **Deployment:** [https://unify-pos-simulator.vercel.app/terminal](https://unify-pos-simulator.vercel.app/terminal)
+
+## Login Credentials
+
+### Demo Vendor Account
+
+```
+Email: technest-integration@voskuils.com
+Password: 32qdpwBAg1pSz3xx7YlKea_M2gfn48X3!9a
+```
+
+### Demo POS Account 
+
+```
+Password: WSrhaDis9rWD3xr4iOsp64aEGTDkWX7s
+```
+
 # Admin Portal
 ## Current capabilities
 
@@ -192,11 +211,30 @@ Administrator accounts are invite-only.
 
 Vendor users are a separate account type. Approved vendors can have owners and staff, with staff access limited through branch memberships. Integration access is separately controlled by scoped API credentials. Vendor invoice payment, payout-destination management, and branch payment-access requests are owner-only; staff can view and operate branch-scoped verification and payment activity for assigned branches.
 
-## Vendor Portal
+# Vendor Portal
 
 The Vendor Portal is part of this Next.js application and is available under `/vendor`. It shares the deployment and PostgreSQL database with the university-facing Admin Portal, but vendor accounts use a separate `VENDOR` user type, vendor-specific sessions, protected route groups, and tenant/branch access checks.
 
 Keeping both portals in this repository allows application approval, vendor membership, service-point provisioning, verification records, and audit events to use one consistent data model. Credential proof decisions still come from the separate UNIFY Agent Service.
+
+## Deployed Mock POS (for testing student wallet payments)
+
+🔗 **Deployment:** [https://unify-pos-simulator.vercel.app/terminal](https://unify-pos-simulator.vercel.app/terminal)
+
+## Login Credentials
+
+### Demo Vendor Account
+
+```
+Email: technest-integration@voskuils.com
+Password: 32qdpwBAg1pSz3xx7YlKea_M2gfn48X3!9a
+```
+
+### Demo POS Account 
+
+```
+Password: WSrhaDis9rWD3xr4iOsp64aEGTDkWX7s
+```
 
 ### Vendor journey
 
