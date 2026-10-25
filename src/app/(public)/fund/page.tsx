@@ -59,55 +59,95 @@ export default async function FundStudentPage({
       <section className="rounded-xl border border-border bg-surface p-6 shadow-md">
         <h1 className="text-page-title text-fg">Fund a student</h1>
         <p className="mt-2 text-sm leading-6 text-fg-muted">
-          Send funds to a student&apos;s UNIFY wallet. Funds can only be spent at approved campus vendors.
+          Send money to a student&apos;s UNIFY wallet. You don&apos;t need an account. Funds can only be spent at
+          approved campus vendors.
         </p>
+
+        <ol className="mt-5 grid gap-3 text-sm text-fg-muted sm:grid-cols-3">
+          {[
+            "Enter the student's number and surname.",
+            "Pay on Paystack's secure checkout.",
+            "The money appears in the student's wallet.",
+          ].map((step, index) => (
+            <li className="flex gap-3 rounded-md bg-surface-muted px-3 py-2.5" key={step}>
+              <span className="font-semibold text-fg">{index + 1}</span>
+              {step}
+            </li>
+          ))}
+        </ol>
 
         {!available ? (
           <p className="mt-5 rounded-md border border-border bg-surface-muted px-3 py-2 text-sm text-fg-muted">
-            Funding is currently unavailable.
+            Funding is currently unavailable. Please check back later.
           </p>
         ) : (
-          <form action={startFunderTopupAction} className="mt-6 space-y-5">
+          <form action={startFunderTopupAction} className="mt-6 space-y-6">
             <input name="idempotencyKey" type="hidden" value={randomUUID()} />
-            <div className="grid gap-4 sm:grid-cols-2">
-              {/* Shown in caps; the server upper-cases it too, as student activation does. */}
-              <Field
-                autoCapitalize="characters"
-                autoComplete="off"
-                className="uppercase"
-                label="Student number"
-                maxLength={64}
-                name="studentNumber"
-                spellCheck={false}
-              />
-              <Field autoComplete="off" label="Student surname" maxLength={100} name="studentSurname" />
-              <Field
-                autoComplete="name"
-                hint="Shown to the student in their wallet activity."
-                label="Your name"
-                maxLength={60}
-                minLength={2}
-                name="funderName"
-              />
-              <Field
-                autoComplete="email"
-                hint="Paystack sends your receipt here."
-                label="Your email"
-                maxLength={254}
-                name="funderEmail"
-                type="email"
-              />
-              <Field
-                hint={`Between ${formatMoneyMinor(minMinor)} and ${formatMoneyMinor(maxMinor)}.`}
-                inputMode="decimal"
-                label="Amount (R)"
-                max={minorToRandInput(maxMinor)}
-                min={minorToRandInput(minMinor)}
-                name="amount"
-                step="0.01"
-                type="number"
-              />
-            </div>
+            <fieldset className="space-y-4">
+              <legend className="text-section-title text-fg">The student</legend>
+              <p className="text-xs text-fg-subtle">
+                We check these against university records. The student needs payments set up in their UNIFY wallet.
+                For their privacy, we won&apos;t show you any of their details.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {/* Shown in caps; the server upper-cases it too, as student activation does. */}
+                <Field
+                  autoCapitalize="characters"
+                  autoComplete="off"
+                  className="uppercase"
+                  hint="As shown on their student card."
+                  label="Student number"
+                  maxLength={64}
+                  name="studentNumber"
+                  spellCheck={false}
+                />
+                <Field
+                  autoComplete="off"
+                  hint="As registered with the university."
+                  label="Student surname"
+                  maxLength={100}
+                  name="studentSurname"
+                />
+              </div>
+            </fieldset>
+
+            <fieldset className="space-y-4">
+              <legend className="w-full border-t border-border pt-5 text-section-title text-fg">You</legend>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  autoComplete="name"
+                  hint="The student sees this in their wallet activity."
+                  label="Your name"
+                  maxLength={60}
+                  minLength={2}
+                  name="funderName"
+                />
+                <Field
+                  autoComplete="email"
+                  hint="Paystack sends your receipt here."
+                  label="Your email"
+                  maxLength={254}
+                  name="funderEmail"
+                  type="email"
+                />
+              </div>
+            </fieldset>
+
+            <fieldset className="space-y-4">
+              <legend className="w-full border-t border-border pt-5 text-section-title text-fg">Amount</legend>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  hint={`Between ${formatMoneyMinor(minMinor)} and ${formatMoneyMinor(maxMinor)}.`}
+                  inputMode="decimal"
+                  label="Amount (R)"
+                  max={minorToRandInput(maxMinor)}
+                  min={minorToRandInput(minMinor)}
+                  name="amount"
+                  step="0.01"
+                  type="number"
+                />
+              </div>
+            </fieldset>
 
             {fundError ? (
               <p className="rounded-md border border-danger-border bg-danger-bg px-3 py-2 text-sm text-danger-fg" role="alert">

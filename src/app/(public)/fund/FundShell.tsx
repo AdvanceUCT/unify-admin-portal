@@ -3,6 +3,7 @@
  * @module app/(public)/fund/FundShell
  */
 
+import { BackButton } from "@/components/ui/BackButton";
 import type { UniversityProfile } from "@/generated/prisma/client";
 import { getDocumentSignedUrlForRender } from "@/lib/storage/supabase";
 import { toSafeImageSrc } from "@/lib/url";
@@ -22,6 +23,7 @@ export async function FundShell({
   return (
     <main className="min-h-screen bg-canvas px-4 py-10 sm:px-6">
       <div className={`mx-auto w-full space-y-6 ${width === "wide" ? "max-w-2xl" : "max-w-md"}`}>
+        <BackButton href="/" label="Back to home" />
         <header className="flex items-center gap-3">
           {logoSrc ? (
             // eslint-disable-next-line @next/next/no-img-element -- signed Supabase URL, not compatible with next/image

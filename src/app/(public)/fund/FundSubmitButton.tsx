@@ -23,7 +23,7 @@ export function FundSubmitButton() {
       type="submit"
     >
       {pending ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : null}
-      {pending ? "Redirecting to Paystack…" : "Pay"}
+      {pending ? "Redirecting to Paystack…" : "Continue to payment"}
     </button>
   );
 }
