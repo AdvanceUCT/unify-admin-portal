@@ -15,6 +15,15 @@ vi.mock("@/lib/config/env", () => ({
 vi.mock("@/lib/agentClient", () => ({
   createBatchActivationLinks: mocks.agent,
   changeCredentialLifecycle: mocks.lifecycle,
+  getCredentialLifecycle: async (exchangeId: string) => {
+    const issuance = await prisma.credentialIssuance.findUniqueOrThrow({ where: { credentialExchangeId: exchangeId } });
+    return {
+      credentialExchangeId: exchangeId,
+      credentialRevocationId: issuance.credentialRevocationId,
+      revocationRegistryDefinitionId: issuance.revocationRegistryDefinitionId,
+      status: "ACTIVE", revision: 0, eventId: `lifecycle-baseline:${exchangeId}`, updatedAt: new Date().toISOString(),
+    };
+  },
 }));
 vi.mock("@/lib/email/credential-activation", () => ({
   sendCredentialActivationEmail: mocks.email,

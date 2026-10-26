@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   auditCreateMany: vi.fn(),
   auditUpdateMany: vi.fn(),
   changeCredentialLifecycle: vi.fn(),
+  getCredentialLifecycle: vi.fn(),
   issuanceFindFirst: vi.fn(),
   issuanceFindUnique: vi.fn(),
   issuanceUpdate: vi.fn(),
@@ -13,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/agentClient", () => ({
   changeCredentialLifecycle: mocks.changeCredentialLifecycle,
+  getCredentialLifecycle: mocks.getCredentialLifecycle,
 }));
 
 vi.mock("@/lib/db/prisma", () => {
@@ -66,6 +68,15 @@ describe("credential lifecycle actions", () => {
     vi.clearAllMocks();
     mocks.issuanceFindFirst.mockResolvedValue(issuance);
     mocks.issuanceFindUnique.mockResolvedValue(issuance);
+    mocks.getCredentialLifecycle.mockResolvedValue({
+      credentialExchangeId: "exchange-1",
+      credentialRevocationId: "7",
+      revocationRegistryDefinitionId: "rev-reg-1",
+      status: "ACTIVE",
+      revision: 0,
+      eventId: "lifecycle-baseline:exchange-1",
+      updatedAt: "2026-07-08T08:00:00.000Z",
+    });
     mocks.changeCredentialLifecycle.mockResolvedValue({
       credentialExchangeId: "exchange-1",
       credentialRevocationId: "7",
@@ -96,6 +107,7 @@ describe("credential lifecycle actions", () => {
       "exchange-1",
       "suspend",
       "Enrolment review",
+      0,
     );
     expect(mocks.issuanceUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -163,7 +175,7 @@ describe("credential lifecycle actions", () => {
       updatedAt: "2026-07-08T09:05:00.000Z",
     });
 
-    expect(mocks.changeCredentialLifecycle).toHaveBeenCalledWith("exchange-1", "revoke", "Demo cleanup");
+    expect(mocks.changeCredentialLifecycle).toHaveBeenCalledWith("exchange-1", "revoke", "Demo cleanup", 0);
     expect(mocks.auditCreateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -253,5 +265,93 @@ describe("credential lifecycle actions", () => {
     expect(mocks.issuanceUpdate).not.toHaveBeenCalled();
     expect(mocks.auditCreateMany).not.toHaveBeenCalled();
     expect(mocks.auditUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it.each(["suspend", "reactivate", "revoke"] as const)("blocks %s before a ledger write when the deployed agent omits revisions", async (action) => {
+    mocks.issuanceFindFirst.mockResolvedValue({ ...issuance, lifecycleStatus: action === "reactivate" ? "SUSPENDED" : "ACTIVE" });
+    mocks.getCredentialLifecycle.mockResolvedValue({
+      credentialExchangeId: "exchange-1", credentialRevocationId: "7", revocationRegistryDefinitionId: "rev-reg-1",
+      status: "ACTIVE", updatedAt: "2026-07-08T08:00:00.000Z",
+    });
+
+    await expect(requestCredentialLifecycleChange({ action, reason: "Review", studentId: "STU001" }))
+      .rejects.toMatchObject({ status: 503, message: expect.stringContaining("Update the agent service") });
+    expect(mocks.changeCredentialLifecycle).not.toHaveBeenCalled();
+    expect(mocks.issuanceUpdate).not.toHaveBeenCalled();
+    expect(mocks.auditCreateMany).not.toHaveBeenCalled();
+  });
+
+  it("recovers a revocation already committed by the agent without another write", async () => {
+    mocks.getCredentialLifecycle.mockResolvedValue({
+      credentialExchangeId: "exchange-1", credentialRevocationId: "7", revocationRegistryDefinitionId: "rev-reg-1",
+      status: "REVOKED", revision: 0, eventId: "lifecycle-baseline:exchange-1",
+      reason: "Original revocation", updatedAt: "2026-07-08T08:30:00.000Z",
+    });
+
+    await expect(requestCredentialLifecycleChange({ action: "revoke", actorId: "retry-admin", reason: "Retry", studentId: "STU001" }))
+      .resolves.toEqual({ lifecycleState: "REVOKED", updatedAt: "2026-07-08T08:30:00.000Z" });
+    expect(mocks.changeCredentialLifecycle).not.toHaveBeenCalled();
+    expect(mocks.issuanceUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ lifecycleRevision: 0, lifecycleStatus: "REVOKED", lifecycleReason: "Original revocation" }),
+    }));
+    expect(mocks.auditCreateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ action: "CREDENTIAL_REVOKED", actorId: undefined, occurredAt: new Date("2026-07-08T08:30:00.000Z") }),
+    }));
+    expect(mocks.auditUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("reconciles terminal revocation before rejecting a stale suspension", async () => {
+    mocks.getCredentialLifecycle.mockResolvedValue({
+      credentialExchangeId: "exchange-1", credentialRevocationId: "7", revocationRegistryDefinitionId: "rev-reg-1",
+      status: "REVOKED", revision: 2, eventId: "revoked-2", updatedAt: "2026-07-08T08:30:00.000Z",
+    });
+    await expect(requestCredentialLifecycleChange({ action: "suspend", reason: "Review", studentId: "STU001" }))
+      .rejects.toMatchObject({ status: 409 });
+    expect(mocks.issuanceUpdate).toHaveBeenCalled();
+    expect(mocks.changeCredentialLifecycle).not.toHaveBeenCalled();
+  });
+
+  it("rejects a snapshot for another credential before a ledger write", async () => {
+    mocks.getCredentialLifecycle.mockResolvedValue({
+      credentialExchangeId: "another-exchange", credentialRevocationId: "7", revocationRegistryDefinitionId: "rev-reg-1",
+      status: "ACTIVE", revision: 0, eventId: "baseline", updatedAt: "2026-07-08T08:00:00.000Z",
+    });
+    await expect(requestCredentialLifecycleChange({ action: "revoke", reason: "Review", studentId: "STU001" }))
+      .rejects.toMatchObject({ status: 409 });
+    expect(mocks.changeCredentialLifecycle).not.toHaveBeenCalled();
+    expect(mocks.issuanceUpdate).not.toHaveBeenCalled();
+  });
+
+  it("does not submit scheduled work against a changed revision", async () => {
+    await expect(requestCredentialLifecycleChange({ action: "suspend", reason: "Review", studentId: "STU001", expectedLifecycleRevision: 3 }))
+      .rejects.toMatchObject({ status: 409 });
+    expect(mocks.changeCredentialLifecycle).not.toHaveBeenCalled();
+  });
+
+  it("does not mutate an agent whose saved revision is behind the portal", async () => {
+    mocks.issuanceFindFirst.mockResolvedValue({ ...issuance, lifecycleRevision: 4 });
+    await expect(requestCredentialLifecycleChange({ action: "revoke", reason: "Review", studentId: "STU001" }))
+      .rejects.toMatchObject({ status: 409, message: expect.stringContaining("behind the portal") });
+    expect(mocks.changeCredentialLifecycle).not.toHaveBeenCalled();
+    expect(mocks.issuanceUpdate).not.toHaveBeenCalled();
+  });
+
+  it("still rejects a revisionless write response if the deployment changes after preflight", async () => {
+    mocks.changeCredentialLifecycle.mockResolvedValueOnce({
+      credentialExchangeId: "exchange-1", credentialRevocationId: "7", revocationRegistryDefinitionId: "rev-reg-1",
+      status: "REVOKED", updatedAt: "2026-07-08T08:30:00.000Z",
+    });
+    await expect(requestCredentialLifecycleChange({ action: "revoke", reason: "Review", studentId: "STU001" }))
+      .rejects.toMatchObject({ status: 503 });
+    expect(mocks.issuanceUpdate).not.toHaveBeenCalled();
+    expect(mocks.auditCreateMany).not.toHaveBeenCalled();
+  });
+
+  it("does not write if the preflight snapshot cannot be read", async () => {
+    mocks.getCredentialLifecycle.mockRejectedValueOnce(new Error("Agent unavailable"));
+    await expect(requestCredentialLifecycleChange({ action: "revoke", reason: "Review", studentId: "STU001" }))
+      .rejects.toThrow("Agent unavailable");
+    expect(mocks.changeCredentialLifecycle).not.toHaveBeenCalled();
+    expect(mocks.issuanceUpdate).not.toHaveBeenCalled();
   });
 });
